@@ -122,27 +122,42 @@ function restoreStateFromURL() {
 
 // Check authentication on page load
 async function checkAuthAndInit() {
-    // Verify authenticated user via Supabase (server-validated, not just session cache)
-    const { data: { user }, error } = await supabaseClient.auth.getUser();
+    try {
+        // Verify authenticated user via Supabase with timeout (prevents infinite loading)
+        const authPromise = supabaseClient.auth.getUser();
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth timeout')), 8000)
+        );
 
-    if (user && !error) {
-        // Get session for access token
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (session) {
-            saveToken(session.access_token);
+        const { data: { user }, error } = await Promise.race([authPromise, timeoutPromise]);
+
+        if (user && !error) {
+            // Get session for access token
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) {
+                saveToken(session.access_token);
+            }
+
+            const username = user.user_metadata?.full_name
+                || user.user_metadata?.username
+                || user.email;
+            saveUser({ id: user.id, username });
+
+            init();
+        } else if (isLoggedIn()) {
+            // Fallback to localStorage token (backend API mode)
+            init();
+        } else {
+            showLoginForm();
         }
-
-        const username = user.user_metadata?.full_name
-            || user.user_metadata?.username
-            || user.email;
-        saveUser({ id: user.id, username });
-
-        init();
-    } else if (isLoggedIn()) {
-        // Fallback to localStorage token (backend API mode)
-        init();
-    } else {
-        showLoginForm();
+    } catch (e) {
+        console.warn('Auth check failed:', e.message);
+        // If auth check fails/times out, show login form instead of infinite loading
+        if (isLoggedIn()) {
+            init();
+        } else {
+            showLoginForm();
+        }
     }
 }
 
