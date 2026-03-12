@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  clients      Client[]
+}
+
+model Client {
+  id                Int       @id @default(autoincrement())
+  name              String
+  risk              String
+  riskLabel         String
+  stockPct          Float     @default(0)
+  bondPct           Float     @default(0)
+  portfolioValue    Float     @default(0)
+  initialInvestment Float     @default(0)
+  performanceHistory Json     @default("[]")
+  holdings          Holding[]
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id])
+  createdAt         DateTime  @default(now())
+}
+
+model Holding {
+  id            Int     @id @default(autoincrement())
+  clientId      Int
+  client        Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ticker        String
+  name          String
+  type          String
+  typeLabel     String
+  sector        String?
+  allocationPct Float   @default(0)
+  value         Float   @default(0)
+  costBasis     Float   @default(0)
+  shares        Int     @default(0)
+  price         Float   @default(0)
+  previousClose Float   @default(0)
+  currency      String  @default("USD")
+}

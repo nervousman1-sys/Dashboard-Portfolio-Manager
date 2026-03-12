@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Generate PWA Icons</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1e293b; color: #f1f5f9; }
+        canvas { border: 1px solid #334155; margin: 10px; }
+        a { color: #3b82f6; display: inline-block; margin: 10px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>PWA Icon Generator</h1>
+    <p>Right-click each image below and "Save image as..." to icons/ folder:</p>
+    <div>
+        <h3>icon-192.png (192x192)</h3>
+        <canvas id="c192" width="192" height="192"></canvas>
+        <br><a id="dl192" download="icon-192.png">Download icon-192.png</a>
+    </div>
+    <div>
+        <h3>icon-512.png (512x512)</h3>
+        <canvas id="c512" width="512" height="512"></canvas>
+        <br><a id="dl512" download="icon-512.png">Download icon-512.png</a>
+    </div>
+    <script>
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const s = size / 512;
+
+            // Background
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.roundRect(0, 0, size, size, 64 * s);
+            ctx.fill();
+
+            // Letter P
+            ctx.fillStyle = '#3b82f6';
+            ctx.font = `bold ${160 * s}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('P', 256 * s, 200 * s);
+
+            // Bar chart bars
+            const bars = [
+                { x: 100, y: 280, w: 60, h: 120, color: '#22c55e' },
+                { x: 180, y: 240, w: 60, h: 160, color: '#3b82f6' },
+                { x: 260, y: 300, w: 60, h: 100, color: '#f97316' },
+                { x: 340, y: 260, w: 60, h: 140, color: '#a855f7' }
+            ];
+
+            bars.forEach(b => {
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.roundRect(b.x * s, b.y * s, b.w * s, b.h * s, 8 * s);
+                ctx.fill();
+            });
+
+            return canvas.toDataURL('image/png');
+        }
+
+        const url192 = drawIcon(document.getElementById('c192'), 192);
+        const url512 = drawIcon(document.getElementById('c512'), 512);
+
+        document.getElementById('dl192').href = url192;
+        document.getElementById('dl512').href = url512;
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#0f172a"/>
+  <text x="256" y="200" text-anchor="middle" fill="#3b82f6" font-family="Arial, sans-serif" font-size="160" font-weight="bold">P</text>
+  <rect x="100" y="280" width="60" height="120" rx="8" fill="#22c55e"/>
+  <rect x="180" y="240" width="60" height="160" rx="8" fill="#3b82f6"/>
+  <rect x="260" y="300" width="60" height="100" rx="8" fill="#f97316"/>
+  <rect x="340" y="260" width="60" height="140" rx="8" fill="#a855f7"/>
+</svg>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Portfolio">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <title>Dashboard Portfolio Manager</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+
+<body>
+
+    <!-- Auth overlay (login/register) -->
+    <div class="auth-overlay hidden" id="authOverlay"></div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">טוען נתוני שוק...</div>
+    </div>
+
+    <header class="header">
+        <h1>Dashboard Portfolio Manager</h1>
+        <div class="header-info">
+            <div class="refresh-indicator">
+                <span class="dot"></span>
+                <span id="lastUpdate">מעדכן...</span>
+            </div>
+            <button class="filter-btn" onclick="refreshAllPrices()" title="רענן מחירים">רענן נתונים</button>
+            <button class="filter-btn" style="background:var(--accent-blue);color:white;border-color:var(--accent-blue)" onclick="openMgmtModal('addClient')">+ הוסף תיק</button>
+            <button class="filter-btn" onclick="toggleAlerts()" title="חדשות מאקרו כלכלה">חדשות מאקרו כלכלה <span
+                    class="alert-count" id="alertCount" style="display:none">0</span></button>
+            <div id="userArea" style="display:none"></div>
+        </div>
+    </header>
+
+    <div class="macro-page" id="macroPage"></div>
+
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <div class="filters">
+        <div class="filter-group">
+            <label>סיכון:</label>
+            <button class="filter-btn active" data-filter="risk" data-value="all"
+                onclick="setFilter('risk', 'all', this)">הכל</button>
+            <button class="filter-btn" data-filter="risk" data-value="high"
+                onclick="setFilter('risk', 'high', this)">גבוה</button>
+            <button class="filter-btn" data-filter="risk" data-value="medium"
+                onclick="setFilter('risk', 'medium', this)">בינוני</button>
+            <button class="filter-btn" data-filter="risk" data-value="low"
+                onclick="setFilter('risk', 'low', this)">נמוך</button>
+        </div>
+        <div class="filter-separator"></div>
+        <div class="filter-group">
+            <label>נכס:</label>
+            <button class="filter-btn active" data-filter="asset" data-value="all"
+                onclick="setFilter('asset', 'all', this)">הכל</button>
+            <button class="filter-btn" data-filter="asset" data-value="stocks"
+                onclick="setFilter('asset', 'stocks', this)">מניות</button>
+            <button class="filter-btn" data-filter="asset" data-value="bonds"
+                onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
+        </div>
+        <div class="filter-separator"></div>
+        <div class="filter-group">
+            <label>סקטור:</label>
+            <button class="filter-btn active" data-filter="sector" data-value="all"
+                onclick="setFilter('sector', 'all', this)">הכל</button>
+            <button class="filter-btn" data-filter="sector" data-value="Technology"
+                onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
+            <button class="filter-btn" data-filter="sector" data-value="Healthcare"
+                onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
+            <button class="filter-btn" data-filter="sector" data-value="Financials"
+                onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
+            <button class="filter-btn" data-filter="sector" data-value="Energy"
+                onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
+        </div>
+        <div class="filter-separator"></div>
+        <div class="filter-group">
+            <label>גודל תיק:</label>
+            <button class="filter-btn active" data-filter="size" data-value="all"
+                onclick="setSizeFilter('all', this)">הכל</button>
+            <button class="filter-btn" data-filter="size" data-value="small" onclick="setSizeFilter('small', this)">קטן
+                מ-250K</button>
+            <button class="filter-btn" data-filter="size" data-value="medium"
+                onclick="setSizeFilter('medium', this)">250K-500K</button>
+            <button class="filter-btn" data-filter="size" data-value="large"
+                onclick="setSizeFilter('large', this)">500K+</button>
+        </div>
+        <div class="filter-separator"></div>
+        <div class="filter-group">
+            <input type="text" class="search-input" placeholder="חיפוש לקוח או מניה..."
+                oninput="searchClients(this.value)" />
+        </div>
+    </div>
+
+    <div class="exposure-section" id="exposureSection"></div>
+
+    <div class="clients-grid" id="clientsGrid"></div>
+
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="modal" id="modalContent"></div>
+    </div>
+
+    <div class="report-view" id="reportView"></div>
+
+    <div class="mgmt-overlay" id="mgmtOverlay" onclick="closeMgmtModal(event)">
+        <div class="mgmt-box" id="mgmtBox"></div>
+    </div>
+
+    <div class="fullscreen-chart-overlay" id="fullscreenOverlay" onclick="closeFullscreen(event)">
+        <div class="fullscreen-chart-box">
+            <div class="fullscreen-chart-header">
+                <h3 id="fullscreenTitle">מעקב תשואה</h3>
+                <div class="fullscreen-chart-controls">
+                    <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
+                    <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">−</button>
+                    <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום">איפוס</button>
+                    <button class="modal-close" onclick="closeFullscreen()" title="סגור">&times;</button>
+                </div>
+            </div>
+            <div class="fullscreen-chart-body">
+                <canvas id="fullscreen-chart"></canvas>
+            </div>
+            <div class="zoom-hint">גלגל עכבר לזום | גרור לצפייה | לחץ פעמיים לאיפוס</div>
+        </div>
+    </div>
+
+    <!-- JavaScript modules - load order matters -->
+    <script src="js/env-config.js"></script>
+    <script src="js/supabase-config.js"></script>
+    <script src="js/supabase-api.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/price-service.js"></script>
+    <script src="js/clients.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/filters.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/portfolio.js"></script>
+    <script src="js/macro.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/init.js"></script>
+
+</body>
+
+</html>
