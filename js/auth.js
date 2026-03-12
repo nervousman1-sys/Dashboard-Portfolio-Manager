@@ -136,7 +136,8 @@ async function handleGoogleLogin() {
             console.error('Google OAuth error:', error.message);
         }
     } catch (e) {
-        showAuthError('שגיאת חיבור לשרת');
+        console.error('Google login error:', e);
+        showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
     }
 }
 
@@ -168,7 +169,8 @@ async function handleLogin() {
         saveUser({ id: data.user.id, username: data.user.user_metadata?.username || data.user.email });
         onAuthSuccess();
     } catch (e) {
-        showAuthError('שגיאת חיבור לשרת');
+        console.error('Login error:', e);
+        showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
         btn.disabled = false;
         btn.textContent = 'התחבר';
     }
