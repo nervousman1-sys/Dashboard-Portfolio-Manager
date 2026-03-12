@@ -167,6 +167,51 @@ create policy "Users can delete own holdings"
 create index if not exists idx_holdings_portfolio_id on holdings(portfolio_id);
 
 
+-- 4. TRANSACTIONS TABLE
+-- Logs all portfolio operations (buy, sell, deposit, withdraw).
+create table if not exists transactions (
+    id bigint generated always as identity primary key,
+    portfolio_id bigint not null references portfolios(id) on delete cascade,
+    type text not null,
+    ticker text default '-',
+    name text default '',
+    asset_type text default 'stock',
+    shares double precision default 0,
+    price double precision default 0,
+    total double precision default 0,
+    realized_pnl double precision,
+    description text,
+    created_at timestamptz default now() not null
+);
+
+-- Enable Row Level Security
+alter table transactions enable row level security;
+
+-- Transactions policies: users can only access transactions of their own portfolios
+create policy "Users can view own transactions"
+    on transactions for select
+    using (
+        exists (
+            select 1 from portfolios
+            where portfolios.id = transactions.portfolio_id
+            and portfolios.user_id = auth.uid()
+        )
+    );
+
+create policy "Users can insert own transactions"
+    on transactions for insert
+    with check (
+        exists (
+            select 1 from portfolios
+            where portfolios.id = portfolio_id
+            and portfolios.user_id = auth.uid()
+        )
+    );
+
+-- Index for fast portfolio lookups
+create index if not exists idx_transactions_portfolio_id on transactions(portfolio_id);
+
+
 -- ============================================================
 -- RELATIONSHIP DIAGRAM:
 --
@@ -181,15 +226,17 @@ create index if not exists idx_holdings_portfolio_id on holdings(portfolio_id);
 --   portfolios
 --       │
 --       │  1:N (on delete cascade)
---       ▼
---   holdings
+--       ├───────────────┐
+--       ▼               ▼
+--   holdings       transactions
 --
 -- ============================================================
 -- ROW LEVEL SECURITY SUMMARY:
 --
---   profiles  → user can only see/edit their own profile
---   portfolios → user can only CRUD their own portfolios
---   holdings  → user can only CRUD holdings of their own portfolios
+--   profiles     → user can only see/edit their own profile
+--   portfolios   → user can only CRUD their own portfolios
+--   holdings     → user can only CRUD holdings of their own portfolios
+--   transactions → user can only view/insert transactions of their own portfolios
 --
 -- All policies use auth.uid() — Supabase's built-in function
 -- that returns the logged-in user's UUID from the JWT.

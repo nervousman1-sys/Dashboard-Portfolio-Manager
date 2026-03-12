@@ -425,7 +425,12 @@ async function updatePricesFromAPI() {
         await supaRecalcClient(portfolioId);
     }
 
-    // 8. Re-fetch all clients with updated data
+    // 8. Record performance snapshots for all portfolios (1 per day)
+    for (const client of clients) {
+        await supaRecordPerformanceSnapshot(client.id);
+    }
+
+    // 9. Re-fetch all clients with updated data
     clients = await supaFetchClients();
     console.log('[PriceService] === Price update complete ===');
 }

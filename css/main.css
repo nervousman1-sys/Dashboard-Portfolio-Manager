@@ -731,9 +731,9 @@ body {
 }
 
 .modal-chart-container.modal-chart-small {
-    width: 162px;
-    height: 162px;
-    flex: 0 0 162px;
+    width: 200px;
+    height: 200px;
+    flex: 0 0 200px;
 }
 
 .modal-performance-container {
@@ -805,6 +805,35 @@ body {
     display: flex;
     gap: 5px;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+.benchmark-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.benchmark-toggle-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.benchmark-toggle-btn.active {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.benchmark-options {
+    display: flex;
+    gap: 5px;
     flex-wrap: wrap;
 }
 

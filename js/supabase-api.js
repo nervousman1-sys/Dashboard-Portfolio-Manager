@@ -436,6 +436,54 @@ async function supaRecalcClient(clientId) {
         .eq('id', clientId);
 }
 
+// ========== PERFORMANCE HISTORY SNAPSHOT ==========
+
+// Records a daily snapshot of portfolio value for chart display.
+// Called after price refresh — max 1 snapshot per day per portfolio.
+async function supaRecordPerformanceSnapshot(clientId) {
+    try {
+        const { data: portfolio } = await supabaseClient
+            .from('portfolios')
+            .select('portfolio_value, initial_investment, performance_history')
+            .eq('id', clientId)
+            .single();
+
+        if (!portfolio || !portfolio.portfolio_value) return;
+
+        const history = portfolio.performance_history || [];
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('he-IL'); // DD.MM.YYYY format
+
+        // Skip if we already have a snapshot for today
+        if (history.length > 0 && history[history.length - 1].date === dateStr) return;
+
+        const costBasis = portfolio.initial_investment || 1;
+        const returnPct = ((portfolio.portfolio_value - costBasis) / costBasis) * 100;
+
+        const snapshot = {
+            date: dateStr,
+            value: portfolio.portfolio_value,
+            returnPct: parseFloat(returnPct.toFixed(2)),
+            year: now.getFullYear(),
+            month: now.getMonth(),
+            yearLabel: now.getFullYear().toString(),
+            monthLabel: now.toLocaleDateString('he-IL', { month: 'short', year: 'numeric' })
+        };
+
+        history.push(snapshot);
+
+        // Keep max 1825 points (~5 years of daily data)
+        if (history.length > 1825) history.splice(0, history.length - 1825);
+
+        await supabaseClient
+            .from('portfolios')
+            .update({ performance_history: history })
+            .eq('id', clientId);
+    } catch (e) {
+        console.warn('supaRecordPerformanceSnapshot error:', e.message);
+    }
+}
+
 // ========== TRANSACTION LOG (localStorage primary, Supabase optional) ==========
 
 // Flag: set to false once we detect the transactions table doesn't exist

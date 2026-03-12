@@ -160,8 +160,38 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
+    // If no performance history, try to generate first snapshot
+    if (!client.performanceHistory || client.performanceHistory.length === 0) {
+        if (supabaseConnected && client.portfolioValue > 0) {
+            await supaRecordPerformanceSnapshot(client.id);
+            // Re-fetch client to get updated history
+            const updated = await supaFetchClient(client.id);
+            if (updated) {
+                const idx = clients.findIndex(c => c.id === clientId);
+                if (idx !== -1) clients[idx] = updated;
+                client.performanceHistory = updated.performanceHistory;
+            }
+        }
+    }
+
     const hist = filterHistoryByRange(client.performanceHistory || [], range);
-    if (!hist || hist.length === 0) return null;
+
+    // Show "no data" message if still empty
+    if (!hist || hist.length === 0) {
+        const canvas = document.getElementById(canvasId);
+        if (canvas) {
+            const container = canvas.parentElement;
+            if (container && !container.querySelector('.no-chart-data')) {
+                const msg = document.createElement('div');
+                msg.className = 'no-chart-data';
+                msg.textContent = 'נתוני ביצועים יופיעו לאחר עדכון מחירים';
+                msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;text-align:center;padding:20px;';
+                canvas.style.display = 'none';
+                container.appendChild(msg);
+            }
+        }
+        return null;
+    }
 
     // Destroy previous chart
     if (chartKey && charts[chartKey]) {
@@ -171,6 +201,11 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     const canvas = document.getElementById(canvasId);
     if (!canvas) return null;
+
+    // Remove "no data" message if it exists
+    canvas.style.display = '';
+    const noDataMsg = canvas.parentElement?.querySelector('.no-chart-data');
+    if (noDataMsg) noDataMsg.remove();
 
     // Normalize portfolio data to % from start of visible range
     const firstValue = hist[0].value || 1;
@@ -290,6 +325,14 @@ function _alignBenchmarkToPortfolio(benchData, targetLength) {
 
 // ========== MODAL PERFORMANCE CHART CONTROLS ==========
 
+function toggleBenchmarkPanel(btn) {
+    const options = btn.parentElement.querySelector('.benchmark-options');
+    if (!options) return;
+    const isVisible = options.style.display !== 'none';
+    options.style.display = isVisible ? 'none' : 'flex';
+    btn.classList.toggle('active', !isVisible);
+}
+
 function setModalPerfRange(range, btn) {
     _modalPerfRange = range;
     // Update button states
@@ -384,10 +427,12 @@ function openFullscreenChart(clientId) {
                     ).join('')}
                 </div>
                 <div class="perf-benchmarks" style="margin-top:6px">
-                    <span class="benchmark-label">השוואה:</span>
+                    <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
+                    <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'}">
                     ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
                         `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
                     ).join('')}
+                    </div>
                 </div>
             </div>
             <div class="fullscreen-chart-controls">
