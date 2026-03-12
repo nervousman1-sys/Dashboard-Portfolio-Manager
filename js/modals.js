@@ -175,10 +175,28 @@ async function openModal(clientId) {
                     <div class="modal-stat"><div class="stat-label">מזומן פנוי</div><div class="stat-value" style="color:var(--accent-green)">${formatCurrency(client.cashBalance || 0)}</div></div>
                 </div>
                 <div class="modal-charts-row">
-                    <div class="modal-chart-container" style="margin:0"><canvas id="modal-chart"></canvas></div>
+                    <div class="modal-chart-container modal-chart-small" style="margin:0"><canvas id="modal-chart"></canvas></div>
                     <div class="modal-performance-container chart-wrapper-relative">
                         <button class="expand-btn" onclick="openFullscreenChart(currentModalClientId)" title="הגדל גרף">&#x26F6;</button>
-                        <h3>ביצועים vs S&P 500</h3>
+                        <div class="perf-chart-header">
+                            <div class="perf-time-range">
+                                <button class="time-btn" onclick="setModalPerfRange('1d', this)">1D</button>
+                                <button class="time-btn" onclick="setModalPerfRange('5d', this)">5D</button>
+                                <button class="time-btn" onclick="setModalPerfRange('1m', this)">1M</button>
+                                <button class="time-btn" onclick="setModalPerfRange('6m', this)">6M</button>
+                                <button class="time-btn" onclick="setModalPerfRange('ytd', this)">YTD</button>
+                                <button class="time-btn active" onclick="setModalPerfRange('1y', this)">1Y</button>
+                                <button class="time-btn" onclick="setModalPerfRange('5y', this)">5Y</button>
+                                <button class="time-btn" onclick="setModalPerfRange('max', this)">Max</button>
+                            </div>
+                            <div class="perf-benchmarks">
+                                <span class="benchmark-label">השוואה:</span>
+                                <button class="benchmark-btn" onclick="toggleModalBenchmark('SPY', this)">S&P 500</button>
+                                <button class="benchmark-btn" onclick="toggleModalBenchmark('QQQ', this)">Nasdaq 100</button>
+                                <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
+                                <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
+                            </div>
+                        </div>
                         <canvas id="modal-perf-chart"></canvas>
                     </div>
                 </div>
@@ -226,62 +244,20 @@ async function openModal(clientId) {
                 options: {
                     responsive: true, maintainAspectRatio: true, cutout: '45%',
                     plugins: {
-                        legend: { position: 'bottom', rtl: true, labels: { color: '#94a3b8', font: { size: 11 }, padding: 8, usePointStyle: true, pointStyleWidth: 8 } },
+                        legend: { position: 'bottom', rtl: true, labels: { color: '#94a3b8', font: { size: 10 }, padding: 6, usePointStyle: true, pointStyleWidth: 6 } },
                         tooltip: { rtl: true, callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
                     }
                 }
             });
         }
 
-        // Performance chart with S&P 500 benchmark
-        const perfCtx = document.getElementById('modal-perf-chart');
-        if (perfCtx && client.performanceHistory && client.performanceHistory.length > 0) {
-            const hist = client.performanceHistory;
-            const isPositive = (hist[hist.length - 1]?.returnPct || 0) >= 0;
-            const benchmark = generateSP500Benchmark(client);
-
-            new Chart(perfCtx, {
-                type: 'line',
-                data: {
-                    labels: hist.map((_, i) => i),
-                    datasets: [
-                        {
-                            label: 'תשואת התיק %',
-                            data: hist.map(p => p.returnPct),
-                            borderColor: isPositive ? COLORS.profit : COLORS.loss,
-                            backgroundColor: isPositive ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                            borderWidth: 2, fill: true, pointRadius: 0, pointHoverRadius: 5, tension: 0.3
-                        },
-                        {
-                            label: 'S&P 500',
-                            data: benchmark.map(p => p.returnPct),
-                            borderColor: '#eab308',
-                            borderWidth: 1.5, borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.3
-                        },
-                        {
-                            label: 'שווי תיק',
-                            data: hist.map(p => p.value),
-                            borderColor: COLORS.neutral, borderWidth: 2, borderDash: [5, 5],
-                            fill: false, pointRadius: 0, tension: 0.3, yAxisID: 'y1'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    interaction: { intersect: false, mode: 'index' },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11, weight: 'bold' }, autoSkip: true, maxRotation: 0, maxTicksLimit: 10, callback: function (v, i) { return getSmartLabel(hist, i, this.chart); } }, grid: { color: 'rgba(51,65,85,0.3)' } },
-                        y: { position: 'right', title: { display: true, text: 'תשואה %', color: '#94a3b8', font: { size: 11 } }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => v.toFixed(1) + '%' }, grid: { color: 'rgba(51,65,85,0.3)' } },
-                        y1: { position: 'left', title: { display: true, text: 'שווי ($)', color: '#94a3b8', font: { size: 11 } }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' }, grid: { display: false } }
-                    },
-                    plugins: {
-                        legend: { display: true, position: 'top', rtl: true, labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 } },
-                        tooltip: { rtl: true, callbacks: { title: (items) => hist[items[0].dataIndex].date, label: (ctx) => { if (ctx.datasetIndex === 0) return ` תיק: ${ctx.parsed.y.toFixed(2)}%`; if (ctx.datasetIndex === 1) return ` S&P 500: ${ctx.parsed.y.toFixed(2)}%`; return ` שווי: $${ctx.parsed.y.toLocaleString()}`; } } },
-                        zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' } }
-                    }
-                }
-            });
-        }
+        // Performance chart — uses unified renderer from charts.js
+        _modalPerfRange = '1y';
+        _modalPerfBenchmarks = [];
+        if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
+        renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
+            _modalPerfChartInstance = inst;
+        });
     }, 100);
 }
 

@@ -1,24 +1,334 @@
 // ========== CHARTS - Chart.js Rendering (Fullscreen, Benchmark, Sector) ==========
 
-function generateSP500Benchmark(client) {
-    if (!client.performanceHistory || !client.performanceHistory.length) return [];
-    const hist = client.performanceHistory;
-    let value = 100; // Normalized to 100
-    const benchmark = [];
-    const drift = 0.00035;
-    const vol = 0.01;
-    for (let i = 0; i < hist.length; i++) {
-        let eventMul = 1;
-        const y = hist[i].year, m = hist[i].month;
-        if (y === 2020 && m >= 1 && m <= 3) eventMul = 0.97;
-        if (y === 2020 && m >= 4 && m <= 8) eventMul = 1.02;
-        if (y === 2022 && m >= 0 && m <= 9) eventMul = 0.995;
-        const ret = (drift + vol * (Math.random() * 2 - 1)) * eventMul;
-        value = value * (1 + ret);
-        benchmark.push({ returnPct: (value - 100) });
+// Benchmark configuration
+const BENCHMARK_SYMBOLS = {
+    'SPY': 'S&P 500',
+    'QQQ': 'Nasdaq 100',
+    'TA125.TA': 'TA-125',
+    'TA35.TA': 'TA-35'
+};
+
+const BENCHMARK_COLORS = {
+    'SPY': '#eab308',
+    'QQQ': '#06b6d4',
+    'TA125.TA': '#f97316',
+    'TA35.TA': '#8b5cf6'
+};
+
+// Cache for benchmark data: key = "symbol_range", value = { data, timestamp }
+const _benchmarkCache = {};
+const BENCHMARK_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// Active state for modal performance chart
+let _modalPerfRange = '1y';
+let _modalPerfBenchmarks = [];
+let _modalPerfChartInstance = null;
+
+// ========== FETCH BENCHMARK DATA FROM API ==========
+
+function _rangeToDays(range) {
+    const map = { '1d': 1, '5d': 5, '1m': 30, '3m': 90, '6m': 180, 'ytd': 0, '1y': 365, '5y': 1825, 'max': 3650, 'all': 3650 };
+    if (range === 'ytd') {
+        const now = new Date();
+        return Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (24 * 60 * 60 * 1000));
     }
-    return benchmark;
+    return map[range] || 365;
 }
+
+function _rangeToInterval(range) {
+    if (range === '1d' || range === '5d') return '1h';
+    return '1day';
+}
+
+function _rangeToOutputSize(range) {
+    const days = _rangeToDays(range);
+    if (days <= 5) return 40;
+    if (days <= 30) return 30;
+    if (days <= 90) return 90;
+    if (days <= 180) return 180;
+    if (days <= 365) return 365;
+    return 1825;
+}
+
+async function fetchBenchmarkData(symbol, range) {
+    const cacheKey = `${symbol}_${range}`;
+
+    // Check memory cache
+    if (_benchmarkCache[cacheKey] && (Date.now() - _benchmarkCache[cacheKey].timestamp < BENCHMARK_CACHE_TTL)) {
+        return _benchmarkCache[cacheKey].data;
+    }
+
+    // Check localStorage cache
+    try {
+        const stored = localStorage.getItem('benchmark_' + cacheKey);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Date.now() - parsed.timestamp < BENCHMARK_CACHE_TTL) {
+                _benchmarkCache[cacheKey] = parsed;
+                return parsed.data;
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    // Fetch from Twelve Data
+    const data = await _fetchTwelveDataBenchmark(symbol, range);
+    if (data && data.length > 0) {
+        const cacheEntry = { data, timestamp: Date.now() };
+        _benchmarkCache[cacheKey] = cacheEntry;
+        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        return data;
+    }
+
+    // Fallback: Finnhub (only for US ETFs, not Israeli indices)
+    if (!symbol.includes('.TA')) {
+        const finnData = await _fetchFinnhubBenchmark(symbol, range);
+        if (finnData && finnData.length > 0) {
+            const cacheEntry = { data: finnData, timestamp: Date.now() };
+            _benchmarkCache[cacheKey] = cacheEntry;
+            try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+            return finnData;
+        }
+    }
+
+    return null;
+}
+
+async function _fetchTwelveDataBenchmark(symbol, range) {
+    if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') return null;
+
+    const interval = _rangeToInterval(range);
+    const outputSize = _rangeToOutputSize(range);
+
+    try {
+        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+        const res = await fetch(url);
+        if (!res.ok || res.status === 429) {
+            console.warn(`[Benchmark] Twelve Data ${res.status} for ${symbol}`);
+            return null;
+        }
+        const json = await res.json();
+        if (json.status === 'error' || !json.values || json.values.length === 0) {
+            console.warn(`[Benchmark] Twelve Data no data for ${symbol}:`, json.message || 'empty');
+            return null;
+        }
+
+        // Twelve Data returns newest first — reverse to chronological order
+        const values = json.values.reverse();
+        const firstClose = parseFloat(values[0].close);
+
+        return values.map(v => ({
+            date: v.datetime.split(' ')[0], // YYYY-MM-DD
+            close: parseFloat(v.close),
+            returnPct: ((parseFloat(v.close) - firstClose) / firstClose) * 100
+        }));
+    } catch (e) {
+        console.warn(`[Benchmark] Twelve Data fetch error for ${symbol}:`, e.message);
+        return null;
+    }
+}
+
+async function _fetchFinnhubBenchmark(symbol, range) {
+    if (!FINNHUB_API_KEY || FINNHUB_API_KEY === 'YOUR_FINNHUB_API_KEY') return null;
+
+    const now = Math.floor(Date.now() / 1000);
+    const days = _rangeToDays(range);
+    const from = now - days * 24 * 60 * 60;
+    const resolution = (range === '1d' || range === '5d') ? '60' : 'D';
+
+    try {
+        const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${FINNHUB_API_KEY}`;
+        const res = await fetch(url);
+        if (!res.ok || res.status === 429) return null;
+        const json = await res.json();
+        if (json.s !== 'ok' || !json.c || json.c.length === 0) return null;
+
+        const firstClose = json.c[0];
+        return json.c.map((close, i) => ({
+            date: new Date(json.t[i] * 1000).toISOString().split('T')[0],
+            close,
+            returnPct: ((close - firstClose) / firstClose) * 100
+        }));
+    } catch (e) {
+        console.warn(`[Benchmark] Finnhub fetch error for ${symbol}:`, e.message);
+        return null;
+    }
+}
+
+// ========== UNIFIED PERFORMANCE CHART RENDERER ==========
+
+async function renderPerformanceChart(canvasId, clientId, range, benchmarks, chartKey) {
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return null;
+
+    const hist = filterHistoryByRange(client.performanceHistory || [], range);
+    if (!hist || hist.length === 0) return null;
+
+    // Destroy previous chart
+    if (chartKey && charts[chartKey]) {
+        charts[chartKey].destroy();
+        delete charts[chartKey];
+    }
+
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+
+    // Normalize portfolio data to % from start of visible range
+    const firstValue = hist[0].value || 1;
+    const portfolioData = hist.map(p => ({
+        date: p.date,
+        returnPct: ((p.value - firstValue) / firstValue) * 100
+    }));
+
+    const isPositive = (portfolioData[portfolioData.length - 1]?.returnPct || 0) >= 0;
+
+    // Build datasets
+    const datasets = [{
+        label: 'תשואת התיק',
+        data: portfolioData.map(p => p.returnPct),
+        borderColor: isPositive ? COLORS.profit : COLORS.loss,
+        backgroundColor: isPositive ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+        borderWidth: 2,
+        fill: true,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        tension: 0.3
+    }];
+
+    // Fetch and add benchmark datasets
+    const labels = hist.map((_, i) => i);
+    for (const symbol of (benchmarks || [])) {
+        const benchData = await fetchBenchmarkData(symbol, range);
+        if (!benchData || benchData.length === 0) continue;
+
+        // Align benchmark data to portfolio data length by sampling evenly
+        const aligned = _alignBenchmarkToPortfolio(benchData, hist.length);
+
+        datasets.push({
+            label: BENCHMARK_SYMBOLS[symbol] || symbol,
+            data: aligned.map(p => p.returnPct),
+            borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
+            borderWidth: 1.5,
+            borderDash: [5, 3],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.3
+        });
+    }
+
+    const chartInstance = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { size: 11, weight: 'bold' },
+                        autoSkip: true,
+                        maxRotation: 0,
+                        maxTicksLimit: 10,
+                        callback: function (v, i) { return getSmartLabel(hist, i, this.chart); }
+                    },
+                    grid: { color: 'rgba(51,65,85,0.3)' }
+                },
+                y: {
+                    position: 'right',
+                    title: { display: true, text: 'תשואה %', color: '#94a3b8', font: { size: 11 } },
+                    ticks: { color: '#64748b', font: { size: 10 }, callback: v => v.toFixed(1) + '%' },
+                    grid: { color: 'rgba(51,65,85,0.3)' }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: datasets.length > 1,
+                    position: 'top',
+                    rtl: true,
+                    labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8, padding: 12 }
+                },
+                tooltip: {
+                    rtl: true,
+                    callbacks: {
+                        title: (items) => {
+                            const idx = items[0].dataIndex;
+                            return hist[idx] ? hist[idx].date : '';
+                        },
+                        label: (ctx) => {
+                            const sign = ctx.parsed.y >= 0 ? '+' : '';
+                            return ` ${ctx.dataset.label}: ${sign}${ctx.parsed.y.toFixed(2)}%`;
+                        }
+                    }
+                },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' }
+                }
+            }
+        }
+    });
+
+    if (chartKey) charts[chartKey] = chartInstance;
+    return chartInstance;
+}
+
+// Align benchmark array to target length by sampling evenly
+function _alignBenchmarkToPortfolio(benchData, targetLength) {
+    if (benchData.length === targetLength) return benchData;
+    if (benchData.length === 0) return [];
+
+    const result = [];
+    const step = (benchData.length - 1) / Math.max(1, targetLength - 1);
+    for (let i = 0; i < targetLength; i++) {
+        const idx = Math.min(Math.round(i * step), benchData.length - 1);
+        result.push(benchData[idx]);
+    }
+    return result;
+}
+
+// ========== MODAL PERFORMANCE CHART CONTROLS ==========
+
+function setModalPerfRange(range, btn) {
+    _modalPerfRange = range;
+    // Update button states
+    const container = btn.closest('.perf-time-range');
+    if (container) container.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _refreshModalPerfChart();
+}
+
+function toggleModalBenchmark(symbol, btn) {
+    const idx = _modalPerfBenchmarks.indexOf(symbol);
+    if (idx >= 0) {
+        _modalPerfBenchmarks.splice(idx, 1);
+        btn.classList.remove('active');
+        btn.style.color = '';
+    } else {
+        _modalPerfBenchmarks.push(symbol);
+        btn.classList.add('active');
+        btn.style.color = BENCHMARK_COLORS[symbol] || '';
+    }
+    _refreshModalPerfChart();
+}
+
+async function _refreshModalPerfChart() {
+    if (!currentModalClientId) return;
+    if (_modalPerfChartInstance) {
+        _modalPerfChartInstance.destroy();
+        _modalPerfChartInstance = null;
+    }
+    _modalPerfChartInstance = await renderPerformanceChart(
+        'modal-perf-chart',
+        currentModalClientId,
+        _modalPerfRange,
+        _modalPerfBenchmarks,
+        null // don't store in charts{} — we track separately
+    );
+}
+
+// ========== SECTOR CHART ==========
 
 function renderModalSectorChart(client) {
     const ctx = document.getElementById('modal-sector-chart');
@@ -26,7 +336,7 @@ function renderModalSectorChart(client) {
     if (charts['modal-sector']) charts['modal-sector'].destroy();
     const sectorData = {};
     client.holdings.filter(h => h.type === 'stock').forEach(h => {
-        const s = h.sector || 'Other';
+        const s = h.sector || SECTOR_MAP[h.ticker] || 'Other';
         sectorData[s] = (sectorData[s] || 0) + h.value;
     });
     const sorted = Object.entries(sectorData).sort((a, b) => b[1] - a[1]);
@@ -48,12 +358,46 @@ function renderModalSectorChart(client) {
 
 // ========== FULLSCREEN CHART ==========
 
+// State for fullscreen
+let _fullscreenRange = '1y';
+let _fullscreenBenchmarks = [];
+
 function openFullscreenChart(clientId) {
     const client = clients.find(c => c.id === clientId);
     if (!client || !client.performanceHistory) return;
 
-    document.getElementById('fullscreenTitle').textContent = `מעקב תשואה - ${client.name}`;
+    // Reset state
+    _fullscreenRange = _modalPerfRange || '1y';
+    _fullscreenBenchmarks = [..._modalPerfBenchmarks];
+
     document.getElementById('fullscreenOverlay').classList.add('active');
+
+    // Build header with controls
+    const headerEl = document.querySelector('.fullscreen-chart-header');
+    if (headerEl) {
+        headerEl.innerHTML = `
+            <div>
+                <h3 id="fullscreenTitle">מעקב תשואה - ${client.name}</h3>
+                <div class="perf-time-range" style="margin-top:8px">
+                    ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
+                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${r.toUpperCase()}</button>`
+                    ).join('')}
+                </div>
+                <div class="perf-benchmarks" style="margin-top:6px">
+                    <span class="benchmark-label">השוואה:</span>
+                    ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
+                        `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
+                    ).join('')}
+                </div>
+            </div>
+            <div class="fullscreen-chart-controls">
+                <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
+                <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">-</button>
+                <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום">איפוס</button>
+                <button class="modal-close" onclick="closeFullscreen()" title="סגור">&times;</button>
+            </div>
+        `;
+    }
 
     // Destroy previous instance
     if (fullscreenChartInstance) {
@@ -61,124 +405,46 @@ function openFullscreenChart(clientId) {
         fullscreenChartInstance = null;
     }
 
-    setTimeout(() => {
-        const ctx = document.getElementById('fullscreen-chart');
-        if (!ctx) return;
+    _renderFullscreenChart(clientId);
+}
 
-        const hist = client.performanceHistory;
-        if (!hist || hist.length === 0) return;
-        const isPositive = (hist[hist.length - 1]?.returnPct || 0) >= 0;
+async function _renderFullscreenChart(clientId) {
+    if (fullscreenChartInstance) {
+        fullscreenChartInstance.destroy();
+        fullscreenChartInstance = null;
+    }
 
-        fullscreenChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: hist.map((_, i) => i),
-                datasets: [
-                    {
-                        label: 'תשואה %',
-                        data: hist.map(p => p.returnPct),
-                        borderColor: isPositive ? '#22c55e' : '#ef4444',
-                        backgroundColor: isPositive ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                        borderWidth: 2.5,
-                        fill: true,
-                        pointRadius: 3,
-                        pointHoverRadius: 7,
-                        pointBackgroundColor: isPositive ? '#22c55e' : '#ef4444',
-                        pointBorderColor: '#1e293b',
-                        pointBorderWidth: 2,
-                        tension: 0.3
-                    },
-                    {
-                        label: 'שווי תיק ($)',
-                        data: hist.map(p => p.value),
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59,130,246,0.05)',
-                        borderWidth: 2,
-                        borderDash: [6, 3],
-                        fill: true,
-                        pointRadius: 2,
-                        pointHoverRadius: 6,
-                        pointBackgroundColor: '#3b82f6',
-                        pointBorderColor: '#1e293b',
-                        pointBorderWidth: 2,
-                        tension: 0.3,
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { intersect: false, mode: 'index' },
-                scales: {
-                    x: {
-                        ticks: {
-                            color: '#94a3b8',
-                            font: { size: 13, weight: 'bold' },
-                            autoSkip: true,
-                            maxRotation: 0,
-                            maxTicksLimit: 15,
-                            callback: function (val, index) {
-                                return getSmartLabel(hist, index, this.chart);
-                            }
-                        },
-                        grid: { color: 'rgba(51,65,85,0.3)' }
-                    },
-                    y: {
-                        position: 'right',
-                        title: { display: true, text: 'תשואה %', color: '#94a3b8', font: { size: 13 } },
-                        ticks: { color: '#94a3b8', font: { size: 12 }, callback: v => v.toFixed(1) + '%' },
-                        grid: { color: 'rgba(51,65,85,0.3)' }
-                    },
-                    y1: {
-                        position: 'left',
-                        title: { display: true, text: 'שווי ($)', color: '#94a3b8', font: { size: 13 } },
-                        ticks: { color: '#94a3b8', font: { size: 12 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        rtl: true,
-                        labels: { color: '#94a3b8', font: { size: 13 }, usePointStyle: true, padding: 20 }
-                    },
-                    tooltip: {
-                        rtl: true,
-                        titleFont: { size: 14 },
-                        bodyFont: { size: 13 },
-                        padding: 12,
-                        callbacks: {
-                            title: (items) => hist[items[0].dataIndex].date,
-                            label: (ctx) => {
-                                if (ctx.datasetIndex === 0) return ` תשואה: ${ctx.parsed.y.toFixed(2)}%`;
-                                return ` שווי: $${ctx.parsed.y.toLocaleString()}`;
-                            }
-                        }
-                    },
-                    zoom: {
-                        pan: {
-                            enabled: true,
-                            mode: 'x',
-                            modifierKey: null
-                        },
-                        zoom: {
-                            wheel: { enabled: true, speed: 0.1 },
-                            pinch: { enabled: true },
-                            drag: {
-                                enabled: true,
-                                backgroundColor: 'rgba(59,130,246,0.15)',
-                                borderColor: '#3b82f6',
-                                borderWidth: 1
-                            },
-                            mode: 'x'
-                        }
-                    }
-                }
-            }
-        });
-    }, 150);
+    setTimeout(async () => {
+        fullscreenChartInstance = await renderPerformanceChart(
+            'fullscreen-chart',
+            clientId,
+            _fullscreenRange,
+            _fullscreenBenchmarks,
+            null
+        );
+    }, 100);
+}
+
+function setFullscreenRange(range, btn) {
+    _fullscreenRange = range;
+    const container = btn.closest('.perf-time-range');
+    if (container) container.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _renderFullscreenChart(currentModalClientId);
+}
+
+function toggleFullscreenBenchmark(symbol, btn) {
+    const idx = _fullscreenBenchmarks.indexOf(symbol);
+    if (idx >= 0) {
+        _fullscreenBenchmarks.splice(idx, 1);
+        btn.classList.remove('active');
+        btn.style.color = '';
+    } else {
+        _fullscreenBenchmarks.push(symbol);
+        btn.classList.add('active');
+        btn.style.color = BENCHMARK_COLORS[symbol] || '';
+    }
+    _renderFullscreenChart(currentModalClientId);
 }
 
 function fullscreenZoom(action) {

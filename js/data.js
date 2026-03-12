@@ -49,14 +49,16 @@ const SECTOR_MAP = {
     'HON': 'Industrials', 'CTAS': 'Industrials', 'RTX': 'Industrials', 'UPS': 'Industrials',
     'CAT': 'Industrials', 'DE': 'Industrials', 'BA': 'Industrials', 'GE': 'Industrials', 'MMM': 'Industrials',
     'NEE': 'Utilities', 'SO': 'Utilities',
-    'PLD': 'Real Estate'
+    'PLD': 'Real Estate',
+    'MSTR': 'Crypto', 'IBIT': 'Crypto', 'BITO': 'Crypto', 'GBTC': 'Crypto',
+    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto'
 };
 
 const SECTOR_COLORS = {
     'Technology': '#3b82f6', 'Communication': '#06b6d4', 'Consumer Disc.': '#f97316',
     'Consumer Staples': '#84cc16', 'Healthcare': '#ec4899', 'Financials': '#eab308',
     'Energy': '#ef4444', 'Industrials': '#8b5cf6', 'Utilities': '#14b8a6',
-    'Real Estate': '#f43f5e', 'Bonds': '#a855f7', 'Other': '#64748b'
+    'Real Estate': '#f43f5e', 'Crypto': '#f7931a', 'Bonds': '#a855f7', 'Other': '#64748b'
 };
 
 const COLORS = { profit: '#22c55e', loss: '#ef4444', neutral: '#3b82f6', bonds: '#a855f7' };

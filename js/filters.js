@@ -33,12 +33,17 @@ function setSort(value) {
 // ========== TIME RANGE ==========
 
 function filterHistoryByRange(history, range) {
-    if (range === 'all' || !history.length) return history;
+    if (range === 'all' || range === 'max' || !history.length) return history;
     const now = new Date();
     let cutoff;
-    if (range === '1m') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    if (range === '1d') cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    else if (range === '5d') cutoff = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+    else if (range === '1m') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
     else if (range === '3m') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    else if (range === '6m') cutoff = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+    else if (range === 'ytd') cutoff = new Date(now.getFullYear(), 0, 1);
     else if (range === '1y') cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    else if (range === '5y') cutoff = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
     else return history;
 
     // Performance history dates are in he-IL format DD.MM.YYYY - parse them

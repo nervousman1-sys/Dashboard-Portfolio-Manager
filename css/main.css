@@ -730,9 +730,15 @@ body {
     margin: 0 auto 24px;
 }
 
+.modal-chart-container.modal-chart-small {
+    width: 162px;
+    height: 162px;
+    flex: 0 0 162px;
+}
+
 .modal-performance-container {
     width: 100%;
-    height: 280px;
+    height: 320px;
     margin-bottom: 24px;
     background: var(--bg-primary);
     border-radius: 12px;
@@ -751,15 +757,94 @@ body {
     display: flex;
     gap: 20px;
     margin-bottom: 24px;
+    align-items: flex-start;
 }
 
 .modal-charts-row>div {
     flex: 1;
 }
 
+/* Performance chart controls */
+.perf-chart-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.perf-time-range {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+
+.time-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.time-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.time-btn.active {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+}
+
+.perf-benchmarks {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.benchmark-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.benchmark-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.benchmark-btn:hover {
+    border-color: var(--text-secondary);
+}
+
+.benchmark-btn.active {
+    border-width: 2px;
+    font-weight: 700;
+}
+
 @media (max-width: 768px) {
     .modal-charts-row {
         flex-direction: column;
+    }
+
+    .modal-chart-container.modal-chart-small {
+        width: 140px;
+        height: 140px;
+        flex: 0 0 auto;
+        margin: 0 auto;
     }
 }
 
