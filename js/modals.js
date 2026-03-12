@@ -367,15 +367,49 @@ function openMgmtModal(action, data) {
     if (action === 'addClient') {
         html = `
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
-            <div class="mgmt-body">
+            <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
                 <div class="mgmt-field"><label>שם הלקוח</label><input type="text" id="mgmt-name" placeholder="הזן שם לקוח..." /></div>
-                <div class="mgmt-field"><label>מזומן פנוי בתיק ($)</label><input type="number" id="mgmt-cash" min="0" step="100" value="0" placeholder="0" /></div>
-                <div style="padding:8px 12px;background:rgba(34,197,94,0.08);border-radius:8px;border:1px solid rgba(34,197,94,0.2);font-size:12px;color:var(--text-muted);direction:rtl">
-                    רמת הסיכון מחושבת אוטומטית לפי הרכב התיק: מניות &gt;70% = גבוה, 40-70% = בינוני, &lt;40% = נמוך
+                <div class="mgmt-field"><label>מזומן פנוי בתיק ($)</label><input type="number" id="mgmt-cash" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
+
+                <div class="mgmt-section-divider">הוספת אחזקות</div>
+
+                <div class="file-dropzone" id="addClientDropzone"
+                     ondragover="event.preventDefault(); this.classList.add('dragover')"
+                     ondragleave="this.classList.remove('dragover')"
+                     ondrop="event.preventDefault(); this.classList.remove('dragover'); handleDropzoneFile(event.dataTransfer.files[0])"
+                     onclick="document.getElementById('addClientFileInput').click()">
+                    <div class="dropzone-icon">&#x2601;</div>
+                    <div class="dropzone-text">גרור קובץ Excel, CSV או PDF</div>
+                    <div class="dropzone-sub">או לחץ לבחירת קובץ</div>
+                    <input type="file" id="addClientFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none"
+                           onchange="handleDropzoneFile(this.files[0])" />
+                </div>
+                <div id="addClientFileStatus" style="display:none;margin-bottom:10px"></div>
+
+                <div class="mgmt-holdings-wrapper">
+                    <table class="mgmt-holdings-table" id="mgmt-holdings-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40%">סימול</th>
+                                <th style="width:20%">כמות</th>
+                                <th style="width:25%">מחיר קנייה ($)</th>
+                                <th style="width:15%"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="mgmt-holdings-tbody"></tbody>
+                    </table>
+                    <button class="add-row-btn" onclick="addHoldingRow()">+ הוסף שורה</button>
+                </div>
+
+                <div class="risk-indicator" id="addClientRiskIndicator">
+                    <span class="risk-indicator-label">רמת סיכון:</span>
+                    <span class="risk-indicator-dot" id="riskDot" style="background:var(--risk-low)"></span>
+                    <span class="risk-indicator-value" id="riskValue">נמוך</span>
+                    <span class="risk-indicator-pct" id="riskPct">(0%)</span>
                 </div>
             </div>
             <div class="mgmt-footer">
-                <button class="mgmt-btn primary" onclick="addClient()">הוסף תיק</button>
+                <button class="mgmt-btn primary" id="addClientSubmitBtn" onclick="addClient()">הוסף תיק</button>
                 <button class="mgmt-btn secondary" onclick="closeMgmtModal()">ביטול</button>
             </div>`;
     }
@@ -659,12 +693,34 @@ async function addClient() {
     const cashBalance = parseFloat(document.getElementById('mgmt-cash')?.value) || 0;
     if (!name) { alert('נא להזין שם לקוח'); return; }
 
-    const newClient = supabaseConnected
-        ? await supaAddClient(name, cashBalance)
-        : await apiAddClient(name, 'low');
-    if (newClient) clients.push(newClient);
-    closeMgmtModal();
-    refreshDashboard();
+    // Collect holdings from dynamic table
+    const holdingsData = _collectHoldingRows();
+
+    // Show loading state
+    const submitBtn = document.getElementById('addClientSubmitBtn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
+
+    try {
+        let finalClient;
+
+        if (supabaseConnected) {
+            if (holdingsData.length > 0) {
+                finalClient = await supaAddClientWithHoldings(name, cashBalance, holdingsData);
+            } else {
+                finalClient = await supaAddClient(name, cashBalance);
+            }
+        } else {
+            finalClient = await apiAddClient(name, 'low');
+        }
+
+        if (finalClient) clients.push(finalClient);
+        closeMgmtModal();
+        refreshDashboard();
+    } catch (err) {
+        console.error('addClient error:', err);
+        alert('שגיאה ביצירת התיק');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'הוסף תיק'; }
+    }
 }
 
 async function editClient(clientId) {
@@ -838,3 +894,229 @@ async function sellHolding(clientId, holdingId) {
         openModal(clientId);
     }
 }
+
+// ========== ADD CLIENT - DYNAMIC HOLDINGS TABLE ==========
+
+let _holdingRowCounter = 0;
+let _rowSearchTimeouts = {};
+
+function addHoldingRow(prefill = null) {
+    const tbody = document.getElementById('mgmt-holdings-tbody');
+    if (!tbody) return;
+
+    const rowId = 'hrow_' + (++_holdingRowCounter);
+    const tr = document.createElement('tr');
+    tr.id = rowId;
+    tr.innerHTML = `
+        <td class="row-ticker-cell">
+            <div class="row-ticker-wrapper">
+                <input type="hidden" class="row-ticker-symbol" value="${prefill?.ticker || ''}" />
+                <div class="row-ticker-badge" style="display:${prefill?.ticker ? 'flex' : 'none'}">${prefill?.ticker || ''}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button></div>
+                <input type="text" class="row-ticker-search" placeholder="חפש סימול..."
+                       style="direction:ltr;text-align:left;${prefill?.ticker ? 'display:none' : ''}"
+                       oninput="onRowTickerSearch('${rowId}')" autocomplete="off" />
+                <div class="row-ticker-dropdown" id="dropdown_${rowId}"></div>
+            </div>
+        </td>
+        <td><input type="number" class="row-shares" min="1" value="${prefill?.shares || ''}" placeholder="0"
+                   style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
+        <td><input type="number" class="row-price" min="0" step="0.01" value="${prefill?.avgPrice || ''}" placeholder="0.00"
+                   style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
+        <td><button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+    updateAddClientRisk();
+
+    // Focus the ticker search if not prefilled
+    if (!prefill?.ticker) {
+        const searchInput = tr.querySelector('.row-ticker-search');
+        if (searchInput) searchInput.focus();
+    }
+}
+
+function removeHoldingRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+    updateAddClientRisk();
+}
+
+function clearRowTicker(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.querySelector('.row-ticker-symbol').value = '';
+    row.querySelector('.row-ticker-badge').style.display = 'none';
+    row.querySelector('.row-ticker-badge').textContent = '';
+    const searchInput = row.querySelector('.row-ticker-search');
+    searchInput.style.display = '';
+    searchInput.value = '';
+    searchInput.focus();
+    updateAddClientRisk();
+}
+
+function onRowTickerSearch(rowId) {
+    if (_rowSearchTimeouts[rowId]) clearTimeout(_rowSearchTimeouts[rowId]);
+
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const input = row.querySelector('.row-ticker-search');
+    const dropdown = document.getElementById('dropdown_' + rowId);
+    const query = input?.value?.trim();
+
+    if (!query || query.length < 1) {
+        if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
+        return;
+    }
+
+    if (dropdown) {
+        dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
+        dropdown.style.display = 'block';
+    }
+
+    _rowSearchTimeouts[rowId] = setTimeout(async () => {
+        const results = await searchTwelveDataSymbols(query);
+        if (!dropdown) return;
+
+        if (results.length === 0) {
+            dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
+            return;
+        }
+
+        dropdown.innerHTML = results.map(r =>
+            `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
+                <span class="ticker-search-symbol">${r.symbol}</span>
+                <span class="ticker-search-name">${r.name}</span>
+                <span class="ticker-search-meta">${r.exchange} · ${r.currency}</span>
+            </div>`
+        ).join('');
+    }, 300);
+}
+
+function selectRowTicker(rowId, symbol, currency) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+
+    row.querySelector('.row-ticker-symbol').value = symbol;
+    row.dataset.currency = currency || 'USD';
+
+    const badge = row.querySelector('.row-ticker-badge');
+    badge.innerHTML = `${symbol}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button>`;
+    badge.style.display = 'flex';
+
+    row.querySelector('.row-ticker-search').style.display = 'none';
+    const dropdown = document.getElementById('dropdown_' + rowId);
+    if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
+
+    updateAddClientRisk();
+}
+
+// Collect all holding rows into an array for submission
+function _collectHoldingRows() {
+    const tbody = document.getElementById('mgmt-holdings-tbody');
+    if (!tbody) return [];
+
+    const rows = tbody.querySelectorAll('tr');
+    const holdings = [];
+
+    rows.forEach(row => {
+        const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase();
+        const shares = parseInt(row.querySelector('.row-shares')?.value) || 0;
+        const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
+        const currency = row.dataset?.currency || 'USD';
+
+        if (ticker && shares > 0 && price > 0) {
+            holdings.push({
+                type: 'stock',
+                ticker,
+                stockName: ticker,
+                price,
+                quantity: shares,
+                currency
+            });
+        }
+    });
+
+    return holdings;
+}
+
+// Real-time risk calculation
+function updateAddClientRisk() {
+    const cash = parseFloat(document.getElementById('mgmt-cash')?.value) || 0;
+    const tbody = document.getElementById('mgmt-holdings-tbody');
+
+    let totalStockValue = 0;
+    if (tbody) {
+        tbody.querySelectorAll('tr').forEach(row => {
+            const shares = parseInt(row.querySelector('.row-shares')?.value) || 0;
+            const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
+            totalStockValue += shares * price;
+        });
+    }
+
+    const total = totalStockValue + cash;
+    const stockPct = total > 0 ? (totalStockValue / total) * 100 : 0;
+
+    let risk, riskLabel, riskColor;
+    if (stockPct > 70) { risk = 'high'; riskLabel = 'גבוה'; riskColor = 'var(--risk-high)'; }
+    else if (stockPct >= 40) { risk = 'medium'; riskLabel = 'בינוני'; riskColor = 'var(--risk-medium)'; }
+    else { risk = 'low'; riskLabel = 'נמוך'; riskColor = 'var(--risk-low)'; }
+
+    const dot = document.getElementById('riskDot');
+    const val = document.getElementById('riskValue');
+    const pct = document.getElementById('riskPct');
+
+    if (dot) dot.style.background = riskColor;
+    if (val) { val.textContent = riskLabel; val.style.color = riskColor; }
+    if (pct) pct.textContent = `(${stockPct.toFixed(0)}% מניות)`;
+}
+
+// Handle file drop/select from dropzone
+async function handleDropzoneFile(file) {
+    if (!file) return;
+
+    const statusEl = document.getElementById('addClientFileStatus');
+    const dropzone = document.getElementById('addClientDropzone');
+
+    // Show loading state
+    if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = '<div class="file-status-loading">מעבד קובץ: ' + file.name + '...</div>';
+    }
+    if (dropzone) dropzone.style.opacity = '0.5';
+
+    try {
+        const parsed = await handleImportFile(file);
+
+        if (parsed && parsed.length > 0) {
+            // Clear existing rows
+            const tbody = document.getElementById('mgmt-holdings-tbody');
+            if (tbody) tbody.innerHTML = '';
+
+            // Add parsed rows
+            parsed.forEach(row => addHoldingRow(row));
+
+            if (statusEl) {
+                statusEl.innerHTML = `<div class="file-status-success">נטענו ${parsed.length} אחזקות מ-${file.name}</div>`;
+            }
+        } else {
+            if (statusEl) {
+                statusEl.innerHTML = '<div class="file-status-error">לא נמצאו אחזקות בקובץ. נסה קובץ אחר או הזן ידנית.</div>';
+            }
+        }
+    } catch (err) {
+        console.error('File parse error:', err);
+        if (statusEl) {
+            statusEl.innerHTML = '<div class="file-status-error">שגיאה בקריאת הקובץ</div>';
+        }
+    }
+
+    if (dropzone) dropzone.style.opacity = '1';
+}
+
+// Close row dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.row-ticker-wrapper')) {
+        document.querySelectorAll('.row-ticker-dropdown').forEach(d => {
+            d.style.display = 'none';
+        });
+    }
+});

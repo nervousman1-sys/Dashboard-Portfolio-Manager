@@ -98,6 +98,31 @@ async function supaAddClient(name, cashBalance = 0) {
     return mapPortfolio(data);
 }
 
+// Create portfolio with initial holdings in one go
+async function supaAddClientWithHoldings(name, cashBalance, holdings) {
+    // Step 1: Create the portfolio
+    const portfolio = await supaAddClient(name, cashBalance);
+    if (!portfolio) return null;
+
+    // Step 2: Add each holding sequentially (handles aggregation)
+    let totalHoldingsCost = 0;
+    for (const h of holdings) {
+        totalHoldingsCost += h.price * h.quantity;
+        await supaAddHolding(portfolio.id, h);
+    }
+
+    // Step 3: Update initial_investment to include holdings cost
+    const totalInvestment = cashBalance + totalHoldingsCost;
+    await supabaseClient
+        .from('portfolios')
+        .update({ initial_investment: totalInvestment })
+        .eq('id', portfolio.id);
+
+    // Step 4: Final recalc and return
+    await supaRecalcClient(portfolio.id);
+    return await supaFetchClient(portfolio.id);
+}
+
 async function supaEditClient(clientId, name) {
     // Fetch current data for logging the change
     const { data: current } = await supabaseClient

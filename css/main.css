@@ -1799,3 +1799,211 @@ body {
     background: rgba(168, 85, 247, 0.15);
     color: var(--accent-purple);
 }
+
+/* ========== Add Client - Holdings Import ========== */
+
+.mgmt-section-divider {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 16px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* File Dropzone */
+.file-dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 12px;
+    background: rgba(51,65,85,0.08);
+}
+.file-dropzone:hover {
+    border-color: var(--accent-blue);
+    background: rgba(59,130,246,0.05);
+}
+.file-dropzone.dragover {
+    border-color: var(--accent-blue);
+    background: rgba(59,130,246,0.1);
+    transform: scale(1.01);
+}
+.dropzone-icon {
+    font-size: 28px;
+    margin-bottom: 6px;
+    opacity: 0.6;
+}
+.dropzone-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.dropzone-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* File status messages */
+.file-status-loading {
+    padding: 8px 12px;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: var(--radius-sm);
+    color: var(--accent-blue);
+    font-size: 12px;
+    text-align: center;
+}
+.file-status-success {
+    padding: 8px 12px;
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: var(--radius-sm);
+    color: var(--accent-green);
+    font-size: 12px;
+    text-align: center;
+}
+.file-status-error {
+    padding: 8px 12px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: var(--radius-sm);
+    color: var(--accent-red);
+    font-size: 12px;
+    text-align: center;
+}
+
+/* Dynamic Holdings Table */
+.mgmt-holdings-wrapper {
+    margin-bottom: 12px;
+}
+.mgmt-holdings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+.mgmt-holdings-table th {
+    text-align: right;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.3px;
+}
+.mgmt-holdings-table td {
+    padding: 4px 4px;
+    border-bottom: 1px solid rgba(51,65,85,0.3);
+    vertical-align: middle;
+}
+.mgmt-holdings-table input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: inherit;
+}
+.mgmt-holdings-table input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+/* Row ticker search */
+.row-ticker-wrapper {
+    position: relative;
+}
+.row-ticker-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-blue);
+    background: rgba(59,130,246,0.1);
+    color: var(--accent-blue);
+    font-size: 12px;
+    font-weight: 700;
+    direction: ltr;
+}
+.row-ticker-badge .ticker-clear-btn {
+    font-size: 14px;
+    padding: 0 2px;
+    margin-right: auto;
+}
+.row-ticker-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* Add Row button */
+.add-row-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--accent-blue);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s;
+    width: 100%;
+}
+.add-row-btn:hover {
+    background: rgba(59,130,246,0.1);
+    border-color: var(--accent-blue);
+}
+
+/* Risk Indicator */
+.risk-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(51,65,85,0.15);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    margin-top: 4px;
+}
+.risk-indicator-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.risk-indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.risk-indicator-value {
+    font-size: 13px;
+    font-weight: 700;
+}
+.risk-indicator-pct {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-right: auto;
+    direction: ltr;
+}
