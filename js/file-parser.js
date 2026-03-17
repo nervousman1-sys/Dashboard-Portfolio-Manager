@@ -1,9 +1,9 @@
 // ========== FILE PARSER - Excel/CSV/PDF Import for Portfolio Holdings ==========
 
 // Column name patterns for auto-detection (Hebrew + English)
-const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'name', 'נכס'];
-const SHARES_COLUMNS = ['כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות'];
-const PRICE_COLUMNS = ['מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות'];
+const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'נכס', 'סימול (ticker)'];
+const SHARES_COLUMNS = ['כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
+const PRICE_COLUMNS = ['מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות', 'מחיר שוק'];
 
 // ========== EXCEL / CSV PARSING ==========
 
@@ -15,7 +15,6 @@ async function parseExcelFile(file) {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
 
-                // Use first sheet
                 const sheetName = workbook.SheetNames[0];
                 if (!sheetName) { resolve([]); return; }
 
@@ -24,7 +23,6 @@ async function parseExcelFile(file) {
 
                 if (!rows || rows.length === 0) { resolve([]); return; }
 
-                // Auto-detect column mapping
                 const headers = Object.keys(rows[0]);
                 const tickerCol = _findMatchingColumn(headers, TICKER_COLUMNS);
                 const sharesCol = _findMatchingColumn(headers, SHARES_COLUMNS);
@@ -44,11 +42,8 @@ async function parseExcelFile(file) {
                     const shares = _cleanNumber(sharesCol ? row[sharesCol] : 0);
                     const avgPrice = _cleanNumber(priceCol ? row[priceCol] : 0);
 
-                    if (shares > 0 && avgPrice > 0) {
-                        result.push({ ticker, shares, avgPrice });
-                    } else if (shares > 0) {
-                        // Allow rows with shares but no price (user can fill later)
-                        result.push({ ticker, shares, avgPrice: 0 });
+                    if (shares > 0) {
+                        result.push({ ticker, shares, avgPrice: avgPrice || 0 });
                     }
                 }
 
@@ -63,7 +58,7 @@ async function parseExcelFile(file) {
     });
 }
 
-// ========== PDF PARSING ==========
+// ========== PDF PARSING (position-based row reconstruction) ==========
 
 async function parsePDFFile(file) {
     if (typeof pdfjsLib === 'undefined') {
@@ -71,7 +66,6 @@ async function parsePDFFile(file) {
         return [];
     }
 
-    // Set worker source
     pdfjsLib.GlobalWorkerOptions.workerSrc =
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -79,53 +73,304 @@ async function parsePDFFile(file) {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        let fullText = '';
+        // Collect all text items with positions from all pages
+        const allItems = [];
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + '\n';
+            for (const item of textContent.items) {
+                if (!item.str || !item.str.trim()) continue;
+                // transform[5] = y position, transform[4] = x position
+                allItems.push({
+                    text: item.str.trim(),
+                    x: Math.round(item.transform[4]),
+                    y: Math.round(item.transform[5]),
+                    page: i
+                });
+            }
         }
 
-        return _extractHoldingsFromText(fullText);
+        if (allItems.length === 0) return [];
+
+        // Strategy 1: Position-based row reconstruction
+        const positionResult = _extractFromPositionedItems(allItems);
+        if (positionResult.length > 0) return positionResult;
+
+        // Strategy 2: Flat text fallback (join all text, scan for patterns)
+        const flatText = allItems.map(it => it.text).join(' ');
+        const flatResult = _extractFromFlatText(flatText);
+        if (flatResult.length > 0) return flatResult;
+
+        // Strategy 3: Scan individual text items for tickers and nearby numbers
+        return _extractFromScatteredItems(allItems);
     } catch (err) {
         console.error('[FileParser] PDF parse error:', err);
         return [];
     }
 }
 
-// Extract holdings data from raw text using regex patterns
-function _extractHoldingsFromText(text) {
+// Strategy 1: Group items into rows by Y position, then parse each row
+function _extractFromPositionedItems(items) {
+    // Group items by Y position (items within 5px vertically = same row)
+    const rowMap = new Map();
+    for (const item of items) {
+        // Create a rounded Y key (group items within 5px)
+        const yKey = Math.round(item.y / 5) * 5;
+        if (!rowMap.has(yKey)) rowMap.set(yKey, []);
+        rowMap.get(yKey).push(item);
+    }
+
+    // Sort rows by Y descending (PDF y=0 is bottom, so top rows have higher Y)
+    const sortedRows = [...rowMap.entries()]
+        .sort((a, b) => b[0] - a[0])
+        .map(([, items]) => {
+            // Sort items within row by X position (left to right)
+            items.sort((a, b) => a.x - b.x);
+            return items;
+        });
+
+    // Try to detect header row to understand column positions
+    const headerInfo = _detectHeaderRow(sortedRows);
+
     const results = [];
-    const lines = text.split('\n');
 
-    // Pattern 1: "TICKER  123  $150.25" or "TICKER  123  150.25"
-    const pattern1 = /\b([A-Z]{1,5})\b\s+(\d[\d,]*(?:\.\d+)?)\s+\$?([\d,]+(?:\.\d+)?)/g;
+    for (const row of sortedRows) {
+        // Look for ticker pattern in this row
+        const tickerMatch = _findTickerInRow(row);
+        if (!tickerMatch) continue;
 
-    // Pattern 2: Lines with ticker-like words followed by numbers
-    const pattern2 = /\b([A-Z]{2,5})\b.*?(\d[\d,]*)\s+(?:shares?|units?)?\s*.*?\$?([\d,]+\.?\d*)/gi;
+        // Find numbers in this row
+        const numbers = _findNumbersInRow(row, tickerMatch.itemIndex);
 
-    for (const line of lines) {
-        let match;
-
-        // Try pattern 1 first
-        pattern1.lastIndex = 0;
-        while ((match = pattern1.exec(line)) !== null) {
-            const ticker = match[1];
-            const shares = _cleanNumber(match[2]);
-            const price = _cleanNumber(match[3]);
-
-            // Basic validation: ticker looks real, reasonable share count and price
-            if (shares > 0 && shares < 10000000 && price > 0.01 && price < 100000) {
-                // Avoid common non-ticker words
-                if (!_isCommonWord(ticker)) {
-                    results.push({ ticker, shares: Math.round(shares), avgPrice: price });
-                }
+        if (numbers.length >= 1) {
+            // Determine which number is shares and which is price
+            const { shares, price } = _classifyNumbers(numbers, headerInfo);
+            if (shares > 0) {
+                results.push({
+                    ticker: tickerMatch.ticker,
+                    shares: Math.round(shares),
+                    avgPrice: price || 0
+                });
             }
         }
     }
 
-    // Deduplicate by ticker (keep first occurrence)
+    return _deduplicateResults(results);
+}
+
+// Detect header row to understand column mapping
+function _detectHeaderRow(sortedRows) {
+    const info = { tickerX: null, sharesX: null, priceX: null };
+
+    for (const row of sortedRows) {
+        const rowText = row.map(it => it.text).join(' ').toLowerCase();
+
+        // Check if this looks like a header row
+        const hasTickerHeader = TICKER_COLUMNS.some(h => rowText.includes(h));
+        const hasSharesHeader = SHARES_COLUMNS.some(h => rowText.includes(h));
+        const hasPriceHeader = PRICE_COLUMNS.some(h => rowText.includes(h));
+
+        if (hasTickerHeader && (hasSharesHeader || hasPriceHeader)) {
+            // Found header row — map column X positions
+            for (const item of row) {
+                const lower = item.text.toLowerCase();
+                if (TICKER_COLUMNS.some(h => lower.includes(h))) info.tickerX = item.x;
+                if (SHARES_COLUMNS.some(h => lower.includes(h))) info.sharesX = item.x;
+                if (PRICE_COLUMNS.some(h => lower.includes(h))) info.priceX = item.x;
+            }
+            break;
+        }
+    }
+
+    return info;
+}
+
+// Find a ticker symbol in a row of text items
+function _findTickerInRow(row) {
+    for (let i = 0; i < row.length; i++) {
+        const text = row[i].text.trim();
+        // Match common ticker patterns: AAPL, BRK.B, GOOGL, META
+        const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
+        const match = text.match(tickerPattern);
+        if (match && !_isCommonWord(match[1])) {
+            return { ticker: match[1], itemIndex: i, x: row[i].x };
+        }
+    }
+    return null;
+}
+
+// Find numeric values in a row (excluding the ticker item)
+function _findNumbersInRow(row, tickerIndex) {
+    const numbers = [];
+    for (let i = 0; i < row.length; i++) {
+        if (i === tickerIndex) continue;
+        const cleaned = row[i].text.replace(/[$₪,\s%]/g, '');
+        const num = parseFloat(cleaned);
+        if (!isNaN(num) && num > 0) {
+            numbers.push({ value: num, x: row[i].x, index: i, raw: row[i].text });
+        }
+    }
+    return numbers;
+}
+
+// Classify numbers into shares and price based on column position or heuristics
+function _classifyNumbers(numbers, headerInfo) {
+    // If we have header position info, use closest X match
+    if (headerInfo.sharesX !== null && headerInfo.priceX !== null) {
+        let shares = 0, price = 0;
+        let bestSharesDist = Infinity, bestPriceDist = Infinity;
+
+        for (const n of numbers) {
+            const sharesDist = Math.abs(n.x - headerInfo.sharesX);
+            const priceDist = Math.abs(n.x - headerInfo.priceX);
+
+            if (sharesDist < bestSharesDist) {
+                bestSharesDist = sharesDist;
+                shares = n.value;
+            }
+            if (priceDist < bestPriceDist) {
+                bestPriceDist = priceDist;
+                price = n.value;
+            }
+        }
+        return { shares, price };
+    }
+
+    // Heuristic: First integer-like number = shares, first decimal = price
+    // Or if only integers: smaller ones likely shares, larger likely price/value
+    let shares = 0, price = 0;
+
+    // Sort by position in row (left to right)
+    const sorted = [...numbers].sort((a, b) => a.x - b.x);
+
+    if (sorted.length === 1) {
+        // Only one number: assume shares
+        shares = sorted[0].value;
+    } else if (sorted.length >= 2) {
+        // Look for a whole number (shares) and a decimal number (price)
+        const integers = sorted.filter(n => Number.isInteger(n.value) || n.raw.indexOf('.') === -1);
+        const decimals = sorted.filter(n => !Number.isInteger(n.value) && n.raw.indexOf('.') !== -1);
+
+        if (integers.length > 0 && decimals.length > 0) {
+            // First integer = shares, first decimal = price
+            shares = integers[0].value;
+            price = decimals[0].value;
+        } else {
+            // All same type: first = shares (quantity), second = price
+            shares = sorted[0].value;
+            price = sorted[1].value;
+        }
+    }
+
+    // Sanity: if shares looks like a price (e.g. 185.2) and price looks like count (e.g. 150), swap
+    if (price > 0 && shares > 0 && Number.isInteger(price) && !Number.isInteger(shares) && shares < price) {
+        const tmp = shares;
+        shares = price;
+        price = tmp;
+    }
+
+    return { shares, price };
+}
+
+// Strategy 2: Extract from flat text using regex
+function _extractFromFlatText(text) {
+    const results = [];
+
+    // Pattern: TICKER followed by numbers anywhere nearby
+    // Handles: "AAPL 150 185.2 27,780 12.50%" or "AAPL אפל 150 185.2"
+    const tickerRegex = /\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b/g;
+    let match;
+
+    while ((match = tickerRegex.exec(text)) !== null) {
+        const ticker = match[1];
+        if (_isCommonWord(ticker)) continue;
+
+        // Look at text after the ticker (up to 200 chars or next ticker)
+        const afterText = text.substring(match.index + match[0].length, match.index + 200);
+
+        // Find numbers in the following text
+        const numMatches = [];
+        const numRegex = /(\d[\d,]*(?:\.\d+)?)/g;
+        let numMatch;
+        while ((numMatch = numRegex.exec(afterText)) !== null) {
+            const val = parseFloat(numMatch[1].replace(/,/g, ''));
+            if (!isNaN(val) && val > 0 && val < 100000000) {
+                numMatches.push(val);
+            }
+            if (numMatches.length >= 4) break; // enough numbers
+        }
+
+        if (numMatches.length >= 2) {
+            // Heuristic: first integer-like = shares, first decimal-like = price
+            let shares = 0, price = 0;
+
+            for (const n of numMatches) {
+                if (shares === 0 && Number.isInteger(n) && n < 1000000) {
+                    shares = n;
+                } else if (price === 0 && !Number.isInteger(n)) {
+                    price = n;
+                }
+            }
+
+            // Fallback: first = shares, second = price
+            if (shares === 0 && numMatches.length >= 1) shares = numMatches[0];
+            if (price === 0 && numMatches.length >= 2) price = numMatches[1];
+
+            if (shares > 0) {
+                results.push({ ticker, shares: Math.round(shares), avgPrice: price || 0 });
+            }
+        }
+    }
+
+    return _deduplicateResults(results);
+}
+
+// Strategy 3: Scan items for tickers, then find nearby numbers
+function _extractFromScatteredItems(items) {
+    const results = [];
+
+    for (let i = 0; i < items.length; i++) {
+        const text = items[i].text.trim();
+        const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
+        const match = text.match(tickerPattern);
+        if (!match || _isCommonWord(match[1])) continue;
+
+        const ticker = match[1];
+        const y = items[i].y;
+
+        // Find numbers on the same line (within 5px Y)
+        const nearbyNumbers = [];
+        for (let j = 0; j < items.length; j++) {
+            if (j === i) continue;
+            if (Math.abs(items[j].y - y) > 5) continue;
+            const cleaned = items[j].text.replace(/[$₪,\s%]/g, '');
+            const num = parseFloat(cleaned);
+            if (!isNaN(num) && num > 0) {
+                nearbyNumbers.push({ value: num, x: items[j].x, raw: items[j].text });
+            }
+        }
+
+        nearbyNumbers.sort((a, b) => a.x - b.x);
+
+        if (nearbyNumbers.length >= 2) {
+            const integers = nearbyNumbers.filter(n => Number.isInteger(n.value));
+            const decimals = nearbyNumbers.filter(n => !Number.isInteger(n.value));
+
+            let shares = integers.length > 0 ? integers[0].value : nearbyNumbers[0].value;
+            let price = decimals.length > 0 ? decimals[0].value : nearbyNumbers[1].value;
+
+            results.push({ ticker, shares: Math.round(shares), avgPrice: price || 0 });
+        } else if (nearbyNumbers.length === 1) {
+            results.push({ ticker, shares: Math.round(nearbyNumbers[0].value), avgPrice: 0 });
+        }
+    }
+
+    return _deduplicateResults(results);
+}
+
+// ========== HELPERS ==========
+
+function _deduplicateResults(results) {
     const seen = new Set();
     return results.filter(r => {
         if (seen.has(r.ticker)) return false;
@@ -134,19 +379,19 @@ function _extractHoldingsFromText(text) {
     });
 }
 
-// ========== HELPERS ==========
-
 function _findMatchingColumn(headers, patterns) {
-    // Exact match first
-    for (const h of headers) {
-        const lower = h.trim().toLowerCase();
-        if (patterns.includes(lower)) return h;
-    }
-    // Partial match
+    // Exact match first (case-insensitive)
     for (const h of headers) {
         const lower = h.trim().toLowerCase();
         for (const p of patterns) {
-            if (lower.includes(p) || p.includes(lower)) return h;
+            if (lower === p.toLowerCase()) return h;
+        }
+    }
+    // Partial match: header contains pattern or pattern contains header
+    for (const h of headers) {
+        const lower = h.trim().toLowerCase();
+        for (const p of patterns) {
+            if (lower.includes(p.toLowerCase()) || p.toLowerCase().includes(lower)) return h;
         }
     }
     return null;
@@ -155,9 +400,7 @@ function _findMatchingColumn(headers, patterns) {
 function _cleanTicker(val) {
     if (!val) return '';
     const str = String(val).trim().toUpperCase();
-    // Remove common prefixes/suffixes
     const cleaned = str.replace(/[^A-Z0-9.]/g, '');
-    // Must be 1-6 characters and start with a letter
     if (cleaned.length >= 1 && cleaned.length <= 6 && /^[A-Z]/.test(cleaned)) {
         return cleaned;
     }
@@ -167,13 +410,13 @@ function _cleanTicker(val) {
 function _cleanNumber(val) {
     if (typeof val === 'number') return val;
     if (!val) return 0;
-    const str = String(val).replace(/[$₪,\s]/g, '').trim();
+    const str = String(val).replace(/[$₪,\s%]/g, '').trim();
     const num = parseFloat(str);
     return isNaN(num) ? 0 : num;
 }
 
 function _isCommonWord(word) {
-    const common = ['THE', 'AND', 'FOR', 'INC', 'LTD', 'LLC', 'USD', 'ILS', 'ETF', 'NAV', 'NET', 'FEE', 'TAX', 'PCT', 'AVG', 'QTY', 'PER', 'NUM', 'TOT', 'SUM', 'MIN', 'MAX', 'YTD', 'MTD', 'ALL', 'BUY', 'SEL'];
+    const common = ['THE', 'AND', 'FOR', 'INC', 'LTD', 'LLC', 'USD', 'ILS', 'ETF', 'NAV', 'NET', 'FEE', 'TAX', 'PCT', 'AVG', 'QTY', 'PER', 'NUM', 'TOT', 'SUM', 'MIN', 'MAX', 'YTD', 'MTD', 'ALL', 'BUY', 'SEL', 'PDF', 'CSV'];
     return common.includes(word);
 }
 

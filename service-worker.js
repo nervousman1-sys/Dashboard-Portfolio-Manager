@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v16';
+const CACHE_NAME = 'portfolio-dashboard-v17';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
