@@ -44,13 +44,21 @@ function mapHolding(h) {
 // ========== FETCH ALL CLIENTS ==========
 
 async function supaFetchClients() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return [];
+    // Use cached user ID from auth flow to avoid extra network call
+    let userId = _cachedUserId || getCachedUserId();
+
+    // Fallback: fetch from Supabase only if no cached ID
+    if (!userId) {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return [];
+        userId = user.id;
+        _cachedUserId = userId;
+    }
 
     const { data, error } = await supabaseClient
         .from('portfolios')
         .select('*, holdings(*)')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('id', { ascending: true });
 
     if (error) { console.error('supaFetchClients:', error.message); return []; }
@@ -399,38 +407,32 @@ async function supaRemoveHolding(clientId, holdingId) {
 // ========== RECALCULATE CLIENT TOTALS ==========
 
 async function supaRecalcClient(clientId) {
-    const { data: holdings, error } = await supabaseClient
-        .from('holdings')
-        .select('*')
-        .eq('portfolio_id', clientId);
+    // Fetch holdings + portfolio cash in parallel (2 queries instead of sequential)
+    const [holdingsRes, portfolioRes] = await Promise.all([
+        supabaseClient.from('holdings').select('*').eq('portfolio_id', clientId),
+        supabaseClient.from('portfolios').select('cash_balance').eq('id', clientId).single()
+    ]);
 
-    if (error) return;
-
-    // Get current cash balance
-    const { data: portfolio } = await supabaseClient
-        .from('portfolios')
-        .select('cash_balance')
-        .eq('id', clientId)
-        .single();
-
-    const cashBalance = portfolio?.cash_balance || 0;
+    if (holdingsRes.error) return;
+    const holdings = holdingsRes.data;
+    const cashBalance = portfolioRes.data?.cash_balance || 0;
 
     let holdingsValue = 0;
     holdings.forEach(h => { holdingsValue += h.shares * h.price; });
 
     const totalValue = holdingsValue + cashBalance;
 
-    // Update each holding's value + allocation (allocation based on total including cash)
-    for (const h of holdings) {
+    // Update all holdings in parallel (not one-by-one)
+    await Promise.all(holdings.map(h => {
         const value = h.shares * h.price;
         const allocationPct = totalValue > 0 ? (value / totalValue * 100) : 0;
-        await supabaseClient
+        return supabaseClient
             .from('holdings')
             .update({ value, allocation_pct: allocationPct })
             .eq('id', h.id);
-    }
+    }));
 
-    // Update portfolio totals
+    // Calculate portfolio totals
     let stockPct = 0, bondPct = 0;
     if (totalValue > 0) {
         holdings.forEach(h => {

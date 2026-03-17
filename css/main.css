@@ -1279,19 +1279,109 @@ body {
     pointer-events: none;
 }
 
-.spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid var(--border);
-    border-top-color: var(--accent-blue);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 16px;
+/* Skeleton Screens */
+@keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
 }
 
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
+.skeleton-dashboard {
+    width: 100%;
+    max-width: 1400px;
+    padding: 20px 24px;
+}
+
+.skeleton-line {
+    background: var(--border);
+    border-radius: 4px;
+    height: 14px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 65%; margin-top: 8px; }
+.skeleton-line.wide { width: 85%; margin-top: 8px; height: 24px; }
+
+.skeleton-header {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.skeleton-header .skeleton-title {
+    width: 260px;
+    height: 22px;
+    margin: 0 auto 8px;
+}
+
+.skeleton-header .skeleton-subtitle {
+    width: 160px;
+    height: 12px;
+    margin: 0 auto;
+}
+
+.skeleton-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.skeleton-summary-card {
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+}
+
+.skeleton-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.skeleton-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 16px;
+}
+
+.skeleton-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.skeleton-badge {
+    width: 50px;
+    height: 20px;
+    background: var(--border);
+    border-radius: 10px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-chart {
+    width: 100%;
+    height: 120px;
+    background: var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-dashboard .loading-text {
+    text-align: center;
+    margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+    .skeleton-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .skeleton-cards {
+        grid-template-columns: 1fr;
     }
 }
 

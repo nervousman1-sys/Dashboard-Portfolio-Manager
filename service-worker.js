@@ -1,6 +1,6 @@
-// ========== SERVICE WORKER - Cache Strategy ==========
+// ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v17';
+const CACHE_NAME = 'portfolio-dashboard-v21';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -28,12 +28,8 @@ const STATIC_ASSETS = [
     './manifest.json'
 ];
 
-// CDN libraries to cache on first fetch
-const CDN_ASSETS = [
-    'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
-    'https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js',
-    'https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js'
-];
+// Hosts that should never be cached (APIs, auth, realtime)
+const API_HOSTS = ['supabase.co', 'supabase.io', 'twelvedata.com', 'financialmodelingprep.com', 'finnhub.io', 'yahoo', 'tradingeconomics'];
 
 // Install - pre-cache static assets
 self.addEventListener('install', (event) => {
@@ -42,7 +38,6 @@ self.addEventListener('install', (event) => {
             return cache.addAll(STATIC_ASSETS);
         })
     );
-    // Activate immediately without waiting for old SW to finish
     self.skipWaiting();
 });
 
@@ -57,16 +52,18 @@ self.addEventListener('activate', (event) => {
             );
         })
     );
-    // Take control of all open pages immediately
     self.clients.claim();
 });
 
-// Fetch - network-first for API calls, cache-first for static assets
+// Fetch - stale-while-revalidate for static, network-only for APIs
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // API calls (backend, Yahoo Finance, Trading Economics) - network only, no cache
-    if (url.pathname.startsWith('/api/') || url.hostname.includes('yahoo') || url.hostname.includes('tradingeconomics')) {
+    // Skip non-GET requests
+    if (event.request.method !== 'GET') return;
+
+    // API calls - network only, never cache
+    if (url.pathname.startsWith('/api/') || API_HOSTS.some(h => url.hostname.includes(h))) {
         event.respondWith(
             fetch(event.request).catch(() => {
                 return new Response(JSON.stringify({ error: 'offline' }), {
@@ -77,8 +74,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // CDN assets - cache on first use, then serve from cache
-    if (url.hostname.includes('cdn.jsdelivr.net')) {
+    // CDN assets - cache-first (immutable versioned URLs)
+    if (url.hostname.includes('cdn.jsdelivr.net') || url.hostname.includes('cdnjs.cloudflare.com')) {
         event.respondWith(
             caches.match(event.request).then((cached) => {
                 if (cached) return cached;
@@ -94,16 +91,20 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Static assets - network first, fallback to cache (ensures code updates are picked up)
+    // Static assets - STALE-WHILE-REVALIDATE
+    // Serve from cache immediately, fetch fresh version in background
     event.respondWith(
-        fetch(event.request).then((response) => {
-            if (response.ok) {
-                const clone = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return response;
-        }).catch(() => {
-            return caches.match(event.request);
+        caches.match(event.request).then((cached) => {
+            const fetchPromise = fetch(event.request).then((response) => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                }
+                return response;
+            }).catch(() => cached);
+
+            // Return cached immediately if available, otherwise wait for network
+            return cached || fetchPromise;
         })
     );
 });

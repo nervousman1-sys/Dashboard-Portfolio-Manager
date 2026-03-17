@@ -30,33 +30,26 @@ let supabaseConnected = false;
 // Test Supabase connection
 async function checkSupabaseConnection() {
     try {
-        // Quick health check — try to reach the DB
-        const { error } = await supabaseClient.from('profiles').select('id').limit(1);
-
-        if (error && error.code === 'PGRST301') {
-            // Table doesn't exist yet — connection works, schema not set up
-            console.warn('Supabase connected but tables not found. Run the SQL schema first.');
+        // Fast path: if URL is clearly not configured, skip network call
+        if (SUPABASE_URL.includes('YOUR_PROJECT_ID') || SUPABASE_ANON_KEY.includes('YOUR_ANON')) {
+            console.warn('Supabase not configured — using backend API.');
             supabaseConnected = false;
             return false;
         }
 
-        if (error && (SUPABASE_URL.includes('YOUR_PROJECT_ID') || SUPABASE_ANON_KEY.includes('YOUR_ANON'))) {
-            console.warn('Supabase not configured — using backend API. Update SUPABASE_URL and SUPABASE_ANON_KEY in supabase-config.js');
+        // Skip the old profiles health-check query — it added 1-2s latency.
+        // Instead, trust that if we have a valid session/token, Supabase is reachable.
+        // The actual supaFetchClients() call will fail gracefully if DB is down.
+        if (!supabaseClient) {
             supabaseConnected = false;
             return false;
         }
 
-        if (error) {
-            console.warn('Supabase connection error:', error.message);
-            supabaseConnected = false;
-            return false;
-        }
-
-        console.log('Supabase connected successfully.');
+        console.log('Supabase configured — connection assumed OK.');
         supabaseConnected = true;
         return true;
     } catch (err) {
-        console.warn('Supabase unreachable, falling back to backend API:', err.message);
+        console.warn('Supabase check error:', err.message);
         supabaseConnected = false;
         return false;
     }

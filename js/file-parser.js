@@ -1,5 +1,43 @@
 // ========== FILE PARSER - Excel/CSV/PDF Import for Portfolio Holdings ==========
 
+// Lazy-load xlsx and pdf.js only when needed (not at startup)
+let _xlsxLoaded = false;
+let _pdfjsLoaded = false;
+
+async function _ensureXLSX() {
+    if (_xlsxLoaded || typeof XLSX !== 'undefined') { _xlsxLoaded = true; return true; }
+    try {
+        await _loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+        _xlsxLoaded = true;
+        return true;
+    } catch (e) {
+        console.error('[FileParser] Failed to load xlsx library:', e);
+        return false;
+    }
+}
+
+async function _ensurePDFJS() {
+    if (_pdfjsLoaded || typeof pdfjsLib !== 'undefined') { _pdfjsLoaded = true; return true; }
+    try {
+        await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+        _pdfjsLoaded = true;
+        return true;
+    } catch (e) {
+        console.error('[FileParser] Failed to load pdf.js library:', e);
+        return false;
+    }
+}
+
+function _loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
 // Column name patterns for auto-detection (Hebrew + English)
 const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'נכס', 'סימול (ticker)'];
 const SHARES_COLUMNS = ['כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
@@ -8,6 +46,7 @@ const PRICE_COLUMNS = ['מחיר', 'מחיר קנייה', 'עלות ממוצעת
 // ========== EXCEL / CSV PARSING ==========
 
 async function parseExcelFile(file) {
+    if (!await _ensureXLSX()) { return []; }
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -61,6 +100,7 @@ async function parseExcelFile(file) {
 // ========== PDF PARSING (position-based row reconstruction) ==========
 
 async function parsePDFFile(file) {
+    if (!await _ensurePDFJS()) { return []; }
     if (typeof pdfjsLib === 'undefined') {
         console.warn('[FileParser] pdf.js not loaded');
         return [];
