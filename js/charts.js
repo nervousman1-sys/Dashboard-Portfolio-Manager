@@ -700,7 +700,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     ticks: {
                         source: 'auto',   // Chart.js computes tick positions from the time scale
                         autoSkip: true,
-                        maxTicksLimit: 12,
+                        maxTicksLimit: 10,
                         maxRotation: 0,
                         color: '#94a3b8',
                         font: { size: 10 }
@@ -791,13 +791,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                 zoom: {
                     pan: {
                         enabled: true,
-                        mode: 'x',
+                        mode: 'xy',
                         onPanComplete: function({ chart }) { _autoScaleY(chart); }
                     },
                     zoom: {
                         wheel: { enabled: true, speed: 0.1 },
                         pinch: { enabled: true },
-                        mode: 'x',
+                        mode: 'xy',
                         onZoomComplete: function({ chart }) { _autoScaleY(chart); }
                     },
                     limits: {
