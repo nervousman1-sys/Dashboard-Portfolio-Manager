@@ -26,10 +26,12 @@ function _clearCanvas(canvasEl) {
     if (ctx2d) ctx2d.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
-// Benchmark configuration
+// Benchmark configuration — all major indices available
 const BENCHMARK_SYMBOLS = {
     'SPY': 'S&P 500',
     'QQQ': 'Nasdaq 100',
+    'DIA': 'Dow Jones',
+    'IWM': 'Russell 2000',
     'TA125.TA': 'TA-125',
     'TA35.TA': 'TA-35'
 };
@@ -37,6 +39,8 @@ const BENCHMARK_SYMBOLS = {
 const BENCHMARK_COLORS = {
     'SPY': '#eab308',
     'QQQ': '#06b6d4',
+    'DIA': '#f43f5e',
+    'IWM': '#a855f7',
     'TA125.TA': '#f97316',
     'TA35.TA': '#8b5cf6'
 };
@@ -261,11 +265,64 @@ function _parseHistDate(dateStr) {
 }
 
 // ========== INTRADAY DATA (1D/5D views) ==========
-// Fetches hourly time_series from Twelve Data for the portfolio's top holdings,
-// then computes weighted portfolio return at each timestamp.
+// Fetches intraday time_series for the portfolio's top holdings using FMP (primary)
+// or Twelve Data (fallback), then computes weighted portfolio return at each timestamp.
 
 const _intradayCache = {}; // key: "clientId_range" → { data, timestamp }
 const INTRADAY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Fetch a single ticker's intraday data — FMP primary, Twelve Data fallback
+async function _fetchTickerIntraday(ticker, currency, interval, outputSize) {
+    const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
+
+    // ── Primary: FMP historical-chart (5min/1hour) ──
+    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+        try {
+            const fmpInterval = interval === '5min' ? '5min' : '1hour';
+            const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${ticker}?apikey=${FMP_API_KEY}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                if (Array.isArray(json) && json.length > 0) {
+                    // FMP returns newest-first — reverse and take last outputSize
+                    const sliced = json.length > outputSize ? json.slice(0, outputSize) : json;
+                    const reversed = sliced.reverse();
+                    return reversed.map(p => ({
+                        datetime: p.date,
+                        close: p.close
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn(`[Intraday] FMP failed for ${ticker}:`, e.message);
+        }
+    }
+
+    // ── Fallback: Twelve Data time_series ──
+    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+        try {
+            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
+                    console.warn(`[Intraday] Twelve Data rate-limited for ${ticker}`);
+                    return null;
+                }
+                if (json.values && json.values.length > 0) {
+                    return json.values.reverse().map(v => ({
+                        datetime: v.datetime,
+                        close: parseFloat(v.close)
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn(`[Intraday] Twelve Data failed for ${ticker}:`, e.message);
+        }
+    }
+
+    return null;
+}
 
 async function _fetchIntradayPortfolioData(client, range) {
     const cacheKey = `${client.id}_${range}`;
@@ -273,72 +330,76 @@ async function _fetchIntradayPortfolioData(client, range) {
         return _intradayCache[cacheKey].data;
     }
 
-    if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') return null;
-
     // Get stock holdings with known prices
-    const stocks = client.holdings.filter(h => h.type === 'stock' && h.shares > 0);
+    const stocks = client.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.ticker);
     if (stocks.length === 0) return null;
 
-    // Use top holdings (by value) to stay within API limits — max 3 symbols per call
-    const topStocks = stocks.sort((a, b) => b.value - a.value).slice(0, 3);
+    // Top 5 holdings by value — enough for weighted representation
+    const topStocks = [...stocks].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 5);
     const totalPortfolioValue = client.portfolioValue || 1;
-    const interval = (range === '1d') ? '1h' : '4h';
-    const outputSize = (range === '1d') ? 24 : 30;
 
-    try {
-        // Fetch time series for each top holding
-        const seriesResults = await Promise.allSettled(topStocks.map(h => {
-            const sym = (h.currency === 'ILS') ? `${h.ticker}:TASE` : h.ticker;
-            return fetch(`https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`)
-                .then(r => r.ok ? r.json() : null)
-                .then(json => {
-                    if (!json || json.status === 'error' || !json.values) return null;
-                    return { ticker: h.ticker, weight: h.value / totalPortfolioValue, values: json.values.reverse() };
-                });
-        }));
+    // 1D: 5min candles (78 points/day), 5D: 1h candles (35 points)
+    const interval = (range === '1d') ? '5min' : '1h';
+    const outputSize = (range === '1d') ? 78 : 35;
 
-        const series = seriesResults
-            .filter(r => r.status === 'fulfilled' && r.value)
-            .map(r => r.value);
+    // Fetch all top holdings in parallel
+    const fetchResults = await Promise.allSettled(
+        topStocks.map(h => _fetchTickerIntraday(h.ticker, h.currency, interval, outputSize))
+    );
 
-        if (series.length === 0) return null;
-
-        // Use the first series as the time backbone
-        const backbone = series[0].values;
-        const points = backbone.map((v, i) => {
-            const date = new Date(v.datetime);
-
-            // Weighted return from each holding at this time point
-            let weightedReturn = 0;
-            series.forEach(s => {
-                if (s.values[i]) {
-                    const firstClose = parseFloat(s.values[0].close);
-                    const thisClose = parseFloat(s.values[i].close);
-                    const holdingReturn = firstClose > 0 ? ((thisClose - firstClose) / firstClose) * 100 : 0;
-                    weightedReturn += holdingReturn * s.weight;
-                }
+    const series = [];
+    for (let i = 0; i < fetchResults.length; i++) {
+        const r = fetchResults[i];
+        if (r.status === 'fulfilled' && r.value && r.value.length >= 2) {
+            series.push({
+                ticker: topStocks[i].ticker,
+                weight: (topStocks[i].value || 0) / totalPortfolioValue,
+                values: r.value
             });
-
-            // Approximate portfolio value at this point
-            const portfolioValueAtPoint = totalPortfolioValue * (1 + weightedReturn / 100);
-
-            return {
-                date: date.toLocaleDateString('he-IL'),
-                _dateObj: date,
-                value: parseFloat(portfolioValueAtPoint.toFixed(2)),
-                returnPct: parseFloat(weightedReturn.toFixed(2))
-            };
-        });
-
-        if (points.length > 0) {
-            _intradayCache[cacheKey] = { data: points, timestamp: Date.now() };
         }
-        return points.length >= 2 ? points : null;
+    }
 
-    } catch (e) {
-        console.warn('[Charts] Intraday fetch error:', e.message);
+    if (series.length === 0) {
+        console.warn(`[Intraday] No data for any holding (${range})`);
         return null;
     }
+
+    // Use the longest series as the time backbone
+    let backbone = series[0];
+    for (const s of series) {
+        if (s.values.length > backbone.values.length) backbone = s;
+    }
+
+    const points = backbone.values.map((v, i) => {
+        const date = new Date(v.datetime);
+
+        // Weighted return from each holding at this time point
+        let weightedReturn = 0;
+        for (const s of series) {
+            if (s.values[i]) {
+                const firstClose = s.values[0].close;
+                const thisClose = s.values[i].close;
+                if (firstClose > 0) {
+                    weightedReturn += ((thisClose - firstClose) / firstClose) * 100 * s.weight;
+                }
+            }
+        }
+
+        const portfolioValueAtPoint = totalPortfolioValue * (1 + weightedReturn / 100);
+
+        return {
+            date: date.toLocaleDateString('he-IL'),
+            _dateObj: date,
+            value: parseFloat(portfolioValueAtPoint.toFixed(2)),
+            returnPct: parseFloat(weightedReturn.toFixed(2))
+        };
+    });
+
+    if (points.length >= 2) {
+        _intradayCache[cacheKey] = { data: points, timestamp: Date.now() };
+        console.log(`[Intraday] Built ${points.length}-point ${range} data for ${client.name}`);
+    }
+    return points.length >= 2 ? points : null;
 }
 
 // ========== MAIN PERFORMANCE CHART RENDERER ==========
@@ -425,15 +486,19 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const staleMsg = container?.querySelector('.no-chart-data');
     if (staleMsg) staleMsg.remove();
 
-    // ── 5. Pre-fetch benchmark data BEFORE deciding display mode ──
-    // We must know whether benchmark data actually loaded before choosing
-    // between % and $ axes — otherwise a failed API call puts the chart
-    // in % mode with no benchmark line, confusing the user.
+    // ── 5. Pre-fetch ALL benchmark data in parallel ──
+    // Parallel fetch prevents sequential rate-limit stacking — if one API is slow
+    // the others don't wait. All benchmarks resolve together.
     const benchmarkResults = [];
-    for (const symbol of (benchmarks || [])) {
-        const benchData = await fetchBenchmarkData(symbol, range);
-        if (benchData && benchData.length > 0) {
-            benchmarkResults.push({ symbol, data: benchData });
+    if (benchmarks && benchmarks.length > 0) {
+        const benchPromises = benchmarks.map(symbol =>
+            fetchBenchmarkData(symbol, range).then(data => ({ symbol, data }))
+        );
+        const settled = await Promise.allSettled(benchPromises);
+        for (const r of settled) {
+            if (r.status === 'fulfilled' && r.value.data && r.value.data.length > 0) {
+                benchmarkResults.push(r.value);
+            }
         }
     }
 
@@ -495,20 +560,43 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         clip: true
     }];
 
-    // Benchmark datasets — from pre-fetched data
+    // Benchmark datasets — from pre-fetched data.
+    //
+    // NORMALIZATION: Both portfolio AND benchmarks must start at 0% from the
+    // SAME date (the portfolio's first visible data point). This means we find
+    // the benchmark's close on the portfolio's start date and rebase from there.
+    const portfolioStartTime = portfolioPoints[0].x;
+
     for (const { symbol, data: benchData } of benchmarkResults) {
-        // Rebase benchmark to 0% at its first data point
-        const benchBase = benchData[0]?.returnPct || 0;
+        // Find the benchmark data point closest to (but not after) the portfolio's start date
+        let alignIdx = 0;
+        for (let i = 0; i < benchData.length; i++) {
+            if (new Date(benchData[i].date).getTime() <= portfolioStartTime) {
+                alignIdx = i;
+            } else {
+                break;
+            }
+        }
+
+        // Rebase: benchmark's close on portfolio start date becomes 0%
+        const benchBaseClose = benchData[alignIdx].close;
+        if (!benchBaseClose || benchBaseClose <= 0) continue;
+
+        // Only include benchmark points from the aligned start onwards
+        const alignedBench = benchData.slice(alignIdx);
+
         datasets.push({
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
-            data: benchData.map(p => ({
-                x: new Date(p.date).getTime(),
-                // % mode: both portfolio and benchmark are rebased to 0% at start
-                // $ mode: scale benchmark to portfolio's starting value
-                y: usePercentMode
-                    ? (p.returnPct - benchBase)
-                    : firstValue * (1 + (p.returnPct - benchBase) / 100)
-            })),
+            data: alignedBench.map(p => {
+                const x = new Date(p.date).getTime();
+                const pctFromBase = ((p.close - benchBaseClose) / benchBaseClose) * 100;
+                return {
+                    x,
+                    y: usePercentMode
+                        ? pctFromBase
+                        : firstValue * (1 + pctFromBase / 100)
+                };
+            }),
             borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
             borderWidth: 1.5,
             borderDash: [5, 3],
@@ -562,7 +650,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             interaction: {
                 intersect: false,
-                mode: 'index',
+                mode: 'nearest',
                 axis: 'x'
             },
 
@@ -601,8 +689,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
                 y: {
                     position: 'right',
-                    beginAtZero: usePercentMode,   // % mode: anchor 0% line; $ mode: fit to data
-                    grace: '15%',
+                    // Never use beginAtZero — it clips lines out of view when returns are
+                    // entirely positive or negative. Let Chart.js auto-fit the Y domain.
+                    grace: '10%',
                     ticks: {
                         color: '#94a3b8',
                         font: { size: 10 },
@@ -955,26 +1044,48 @@ async function _renderFullscreenChart(clientId) {
     const fsBody = document.querySelector('.fullscreen-chart-body');
     if (fsBody) {
         fsBody.style.position = 'relative';
-        let existingBtn = fsBody.querySelector('.display-mode-btn');
-        if (!existingBtn) {
-            const btn = document.createElement('button');
-            btn.className = `display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}`;
-            btn.textContent = _chartDisplayMode === 'percent' ? '%' : '$';
-            btn.title = _chartDisplayMode === 'percent' ? 'מצב: אחוזים — לחץ למעבר לדולרים' : 'מצב: דולרים — לחץ למעבר לאחוזים';
-            btn.onclick = function() { toggleChartDisplayMode(this); };
-            fsBody.appendChild(btn);
-        }
+        // Remove stale toggle buttons (re-inject fresh each render)
+        const oldBtn = fsBody.querySelector('.display-mode-btn');
+        if (oldBtn) oldBtn.remove();
+
+        const btn = document.createElement('button');
+        btn.className = `display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}`;
+        btn.textContent = _chartDisplayMode === 'percent' ? '%' : '$';
+        btn.title = _chartDisplayMode === 'percent' ? 'מצב: אחוזים — לחץ למעבר לדולרים' : 'מצב: דולרים — לחץ למעבר לאחוזים';
+        btn.onclick = function() { toggleChartDisplayMode(this); };
+        fsBody.appendChild(btn);
     }
 
-    setTimeout(async () => {
-        fullscreenChartInstance = await renderPerformanceChart(
-            'fullscreen-chart',
-            clientId,
-            _fullscreenRange,
-            _fullscreenBenchmarks,
-            null
-        );
-    }, 100);
+    // Wait for CSS transition to finish and canvas to have real dimensions.
+    // A short setTimeout(100) is not enough — the overlay CSS transition takes ~300ms.
+    // We poll until the canvas has non-zero dimensions (max 1s safety).
+    const canvas = document.getElementById('fullscreen-chart');
+    await new Promise(resolve => {
+        let tries = 0;
+        const check = () => {
+            tries++;
+            if ((canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) || tries > 20) {
+                resolve();
+            } else {
+                requestAnimationFrame(check);
+            }
+        };
+        // Start checking after one frame
+        requestAnimationFrame(check);
+    });
+
+    fullscreenChartInstance = await renderPerformanceChart(
+        'fullscreen-chart',
+        clientId,
+        _fullscreenRange,
+        _fullscreenBenchmarks,
+        null
+    );
+
+    // Force resize after chart is created — catches any remaining layout drift
+    if (fullscreenChartInstance && !fullscreenChartInstance._destroyed) {
+        requestAnimationFrame(() => fullscreenChartInstance.resize());
+    }
 }
 
 function setFullscreenRange(range, btn) {

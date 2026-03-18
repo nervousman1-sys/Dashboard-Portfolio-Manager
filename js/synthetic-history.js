@@ -252,8 +252,10 @@ async function fetchSyntheticHistory(client, range) {
 
     const fetchedTickers = Object.keys(tickerSeries);
     if (fetchedTickers.length === 0) {
-        console.warn('[SyntheticHistory] No historical data fetched for any ticker');
-        return null;
+        // FALLBACK: ALL APIs failed — generate a costBasis straight-line so the UI never breaks.
+        // Two-point line from "purchase date" to "today" using total costBasis → current value.
+        console.warn('[SyntheticHistory] No historical data fetched — using costBasis fallback');
+        return _buildCostBasisFallback(client, range);
     }
     console.log(`[SyntheticHistory] Got data for ${fetchedTickers.length}/${eligibleHoldings.length} tickers`);
 
@@ -345,6 +347,52 @@ async function fetchSyntheticHistory(client, range) {
     // Cache result
     _syntheticCache[cacheKey] = { data: history, timestamp: Date.now() };
     console.log(`[SyntheticHistory] Built ${n}-point synthetic history (${history[0].date} → ${history[n - 1].date}), return: ${history[n - 1].returnPct.toFixed(2)}%`);
+    return history;
+}
+
+// ========== COST BASIS FALLBACK ==========
+// When ALL API calls fail (rate-limited, network down, etc.), generate a simple
+// 2-point history from total costBasis → current portfolio value.
+// This ensures the UI NEVER shows an empty chart (especially for Shai Meidan).
+
+function _buildCostBasisFallback(client, range) {
+    const allHoldings = client.holdings.filter(
+        h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
+    );
+    if (allHoldings.length === 0) return null;
+
+    const totalCostBasis = allHoldings.reduce((sum, h) => sum + (h.costBasis || 0), 0);
+    const currentValue = allHoldings.reduce((sum, h) => sum + (h.value || h.costBasis || 0), 0)
+        + (client.cashBalance || 0);
+
+    if (totalCostBasis <= 0 && currentValue <= 0) return null;
+
+    const startValue = totalCostBasis + (client.cashBalance || 0);
+
+    // Generate daily points from range start → today
+    const days = _rangeToOutputSize(range);
+    const today = new Date();
+    const startDate = new Date(today.getTime() - days * 86400000);
+
+    // Linear interpolation between costBasis and current value
+    const n = Math.min(days, 365); // cap at 365 points
+    const history = new Array(n);
+    for (let i = 0; i < n; i++) {
+        const t = i / (n - 1); // 0 → 1
+        const date = new Date(startDate.getTime() + t * (today.getTime() - startDate.getTime()));
+        const value = startValue + t * (currentValue - startValue);
+        const returnPct = startValue > 0 ? ((value - startValue) / startValue) * 100 : 0;
+        history[i] = {
+            date: date.toISOString().split('T')[0],
+            value: parseFloat(value.toFixed(2)),
+            returnPct: parseFloat(returnPct.toFixed(2))
+        };
+    }
+
+    // Cache it
+    const cacheKey = `${client.id}_${range}`;
+    _syntheticCache[cacheKey] = { data: history, timestamp: Date.now() };
+    console.log(`[SyntheticHistory] CostBasis fallback: ${n} points, ${history[0].date} → ${history[n-1].date}, return: ${history[n-1].returnPct.toFixed(2)}%`);
     return history;
 }
 

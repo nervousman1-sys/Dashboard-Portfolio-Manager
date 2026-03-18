@@ -195,6 +195,8 @@ async function openModal(clientId) {
                                 <div class="benchmark-options" style="display:none">
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('SPY', this)">S&P 500</button>
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('QQQ', this)">Nasdaq 100</button>
+                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('DIA', this)">Dow Jones</button>
+                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('IWM', this)">Russell 2000</button>
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
                                 </div>
