@@ -938,44 +938,39 @@ body {
     gap: 8px;
 }
 
-/* $ / % Display mode toggle button — ghost, sm, top-right of chart (avoids close btn) */
+/* $ / % Display mode toggle — inline next to benchmark buttons, same height */
 .display-mode-btn {
-    position: absolute;
-    top: 8px;
-    right: 48px;
-    z-index: 5;
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(4px);
-    opacity: 0.55;
     line-height: 1;
-    color: var(--text-muted);
+    margin-inline-start: 4px;
 }
 
 .display-mode-btn:hover {
-    opacity: 1;
-    background: rgba(15, 23, 42, 0.85);
+    border-color: var(--text-secondary);
 }
 
 .display-mode-btn.active-percent {
     color: var(--accent-blue);
-    border-color: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.5);
+    border-width: 2px;
 }
 
 .display-mode-btn.active-value {
     color: var(--accent-green);
-    border-color: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.5);
+    border-width: 2px;
 }
 
 /* Card sparkline loading / empty states */

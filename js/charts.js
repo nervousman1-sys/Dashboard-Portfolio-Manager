@@ -402,6 +402,32 @@ async function _fetchIntradayPortfolioData(client, range) {
     return points.length >= 2 ? points : null;
 }
 
+// ========== Y-AXIS AUTO-SCALE ==========
+// Recalculates Y min/max based on currently visible X range.
+// Called after zoom/pan so the chart never looks "flat" or lines disappear.
+function _autoScaleY(chart) {
+    const xScale = chart.scales.x;
+    const xMin = xScale.min;
+    const xMax = xScale.max;
+
+    let yMin = Infinity, yMax = -Infinity;
+    for (const ds of chart.data.datasets) {
+        for (const pt of ds.data) {
+            if (pt.x >= xMin && pt.x <= xMax) {
+                if (pt.y < yMin) yMin = pt.y;
+                if (pt.y > yMax) yMax = pt.y;
+            }
+        }
+    }
+
+    if (yMin === Infinity || yMax === -Infinity) return;
+
+    const yRange = yMax - yMin || 1;
+    chart.options.scales.y.min = yMin - yRange * 0.1;
+    chart.options.scales.y.max = yMax + yRange * 0.1;
+    chart.update('none');
+}
+
 // ========== MAIN PERFORMANCE CHART RENDERER ==========
 // Production-ready financial chart: real Supabase data mapped to {x: timestamp, y: value}.
 // Data-fitted visible range, 20-year zoom limits, grace-based containment, dynamic granularity.
@@ -650,7 +676,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             interaction: {
                 intersect: false,
-                mode: 'nearest',
+                mode: 'index',
                 axis: 'x'
             },
 
@@ -660,17 +686,16 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     min: viewMin,          // Fit to data for initial view
                     max: viewMax,
                     time: {
-                        // Let Chart.js auto-pick unit based on visible range, using our hint
                         unit: timeUnit,
                         displayFormats: {
                             hour: 'HH:mm',
-                            day: 'dd MMM',
-                            week: 'dd MMM',
+                            day: 'dd MMM yy',
+                            week: 'dd MMM yy',
                             month: 'MMM yyyy',
                             quarter: 'QQQ yyyy',
                             year: 'yyyy'
                         },
-                        tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd/MM/yyyy'
+                        tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd MMM yyyy'
                     },
                     ticks: {
                         source: 'auto',   // Chart.js computes tick positions from the time scale
@@ -764,17 +789,22 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                 },
 
                 zoom: {
-                    pan: { enabled: true, mode: 'x' },
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        onPanComplete: function({ chart }) { _autoScaleY(chart); }
+                    },
                     zoom: {
                         wheel: { enabled: true, speed: 0.1 },
                         pinch: { enabled: true },
-                        mode: 'x'
+                        mode: 'x',
+                        onZoomComplete: function({ chart }) { _autoScaleY(chart); }
                     },
                     limits: {
                         x: {
-                            min: zoomMin,        // 10 years back
-                            max: zoomMax,        // 10 years forward
-                            minRange: 3600000    // minimum 1 hour visible when zoomed in
+                            min: zoomMin,
+                            max: zoomMax,
+                            minRange: 3600000
                         }
                     }
                 }
@@ -1014,11 +1044,13 @@ function openFullscreenChart(clientId) {
                         `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
                     ).join('')}
                     </div>
+                    <button class="display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}" onclick="toggleChartDisplayMode(this)" title="% / $">${_chartDisplayMode === 'percent' ? '%' : '$'}</button>
                 </div>
             </div>
             <div class="fullscreen-chart-controls">
                 <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
                 <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">-</button>
+                <button class="zoom-btn" onclick="fullscreenAutoScale()" title="התאמה אוטומטית">⇕</button>
                 <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום">איפוס</button>
                 <button class="modal-close" onclick="closeFullscreen()" title="סגור">&times;</button>
             </div>
@@ -1040,25 +1072,7 @@ async function _renderFullscreenChart(clientId) {
         fullscreenChartInstance = null;
     }
 
-    // Inject toggle button into the fullscreen chart body (position: relative container)
-    const fsBody = document.querySelector('.fullscreen-chart-body');
-    if (fsBody) {
-        fsBody.style.position = 'relative';
-        // Remove stale toggle buttons (re-inject fresh each render)
-        const oldBtn = fsBody.querySelector('.display-mode-btn');
-        if (oldBtn) oldBtn.remove();
-
-        const btn = document.createElement('button');
-        btn.className = `display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}`;
-        btn.textContent = _chartDisplayMode === 'percent' ? '%' : '$';
-        btn.title = _chartDisplayMode === 'percent' ? 'מצב: אחוזים — לחץ למעבר לדולרים' : 'מצב: דולרים — לחץ למעבר לאחוזים';
-        btn.onclick = function() { toggleChartDisplayMode(this); };
-        fsBody.appendChild(btn);
-    }
-
     // Wait for CSS transition to finish and canvas to have real dimensions.
-    // A short setTimeout(100) is not enough — the overlay CSS transition takes ~300ms.
-    // We poll until the canvas has non-zero dimensions (max 1s safety).
     const canvas = document.getElementById('fullscreen-chart');
     await new Promise(resolve => {
         let tries = 0;
@@ -1070,7 +1084,6 @@ async function _renderFullscreenChart(clientId) {
                 requestAnimationFrame(check);
             }
         };
-        // Start checking after one frame
         requestAnimationFrame(check);
     });
 
@@ -1119,6 +1132,34 @@ function fullscreenZoom(action) {
     } else if (action === 'reset') {
         fullscreenChartInstance.resetZoom();
     }
+}
+
+// Auto-scale Y-axis: recalculate min/max based on currently visible data
+function fullscreenAutoScale() {
+    if (!fullscreenChartInstance) return;
+    const chart = fullscreenChartInstance;
+    const xScale = chart.scales.x;
+    const xMin = xScale.min;
+    const xMax = xScale.max;
+
+    // Find Y min/max across all datasets for the visible X range
+    let yMin = Infinity, yMax = -Infinity;
+    for (const ds of chart.data.datasets) {
+        for (const pt of ds.data) {
+            if (pt.x >= xMin && pt.x <= xMax) {
+                if (pt.y < yMin) yMin = pt.y;
+                if (pt.y > yMax) yMax = pt.y;
+            }
+        }
+    }
+
+    if (yMin === Infinity || yMax === -Infinity) return;
+
+    // Add 10% grace
+    const yRange = yMax - yMin || 1;
+    chart.options.scales.y.min = yMin - yRange * 0.1;
+    chart.options.scales.y.max = yMax + yRange * 0.1;
+    chart.update('none');
 }
 
 function closeFullscreen(event) {

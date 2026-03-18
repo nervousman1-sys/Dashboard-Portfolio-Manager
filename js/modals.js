@@ -200,9 +200,9 @@ async function openModal(clientId) {
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
                                     <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
                                 </div>
+                                <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="% / $">%</button>
                             </div>
                         </div>
-                        <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="מצב: אחוזים — לחץ למעבר לדולרים">%</button>
                         <canvas id="modal-perf-chart"></canvas>
                     </div>
                 </div>
