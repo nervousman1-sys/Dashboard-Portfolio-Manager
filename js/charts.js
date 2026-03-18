@@ -85,7 +85,23 @@ function _rangeToOutputSize(range) {
     return 1825;
 }
 
+// One-time diagnostic: log API key status on first benchmark fetch
+let _benchmarkDiagDone = false;
+function _logBenchmarkDiag() {
+    if (_benchmarkDiagDone) return;
+    _benchmarkDiagDone = true;
+    const fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY' && FMP_API_KEY !== '';
+    const tdOk = TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY' && TWELVE_DATA_API_KEY !== '';
+    console.log(`[Benchmark] API Key Status — FMP: ${fmpOk ? '✓ configured' : '✗ MISSING'}, Twelve Data: ${tdOk ? '✓ configured' : '✗ MISSING'}`);
+    if (!fmpOk && !tdOk) {
+        console.error('[Benchmark] ⚠ NO API KEYS CONFIGURED — benchmarks will use static fallback only (SPY). Configure FMP_API_KEY and/or TWELVE_DATA_API_KEY in env-config.js or build process.');
+    } else if (!fmpOk) {
+        console.warn('[Benchmark] FMP key missing — all benchmarks depend on Twelve Data (8 req/min rate limit). Some benchmarks may fail.');
+    }
+}
+
 async function fetchBenchmarkData(symbol, range) {
+    _logBenchmarkDiag();
     const cacheKey = `${symbol}_${range}`;
     const isIntraday = (range === '1d' || range === '5d');
 
@@ -162,6 +178,28 @@ const _TWELVE_DATA_ALIASES = {
     'IWM': ['IWM', 'RUT']     // Russell 2000 ETF → ^RUT index
 };
 
+// ── Twelve Data Rate-Limit Queue ──
+// Free plan: 8 requests/minute. When multiple benchmarks are fetched in parallel
+// (via Promise.allSettled), they ALL fall to Twelve Data simultaneously if FMP fails,
+// exhausting the rate limit. Only the first benchmark succeeds — the rest get 429.
+// Solution: serialize Twelve Data calls with a minimum interval between them.
+let _lastTwelveDataCallTime = 0;
+const _TWELVE_DATA_MIN_INTERVAL_MS = 850; // ~7 req/min — comfortably under the 8/min limit
+let _twelveDataQueue = Promise.resolve(); // serialization chain
+
+function _twelveDataSerialized(fn) {
+    // Chain onto the queue — each call waits for the previous to finish + rate delay
+    _twelveDataQueue = _twelveDataQueue.then(async () => {
+        const elapsed = Date.now() - _lastTwelveDataCallTime;
+        if (elapsed < _TWELVE_DATA_MIN_INTERVAL_MS) {
+            await new Promise(r => setTimeout(r, _TWELVE_DATA_MIN_INTERVAL_MS - elapsed));
+        }
+        _lastTwelveDataCallTime = Date.now();
+        return fn();
+    }).catch(() => null); // prevent queue breakage
+    return _twelveDataQueue;
+}
+
 async function _fetchTwelveDataBenchmark(symbol, range) {
     if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') return null;
 
@@ -173,13 +211,20 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
 
     for (const sym of symbolsToTry) {
         try {
-            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
-            const res = await fetch(url);
-            if (!res.ok || res.status === 429) {
-                console.warn(`[Benchmark] Twelve Data ${res.status} for ${sym} (alias of ${symbol})`);
-                continue;
-            }
-            const json = await res.json();
+            // Serialize through rate-limit queue — prevents parallel calls from
+            // exhausting the 8 req/min limit when multiple benchmarks fall to Twelve Data.
+            const result = await _twelveDataSerialized(async () => {
+                const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok || res.status === 429) {
+                    console.warn(`[Benchmark] Twelve Data ${res.status} for ${sym} (alias of ${symbol})`);
+                    return { skip: true };
+                }
+                return res.json();
+            });
+
+            if (!result || result.skip) continue;
+            const json = result;
 
             // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
             if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
@@ -243,43 +288,49 @@ async function _fetchFMPBenchmark(symbol, range) {
     const symbolsToTry = _FMP_SYMBOL_ALIASES[symbol] || [symbol];
 
     // ── Intraday: use FMP historical-chart endpoint (5min / 1hour candles) ──
+    // Try both /api/v3/ and /stable/ — free plans may only support one.
     if (isIntraday) {
         const fmpInterval = (range === '1d') ? '5min' : '1hour';
         for (const sym of symbolsToTry) {
-            try {
-                const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`;
-                const res = await fetch(url);
-                if (!res.ok) {
-                    console.warn(`[Benchmark] FMP intraday ${res.status} for ${sym}`);
-                    continue;
-                }
-                const json = await res.json();
-                if (!Array.isArray(json) || json.length === 0) continue;
+            const intradayUrls = [
+                `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`,
+                `https://financialmodelingprep.com/stable/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`
+            ];
+            for (const url of intradayUrls) {
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) {
+                        console.warn(`[Benchmark] FMP intraday ${res.status} for ${sym} at ${url.split('?')[0]}`);
+                        continue;
+                    }
+                    const json = await res.json();
+                    if (!Array.isArray(json) || json.length === 0) continue;
 
-                // FMP returns newest-first — take relevant slice and reverse
-                const limit = (range === '1d') ? 200 : 50;
-                const sliced = json.length > limit ? json.slice(0, limit) : json;
-                const reversed = sliced.reverse();
+                    // FMP returns newest-first — take relevant slice and reverse
+                    const limit = (range === '1d') ? 200 : 50;
+                    const sliced = json.length > limit ? json.slice(0, limit) : json;
+                    const reversed = sliced.reverse();
 
-                // For 1D: filter to only the last trading day
-                let points = reversed;
-                if (range === '1d' && reversed.length > 0) {
-                    const lastDate = reversed[reversed.length - 1].date.split(' ')[0];
-                    const dayOnly = reversed.filter(p => p.date.startsWith(lastDate));
-                    if (dayOnly.length >= 2) points = dayOnly;
-                }
+                    // For 1D: filter to only the last trading day
+                    let points = reversed;
+                    if (range === '1d' && reversed.length > 0) {
+                        const lastDate = reversed[reversed.length - 1].date.split(' ')[0];
+                        const dayOnly = reversed.filter(p => p.date.startsWith(lastDate));
+                        if (dayOnly.length >= 2) points = dayOnly;
+                    }
 
-                const firstClose = points[0].close;
-                if (firstClose > 0) {
-                    console.log(`[Benchmark] FMP intraday success for ${symbol} (via ${sym}): ${points.length} ${fmpInterval} points`);
-                    return points.map(p => ({
-                        date: p.date,  // Full datetime string e.g. "2026-03-19 10:30:00"
-                        close: p.close,
-                        returnPct: ((p.close - firstClose) / firstClose) * 100
-                    }));
+                    const firstClose = points[0].close;
+                    if (firstClose > 0) {
+                        console.log(`[Benchmark] FMP intraday success for ${symbol} (via ${sym}): ${points.length} ${fmpInterval} points`);
+                        return points.map(p => ({
+                            date: p.date,  // Full datetime string e.g. "2026-03-19 10:30:00"
+                            close: p.close,
+                            returnPct: ((p.close - firstClose) / firstClose) * 100
+                        }));
+                    }
+                } catch (e) {
+                    console.warn(`[Benchmark] FMP intraday error for ${sym}:`, e.message);
                 }
-            } catch (e) {
-                console.warn(`[Benchmark] FMP intraday error for ${sym}:`, e.message);
             }
         }
         // Fall through to daily if intraday fails for all aliases
@@ -420,12 +471,17 @@ async function _fetchTickerIntraday(ticker, currency, interval, outputSize) {
     const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
 
     // ── Primary: FMP historical-chart (5min/1hour) ──
+    // Try both /api/v3/ and /stable/ — free plans may only support one.
     if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
-        try {
-            const fmpInterval = interval === '5min' ? '5min' : '1hour';
-            const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${ticker}?apikey=${FMP_API_KEY}`;
-            const res = await fetch(url);
-            if (res.ok) {
+        const fmpInterval = interval === '5min' ? '5min' : '1hour';
+        const fmpUrls = [
+            `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${ticker}?apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/stable/historical-chart/${fmpInterval}/${ticker}?apikey=${FMP_API_KEY}`
+        ];
+        for (const url of fmpUrls) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) continue;
                 const json = await res.json();
                 if (Array.isArray(json) && json.length > 0) {
                     // FMP returns newest-first — reverse and take last outputSize
@@ -436,19 +492,22 @@ async function _fetchTickerIntraday(ticker, currency, interval, outputSize) {
                         close: p.close
                     }));
                 }
+            } catch (e) {
+                console.warn(`[Intraday] FMP failed for ${ticker} at ${url.split('?')[0]}:`, e.message);
             }
-        } catch (e) {
-            console.warn(`[Intraday] FMP failed for ${ticker}:`, e.message);
         }
     }
 
-    // ── Fallback: Twelve Data time_series ──
+    // ── Fallback: Twelve Data time_series (serialized to respect rate limit) ──
     if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
         try {
-            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
-            const res = await fetch(url);
-            if (res.ok) {
-                const json = await res.json();
+            const json = await _twelveDataSerialized(async () => {
+                const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok) return null;
+                return res.json();
+            });
+            if (json) {
                 if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
                     console.warn(`[Intraday] Twelve Data rate-limited for ${ticker}`);
                     return null;
