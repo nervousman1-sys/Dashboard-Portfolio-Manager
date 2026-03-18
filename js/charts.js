@@ -103,16 +103,20 @@ async function fetchBenchmarkData(symbol, range) {
         }
     } catch (e) { /* ignore */ }
 
+    console.log(`[Benchmark] Fetching ${symbol} (range=${range}) — no cache, calling APIs...`);
+
     // Fetch from Twelve Data
     const data = await _fetchTwelveDataBenchmark(symbol, range);
     if (data && data.length > 0) {
+        console.log(`[Benchmark] Twelve Data success for ${symbol}: ${data.length} points`);
         const cacheEntry = { data, timestamp: Date.now() };
         _benchmarkCache[cacheKey] = cacheEntry;
         try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
         return data;
     }
+    console.warn(`[Benchmark] Twelve Data failed for ${symbol} — trying FMP...`);
 
-    // Fallback: FMP historical-price-full (works for all symbols)
+    // Fallback: FMP historical-price-full (works for all US symbols)
     const fmpData = await _fetchFMPBenchmark(symbol, range);
     if (fmpData && fmpData.length > 0) {
         const cacheEntry = { data: fmpData, timestamp: Date.now() };
@@ -121,10 +125,7 @@ async function fetchBenchmarkData(symbol, range) {
         return fmpData;
     }
 
-    // Finnhub removed — was returning 403s. FMP + Twelve Data cover US benchmarks.
-
     // Static fallback for S&P 500: if all APIs fail, use approximate historical data
-    // so the user at least sees a benchmark line on the chart.
     if (symbol === 'SPY') {
         const staticData = _getStaticSPYFallback(range);
         if (staticData && staticData.length > 0) {
@@ -135,7 +136,7 @@ async function fetchBenchmarkData(symbol, range) {
         }
     }
 
-    console.warn(`[Benchmark] All APIs failed for ${symbol} (range=${range})`);
+    console.error(`[Benchmark] ALL APIs FAILED for ${symbol} (range=${range}). Check: 1) API keys configured? 2) Rate limits exceeded? 3) Symbol valid?`);
     return null;
 }
 
@@ -169,6 +170,7 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
         const values = json.values.reverse();
         const firstClose = parseFloat(values[0].close);
 
+        console.log(`[Benchmark] Twelve Data success for ${symbol}: ${values.length} points`);
         return values.map(v => ({
             date: v.datetime.split(' ')[0], // YYYY-MM-DD
             close: parseFloat(v.close),
@@ -181,35 +183,55 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
 }
 
 async function _fetchFMPBenchmark(symbol, range) {
-    if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
+    if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') {
+        console.warn(`[Benchmark] FMP API key not configured — skipping ${symbol}`);
+        return null;
+    }
 
     const outputSize = _rangeToOutputSize(range);
 
     // FMP doesn't support Israeli indices (.TA suffix) — skip immediately
-    if (symbol.includes('.TA')) return null;
-
-    try {
-        const url = `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`;
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        const json = await res.json();
-        const hist = json.historical || (Array.isArray(json) ? json : null);
-        if (!hist || hist.length === 0) return null;
-
-        // FMP returns newest-first — take outputSize, then reverse to chronological
-        const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
-        const reversed = sliced.reverse();
-        const firstClose = reversed[0].close;
-
-        return reversed.map(p => ({
-            date: p.date,
-            close: p.close,
-            returnPct: ((p.close - firstClose) / firstClose) * 100
-        }));
-    } catch (e) {
-        console.warn(`[Benchmark] FMP fetch error for ${symbol}:`, e.message);
+    if (symbol.includes('.TA')) {
+        console.log(`[Benchmark] FMP skipping Israeli index ${symbol}`);
         return null;
     }
+
+    // Try both FMP endpoints: /stable/ (newer) and /api/v3/ (legacy, wider coverage)
+    const urls = [
+        `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`,
+        `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`
+    ];
+
+    for (const url of urls) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) {
+                console.warn(`[Benchmark] FMP ${res.status} for ${symbol} at ${url.split('?')[0]}`);
+                continue;
+            }
+            const json = await res.json();
+            const hist = json.historical || (Array.isArray(json) ? json : null);
+            if (!hist || hist.length === 0) {
+                console.warn(`[Benchmark] FMP empty response for ${symbol} at ${url.split('?')[0]}`);
+                continue;
+            }
+
+            // FMP returns newest-first — take outputSize, then reverse to chronological
+            const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
+            const reversed = sliced.reverse();
+            const firstClose = reversed[0].close;
+
+            console.log(`[Benchmark] FMP success for ${symbol}: ${reversed.length} points`);
+            return reversed.map(p => ({
+                date: p.date,
+                close: p.close,
+                returnPct: ((p.close - firstClose) / firstClose) * 100
+            }));
+        } catch (e) {
+            console.warn(`[Benchmark] FMP fetch error for ${symbol}:`, e.message);
+        }
+    }
+    return null;
 }
 
 // ========== STATIC S&P 500 FALLBACK ==========
@@ -332,15 +354,22 @@ async function _fetchIntradayPortfolioData(client, range) {
 
     // Get stock holdings with known prices
     const stocks = client.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.ticker);
-    if (stocks.length === 0) return null;
+    if (stocks.length === 0) {
+        console.warn(`[Intraday] No stock holdings for ${client.name}`);
+        return null;
+    }
 
     // Top 5 holdings by value — enough for weighted representation
     const topStocks = [...stocks].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 5);
     const totalPortfolioValue = client.portfolioValue || 1;
 
-    // 1D: 5min candles (78 points/day), 5D: 1h candles (35 points)
+    // 1D: 5min candles — request 200 points (covers ~2.5 trading days) to handle
+    //     weekends/holidays where today has no data yet.
+    // 5D: 1h candles — request 50 points (covers ~7 days including weekends).
     const interval = (range === '1d') ? '5min' : '1h';
-    const outputSize = (range === '1d') ? 78 : 35;
+    const outputSize = (range === '1d') ? 200 : 50;
+
+    console.log(`[Intraday] Fetching ${interval} data for ${topStocks.map(h => h.ticker).join(', ')} (outputSize=${outputSize})`);
 
     // Fetch all top holdings in parallel
     const fetchResults = await Promise.allSettled(
@@ -356,6 +385,8 @@ async function _fetchIntradayPortfolioData(client, range) {
                 weight: (topStocks[i].value || 0) / totalPortfolioValue,
                 values: r.value
             });
+        } else {
+            console.warn(`[Intraday] No data for ${topStocks[i].ticker}: ${r.status === 'rejected' ? r.reason : 'empty'}`);
         }
     }
 
@@ -370,12 +401,42 @@ async function _fetchIntradayPortfolioData(client, range) {
         if (s.values.length > backbone.values.length) backbone = s;
     }
 
-    const points = backbone.values.map((v, i) => {
+    // For 1D: filter to only the most recent trading day's data
+    // This handles weekends/after-hours: we have ~200 points spanning 2-3 days,
+    // extract only the latest calendar day that has data
+    let filteredBackbone = backbone.values;
+    let filteredSeries = series;
+
+    if (range === '1d' && backbone.values.length > 0) {
+        // Find the most recent trading date in the data
+        const lastDatetime = new Date(backbone.values[backbone.values.length - 1].datetime);
+        const lastDateStr = lastDatetime.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        // Filter each series to only include points from the last trading day
+        filteredSeries = series.map(s => {
+            const dayValues = s.values.filter(v => {
+                const vDate = new Date(v.datetime).toISOString().split('T')[0];
+                return vDate === lastDateStr;
+            });
+            return { ...s, values: dayValues.length >= 2 ? dayValues : s.values };
+        });
+
+        // Update backbone to the filtered version
+        let longestFiltered = filteredSeries[0];
+        for (const s of filteredSeries) {
+            if (s.values.length > longestFiltered.values.length) longestFiltered = s;
+        }
+        filteredBackbone = longestFiltered.values;
+
+        console.log(`[Intraday] 1D filter: ${backbone.values.length} raw points → ${filteredBackbone.length} points for ${lastDateStr}`);
+    }
+
+    const points = filteredBackbone.map((v, i) => {
         const date = new Date(v.datetime);
 
         // Weighted return from each holding at this time point
         let weightedReturn = 0;
-        for (const s of series) {
+        for (const s of filteredSeries) {
             if (s.values[i]) {
                 const firstClose = s.values[0].close;
                 const thisClose = s.values[i].close;
@@ -732,7 +793,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                                 return '$' + v.toFixed(0);
                             },
                         maxTicksLimit: 6,
-                        padding: 8
+                        padding: 8,
+                        precision: 2
                     },
                     grid: {
                         color: 'rgba(148,163,184,0.07)',
@@ -792,13 +854,14 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     pan: {
                         enabled: true,
                         mode: 'xy',
-                        onPanComplete: function({ chart }) { _autoScaleY(chart); }
+                        threshold: 0
+                        // No onPanComplete — user's manual Y position must be preserved
                     },
                     zoom: {
                         wheel: { enabled: true, speed: 0.1 },
                         pinch: { enabled: true },
-                        mode: 'xy',
-                        onZoomComplete: function({ chart }) { _autoScaleY(chart); }
+                        mode: 'xy'
+                        // No onZoomComplete — prevents Y-axis snap-back after zoom
                     },
                     limits: {
                         x: {
