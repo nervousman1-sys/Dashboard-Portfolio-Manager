@@ -50,6 +50,9 @@ let _modalPerfRange = '1y';
 let _modalPerfBenchmarks = [];
 let _modalPerfChartInstance = null;
 
+// Display mode toggle: 'percent' (default) or 'value'
+let _chartDisplayMode = 'percent';
+
 // ========== FETCH BENCHMARK DATA FROM API ==========
 
 function _rangeToDays(range) {
@@ -105,6 +108,15 @@ async function fetchBenchmarkData(symbol, range) {
         return data;
     }
 
+    // Fallback: FMP historical-price-full (works for all symbols)
+    const fmpData = await _fetchFMPBenchmark(symbol, range);
+    if (fmpData && fmpData.length > 0) {
+        const cacheEntry = { data: fmpData, timestamp: Date.now() };
+        _benchmarkCache[cacheKey] = cacheEntry;
+        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        return fmpData;
+    }
+
     // Fallback: Finnhub (only for US ETFs, not Israeli indices)
     if (!symbol.includes('.TA')) {
         const finnData = await _fetchFinnhubBenchmark(symbol, range);
@@ -116,6 +128,7 @@ async function fetchBenchmarkData(symbol, range) {
         }
     }
 
+    console.warn(`[Benchmark] All APIs failed for ${symbol} (range=${range})`);
     return null;
 }
 
@@ -133,6 +146,13 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
             return null;
         }
         const json = await res.json();
+
+        // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
+        if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
+            console.warn(`[Benchmark] Twelve Data rate-limited for ${symbol}: ${json.message}`);
+            return null;
+        }
+
         if (json.status === 'error' || !json.values || json.values.length === 0) {
             console.warn(`[Benchmark] Twelve Data no data for ${symbol}:`, json.message || 'empty');
             return null;
@@ -149,6 +169,37 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
         }));
     } catch (e) {
         console.warn(`[Benchmark] Twelve Data fetch error for ${symbol}:`, e.message);
+        return null;
+    }
+}
+
+async function _fetchFMPBenchmark(symbol, range) {
+    if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
+
+    // FMP uses plain tickers — strip exchange suffixes like .TA
+    const fmpSymbol = symbol.includes('.TA') ? symbol.replace('.TA', '.TA') : symbol;
+    const outputSize = _rangeToOutputSize(range);
+
+    try {
+        const url = `https://financialmodelingprep.com/stable/historical-price-full/${fmpSymbol}?apikey=${FMP_API_KEY}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const json = await res.json();
+        const hist = json.historical || (Array.isArray(json) ? json : null);
+        if (!hist || hist.length === 0) return null;
+
+        // FMP returns newest-first — take outputSize, then reverse to chronological
+        const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
+        const reversed = sliced.reverse();
+        const firstClose = reversed[0].close;
+
+        return reversed.map(p => ({
+            date: p.date,
+            close: p.close,
+            returnPct: ((p.close - firstClose) / firstClose) * 100
+        }));
+    } catch (e) {
+        console.warn(`[Benchmark] FMP fetch error for ${symbol}:`, e.message);
         return null;
     }
 }
@@ -319,19 +370,27 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         hist = filterHistoryByRange(client.performanceHistory || [], range);
     }
 
-    // 2c. Synthetic fallback: if real history is insufficient but holdings exist,
+    // 2c. Synthetic fallback: if real history is insufficient for the selected range,
     //     reconstruct historical performance from daily closing prices.
-    //     This enables 1Y charts for brand-new portfolios.
-    if ((!hist || hist.length < 2) && !isIntraday) {
-        const hasStockHoldings = client.holdings && client.holdings.some(
-            h => h.type === 'stock' && h.shares > 0
+    //     This enables meaningful charts for new/recent portfolios.
+    //
+    //     Threshold: real history must have enough points relative to the range.
+    //     A portfolio created 3 days ago shouldn't show a 3-point "1Y" chart —
+    //     synthetic history with ~250 points is far more useful.
+    const _minPointsForRange = { '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 200, 'max': 60, 'all': 10 };
+    const minPoints = _minPointsForRange[range] || 10;
+    const histTooSparse = !hist || hist.length < minPoints;
+
+    if (histTooSparse && !isIntraday) {
+        const hasEligibleHoldings = client.holdings && client.holdings.some(
+            h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
         );
-        if (hasStockHoldings && typeof fetchSyntheticHistory === 'function') {
+        if (hasEligibleHoldings && typeof fetchSyntheticHistory === 'function') {
             const synth = await fetchSyntheticHistory(client, range);
             if (synth && synth.length >= 2) {
                 hist = synth;
                 isSynthetic = true;
-                console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points)`);
+                console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points, range=${range})`);
             }
         }
     }
@@ -367,17 +426,14 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 6. Determine display mode ──
     // Two modes:
-    //   Absolute ($): Y = portfolio value. Used when no benchmarks are active.
-    //   Percentage (%): Y = cumulative return from day 0, both portfolio and
-    //                   benchmarks normalized to the same 0% origin.
+    //   Percentage (%): Y = cumulative return from day 0 — DEFAULT.
+    //                   Both portfolio and benchmarks normalized to the same 0% origin.
+    //   Absolute ($): Y = portfolio value. Activated by user toggle.
     //
-    // % mode activates when:
-    //   - Synthetic history is in use (new portfolios with no snapshots), OR
-    //   - At least one benchmark dataset was SUCCESSFULLY fetched
-    //
-    // KEY: usePercentMode depends on actual fetched data, not the requested list.
-    // If the API fails for all benchmarks, we stay in $ mode — not a broken % chart.
-    const usePercentMode = isSynthetic || benchmarkResults.length > 0;
+    // The global _chartDisplayMode ('percent' | 'value') is controlled by the UI toggle.
+    // When benchmarks are active, % mode is forced (comparison requires same scale).
+    const hasBenchmarks = benchmarkResults.length > 0;
+    const usePercentMode = hasBenchmarks || _chartDisplayMode === 'percent';
 
     // ── 7. Map history → Chart.js points ──
     //
@@ -673,7 +729,7 @@ function _showNoChartData(canvas, container, isIntraday) {
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
         </div>
-        <div class="no-chart-data-title">${isIntraday ? 'אין נתונים זמינים לטווח זה' : 'No Data Available for this Range'}</div>
+        <div class="no-chart-data-title">${isIntraday ? 'אין נתונים זמינים לטווח זה' : 'אין נתונים זמינים לטווח זה'}</div>
         <div class="no-chart-data-sub">${isIntraday
             ? 'נתוני יום המסחר יופיעו בשעות הפעילות'
             : 'נתוני ביצועים נאספים אוטומטית — הגרף יופיע לאחר עדכון המחירים הבא'
@@ -702,6 +758,28 @@ function _hideChartLoading(container) {
 }
 
 // ========== MODAL PERFORMANCE CHART CONTROLS ==========
+
+// ========== DISPLAY MODE TOGGLE ($ / %) ==========
+
+function toggleChartDisplayMode(btn) {
+    _chartDisplayMode = (_chartDisplayMode === 'percent') ? 'value' : 'percent';
+    const isPercent = _chartDisplayMode === 'percent';
+
+    // Update all toggle buttons across modal and fullscreen
+    document.querySelectorAll('.display-mode-btn').forEach(b => {
+        b.textContent = isPercent ? '%' : '$';
+        b.classList.toggle('active-percent', isPercent);
+        b.classList.toggle('active-value', !isPercent);
+        b.title = isPercent ? 'מצב: אחוזים — לחץ למעבר לדולרים' : 'מצב: דולרים — לחץ למעבר לאחוזים';
+    });
+
+    // Refresh whichever chart is currently active
+    if (document.getElementById('fullscreenOverlay')?.classList.contains('active')) {
+        _renderFullscreenChart(currentModalClientId);
+    } else {
+        _refreshModalPerfChart();
+    }
+}
 
 function toggleBenchmarkPanel(btn) {
     const options = btn.parentElement.querySelector('.benchmark-options');
@@ -807,7 +885,8 @@ let _fullscreenBenchmarks = [];
 
 function openFullscreenChart(clientId) {
     const client = clients.find(c => c.id === clientId);
-    if (!client || !client.performanceHistory) return;
+    if (!client) return;
+    // Don't block on empty performanceHistory — synthetic history will handle it
 
     // Reset state
     _fullscreenRange = _modalPerfRange || '1y';
@@ -826,13 +905,16 @@ function openFullscreenChart(clientId) {
                         `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${r.toUpperCase()}</button>`
                     ).join('')}
                 </div>
-                <div class="perf-benchmarks" style="margin-top:6px">
-                    <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
-                    <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'}">
-                    ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
-                        `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
-                    ).join('')}
+                <div class="perf-chart-controls-row" style="margin-top:6px">
+                    <div class="perf-benchmarks">
+                        <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
+                        <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'}">
+                        ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
+                            `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
+                        ).join('')}
+                        </div>
                     </div>
+                    <button class="display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}" onclick="toggleChartDisplayMode(this)" title="${_chartDisplayMode === 'percent' ? 'מצב: אחוזים — לחץ למעבר לדולרים' : 'מצב: דולרים — לחץ למעבר לאחוזים'}">${_chartDisplayMode === 'percent' ? '%' : '$'}</button>
                 </div>
             </div>
             <div class="fullscreen-chart-controls">

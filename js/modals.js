@@ -190,14 +190,17 @@ async function openModal(clientId) {
                                 <button class="time-btn" onclick="setModalPerfRange('5y', this)">5Y</button>
                                 <button class="time-btn" onclick="setModalPerfRange('max', this)">Max</button>
                             </div>
-                            <div class="perf-benchmarks">
-                                <button class="benchmark-toggle-btn" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
-                                <div class="benchmark-options" style="display:none">
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('SPY', this)">S&P 500</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('QQQ', this)">Nasdaq 100</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
+                            <div class="perf-chart-controls-row">
+                                <div class="perf-benchmarks">
+                                    <button class="benchmark-toggle-btn" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
+                                    <div class="benchmark-options" style="display:none">
+                                        <button class="benchmark-btn" onclick="toggleModalBenchmark('SPY', this)">S&P 500</button>
+                                        <button class="benchmark-btn" onclick="toggleModalBenchmark('QQQ', this)">Nasdaq 100</button>
+                                        <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
+                                        <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
+                                    </div>
                                 </div>
+                                <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="מצב: אחוזים — לחץ למעבר לדולרים">%</button>
                             </div>
                         </div>
                         <canvas id="modal-perf-chart"></canvas>

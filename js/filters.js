@@ -61,15 +61,27 @@ function filterHistoryByRange(history, range) {
     });
 }
 
-function setCardTimeRange(clientId, range, btn) {
+async function setCardTimeRange(clientId, range, btn) {
     const client = clients.find(c => c.id === clientId);
-    if (!client || !client.performanceHistory) return;
+    if (!client) return;
 
     btn.parentElement.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    const hist = filterHistoryByRange(client.performanceHistory, range);
-    if (!hist.length) return;
+    let hist = filterHistoryByRange(client.performanceHistory || [], range);
+
+    // Synthetic fallback for sparse data
+    if (hist.length < 5 && typeof fetchSyntheticHistory === 'function') {
+        const hasEligible = client.holdings && client.holdings.some(
+            h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
+        );
+        if (hasEligible) {
+            const synth = await fetchSyntheticHistory(client, range);
+            if (synth && synth.length >= 2) hist = synth;
+        }
+    }
+
+    if (!hist || hist.length < 2) return;
 
     _safeDestroyChart(`perf-${clientId}`);
 

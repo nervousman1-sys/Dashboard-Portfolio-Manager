@@ -118,6 +118,110 @@ function renderExposureSection() {
     }, 50);
 }
 
+// ========== CARD SPARKLINE (async, with synthetic fallback) ==========
+
+async function _renderCardSparkline(client, renderKey) {
+    const perfCtx = document.getElementById(`perf-${client.id}`);
+    if (!perfCtx) return;
+
+    // Stale check — a newer renderClientCards() may have replaced the canvas
+    if (renderKey !== _cardRenderKey) return;
+
+    let hist = client.performanceHistory;
+
+    // Synthetic fallback: if real history is empty/sparse and holdings exist
+    if ((!hist || hist.length < 5) && typeof fetchSyntheticHistory === 'function') {
+        const hasEligible = client.holdings && client.holdings.some(
+            h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
+        );
+        if (hasEligible) {
+            // Show loading indicator while fetching
+            const container = perfCtx.parentElement;
+            if (container && !container.querySelector('.sparkline-loading')) {
+                const loader = document.createElement('div');
+                loader.className = 'sparkline-loading';
+                loader.textContent = 'טוען גרף...';
+                container.appendChild(loader);
+            }
+
+            const synth = await fetchSyntheticHistory(client, '1y');
+
+            // Re-check staleness after async call
+            if (renderKey !== _cardRenderKey) return;
+
+            // Remove loading indicator
+            const loader = perfCtx.parentElement?.querySelector('.sparkline-loading');
+            if (loader) loader.remove();
+
+            if (synth && synth.length >= 2) {
+                hist = synth;
+            }
+        }
+    }
+
+    if (!hist || hist.length < 2) {
+        // Show empty state
+        const container = perfCtx.parentElement;
+        if (container && !container.querySelector('.sparkline-empty')) {
+            perfCtx.style.display = 'none';
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'sparkline-empty';
+            emptyMsg.textContent = 'אין נתוני ביצועים';
+            container.appendChild(emptyMsg);
+        }
+        return;
+    }
+
+    // Destroy any existing chart on this canvas
+    _safeDestroyChart(`perf-${client.id}`);
+    _destroyChartOnCanvas(perfCtx);
+    _clearCanvas(perfCtx);
+    perfCtx.style.display = '';
+
+    const firstVal = hist[0]?.value || 0;
+    const lastVal = hist[hist.length - 1]?.value || 0;
+    const isPositive = lastVal >= firstVal;
+    const lineColor = isPositive ? '#22c55e' : '#ef4444';
+    const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+
+    charts[`perf-${client.id}`] = new Chart(perfCtx, {
+        type: 'line',
+        data: {
+            labels: hist.map(p => p.date),
+            datasets: [{
+                data: hist.map(p => p.value),
+                borderColor: lineColor,
+                backgroundColor: bgColor,
+                borderWidth: 2,
+                fill: true,
+                pointRadius: 0,
+                tension: 0.3,
+                clip: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 4, bottom: 4 } },
+            scales: {
+                x: { display: false },
+                y: { display: false, beginAtZero: false, grace: '15%' }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    rtl: true,
+                    callbacks: {
+                        title: (items) => items[0].label,
+                        label: (ctx) => ` שווי: ${formatCurrency(ctx.parsed.y)}`
+                    }
+                }
+            },
+            interaction: { intersect: false, mode: 'index' }
+        }
+    });
+}
+
 // ========== SUMMARY BAR ==========
 
 function renderSummaryBar() {
@@ -481,62 +585,8 @@ function renderClientCards() {
                 }
             });
 
-            // Performance sparkline
-            const perfCtx = document.getElementById(`perf-${client.id}`);
-            if (!perfCtx || !client.performanceHistory || client.performanceHistory.length === 0) return;
-
-            // Destroy any existing chart on this canvas
-            _safeDestroyChart(`perf-${client.id}`);
-            _destroyChartOnCanvas(perfCtx);
-            _clearCanvas(perfCtx);
-
-            const hist = client.performanceHistory;
-            const firstVal = hist[0]?.value || 0;
-            const lastVal = hist[hist.length - 1]?.value || 0;
-            const isPositive = lastVal >= firstVal;
-            const lineColor = isPositive ? '#22c55e' : '#ef4444';
-            const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
-
-            charts[`perf-${client.id}`] = new Chart(perfCtx, {
-                type: 'line',
-                data: {
-                    labels: hist.map(p => p.date),
-                    datasets: [{
-                        data: hist.map(p => p.value),
-                        borderColor: lineColor,
-                        backgroundColor: bgColor,
-                        borderWidth: 2,
-                        fill: true,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        clip: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { top: 4, bottom: 4 } },
-                    scales: {
-                        x: { display: false },
-                        y: {
-                            display: false,
-                            beginAtZero: false,
-                            grace: '15%'
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            rtl: true,
-                            callbacks: {
-                                title: (items) => items[0].label,
-                                label: (ctx) => ` שווי: ${formatCurrency(ctx.parsed.y)}`
-                            }
-                        }
-                    },
-                    interaction: { intersect: false, mode: 'index' }
-                }
-            });
+            // Performance sparkline — async to support synthetic fallback
+            _renderCardSparkline(client, renderKey);
         }, 50);
     });
 }
