@@ -46,6 +46,40 @@
 const _syntheticCache = {};
 const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
+// ========== LOCAL STORAGE TICKER CACHE (24-hour, per-ticker) ==========
+// Prevents API burnout: never fetch the same ticker twice per session or within 24h.
+const TICKER_LS_PREFIX = 'ticker_hist_';
+const TICKER_LS_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Session-level dedup: track tickers already fetched this session
+const _sessionTickerCache = {};
+
+function _getTickerFromLS(ticker, outputSize) {
+    try {
+        const raw = localStorage.getItem(TICKER_LS_PREFIX + ticker);
+        if (!raw) return null;
+        const entry = JSON.parse(raw);
+        if (Date.now() - entry.ts > TICKER_LS_TTL) {
+            localStorage.removeItem(TICKER_LS_PREFIX + ticker);
+            return null;
+        }
+        // Only use if stored data has enough points for the requested range
+        if (entry.data && entry.data.length >= Math.min(outputSize, 30)) {
+            return entry.data;
+        }
+        return null;
+    } catch (e) { return null; }
+}
+
+function _saveTickerToLS(ticker, data) {
+    try {
+        localStorage.setItem(TICKER_LS_PREFIX + ticker, JSON.stringify({
+            data: data,
+            ts: Date.now()
+        }));
+    } catch (e) { /* localStorage full — silent */ }
+}
+
 // Invalidate cached synthetic history for a specific client.
 // Call this after any holding change (buy, sell, add, remove) so the next
 // chart render fetches fresh data reflecting the new positions.
@@ -61,8 +95,22 @@ function invalidateSyntheticCache(clientId) {
 
 // ========== HISTORICAL TIME SERIES FETCH (per ticker) ==========
 // Returns: [{date: 'YYYY-MM-DD', close: number}] in chronological order, or null.
+// Uses localStorage cache (24h TTL) to avoid API burnout — never fetches same ticker twice.
 
 async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
+    // ── Check session cache (instant — no parse overhead) ──
+    if (_sessionTickerCache[ticker]) {
+        return _sessionTickerCache[ticker];
+    }
+
+    // ── Check localStorage cache (24h TTL) ──
+    const lsCached = _getTickerFromLS(ticker, outputSize);
+    if (lsCached) {
+        _sessionTickerCache[ticker] = lsCached;
+        console.log(`[SyntheticHistory] Cache hit for ${ticker} (${lsCached.length} points)`);
+        return lsCached;
+    }
+
     const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
 
     // ── Primary: FMP historical-price-full ──
@@ -82,8 +130,13 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
                     for (let i = sliced.length - 1, j = 0; i >= 0; i--, j++) {
                         result[j] = { date: sliced[i].date, close: sliced[i].close };
                     }
+                    // Save to both caches
+                    _sessionTickerCache[ticker] = result;
+                    _saveTickerToLS(ticker, result);
                     return result;
                 }
+            } else if (res.status === 429) {
+                console.warn(`[SyntheticHistory] FMP rate-limited (429) for ${ticker}`);
             }
         } catch (e) {
             console.warn(`[SyntheticHistory] FMP failed for ${ticker}:`, e.message);
@@ -103,7 +156,6 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
                 // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
                 if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
                     console.warn(`[SyntheticHistory] Twelve Data rate-limited for ${ticker}: ${json.message}`);
-                    // Fall through to Finnhub
                 } else if (json.values && json.values.length > 0) {
                     // Twelve Data returns newest-first — reverse to chronological
                     const values = json.values;
@@ -114,6 +166,9 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
                             close: parseFloat(values[i].close)
                         };
                     }
+                    // Save to both caches
+                    _sessionTickerCache[ticker] = result;
+                    _saveTickerToLS(ticker, result);
                     return result;
                 }
             }
@@ -122,30 +177,8 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
         }
     }
 
-    // ── Fallback: Finnhub candle ──
-    if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
-        try {
-            const now = Math.floor(Date.now() / 1000);
-            const from = now - outputSize * 24 * 60 * 60;
-            const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${now}&token=${FINNHUB_API_KEY}`;
-            const res = await fetch(url);
-            if (res.ok) {
-                const json = await res.json();
-                if (json.s === 'ok' && json.c && json.c.length > 0) {
-                    const result = new Array(json.c.length);
-                    for (let i = 0; i < json.c.length; i++) {
-                        result[i] = {
-                            date: new Date(json.t[i] * 1000).toISOString().split('T')[0],
-                            close: json.c[i]
-                        };
-                    }
-                    return result;
-                }
-            }
-        } catch (e) {
-            console.warn(`[SyntheticHistory] Finnhub failed for ${ticker}:`, e.message);
-        }
-    }
+    // Finnhub removed — was returning 403s and adding log noise.
+    // FMP + Twelve Data cover all needed tickers.
 
     return null;
 }

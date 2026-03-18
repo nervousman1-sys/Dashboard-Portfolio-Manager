@@ -554,8 +554,9 @@ async function supaRecordPerformanceSnapshot(clientId) {
 
 // ========== TRANSACTION LOG (localStorage primary, Supabase optional) ==========
 
-// Flag: set to false once we detect the transactions table doesn't exist
-let _supaTransactionsAvailable = true;
+// Flag: set to false since the Supabase 'transactions' table doesn't exist.
+// Transactions are stored in localStorage only — no 404 noise in console.
+let _supaTransactionsAvailable = false;
 
 function _localTxKey(portfolioId) {
     return `portfolio_transactions_${portfolioId}`;
