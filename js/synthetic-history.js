@@ -10,6 +10,13 @@
 //
 //   returnPct_i = ((Vᵢ − V₀) / V₀) × 100
 //
+// Equivalently (the formula used in the code):
+//
+//   returnPct_i = ((Vᵢ / V₀) − 1) × 100
+//
+// Both are algebraically identical. The second form avoids computing (Vᵢ − V₀)
+// separately; we use the first form in the implementation for clarity.
+//
 //   Day 0:  ((V₀ − V₀) / V₀) × 100 = 0.00%   (always starts at zero)
 //   Day i:  ((Vᵢ − V₀) / V₀) × 100 = cumulative % change from inception
 //
@@ -18,8 +25,10 @@
 // with market indices that are also rebased to 0% on the same start date.
 //
 // Example:
-//   Portfolio starts at $10,000, ends at $11,200  →  +12.00%
-//   S&P 500 starts at 5,000, ends at 5,450       →  +9.00%
+//   Portfolio starts at $10,000, ends at $11,200
+//     → ((11200 − 10000) / 10000) × 100 = +12.00%
+//   S&P 500 starts at 5,000, ends at 5,450
+//     → ((5450 − 5000) / 5000) × 100 = +9.00%
 //   → Portfolio outperformed by 3 percentage points
 //
 // ── MEMORY EFFICIENCY ──
@@ -30,11 +39,25 @@
 //    without interpolation or extra arrays
 // 4. Single-pass computation — each date visited exactly once
 // 5. Batch API calls (3 concurrent) with rate-limit delays
+// 6. Reciprocal multiplication in normalization loop — 1 division total, not N
 
 // ========== CACHE ==========
 
 const _syntheticCache = {};
 const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+// Invalidate cached synthetic history for a specific client.
+// Call this after any holding change (buy, sell, add, remove) so the next
+// chart render fetches fresh data reflecting the new positions.
+function invalidateSyntheticCache(clientId) {
+    if (!clientId) return;
+    const prefix = `${clientId}_`;
+    for (const key of Object.keys(_syntheticCache)) {
+        if (key.startsWith(prefix)) {
+            delete _syntheticCache[key];
+        }
+    }
+}
 
 // ========== HISTORICAL TIME SERIES FETCH (per ticker) ==========
 // Returns: [{date: 'YYYY-MM-DD', close: number}] in chronological order, or null.
@@ -49,7 +72,12 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
             const res = await fetch(url);
             if (res.ok && res.status !== 429) {
                 const json = await res.json();
-                if (json.values && json.values.length > 0) {
+
+                // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
+                if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
+                    console.warn(`[SyntheticHistory] Twelve Data rate-limited for ${ticker}: ${json.message}`);
+                    // Fall through to FMP/Finnhub
+                } else if (json.values && json.values.length > 0) {
                     // Twelve Data returns newest-first — reverse to chronological
                     const values = json.values;
                     const result = new Array(values.length);
@@ -118,14 +146,14 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     return null;
 }
 
-// ========== MAIN: BUILD SYNTHETIC HISTORY ==========
+// ========== CORE: BUILD SYNTHETIC HISTORY ==========
 //
 // Input:  client object (with holdings[] and cashBalance)
 // Output: [{date: 'YYYY-MM-DD', value: number, returnPct: number}]
 //         where returnPct is normalized to 0% on first data point.
 //
 // Algorithm:
-//   1. Filter to stock holdings with shares > 0
+//   1. Filter to stock AND fund holdings with shares > 0 (both have tickers with history)
 //   2. Fetch daily time_series for each ticker (3 concurrent, with 1.2s rate-limit gaps)
 //   3. Build the "date backbone" from the longest series
 //   4. Create Map<date, close> per ticker for O(1) lookups
@@ -142,22 +170,22 @@ async function fetchSyntheticHistory(client, range) {
         return cached.data;
     }
 
-    // Step 1: Filter eligible holdings
-    const stockHoldings = client.holdings.filter(
-        h => h.type === 'stock' && h.shares > 0 && h.ticker
+    // Step 1: Filter eligible holdings — stocks AND funds (ETFs) have ticker-based history
+    const eligibleHoldings = client.holdings.filter(
+        h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0 && h.ticker
     );
-    if (stockHoldings.length === 0) return null;
+    if (eligibleHoldings.length === 0) return null;
 
     const outputSize = _rangeToOutputSize(range); // Reuse existing charts.js helper
-    console.log(`[SyntheticHistory] Fetching ${outputSize} days for ${stockHoldings.length} tickers: ${stockHoldings.map(h => h.ticker).join(', ')}`);
+    console.log(`[SyntheticHistory] Fetching ${outputSize} days for ${eligibleHoldings.length} tickers: ${eligibleHoldings.map(h => h.ticker).join(', ')}`);
 
     // Step 2: Fetch historical data — batched with rate limiting
     //         3 concurrent fetches balances speed vs API rate limits
     const tickerSeries = {};
     const BATCH_SIZE = 3;
 
-    for (let i = 0; i < stockHoldings.length; i += BATCH_SIZE) {
-        const batch = stockHoldings.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < eligibleHoldings.length; i += BATCH_SIZE) {
+        const batch = eligibleHoldings.slice(i, i + BATCH_SIZE);
         const results = await Promise.allSettled(
             batch.map(h => _fetchTickerTimeSeries(h.ticker, h.currency, outputSize))
         );
@@ -169,7 +197,7 @@ async function fetchSyntheticHistory(client, range) {
         }
 
         // Rate-limit delay between batches (Twelve Data allows 8 calls/min on free tier)
-        if (i + BATCH_SIZE < stockHoldings.length) {
+        if (i + BATCH_SIZE < eligibleHoldings.length) {
             await new Promise(r => setTimeout(r, 1200));
         }
     }
@@ -179,7 +207,7 @@ async function fetchSyntheticHistory(client, range) {
         console.warn('[SyntheticHistory] No historical data fetched for any ticker');
         return null;
     }
-    console.log(`[SyntheticHistory] Got data for ${fetchedTickers.length}/${stockHoldings.length} tickers`);
+    console.log(`[SyntheticHistory] Got data for ${fetchedTickers.length}/${eligibleHoldings.length} tickers`);
 
     // Step 3: Build date backbone from the longest time series
     //         This ensures we have a date for every trading day
@@ -214,8 +242,8 @@ async function fetchSyntheticHistory(client, range) {
         const date = backbone[i].date;
         let totalValue = cashBalance; // Cash is constant throughout synthetic history
 
-        for (let j = 0; j < stockHoldings.length; j++) {
-            const h = stockHoldings[j];
+        for (let j = 0; j < eligibleHoldings.length; j++) {
+            const h = eligibleHoldings[j];
             const dateMap = priceLookup.get(h.ticker);
 
             if (dateMap) {
@@ -243,6 +271,7 @@ async function fetchSyntheticHistory(client, range) {
     // Step 6: Normalize to percentage return from first data point
     //
     //   returnPct_i = ((Vᵢ − V₀) / V₀) × 100
+    //   Equivalent: ((Vᵢ / V₀) − 1) × 100
     //
     //   This is a SINGLE pass — we already have the array, just add the field.
     //   No intermediate array created; we mutate in-place for zero extra allocation.
@@ -263,4 +292,39 @@ async function fetchSyntheticHistory(client, range) {
     _syntheticCache[cacheKey] = { data: history, timestamp: Date.now() };
     console.log(`[SyntheticHistory] Built ${n}-point synthetic history (${history[0].date} → ${history[n - 1].date}), return: ${history[n - 1].returnPct.toFixed(2)}%`);
     return history;
+}
+
+// ========== PUBLIC API: generateBackfilledData(holdings, period) ==========
+//
+// Clean public interface that takes a holdings array and period string,
+// returns Chart.js-ready [{x: timestamp_ms, y: totalValue}] or null.
+//
+// Usage:
+//   const points = await generateBackfilledData(client.holdings, '1y');
+//   if (points) chart.data.datasets[0].data = points;
+//
+// This is a convenience wrapper around fetchSyntheticHistory.
+
+async function generateBackfilledData(holdings, period, cashBalance) {
+    if (!holdings || holdings.length === 0) return null;
+
+    // Build a minimal client-like object for fetchSyntheticHistory
+    const pseudoClient = {
+        id: '_backfill_' + holdings.map(h => h.ticker).sort().join('_'),
+        holdings: holdings,
+        cashBalance: cashBalance || 0
+    };
+
+    const history = await fetchSyntheticHistory(pseudoClient, period || '1y');
+    if (!history || history.length < 2) return null;
+
+    // Convert to Chart.js {x, y} format — x is ms timestamp, y is portfolio value
+    const points = new Array(history.length);
+    for (let i = 0; i < history.length; i++) {
+        points[i] = {
+            x: new Date(history[i].date).getTime(),
+            y: history[i].value
+        };
+    }
+    return points;
 }

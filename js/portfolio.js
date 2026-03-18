@@ -39,6 +39,10 @@ async function portfolioBuyAsset(clientId, holdingData) {
 
     // Create the holding (supaAddHolding handles insert + transaction log + recalc)
     const updated = await supaAddHolding(clientId, holdingData);
+
+    // Invalidate synthetic history cache — holdings changed, backfill data is stale
+    if (typeof invalidateSyntheticCache === 'function') invalidateSyntheticCache(clientId);
+
     return updated;
 }
 
@@ -47,7 +51,12 @@ async function portfolioBuyAsset(clientId, holdingData) {
 
 async function portfolioSellAsset(clientId, holdingId, sellQty) {
     if (!supabaseConnected) return null;
-    return await supaSellHolding(clientId, holdingId, sellQty);
+    const result = await supaSellHolding(clientId, holdingId, sellQty);
+
+    // Invalidate synthetic history cache — holdings changed, backfill data is stale
+    if (typeof invalidateSyntheticCache === 'function') invalidateSyntheticCache(clientId);
+
+    return result;
 }
 
 // ========== DEPOSIT CASH ==========
@@ -99,6 +108,9 @@ async function portfolioDepositCash(clientId, amount) {
         total: amount
     });
 
+    // Invalidate synthetic history cache — cash balance changed
+    if (typeof invalidateSyntheticCache === 'function') invalidateSyntheticCache(clientId);
+
     // Recalculate allocations
     await supaRecalcClient(clientId);
     return await supaFetchClient(clientId);
@@ -142,6 +154,9 @@ async function portfolioWithdrawCash(clientId, amount) {
         price: amount,
         total: amount
     });
+
+    // Invalidate synthetic history cache — cash balance changed
+    if (typeof invalidateSyntheticCache === 'function') invalidateSyntheticCache(clientId);
 
     await supaRecalcClient(clientId);
     return await supaFetchClient(clientId);

@@ -353,24 +353,51 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const staleMsg = container?.querySelector('.no-chart-data');
     if (staleMsg) staleMsg.remove();
 
-    // ── 5. Map history → Chart.js points ──
+    // ── 5. Pre-fetch benchmark data BEFORE deciding display mode ──
+    // We must know whether benchmark data actually loaded before choosing
+    // between % and $ axes — otherwise a failed API call puts the chart
+    // in % mode with no benchmark line, confusing the user.
+    const benchmarkResults = [];
+    for (const symbol of (benchmarks || [])) {
+        const benchData = await fetchBenchmarkData(symbol, range);
+        if (benchData && benchData.length > 0) {
+            benchmarkResults.push({ symbol, data: benchData });
+        }
+    }
+
+    // ── 6. Determine display mode ──
     // Two modes:
-    //   Absolute ($): Y = portfolio value. Benchmarks scaled to portfolio starting value.
-    //   Percentage (%): Y = cumulative return from day 0. Portfolio + benchmarks in same unit.
+    //   Absolute ($): Y = portfolio value. Used when no benchmarks are active.
+    //   Percentage (%): Y = cumulative return from day 0, both portfolio and
+    //                   benchmarks normalized to the same 0% origin.
     //
-    // Percentage mode is used when:
-    //   - Synthetic history is active (new portfolios with no real snapshots)
-    //   - Benchmarks are enabled (apples-to-apples comparison)
-    const usePercentMode = isSynthetic || (benchmarks && benchmarks.length > 0);
+    // % mode activates when:
+    //   - Synthetic history is in use (new portfolios with no snapshots), OR
+    //   - At least one benchmark dataset was SUCCESSFULLY fetched
+    //
+    // KEY: usePercentMode depends on actual fetched data, not the requested list.
+    // If the API fails for all benchmarks, we stay in $ mode — not a broken % chart.
+    const usePercentMode = isSynthetic || benchmarkResults.length > 0;
+
+    // ── 7. Map history → Chart.js points ──
+    //
+    // NORMALIZATION (% mode):
+    //   returnPct = ((Vᵢ − V₀) / V₀) × 100
+    //
+    //   CRITICAL: Always compute from the first VISIBLE data point's VALUE,
+    //   never from the stored returnPct. The stored returnPct in Supabase snapshots
+    //   is relative to initialInvestment — a different baseline than the first
+    //   visible point. Using it would make the portfolio start at +15% while
+    //   the benchmark starts at 0%, destroying the apples-to-apples comparison.
+    const firstValue = hist[0].value || 1; // Denominator for normalization
 
     const portfolioPoints = hist.map(p => {
         const x = (p._dateObj || _parseHistDate(p.date)).getTime();
         if (usePercentMode) {
-            // returnPct is pre-computed on synthetic data.
-            // For real history, compute it on the fly from absolute values.
-            const returnPct = p.returnPct !== undefined
-                ? p.returnPct
-                : (hist[0].value > 0 ? ((p.value - hist[0].value) / hist[0].value) * 100 : 0);
+            // Always compute from values — never use stored returnPct for comparisons
+            const returnPct = firstValue > 0
+                ? ((p.value - firstValue) / firstValue) * 100
+                : 0;
             return { x, y: returnPct };
         }
         return { x, y: p.value };
@@ -382,9 +409,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const mainColor = isPositive ? COLORS.profit : COLORS.loss;
     const fillColor = isPositive ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
 
-    // ── 6. Build datasets ──
+    // ── 8. Build datasets ──
     const datasets = [{
-        label: isSynthetic ? 'תשואה משוחזרת' : 'שווי תיק',
+        label: isSynthetic ? 'תשואה משוחזרת' : (usePercentMode ? 'תשואת תיק' : 'שווי תיק'),
         data: portfolioPoints,
         borderColor: mainColor,
         backgroundColor: fillColor,
@@ -399,21 +426,19 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         clip: true
     }];
 
-    // Benchmark datasets
-    for (const symbol of (benchmarks || [])) {
-        const benchData = await fetchBenchmarkData(symbol, range);
-        if (!benchData || benchData.length === 0) continue;
-
+    // Benchmark datasets — from pre-fetched data
+    for (const { symbol, data: benchData } of benchmarkResults) {
+        // Rebase benchmark to 0% at its first data point
         const benchBase = benchData[0]?.returnPct || 0;
         datasets.push({
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
             data: benchData.map(p => ({
                 x: new Date(p.date).getTime(),
-                // Percent mode: plot benchmark returnPct directly (rebased to 0%)
-                // Absolute mode: scale to portfolio starting value for visual comparison
+                // % mode: both portfolio and benchmark are rebased to 0% at start
+                // $ mode: scale benchmark to portfolio's starting value
                 y: usePercentMode
                     ? (p.returnPct - benchBase)
-                    : portfolioPoints[0].y * (1 + (p.returnPct - benchBase) / 100)
+                    : firstValue * (1 + (p.returnPct - benchBase) / 100)
             })),
             borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
             borderWidth: 1.5,
@@ -426,7 +451,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         });
     }
 
-    // ── 7. Timeline configuration ──
+    // ── 9. Timeline configuration ──
     const now = new Date();
     const TEN_YEARS_MS = 10 * 365.25 * 24 * 60 * 60 * 1000;
 
@@ -453,7 +478,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     else if (dataSpanDays <= 3650) timeUnit = 'quarter'; // 2-10Y → show quarters
     else timeUnit = 'year';                            // 10Y+  → show years
 
-    // ── 8. Construct Chart.js instance — complete options object ──
+    // ── 10. Construct Chart.js instance — complete options object ──
     const chartInstance = new Chart(canvas, {
         type: 'line',
         data: { datasets },
