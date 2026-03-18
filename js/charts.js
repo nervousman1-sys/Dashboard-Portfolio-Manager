@@ -87,9 +87,14 @@ function _rangeToOutputSize(range) {
 
 async function fetchBenchmarkData(symbol, range) {
     const cacheKey = `${symbol}_${range}`;
+    const isIntraday = (range === '1d' || range === '5d');
+
+    // Intraday benchmark data is time-sensitive — 5 min cache only.
+    // Daily data can use the full 24h TTL.
+    const effectiveTTL = isIntraday ? INTRADAY_CACHE_TTL : BENCHMARK_CACHE_TTL;
 
     // Check memory cache
-    if (_benchmarkCache[cacheKey] && (Date.now() - _benchmarkCache[cacheKey].timestamp < BENCHMARK_CACHE_TTL)) {
+    if (_benchmarkCache[cacheKey] && (Date.now() - _benchmarkCache[cacheKey].timestamp < effectiveTTL)) {
         return _benchmarkCache[cacheKey].data;
     }
 
@@ -98,7 +103,7 @@ async function fetchBenchmarkData(symbol, range) {
         const stored = localStorage.getItem('benchmark_' + cacheKey);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Date.now() - parsed.timestamp < BENCHMARK_CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+            if (Date.now() - parsed.timestamp < effectiveTTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 _benchmarkCache[cacheKey] = parsed;
                 return parsed.data;
             } else {
@@ -149,11 +154,12 @@ async function fetchBenchmarkData(symbol, range) {
 }
 
 // Twelve Data sometimes needs the INDEX symbol instead of the ETF ticker.
-// Try the ETF first (SPY, QQQ, DIA, IWM), then the index alias.
+// Try the ETF first, then the index alias. Twelve Data uses symbols WITHOUT ^ prefix.
 const _TWELVE_DATA_ALIASES = {
-    'QQQ': ['QQQ', 'IXIC'],   // Nasdaq 100 ETF → Nasdaq Composite index
-    'DIA': ['DIA', 'DJI'],    // Dow Jones ETF → Dow Jones index
-    'IWM': ['IWM', 'RUT']     // Russell 2000 ETF → Russell 2000 index
+    'SPY': ['SPY', 'GSPC'],   // S&P 500 ETF → ^GSPC index (without ^)
+    'QQQ': ['QQQ', 'IXIC'],   // Nasdaq 100 ETF → ^IXIC (Nasdaq Composite)
+    'DIA': ['DIA', 'DJI'],    // Dow Jones ETF → ^DJI index
+    'IWM': ['IWM', 'RUT']     // Russell 2000 ETF → ^RUT index
 };
 
 async function _fetchTwelveDataBenchmark(symbol, range) {
@@ -825,11 +831,17 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //     Threshold: real history must have enough points relative to the range.
     //     A portfolio created 3 days ago shouldn't show a 3-point "1Y" chart —
     //     synthetic history with ~250 points is far more useful.
-    const _minPointsForRange = { '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 200, 'max': 60, 'all': 10 };
+    //
+    //     For 1D/5D: intraday APIs are the primary source. If they fail, we accept
+    //     even 2 performance_history points (better than "No Data"). Synthetic daily
+    //     history is also attempted as a last resort for 5D.
+    const _minPointsForRange = { '1d': 2, '5d': 3, '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 200, 'max': 60, 'all': 10 };
     const minPoints = _minPointsForRange[range] || 10;
     const histTooSparse = !hist || hist.length < minPoints;
 
-    if (histTooSparse && !isIntraday) {
+    // Synthetic fallback: available for all ranges except 1D (too granular for daily data).
+    // 5D can use synthetic daily data as a meaningful fallback.
+    if (histTooSparse && range !== '1d') {
         const hasEligibleHoldings = client.holdings && client.holdings.some(
             h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
         );
@@ -865,6 +877,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // the others don't wait. All benchmarks resolve together.
     const benchmarkResults = [];
     if (benchmarks && benchmarks.length > 0) {
+        console.log(`[PerfChart] Fetching ${benchmarks.length} benchmarks: ${benchmarks.join(', ')} (range=${range})`);
         const benchPromises = benchmarks.map(symbol =>
             fetchBenchmarkData(symbol, range).then(data => ({ symbol, data }))
         );
@@ -872,8 +885,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         for (const r of settled) {
             if (r.status === 'fulfilled' && r.value.data && r.value.data.length > 0) {
                 benchmarkResults.push(r.value);
+            } else {
+                const sym = r.status === 'fulfilled' ? r.value.symbol : 'unknown';
+                const reason = r.status === 'rejected' ? r.reason : 'empty data';
+                console.warn(`[PerfChart] Benchmark ${sym} excluded: ${reason}`);
             }
         }
+        console.log(`[PerfChart] ${benchmarkResults.length}/${benchmarks.length} benchmarks loaded successfully`);
     }
 
     // ── 6. Determine display mode ──
@@ -965,8 +983,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                 };
             }),
             borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
-            borderWidth: 1.5,
-            borderDash: [5, 3],
+            borderWidth: 2,
+            borderDash: [6, 3],
             fill: false,
             pointRadius: 0,
             pointHoverRadius: 3,
