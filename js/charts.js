@@ -292,8 +292,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const container = canvas.parentElement;
     _showChartLoading(container);
 
-    // ── 2. Acquire REAL data — never synthetic ──
+    // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
+    let isSynthetic = false;
     const isIntraday = (range === '1d' || range === '5d');
 
     // 2a. Intraday: live hourly data from Twelve Data
@@ -307,12 +308,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         if (!client.performanceHistory || client.performanceHistory.length === 0) {
             if (typeof supabaseConnected !== 'undefined' && supabaseConnected && client.portfolioValue > 0) {
                 await supaRecordPerformanceSnapshot(client.id);
-                // Fetch ONLY performanceHistory from DB — do NOT replace the full client
-                // object, as that would overwrite in-memory live prices with stale DB values.
                 const updated = await supaFetchClient(client.id);
                 if (updated && updated.performanceHistory) {
                     client.performanceHistory = updated.performanceHistory;
-                    // Also patch the clients array entry's history without replacing the object
                     const idx = clients.findIndex(c => c.id === clientId);
                     if (idx !== -1) clients[idx].performanceHistory = updated.performanceHistory;
                 }
@@ -321,7 +319,24 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         hist = filterHistoryByRange(client.performanceHistory || [], range);
     }
 
-    // ── 3. Empty/insufficient data → clear "No Data" overlay, abort ──
+    // 2c. Synthetic fallback: if real history is insufficient but holdings exist,
+    //     reconstruct historical performance from daily closing prices.
+    //     This enables 1Y charts for brand-new portfolios.
+    if ((!hist || hist.length < 2) && !isIntraday) {
+        const hasStockHoldings = client.holdings && client.holdings.some(
+            h => h.type === 'stock' && h.shares > 0
+        );
+        if (hasStockHoldings && typeof fetchSyntheticHistory === 'function') {
+            const synth = await fetchSyntheticHistory(client, range);
+            if (synth && synth.length >= 2) {
+                hist = synth;
+                isSynthetic = true;
+                console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points)`);
+            }
+        }
+    }
+
+    // ── 3. Empty/insufficient data → "No Data" overlay, abort ──
     _hideChartLoading(container);
 
     if (!hist || hist.length < 2) {
@@ -338,14 +353,30 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const staleMsg = container?.querySelector('.no-chart-data');
     if (staleMsg) staleMsg.remove();
 
-    // ── 5. Map Supabase data → { x: ISO-timestamp, y: numeric_value } ──
-    // Every point uses a real Date timestamp and the recorded portfolio total value.
-    const portfolioPoints = hist.map(p => ({
-        x: (p._dateObj || _parseHistDate(p.date)).getTime(),
-        y: p.value
-    }));
+    // ── 5. Map history → Chart.js points ──
+    // Two modes:
+    //   Absolute ($): Y = portfolio value. Benchmarks scaled to portfolio starting value.
+    //   Percentage (%): Y = cumulative return from day 0. Portfolio + benchmarks in same unit.
+    //
+    // Percentage mode is used when:
+    //   - Synthetic history is active (new portfolios with no real snapshots)
+    //   - Benchmarks are enabled (apples-to-apples comparison)
+    const usePercentMode = isSynthetic || (benchmarks && benchmarks.length > 0);
 
-    const firstVal = portfolioPoints[0].y || 1;
+    const portfolioPoints = hist.map(p => {
+        const x = (p._dateObj || _parseHistDate(p.date)).getTime();
+        if (usePercentMode) {
+            // returnPct is pre-computed on synthetic data.
+            // For real history, compute it on the fly from absolute values.
+            const returnPct = p.returnPct !== undefined
+                ? p.returnPct
+                : (hist[0].value > 0 ? ((p.value - hist[0].value) / hist[0].value) * 100 : 0);
+            return { x, y: returnPct };
+        }
+        return { x, y: p.value };
+    });
+
+    const firstVal = usePercentMode ? 0 : (portfolioPoints[0].y || 1);
     const lastVal = portfolioPoints[portfolioPoints.length - 1].y || 0;
     const isPositive = lastVal >= firstVal;
     const mainColor = isPositive ? COLORS.profit : COLORS.loss;
@@ -353,7 +384,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 6. Build datasets ──
     const datasets = [{
-        label: 'שווי תיק',
+        label: isSynthetic ? 'תשואה משוחזרת' : 'שווי תיק',
         data: portfolioPoints,
         borderColor: mainColor,
         backgroundColor: fillColor,
@@ -365,10 +396,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         pointHoverBorderColor: '#fff',
         pointHoverBorderWidth: 2,
         tension: 0.3,
-        clip: true      // CRITICAL: clips line to the chart area rectangle — prevents overflow
+        clip: true
     }];
 
-    // Benchmark datasets — normalized to portfolio starting value for visual comparison
+    // Benchmark datasets
     for (const symbol of (benchmarks || [])) {
         const benchData = await fetchBenchmarkData(symbol, range);
         if (!benchData || benchData.length === 0) continue;
@@ -378,7 +409,11 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
             data: benchData.map(p => ({
                 x: new Date(p.date).getTime(),
-                y: firstVal * (1 + (p.returnPct - benchBase) / 100)
+                // Percent mode: plot benchmark returnPct directly (rebased to 0%)
+                // Absolute mode: scale to portfolio starting value for visual comparison
+                y: usePercentMode
+                    ? (p.returnPct - benchBase)
+                    : portfolioPoints[0].y * (1 + (p.returnPct - benchBase) / 100)
             })),
             borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
             borderWidth: 1.5,
@@ -472,16 +507,22 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
                 y: {
                     position: 'right',
-                    beginAtZero: false,
-                    grace: '15%',         // Expands scale 15% beyond data extremes → line never touches edges
+                    beginAtZero: usePercentMode,   // % mode: anchor 0% line; $ mode: fit to data
+                    grace: '15%',
                     ticks: {
                         color: '#94a3b8',
                         font: { size: 10 },
-                        callback: function(v) {
-                            if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
-                            if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
-                            return '$' + v.toFixed(0);
-                        },
+                        callback: usePercentMode
+                            ? function(v) {
+                                // Percentage Y-axis: "+12.5%", "-3.2%", "0.0%"
+                                const sign = v > 0 ? '+' : '';
+                                return sign + v.toFixed(1) + '%';
+                            }
+                            : function(v) {
+                                if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+                                if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
+                                return '$' + v.toFixed(0);
+                            },
                         maxTicksLimit: 6,
                         padding: 8
                     },
@@ -522,12 +563,20 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     boxHeight: 8,
                     boxPadding: 4,
                     callbacks: {
-                        label: function(ctx) {
-                            const val = ctx.parsed.y;
-                            const pct = firstVal > 0 ? ((val - firstVal) / firstVal * 100) : 0;
-                            const sign = pct >= 0 ? '+' : '';
-                            return ` ${ctx.dataset.label}: ${formatCurrency(val)} (${sign}${pct.toFixed(2)}%)`;
-                        }
+                        label: usePercentMode
+                            ? function(ctx) {
+                                // Percentage mode: value IS the return %
+                                const pct = ctx.parsed.y;
+                                const sign = pct >= 0 ? '+' : '';
+                                return ` ${ctx.dataset.label}: ${sign}${pct.toFixed(2)}%`;
+                            }
+                            : function(ctx) {
+                                // Absolute mode: show $ value + derived %
+                                const val = ctx.parsed.y;
+                                const pct = firstVal > 0 ? ((val - firstVal) / firstVal * 100) : 0;
+                                const sign = pct >= 0 ? '+' : '';
+                                return ` ${ctx.dataset.label}: ${formatCurrency(val)} (${sign}${pct.toFixed(2)}%)`;
+                            }
                     }
                 },
 
