@@ -299,16 +299,15 @@ function _applyPricesToClientsInMemory(priceMap) {
         client.holdings.forEach(h => {
             if (h.type === 'stock' && priceMap[h.ticker]) {
                 const newPrice = priceMap[h.ticker].price;
-                if (Math.abs(newPrice - h.price) > 0.001) {
-                    // LOCK: Don't "update" price if the API returned the same as purchase price
-                    const purchasePrice = (h.costBasis && h.shares > 0) ? h.costBasis / h.shares : 0;
-                    if (purchasePrice > 0 && Math.abs(newPrice - purchasePrice) < 0.001 && Math.abs(h.price - purchasePrice) > 0.001) {
-                        // The API returned the purchase price but we already have a different live price — keep it
-                        return;
-                    }
-                    h.previousClose = priceMap[h.ticker].previousClose;
+                const newPrevClose = priceMap[h.ticker].previousClose;
+
+                // Always apply live API prices — no locks, no conditions.
+                // The API is the source of truth for current market prices.
+                if (newPrice > 0) {
+                    h.previousClose = newPrevClose;
                     h.price = newPrice;
                     h.value = h.shares * newPrice;
+                    h._livePriceResolved = true; // Flag: this price came from a live API
                     clientChanged = true;
                 }
             }
@@ -547,15 +546,8 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
                     continue;
                 }
 
-                // LOCK MECHANISM: Reject writes where the "live" price is identical to
-                // the purchase price (costBasis / shares). This means no real API data was
-                // fetched and we'd be persisting the purchase price as current price → 0% return.
-                const purchasePrice = (h.costBasis && h.shares > 0) ? h.costBasis / h.shares : 0;
-                if (purchasePrice > 0 && Math.abs(newPrice - purchasePrice) < 0.001) {
-                    console.warn(`[PriceService] LOCK: Skipping ${h.ticker} — price ${newPrice} === purchase price ${purchasePrice.toFixed(2)}`);
-                    continue;
-                }
-
+                // Always persist live API prices to DB — no locks.
+                // If the API returned this price, it IS the current market price.
                 const newValue = h.shares * newPrice;
                 affectedPortfolios.add(client.id);
 

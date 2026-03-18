@@ -50,6 +50,7 @@ async function openModal(clientId) {
     let totalHoldingsValue = 0;
     let totalHoldingsPnL = 0;
     client.holdings.forEach((h, hIdx) => {
+        const isStale = h.type === 'stock' && !h._livePriceResolved;
         const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
         const changeClass = change >= 0 ? 'positive' : 'negative';
         const changeSign = change >= 0 ? '+' : '';
@@ -59,7 +60,7 @@ async function openModal(clientId) {
         const holdingProfitSign = holdingProfit >= 0 ? '+' : '';
         const currSymbol = h.currency === 'ILS' ? '₪' : '$';
         totalHoldingsValue += h.value;
-        totalHoldingsPnL += holdingProfit;
+        totalHoldingsPnL += isStale ? 0 : holdingProfit;
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
@@ -67,12 +68,12 @@ async function openModal(clientId) {
                     <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                 </div>
             </td>
-            <td>${h.price.toFixed(2)} ${currSymbol}</td>
+            <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
             <td>${h.shares}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
-            <td class="price-change ${changeClass}">${changeSign}${change.toFixed(2)}%</td>
-            <td class="price-change ${holdingProfitClass}">${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}</td>
-            <td class="price-change ${holdingProfitClass}" style="font-weight:700">${holdingProfitSign}${holdingReturn.toFixed(2)}%</td>
+            <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
+            <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
+            <td class="price-change ${isStale ? '' : holdingProfitClass}" style="font-weight:700">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${holdingReturn.toFixed(2)}%`}</td>
             <td>
                 <button class="holding-action-btn sell" onclick="openMgmtModal('sellHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">מכור</button>
                 <button class="holding-action-btn" onclick="openMgmtModal('editHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">ערוך</button>

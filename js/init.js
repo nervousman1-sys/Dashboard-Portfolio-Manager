@@ -7,22 +7,13 @@ const CACHE_TS_KEY = 'portfolio_cache_ts';
 
 function saveClientsToCache(data) {
     try {
-        // LOCK GUARD: Don't cache data where all stock prices equal purchase prices (0% return).
-        // This indicates stale DB data that would cause the "flash then reset" bug on next load.
+        // GUARD: Don't cache data where no stock holdings have resolved live prices.
+        // This prevents caching stale DB data with purchase prices as current prices.
         if (data && data.length > 0) {
-            let stockCount = 0, staleCount = 0;
-            data.forEach(c => {
-                if (!c.holdings) return;
-                c.holdings.forEach(h => {
-                    if (h.type === 'stock' && h.shares > 0 && h.costBasis > 0) {
-                        stockCount++;
-                        const purchasePrice = h.costBasis / h.shares;
-                        if (Math.abs(h.price - purchasePrice) < 0.01) staleCount++;
-                    }
-                });
-            });
-            if (stockCount > 0 && staleCount === stockCount) {
-                console.warn('[Cache] BLOCKED: All stock prices equal purchase prices — not caching stale data');
+            const allStocks = data.flatMap(c => (c.holdings || []).filter(h => h.type === 'stock' && h.shares > 0));
+            const anyResolved = allStocks.some(h => h._livePriceResolved);
+            if (allStocks.length > 0 && !anyResolved) {
+                console.warn('[Cache] BLOCKED: No live prices resolved — not caching stale data');
                 return;
             }
         }

@@ -139,8 +139,13 @@ function renderSummaryBar() {
     const allCostBasis = clients.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.costBasis, 0), 0);
     const allCurrentValue = clients.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.value, 0), 0);
     const totalReturn = allCostBasis > 0 ? ((allCurrentValue - allCostBasis) / allCostBasis * 100) : 0;
-    const profitClass = totalProfit >= 0 ? 'positive' : 'negative';
-    const profitSign = totalProfit >= 0 ? '+' : '';
+
+    // Global stale detection — if ALL stock holdings have unresolved prices
+    const allStockHoldings = clients.flatMap(c => c.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.costBasis > 0));
+    const globalAllStale = allStockHoldings.length > 0 && allStockHoldings.every(h => !h._livePriceResolved);
+
+    const profitClass = globalAllStale ? 'neutral' : (totalProfit >= 0 ? 'positive' : 'negative');
+    const profitSign = globalAllStale ? '' : (totalProfit >= 0 ? '+' : '');
 
     const highClients = clients.filter(c => c.risk === 'high');
     const medClients = clients.filter(c => c.risk === 'medium');
@@ -153,8 +158,8 @@ function renderSummaryBar() {
         const r = cb > 0 ? ((cv - cb) / cb * 100) : 0;
         return s + r * (cb / allCostBasis);
     }, 0) : 0;
-    const avgClass = avgReturn >= 0 ? 'positive' : 'negative';
-    const avgSign = avgReturn >= 0 ? '+' : '';
+    const avgClass = globalAllStale ? 'neutral' : (avgReturn >= 0 ? 'positive' : 'negative');
+    const avgSign = globalAllStale ? '' : (avgReturn >= 0 ? '+' : '');
 
     function groupReturn(group) {
         const cb = group.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.costBasis, 0), 0);
@@ -174,8 +179,8 @@ function renderSummaryBar() {
             </div>
             <div class="summary-card-large">
                 <div class="label">רווח / הפסד כולל</div>
-                <div class="value price-change ${profitClass}">${profitSign}${formatCurrency(Math.abs(totalProfit))}</div>
-                <div class="sub">תשואה: <span class="price-change ${profitClass}" style="font-weight:700">${profitSign}${totalReturn.toFixed(2)}%</span></div>
+                <div class="value price-change ${profitClass}">${globalAllStale ? '<span style="color:var(--text-muted);font-size:14px">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</div>
+                <div class="sub">תשואה: ${globalAllStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `<span class="price-change ${profitClass}" style="font-weight:700">${profitSign}${totalReturn.toFixed(2)}%</span>`}</div>
             </div>
             <div class="summary-card-large">
                 <div class="label">תיקים פעילים</div>
@@ -184,7 +189,7 @@ function renderSummaryBar() {
             </div>
             <div class="summary-card-large">
                 <div class="label">תשואה ממוצעת</div>
-                <div class="value price-change ${avgClass}">${avgSign}${avgReturn.toFixed(2)}%</div>
+                <div class="value price-change ${avgClass}">${globalAllStale ? '<span style="color:var(--text-muted);font-size:14px">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</div>
                 <div class="sub">ממוצע משוקלל</div>
             </div>
         </div>
@@ -359,11 +364,9 @@ function renderClientCards() {
         const investedProfit = investedCurrentValue - investedCostBasis;
         const returnPct = investedCostBasis > 0 ? (investedProfit / investedCostBasis * 100) : 0;
 
-        // Detect "price not yet resolved" — all stock prices still equal purchase price
+        // Detect "price not yet resolved" — use _livePriceResolved flag set by mapHolding / price-service
         const stockHoldingsWithCost = stockHoldings.filter(h => h.shares > 0 && h.costBasis > 0);
-        const allPricesStale = stockHoldingsWithCost.length > 0 && stockHoldingsWithCost.every(h =>
-            Math.abs(h.price - (h.costBasis / h.shares)) < 0.01
-        );
+        const allPricesStale = stockHoldingsWithCost.length > 0 && stockHoldingsWithCost.every(h => !h._livePriceResolved);
 
         const profitClass = allPricesStale ? 'neutral' : (profit >= 0 ? 'positive' : 'negative');
         const profitSign = allPricesStale ? '' : (profit >= 0 ? '+' : '');

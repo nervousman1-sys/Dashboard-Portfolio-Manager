@@ -24,6 +24,11 @@ function mapPortfolio(p) {
 }
 
 function mapHolding(h) {
+    // Detect if the price stored in DB is just the purchase price (no live API data).
+    // This happens when supaAddHolding couldn't fetch a live price and used the purchase price as placeholder.
+    const purchasePrice = (h.cost_basis && h.shares > 0) ? h.cost_basis / h.shares : 0;
+    const priceMatchesPurchase = purchasePrice > 0 && Math.abs(h.price - purchasePrice) < 0.01;
+
     return {
         id: h.id,
         ticker: h.ticker,
@@ -37,7 +42,8 @@ function mapHolding(h) {
         shares: h.shares,
         price: h.price,
         previousClose: h.previous_close,
-        currency: h.currency
+        currency: h.currency,
+        _livePriceResolved: (h.type !== 'stock') || !priceMatchesPurchase
     };
 }
 
