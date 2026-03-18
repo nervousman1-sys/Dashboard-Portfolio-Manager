@@ -102,7 +102,6 @@ async function fetchBenchmarkData(symbol, range) {
                 _benchmarkCache[cacheKey] = parsed;
                 return parsed.data;
             } else {
-                // Stale or empty — remove so we re-fetch
                 localStorage.removeItem('benchmark_' + cacheKey);
             }
         }
@@ -110,7 +109,21 @@ async function fetchBenchmarkData(symbol, range) {
 
     console.log(`[Benchmark] Fetching ${symbol} (range=${range}) — no cache, calling APIs...`);
 
-    // Fetch from Twelve Data
+    // ── Strategy: FMP FIRST (more reliable for US ETFs, no strict rate limit),
+    //    then Twelve Data as fallback (rate-limited to 8 req/min on free plan).
+    //    This order prevents the "only SPY works" bug caused by Twelve Data rate limits
+    //    exhausting the quota on the first benchmark, leaving the rest dead.
+
+    const fmpData = await _fetchFMPBenchmark(symbol, range);
+    if (fmpData && fmpData.length > 0) {
+        console.log(`[Benchmark] FMP success for ${symbol}: ${fmpData.length} points`);
+        const cacheEntry = { data: fmpData, timestamp: Date.now() };
+        _benchmarkCache[cacheKey] = cacheEntry;
+        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        return fmpData;
+    }
+    console.warn(`[Benchmark] FMP failed for ${symbol} — trying Twelve Data...`);
+
     const data = await _fetchTwelveDataBenchmark(symbol, range);
     if (data && data.length > 0) {
         console.log(`[Benchmark] Twelve Data success for ${symbol}: ${data.length} points`);
@@ -118,16 +131,6 @@ async function fetchBenchmarkData(symbol, range) {
         _benchmarkCache[cacheKey] = cacheEntry;
         try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
         return data;
-    }
-    console.warn(`[Benchmark] Twelve Data failed for ${symbol} — trying FMP...`);
-
-    // Fallback: FMP historical-price-full (works for all US symbols)
-    const fmpData = await _fetchFMPBenchmark(symbol, range);
-    if (fmpData && fmpData.length > 0) {
-        const cacheEntry = { data: fmpData, timestamp: Date.now() };
-        _benchmarkCache[cacheKey] = cacheEntry;
-        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
-        return fmpData;
     }
 
     // Static fallback for S&P 500: if all APIs fail, use approximate historical data
@@ -209,6 +212,15 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
     return null;
 }
 
+// FMP symbol aliases: if the primary ETF ticker fails, try the index symbol.
+// FMP supports both ETF tickers and index symbols for major US indices.
+const _FMP_SYMBOL_ALIASES = {
+    'SPY': ['SPY', '%5EGSPC'],       // S&P 500 ETF → ^GSPC index
+    'QQQ': ['QQQ', '%5ENDX'],        // Nasdaq 100 ETF → ^NDX index
+    'DIA': ['DIA', '%5EDJI'],        // Dow Jones ETF → ^DJI index
+    'IWM': ['IWM', '%5ERUT']         // Russell 2000 ETF → ^RUT index
+};
+
 async function _fetchFMPBenchmark(symbol, range) {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') {
         console.warn(`[Benchmark] FMP API key not configured — skipping ${symbol}`);
@@ -222,82 +234,86 @@ async function _fetchFMPBenchmark(symbol, range) {
     }
 
     const isIntraday = (range === '1d' || range === '5d');
+    const symbolsToTry = _FMP_SYMBOL_ALIASES[symbol] || [symbol];
 
     // ── Intraday: use FMP historical-chart endpoint (5min / 1hour candles) ──
     if (isIntraday) {
         const fmpInterval = (range === '1d') ? '5min' : '1hour';
-        const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${symbol}?apikey=${FMP_API_KEY}`;
-        try {
-            const res = await fetch(url);
-            if (res.ok) {
-                const json = await res.json();
-                if (Array.isArray(json) && json.length > 0) {
-                    // FMP returns newest-first — take relevant slice and reverse
-                    const limit = (range === '1d') ? 200 : 50;
-                    const sliced = json.length > limit ? json.slice(0, limit) : json;
-                    const reversed = sliced.reverse();
-
-                    // For 1D: filter to only the last trading day
-                    let points = reversed;
-                    if (range === '1d' && reversed.length > 0) {
-                        const lastDate = reversed[reversed.length - 1].date.split(' ')[0];
-                        const dayOnly = reversed.filter(p => p.date.startsWith(lastDate));
-                        if (dayOnly.length >= 2) points = dayOnly;
-                    }
-
-                    const firstClose = points[0].close;
-                    if (firstClose > 0) {
-                        console.log(`[Benchmark] FMP intraday success for ${symbol}: ${points.length} ${fmpInterval} points`);
-                        return points.map(p => ({
-                            date: p.date,  // Full datetime string e.g. "2026-03-19 10:30:00"
-                            close: p.close,
-                            returnPct: ((p.close - firstClose) / firstClose) * 100
-                        }));
-                    }
+        for (const sym of symbolsToTry) {
+            try {
+                const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`;
+                const res = await fetch(url);
+                if (!res.ok) {
+                    console.warn(`[Benchmark] FMP intraday ${res.status} for ${sym}`);
+                    continue;
                 }
+                const json = await res.json();
+                if (!Array.isArray(json) || json.length === 0) continue;
+
+                // FMP returns newest-first — take relevant slice and reverse
+                const limit = (range === '1d') ? 200 : 50;
+                const sliced = json.length > limit ? json.slice(0, limit) : json;
+                const reversed = sliced.reverse();
+
+                // For 1D: filter to only the last trading day
+                let points = reversed;
+                if (range === '1d' && reversed.length > 0) {
+                    const lastDate = reversed[reversed.length - 1].date.split(' ')[0];
+                    const dayOnly = reversed.filter(p => p.date.startsWith(lastDate));
+                    if (dayOnly.length >= 2) points = dayOnly;
+                }
+
+                const firstClose = points[0].close;
+                if (firstClose > 0) {
+                    console.log(`[Benchmark] FMP intraday success for ${symbol} (via ${sym}): ${points.length} ${fmpInterval} points`);
+                    return points.map(p => ({
+                        date: p.date,  // Full datetime string e.g. "2026-03-19 10:30:00"
+                        close: p.close,
+                        returnPct: ((p.close - firstClose) / firstClose) * 100
+                    }));
+                }
+            } catch (e) {
+                console.warn(`[Benchmark] FMP intraday error for ${sym}:`, e.message);
             }
-        } catch (e) {
-            console.warn(`[Benchmark] FMP intraday error for ${symbol}:`, e.message);
         }
-        // Fall through to daily if intraday fails
+        // Fall through to daily if intraday fails for all aliases
     }
 
     // ── Daily: historical-price-full (for ranges > 5D) ──
     const outputSize = _rangeToOutputSize(range);
 
-    // Try both FMP endpoints: /stable/ (newer) and /api/v3/ (legacy, wider coverage)
-    const urls = [
-        `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`,
-        `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`
-    ];
+    // Try each symbol alias against both FMP endpoints (/api/v3/ first — wider coverage)
+    for (const sym of symbolsToTry) {
+        const urls = [
+            `https://financialmodelingprep.com/api/v3/historical-price-full/${sym}?apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/stable/historical-price-full/${sym}?apikey=${FMP_API_KEY}`
+        ];
 
-    for (const url of urls) {
-        try {
-            const res = await fetch(url);
-            if (!res.ok) {
-                console.warn(`[Benchmark] FMP ${res.status} for ${symbol} at ${url.split('?')[0]}`);
-                continue;
+        for (const url of urls) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) {
+                    console.warn(`[Benchmark] FMP ${res.status} for ${sym} at ${url.split('?')[0]}`);
+                    continue;
+                }
+                const json = await res.json();
+                const hist = json.historical || (Array.isArray(json) ? json : null);
+                if (!hist || hist.length === 0) continue;
+
+                // FMP returns newest-first — take outputSize, then reverse to chronological
+                const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
+                const reversed = sliced.reverse();
+                const firstClose = reversed[0].close;
+
+                console.log(`[Benchmark] FMP daily success for ${symbol} (via ${sym}): ${reversed.length} points`);
+                return reversed.map(p => ({
+                    date: p.date,
+                    close: p.close,
+                    returnPct: ((p.close - firstClose) / firstClose) * 100
+                }));
+            } catch (e) {
+                console.warn(`[Benchmark] FMP fetch error for ${sym}:`, e.message);
             }
-            const json = await res.json();
-            const hist = json.historical || (Array.isArray(json) ? json : null);
-            if (!hist || hist.length === 0) {
-                console.warn(`[Benchmark] FMP empty response for ${symbol} at ${url.split('?')[0]}`);
-                continue;
-            }
-
-            // FMP returns newest-first — take outputSize, then reverse to chronological
-            const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
-            const reversed = sliced.reverse();
-            const firstClose = reversed[0].close;
-
-            console.log(`[Benchmark] FMP success for ${symbol}: ${reversed.length} points`);
-            return reversed.map(p => ({
-                date: p.date,
-                close: p.close,
-                returnPct: ((p.close - firstClose) / firstClose) * 100
-            }));
-        } catch (e) {
-            console.warn(`[Benchmark] FMP fetch error for ${symbol}:`, e.message);
         }
     }
     return null;
@@ -337,6 +353,37 @@ function _getStaticSPYFallback(range) {
         close: p.close,
         returnPct: ((p.close - firstClose) / firstClose) * 100
     }));
+}
+
+// ========== MASTER TIMELINE ALIGNMENT ==========
+// Maps benchmark data to the portfolio's exact timestamps using forward-fill.
+// If a benchmark has no price for a given portfolio date, the previous available
+// close is used ("hold last known price"). This guarantees:
+//   1. Benchmark and portfolio share identical X coordinates (no stray dots)
+//   2. No missing points create visual gaps
+//   3. All lines start at the same timestamp (perfect normalization anchor)
+
+function _alignBenchmarkToTimeline(benchData, portfolioPoints) {
+    if (!benchData || benchData.length === 0 || !portfolioPoints || portfolioPoints.length === 0) return [];
+
+    // Pre-convert benchmark dates to timestamps for binary-style search
+    const benchTimestamps = benchData.map(b => new Date(b.date).getTime());
+    const aligned = [];
+    let benchIdx = 0;
+
+    for (const pp of portfolioPoints) {
+        const t = pp.x;
+
+        // Advance benchmark pointer to the last point <= portfolio timestamp
+        while (benchIdx < benchTimestamps.length - 1 && benchTimestamps[benchIdx + 1] <= t) {
+            benchIdx++;
+        }
+
+        // Forward-fill: use the most recent benchmark close at or before this timestamp
+        aligned.push({ x: t, close: benchData[benchIdx].close });
+    }
+
+    return aligned;
 }
 
 // ========== UNIFIED PERFORMANCE CHART RENDERER ==========
@@ -559,97 +606,173 @@ function _autoScaleY(chart) {
 }
 
 // ========== TRADINGVIEW-STYLE Y-AXIS DRAG PLUGIN ==========
-// Clicking and dragging on the Y-axis area (right side) stretches/compresses
-// the vertical scale. Double-click resets to auto-scale.
-// This is a Chart.js inline plugin — attached to each chart instance.
+// Architecture:
+//   1. _manualYScale{} — persistent state keyed by canvas ID, survives chart.update()
+//   2. beforeUpdate hook — re-applies manual min/max on EVERY update cycle so the
+//      Chart.js layout engine can never override our values
+//   3. Chart.getChart(canvas) — always references the CURRENT chart instance, not a
+//      stale closure. Prevents the "listeners bound to destroyed chart" bug.
+//   4. Listener cleanup — old handlers removed before new ones added on re-creation.
+
+const _manualYScale = {};  // { canvasId: { active, min, max } }
+
 const _yAxisDragPlugin = {
     id: 'yAxisDrag',
+
     beforeInit(chart) {
         chart._yDrag = { active: false, startY: 0, startMin: 0, startMax: 0 };
     },
+
+    // CRITICAL: Re-apply manual scale on EVERY update cycle.
+    // Without this, Chart.js's layout engine recalculates the Y domain from data+grace,
+    // overriding our explicit min/max and causing the "snap-back" glitch.
+    beforeUpdate(chart) {
+        const canvasId = chart.canvas?.id;
+        if (!canvasId) return;
+        const manual = _manualYScale[canvasId];
+        if (manual && manual.active) {
+            chart.options.scales.y.min = manual.min;
+            chart.options.scales.y.max = manual.max;
+            chart.options.scales.y.grace = 0;
+        }
+    },
+
     afterInit(chart) {
         const canvas = chart.canvas;
-        if (!canvas || canvas._yDragBound) return;
-        canvas._yDragBound = true;
+        if (!canvas) return;
 
-        // Detect if mouse is in Y-axis area (right side gutter)
+        // Tear down old handlers if chart was re-created on the same canvas
+        if (canvas._yDragCleanup) {
+            canvas._yDragCleanup();
+        }
+
+        // Always resolve the CURRENT chart — never use the closure's `chart` for state
+        function _getChart() {
+            try { return Chart.getChart(canvas); } catch (e) { return null; }
+        }
+
         function _isInYAxis(e) {
-            const yScale = chart.scales.y;
+            const c = _getChart();
+            if (!c) return false;
+            const yScale = c.scales.y;
             if (!yScale) return false;
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
-            // Y-axis is on the right — check if cursor is in the axis label zone
             return x >= yScale.left && x <= rect.width;
         }
 
-        canvas.addEventListener('mousedown', function(e) {
+        // ── Mousedown: capture initial Y-axis range ──
+        function _onMouseDown(e) {
             if (!_isInYAxis(e)) return;
-            const yScale = chart.scales.y;
+            const c = _getChart();
+            if (!c) return;
+            const yScale = c.scales.y;
             if (!yScale) return;
-            chart._yDrag.active = true;
-            chart._yDrag.startY = e.clientY;
-            chart._yDrag.startMin = yScale.min;
-            chart._yDrag.startMax = yScale.max;
+
+            c._yDrag = c._yDrag || {};
+            c._yDrag.active = true;
+            c._yDrag.startY = e.clientY;
+            c._yDrag.startMin = yScale.min;
+            c._yDrag.startMax = yScale.max;
             canvas.style.cursor = 'ns-resize';
             e.preventDefault();
             e.stopPropagation();
-        });
+        }
 
-        canvas.addEventListener('mousemove', function(e) {
-            // Update cursor when hovering Y-axis area
-            if (_isInYAxis(e) && !chart._yDrag.active) {
+        // ── Mousemove: compute new Y range from INITIAL mousedown values ──
+        function _onMouseMove(e) {
+            const c = _getChart();
+            if (!c || !c._yDrag) return;
+
+            // Cursor feedback when hovering Y-axis area
+            if (_isInYAxis(e) && !c._yDrag.active) {
                 canvas.style.cursor = 'ns-resize';
-            } else if (!chart._yDrag.active) {
+            } else if (!c._yDrag.active) {
                 canvas.style.cursor = '';
             }
 
-            if (!chart._yDrag.active) return;
+            if (!c._yDrag.active) return;
 
-            const dy = e.clientY - chart._yDrag.startY;
-            const yScale = chart.scales.y;
+            const dy = e.clientY - c._yDrag.startY;
+            const yScale = c.scales.y;
             const chartHeight = yScale.bottom - yScale.top;
             if (chartHeight <= 0) return;
 
-            // Scale factor: dragging up expands range (zoom out), dragging down compresses (zoom in)
+            // Scale factor: drag up → zoom out (expand range), drag down → zoom in
             const sensitivity = 2.0;
             const scaleFactor = 1 + (dy / chartHeight) * sensitivity;
-            if (scaleFactor <= 0.05 || scaleFactor > 20) return; // safety clamp
+            if (scaleFactor <= 0.05 || scaleFactor > 20) return;
 
-            const origRange = chart._yDrag.startMax - chart._yDrag.startMin;
-            const origMid = (chart._yDrag.startMax + chart._yDrag.startMin) / 2;
+            // IMPORTANT: Always compute from the INITIAL mousedown range, not the
+            // current (moving) one. This prevents compounding drift.
+            const origRange = c._yDrag.startMax - c._yDrag.startMin;
+            const origMid = (c._yDrag.startMax + c._yDrag.startMin) / 2;
             const newRange = origRange * scaleFactor;
+            const newMin = origMid - newRange / 2;
+            const newMax = origMid + newRange / 2;
 
-            chart.options.scales.y.grace = 0;  // Override grace during manual drag
-            chart.options.scales.y.min = origMid - newRange / 2;
-            chart.options.scales.y.max = origMid + newRange / 2;
-            chart.stop();           // Kill any running animations that fight the drag
-            chart.update('none');   // Instant update, no animation
+            // Persist in global state — beforeUpdate hook will re-apply on every cycle
+            if (canvas.id) {
+                _manualYScale[canvas.id] = { active: true, min: newMin, max: newMax };
+            }
+
+            c.options.scales.y.grace = 0;
+            c.options.scales.y.min = newMin;
+            c.options.scales.y.max = newMax;
+            c.stop();            // Kill running animations that fight the drag
+            c.update('none');    // Instant, animation-free redraw
 
             e.preventDefault();
             e.stopPropagation();
-        });
+        }
 
-        function _endDrag() {
-            if (chart._yDrag.active) {
-                chart._yDrag.active = false;
+        // ── Mouseup / mouseleave: end drag ──
+        function _onMouseUp() {
+            const c = _getChart();
+            if (c && c._yDrag && c._yDrag.active) {
+                c._yDrag.active = false;
                 canvas.style.cursor = '';
             }
         }
-        canvas.addEventListener('mouseup', _endDrag);
-        canvas.addEventListener('mouseleave', _endDrag);
 
-        // Double-click on Y-axis → reset to auto-scale
-        canvas.addEventListener('dblclick', function(e) {
+        // ── Double-click: reset to auto-scale ──
+        function _onDblClick(e) {
             if (!_isInYAxis(e)) return;
-            // Remove manual min/max and restore grace — let Chart.js auto-fit
-            delete chart.options.scales.y.min;
-            delete chart.options.scales.y.max;
-            chart.options.scales.y.grace = '10%';
-            chart.stop();
-            chart.update();
+            const c = _getChart();
+            if (!c) return;
+
+            // Clear persistent manual scale
+            if (canvas.id) delete _manualYScale[canvas.id];
+
+            delete c.options.scales.y.min;
+            delete c.options.scales.y.max;
+            c.options.scales.y.grace = '10%';
+            c.stop();
+            c.update();
             e.preventDefault();
             e.stopPropagation();
-        });
+        }
+
+        canvas.addEventListener('mousedown', _onMouseDown);
+        canvas.addEventListener('mousemove', _onMouseMove);
+        canvas.addEventListener('mouseup', _onMouseUp);
+        canvas.addEventListener('mouseleave', _onMouseUp);
+        canvas.addEventListener('dblclick', _onDblClick);
+
+        // Store cleanup function — called when chart is re-created on the same canvas
+        canvas._yDragCleanup = function () {
+            canvas.removeEventListener('mousedown', _onMouseDown);
+            canvas.removeEventListener('mousemove', _onMouseMove);
+            canvas.removeEventListener('mouseup', _onMouseUp);
+            canvas.removeEventListener('mouseleave', _onMouseUp);
+            canvas.removeEventListener('dblclick', _onDblClick);
+        };
+    },
+
+    // Clear manual scale when chart is destroyed — fresh auto-scale for next instance
+    beforeDestroy(chart) {
+        const canvasId = chart.canvas?.id;
+        if (canvasId) delete _manualYScale[canvasId];
     }
 };
 
@@ -811,38 +934,31 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         clip: true
     }];
 
-    // Benchmark datasets — from pre-fetched data.
+    // Benchmark datasets — MASTER TIMELINE ALIGNMENT.
     //
-    // NORMALIZATION: Both portfolio AND benchmarks must start at 0% from the
-    // SAME date (the portfolio's first visible data point). This means we find
-    // the benchmark's close on the portfolio's start date and rebase from there.
-    const portfolioStartTime = portfolioPoints[0].x;
+    // Every benchmark is mapped onto the portfolio's exact timestamps using
+    // forward-fill interpolation (_alignBenchmarkToTimeline). This guarantees:
+    //   1. All lines share identical X coordinates — no stray dots or gaps
+    //   2. The benchmark's first Y value is the price at the portfolio's first date
+    //   3. Normalization to 0% uses that first aligned price as the base
+    //
+    // Formula: benchmarkReturn = ((close - baseClose) / baseClose) * 100
 
     for (const { symbol, data: benchData } of benchmarkResults) {
-        // Find the benchmark data point closest to (but not after) the portfolio's start date
-        let alignIdx = 0;
-        for (let i = 0; i < benchData.length; i++) {
-            if (new Date(benchData[i].date).getTime() <= portfolioStartTime) {
-                alignIdx = i;
-            } else {
-                break;
-            }
-        }
+        // Align to portfolio timeline — forward-fill missing dates
+        const aligned = _alignBenchmarkToTimeline(benchData, portfolioPoints);
+        if (aligned.length < 2) continue;
 
-        // Rebase: benchmark's close on portfolio start date becomes 0%
-        const benchBaseClose = benchData[alignIdx].close;
+        // Base price = benchmark close at portfolio's first visible date
+        const benchBaseClose = aligned[0].close;
         if (!benchBaseClose || benchBaseClose <= 0) continue;
-
-        // Only include benchmark points from the aligned start onwards
-        const alignedBench = benchData.slice(alignIdx);
 
         datasets.push({
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
-            data: alignedBench.map(p => {
-                const x = new Date(p.date).getTime();
+            data: aligned.map(p => {
                 const pctFromBase = ((p.close - benchBaseClose) / benchBaseClose) * 100;
                 return {
-                    x,
+                    x: p.x,
                     y: usePercentMode
                         ? pctFromBase
                         : firstValue * (1 + pctFromBase / 100)
@@ -923,7 +1039,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd MMM yyyy'
                     },
                     ticks: {
-                        source: 'auto',   // Chart.js computes tick positions from the time scale
+                        source: isIntraday ? 'data' : 'auto', // 'data' for intraday removes overnight gaps
                         autoSkip: true,
                         maxTicksLimit: 10,
                         maxRotation: 0,
