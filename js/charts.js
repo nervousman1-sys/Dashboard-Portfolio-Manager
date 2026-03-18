@@ -69,13 +69,15 @@ function _rangeToDays(range) {
 }
 
 function _rangeToInterval(range) {
-    if (range === '1d' || range === '5d') return '1h';
+    if (range === '1d') return '5min';   // 5-minute candles for 1D — enough granularity
+    if (range === '5d') return '1h';     // Hourly candles for 5D
     return '1day';
 }
 
 function _rangeToOutputSize(range) {
+    if (range === '1d') return 200;   // ~200 five-minute candles (covers 2+ trading days)
+    if (range === '5d') return 50;    // ~50 hourly candles
     const days = _rangeToDays(range);
-    if (days <= 5) return 40;
     if (days <= 30) return 30;
     if (days <= 90) return 90;
     if (days <= 180) return 180;
@@ -91,14 +93,17 @@ async function fetchBenchmarkData(symbol, range) {
         return _benchmarkCache[cacheKey].data;
     }
 
-    // Check localStorage cache
+    // Check localStorage cache — only use if data is valid (non-empty array)
     try {
         const stored = localStorage.getItem('benchmark_' + cacheKey);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Date.now() - parsed.timestamp < BENCHMARK_CACHE_TTL) {
+            if (Date.now() - parsed.timestamp < BENCHMARK_CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 _benchmarkCache[cacheKey] = parsed;
                 return parsed.data;
+            } else {
+                // Stale or empty — remove so we re-fetch
+                localStorage.removeItem('benchmark_' + cacheKey);
             }
         }
     } catch (e) { /* ignore */ }
@@ -179,12 +184,21 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
             }
 
             // Twelve Data returns newest first — reverse to chronological order
-            const values = json.values.reverse();
+            let values = json.values.reverse();
+
+            // For 1D: filter to only the last trading day's data
+            if (range === '1d' && values.length > 0) {
+                const lastDateStr = values[values.length - 1].datetime.split(' ')[0];
+                const dayOnly = values.filter(v => v.datetime.startsWith(lastDateStr));
+                if (dayOnly.length >= 2) values = dayOnly;
+            }
+
             const firstClose = parseFloat(values[0].close);
 
-            console.log(`[Benchmark] Twelve Data success for ${symbol} (via ${sym}): ${values.length} points`);
+            console.log(`[Benchmark] Twelve Data success for ${symbol} (via ${sym}): ${values.length} points, interval=${interval}`);
             return values.map(v => ({
-                date: v.datetime.split(' ')[0], // YYYY-MM-DD
+                // Keep full datetime for intraday intervals (1h/5min) so chart X-axis works
+                date: (interval === '1h' || interval === '5min') ? v.datetime : v.datetime.split(' ')[0],
                 close: parseFloat(v.close),
                 returnPct: ((parseFloat(v.close) - firstClose) / firstClose) * 100
             }));
@@ -201,13 +215,55 @@ async function _fetchFMPBenchmark(symbol, range) {
         return null;
     }
 
-    const outputSize = _rangeToOutputSize(range);
-
     // FMP doesn't support Israeli indices (.TA suffix) — skip immediately
     if (symbol.includes('.TA')) {
         console.log(`[Benchmark] FMP skipping Israeli index ${symbol}`);
         return null;
     }
+
+    const isIntraday = (range === '1d' || range === '5d');
+
+    // ── Intraday: use FMP historical-chart endpoint (5min / 1hour candles) ──
+    if (isIntraday) {
+        const fmpInterval = (range === '1d') ? '5min' : '1hour';
+        const url = `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${symbol}?apikey=${FMP_API_KEY}`;
+        try {
+            const res = await fetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                if (Array.isArray(json) && json.length > 0) {
+                    // FMP returns newest-first — take relevant slice and reverse
+                    const limit = (range === '1d') ? 200 : 50;
+                    const sliced = json.length > limit ? json.slice(0, limit) : json;
+                    const reversed = sliced.reverse();
+
+                    // For 1D: filter to only the last trading day
+                    let points = reversed;
+                    if (range === '1d' && reversed.length > 0) {
+                        const lastDate = reversed[reversed.length - 1].date.split(' ')[0];
+                        const dayOnly = reversed.filter(p => p.date.startsWith(lastDate));
+                        if (dayOnly.length >= 2) points = dayOnly;
+                    }
+
+                    const firstClose = points[0].close;
+                    if (firstClose > 0) {
+                        console.log(`[Benchmark] FMP intraday success for ${symbol}: ${points.length} ${fmpInterval} points`);
+                        return points.map(p => ({
+                            date: p.date,  // Full datetime string e.g. "2026-03-19 10:30:00"
+                            close: p.close,
+                            returnPct: ((p.close - firstClose) / firstClose) * 100
+                        }));
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`[Benchmark] FMP intraday error for ${symbol}:`, e.message);
+        }
+        // Fall through to daily if intraday fails
+    }
+
+    // ── Daily: historical-price-full (for ranges > 5D) ──
+    const outputSize = _rangeToOutputSize(range);
 
     // Try both FMP endpoints: /stable/ (newer) and /api/v3/ (legacy, wider coverage)
     const urls = [
@@ -563,9 +619,11 @@ const _yAxisDragPlugin = {
             const origMid = (chart._yDrag.startMax + chart._yDrag.startMin) / 2;
             const newRange = origRange * scaleFactor;
 
+            chart.options.scales.y.grace = 0;  // Override grace during manual drag
             chart.options.scales.y.min = origMid - newRange / 2;
             chart.options.scales.y.max = origMid + newRange / 2;
-            chart.update('none');
+            chart.stop();           // Kill any running animations that fight the drag
+            chart.update('none');   // Instant update, no animation
 
             e.preventDefault();
             e.stopPropagation();
@@ -583,8 +641,12 @@ const _yAxisDragPlugin = {
         // Double-click on Y-axis → reset to auto-scale
         canvas.addEventListener('dblclick', function(e) {
             if (!_isInYAxis(e)) return;
-            // Reset Y-axis to auto-fit visible data
-            _autoScaleY(chart);
+            // Remove manual min/max and restore grace — let Chart.js auto-fit
+            delete chart.options.scales.y.min;
+            delete chart.options.scales.y.max;
+            chart.options.scales.y.grace = '10%';
+            chart.stop();
+            chart.update();
             e.preventDefault();
             e.stopPropagation();
         });
