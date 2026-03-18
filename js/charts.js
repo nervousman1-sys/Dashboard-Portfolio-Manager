@@ -176,12 +176,13 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
 async function _fetchFMPBenchmark(symbol, range) {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
 
-    // FMP uses plain tickers — strip exchange suffixes like .TA
-    const fmpSymbol = symbol.includes('.TA') ? symbol.replace('.TA', '.TA') : symbol;
     const outputSize = _rangeToOutputSize(range);
 
+    // FMP doesn't support Israeli indices (.TA suffix) — skip immediately
+    if (symbol.includes('.TA')) return null;
+
     try {
-        const url = `https://financialmodelingprep.com/stable/historical-price-full/${fmpSymbol}?apikey=${FMP_API_KEY}`;
+        const url = `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?apikey=${FMP_API_KEY}`;
         const res = await fetch(url);
         if (!res.ok) return null;
         const json = await res.json();
