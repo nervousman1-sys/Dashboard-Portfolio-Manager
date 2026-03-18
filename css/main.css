@@ -341,6 +341,52 @@ body {
     height: 280px;
 }
 
+/* Chart empty state (zero-data doughnut placeholder) */
+.chart-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 280px;
+    color: var(--text-muted);
+    font-size: 13px;
+    gap: 12px;
+}
+.chart-empty-circle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 6px solid var(--border);
+    opacity: 0.4;
+}
+
+/* Chart loading overlay */
+.chart-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.7);
+    border-radius: 12px;
+    z-index: 10;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.chart-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Grid */
 .clients-grid {
     display: grid;
@@ -485,8 +531,10 @@ body {
 }
 
 .card-performance-chart {
+    position: relative;
     width: 100%;
     height: 75px;
+    overflow: hidden;
 }
 
 .holdings-summary {
@@ -737,13 +785,30 @@ body {
 }
 
 .modal-performance-container {
+    position: relative;
     width: 100%;
     height: 280px;
     margin-bottom: 24px;
     background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
     border-radius: 12px;
     padding: 12px;
     border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+/* Header items (buttons, time range) don't grow — canvas takes remaining flex space */
+.modal-performance-container .perf-chart-header {
+    flex-shrink: 0;
+}
+.modal-performance-container .expand-btn {
+    flex-shrink: 0;
+}
+.modal-performance-container canvas {
+    flex: 1 1 0;
+    min-height: 0;   /* allows flex shrink below intrinsic height */
+    width: 100%;
 }
 
 .modal-performance-container h3 {
@@ -751,6 +816,7 @@ body {
     color: var(--text-secondary);
     margin-bottom: 12px;
     font-weight: 600;
+    flex-shrink: 0;
 }
 
 .modal-charts-row {
@@ -1279,110 +1345,19 @@ body {
     pointer-events: none;
 }
 
-/* Skeleton Screens */
-@keyframes skeleton-pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
+/* Loading Spinner */
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-.skeleton-dashboard {
-    width: 100%;
-    max-width: 1400px;
-    padding: 20px 24px;
-}
-
-.skeleton-line {
-    background: var(--border);
-    border-radius: 4px;
-    height: 14px;
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-}
-
-.skeleton-line.short { width: 40%; }
-.skeleton-line.medium { width: 65%; margin-top: 8px; }
-.skeleton-line.wide { width: 85%; margin-top: 8px; height: 24px; }
-
-.skeleton-header {
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.skeleton-header .skeleton-title {
-    width: 260px;
-    height: 22px;
-    margin: 0 auto 8px;
-}
-
-.skeleton-header .skeleton-subtitle {
-    width: 160px;
-    height: 12px;
-    margin: 0 auto;
-}
-
-.skeleton-summary {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-    margin-bottom: 20px;
-}
-
-.skeleton-summary-card {
-    background: var(--bg-primary);
-    border-radius: var(--radius-md);
-    padding: 16px 20px;
-    border: 1px solid var(--border);
-}
-
-.skeleton-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-}
-
-.skeleton-card {
-    background: var(--bg-card);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    padding: 16px;
-}
-
-.skeleton-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.skeleton-badge {
-    width: 50px;
-    height: 20px;
-    background: var(--border);
-    border-radius: 10px;
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-}
-
-.skeleton-chart {
-    width: 100%;
-    height: 120px;
-    background: var(--border);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-}
-
-.skeleton-dashboard .loading-text {
-    text-align: center;
-    margin-top: 16px;
-}
-
-@media (max-width: 768px) {
-    .skeleton-summary {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .skeleton-cards {
-        grid-template-columns: 1fr;
-    }
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 16px;
 }
 
 .loading-text {

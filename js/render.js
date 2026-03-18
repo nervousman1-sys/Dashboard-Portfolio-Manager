@@ -2,6 +2,9 @@
 
 // ========== EXPOSURE ==========
 
+// Version counter — prevents stale setTimeout callbacks from creating orphaned charts
+let _exposureRenderVersion = 0;
+
 function calculateOverallExposure() {
     let totalStocks = 0, totalBonds = 0, totalValue = 0;
     const sectorTotals = {};
@@ -21,6 +24,12 @@ function calculateOverallExposure() {
 }
 
 function renderExposureSection() {
+    // Bump version — any pending setTimeout from a previous call becomes stale
+    const myVersion = ++_exposureRenderVersion;
+
+    // Destroy previous sector chart (may reference an orphaned canvas)
+    _safeDestroyChart('sector-exposure');
+
     if (!clients || clients.length === 0) {
         document.getElementById('exposureSection').innerHTML = `
             <h2>סקירת חשיפה כוללת</h2>
@@ -45,6 +54,11 @@ function renderExposureSection() {
         legendHTML += `<div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:${color}"></span>${sector}: ${pct}% (${formatCurrency(value)})</div>`;
     });
 
+    // Sector chart or empty-state if no sector data
+    const sectorContent = sortedSectors.length > 0
+        ? `<div class="sector-chart-container"><canvas id="sector-exposure-chart"></canvas></div>`
+        : `<div class="chart-empty-state"><div class="chart-empty-circle"></div><span>אין נתוני סקטורים</span></div>`;
+
     document.getElementById('exposureSection').innerHTML = `
         <h2>סקירת חשיפה כוללת</h2>
         <div class="exposure-grid">
@@ -61,18 +75,26 @@ function renderExposureSection() {
             </div>
             <div class="exposure-card">
                 <h3>חלוקה לפי סקטורים</h3>
-                <div class="sector-chart-container">
-                    <canvas id="sector-exposure-chart"></canvas>
-                </div>
+                ${sectorContent}
             </div>
         </div>
     `;
 
-    // Sector doughnut chart
+    // No chart to create if sectors are empty
+    if (sortedSectors.length === 0) return;
+
+    // Sector doughnut chart — version-guarded to prevent race conditions
     setTimeout(() => {
+        // Stale callback — a newer renderExposureSection() already ran
+        if (myVersion !== _exposureRenderVersion) return;
+
         const ctx = document.getElementById('sector-exposure-chart');
         if (!ctx) return;
-        if (charts['sector-exposure']) charts['sector-exposure'].destroy();
+
+        // Belt-and-suspenders: destroy anything already on this canvas
+        _destroyChartOnCanvas(ctx);
+        _clearCanvas(ctx);
+
         charts['sector-exposure'] = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -188,13 +210,20 @@ function renderSummaryBar() {
 
 // ========== CLIENT CARDS ==========
 
+// Incremented on each render — used as canvas key to force clean re-draw
+let _cardRenderKey = 0;
+
 function renderClientCards() {
+    _cardRenderKey++;
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
 
-    // Destroy existing charts
-    Object.values(charts).forEach(c => c.destroy());
-    charts = {};
+    // Destroy only card-level charts (doughnut + sparkline), preserve exposure/modal charts
+    const preserveKeys = ['sector-exposure', 'modal-sector'];
+    Object.keys(charts).forEach(key => {
+        if (preserveKeys.includes(key)) return;
+        _safeDestroyChart(key);
+    });
 
     // Empty state — no portfolios at all
     if (!clients || clients.length === 0) {
@@ -245,6 +274,18 @@ function renderClientCards() {
         filtered.sort((a, b) => b.portfolioValue - a.portfolioValue);
     } else if (activeFilters.sort === 'size-low') {
         filtered.sort((a, b) => a.portfolioValue - b.portfolioValue);
+    }
+
+    // No matching results for current filter
+    if (filtered.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <h3>לא נמצאו תיקים תואמים</h3>
+                <p>נסה לשנות את הפילטרים או לחץ על "הכל"</p>
+            </div>
+        `;
+        return;
     }
 
     filtered.forEach(client => {
@@ -317,8 +358,15 @@ function renderClientCards() {
         const investedCurrentValue = client.holdings.reduce((s, h) => s + h.value, 0);
         const investedProfit = investedCurrentValue - investedCostBasis;
         const returnPct = investedCostBasis > 0 ? (investedProfit / investedCostBasis * 100) : 0;
-        const profitClass = profit >= 0 ? 'positive' : 'negative';
-        const profitSign = profit >= 0 ? '+' : '';
+
+        // Detect "price not yet resolved" — all stock prices still equal purchase price
+        const stockHoldingsWithCost = stockHoldings.filter(h => h.shares > 0 && h.costBasis > 0);
+        const allPricesStale = stockHoldingsWithCost.length > 0 && stockHoldingsWithCost.every(h =>
+            Math.abs(h.price - (h.costBasis / h.shares)) < 0.01
+        );
+
+        const profitClass = allPricesStale ? 'neutral' : (profit >= 0 ? 'positive' : 'negative');
+        const profitSign = allPricesStale ? '' : (profit >= 0 ? '+' : '');
 
         card.innerHTML = `
                 <div class="card-header">
@@ -334,7 +382,7 @@ function renderClientCards() {
                 </div>
                 <div class="card-body">
                     <div class="chart-container">
-                        <canvas id="chart-${client.id}"></canvas>
+                        <canvas id="chart-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
                     </div>
                     <div class="holdings-summary">
                         ${holdingsHTML}
@@ -349,7 +397,7 @@ function renderClientCards() {
                 <div class="card-performance chart-wrapper-relative">
                     <button class="expand-btn" onclick="event.stopPropagation(); openFullscreenChart(${client.id})" title="הגדל גרף">&#x26F6;</button>
                     <div class="card-performance-chart">
-                        <canvas id="perf-${client.id}"></canvas>
+                        <canvas id="perf-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
                     </div>
                 </div>
             <div class="card-footer">
@@ -359,31 +407,57 @@ function renderClientCards() {
                 </div>
                 <div style="text-align: center;">
                     <div class="portfolio-label">רווח/הפסד</div>
-                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${profitSign}${formatCurrency(Math.abs(profit))}</div>
+                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${allPricesStale ? '<span style="color:var(--text-muted);font-size:12px">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(profit))}`}</div>
                 </div>
                 <div style="text-align: left;">
                     <div class="portfolio-label">תשואה משוכללת</div>
-                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${profitSign}${returnPct.toFixed(2)}%</div>
+                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${allPricesStale ? '<span style="color:var(--text-muted);font-size:12px">ממתין...</span>' : `${profitSign}${returnPct.toFixed(2)}%`}</div>
                 </div>
             </div>
         `;
 
         grid.appendChild(card);
 
-        // Create pie chart + performance sparkline
+        // Create pie chart + performance sparkline (version-guarded)
+        const renderKey = _cardRenderKey; // capture current version
         setTimeout(() => {
+            // Stale callback — a newer renderClientCards() already ran
+            if (renderKey !== _cardRenderKey) return;
+
             const ctx = document.getElementById(`chart-${client.id}`);
             if (!ctx) return;
+
+            // Destroy any existing chart on this canvas (belt-and-suspenders)
+            _safeDestroyChart(client.id);
+            _destroyChartOnCanvas(ctx);
+            _clearCanvas(ctx);
+
+            // Handle zero-data: show placeholder ring with "fetching" message when all prices are stale,
+            // or a "cash-only" ring when there are no holdings.
+            const hasData = totalStockPct > 0 || totalBondPct > 0;
+            if (!hasData && allPricesStale && stockHoldings.length > 0) {
+                // Prices not yet fetched — show a "loading" placeholder ring
+                ctx.parentElement.style.position = 'relative';
+                const loadingMsg = document.createElement('div');
+                loadingMsg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-muted);font-size:10px;text-align:center;pointer-events:none;';
+                loadingMsg.textContent = 'טוען מחירים...';
+                ctx.parentElement.appendChild(loadingMsg);
+            }
+            const chartData = hasData ? [totalStockPct, totalBondPct] : [1];
+            const chartLabels = hasData ? ['מניות', 'אג"ח'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
+            const chartBg = hasData ? ['#3b82f6', '#a855f7'] : ['#334155'];
+            const chartBorder = hasData ? ['#2563eb', '#9333ea'] : ['#475569'];
+
             charts[client.id] = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['מניות', 'אג"ח'],
+                    labels: chartLabels,
                     datasets: [{
-                        data: [totalStockPct, totalBondPct],
-                        backgroundColor: ['#3b82f6', '#a855f7'],
-                        borderColor: ['#2563eb', '#9333ea'],
+                        data: chartData,
+                        backgroundColor: chartBg,
+                        borderColor: chartBorder,
                         borderWidth: 2,
-                        hoverOffset: 6
+                        hoverOffset: hasData ? 6 : 0
                     }]
                 },
                 options: {
@@ -393,6 +467,7 @@ function renderClientCards() {
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            enabled: hasData,
                             rtl: true,
                             textDirection: 'rtl',
                             callbacks: {
@@ -406,8 +481,16 @@ function renderClientCards() {
             // Performance sparkline
             const perfCtx = document.getElementById(`perf-${client.id}`);
             if (!perfCtx || !client.performanceHistory || client.performanceHistory.length === 0) return;
+
+            // Destroy any existing chart on this canvas
+            _safeDestroyChart(`perf-${client.id}`);
+            _destroyChartOnCanvas(perfCtx);
+            _clearCanvas(perfCtx);
+
             const hist = client.performanceHistory;
-            const isPositive = (hist[hist.length - 1]?.returnPct || 0) >= 0;
+            const firstVal = hist[0]?.value || 0;
+            const lastVal = hist[hist.length - 1]?.value || 0;
+            const isPositive = lastVal >= firstVal;
             const lineColor = isPositive ? '#22c55e' : '#ef4444';
             const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
 
@@ -416,23 +499,26 @@ function renderClientCards() {
                 data: {
                     labels: hist.map(p => p.date),
                     datasets: [{
-                        data: hist.map(p => p.returnPct),
+                        data: hist.map(p => p.value),
                         borderColor: lineColor,
                         backgroundColor: bgColor,
-                        borderWidth: 1.5,
+                        borderWidth: 2,
                         fill: true,
                         pointRadius: 0,
-                        tension: 0.3
+                        tension: 0.3,
+                        clip: true
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { top: 4, bottom: 4 } },
                     scales: {
                         x: { display: false },
                         y: {
                             display: false,
-                            beginAtZero: false
+                            beginAtZero: false,
+                            grace: '15%'
                         }
                     },
                     plugins: {
@@ -441,7 +527,7 @@ function renderClientCards() {
                             rtl: true,
                             callbacks: {
                                 title: (items) => items[0].label,
-                                label: (ctx) => ` תשואה: ${ctx.parsed.y.toFixed(2)}%`
+                                label: (ctx) => ` שווי: ${formatCurrency(ctx.parsed.y)}`
                             }
                         }
                     },

@@ -235,22 +235,40 @@ async function openModal(clientId) {
         // Doughnut - allocation
         const ctx = document.getElementById('modal-chart');
         if (ctx) {
-            const labels = client.holdings.map(h => h.type === 'stock' ? h.ticker : h.name.slice(0, 15));
-            const data = client.holdings.map(h => h.allocationPct);
-            const colors = client.holdings.map(h =>
-                h.type === 'stock' ? (SECTOR_COLORS[h.sector] || COLORS.neutral) : COLORS.bonds
-            );
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#1e293b' }] },
-                options: {
-                    responsive: true, maintainAspectRatio: true, cutout: '45%',
-                    plugins: {
-                        legend: { position: 'bottom', rtl: true, labels: { color: '#94a3b8', font: { size: 10 }, padding: 6, usePointStyle: true, pointStyleWidth: 6 } },
-                        tooltip: { rtl: true, callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+            _destroyChartOnCanvas(ctx);
+            _clearCanvas(ctx);
+
+            const totalValue = client.holdings.reduce((s, h) => s + h.value, 0);
+            const hasHoldings = client.holdings.length > 0 && totalValue > 0;
+
+            if (hasHoldings) {
+                const labels = client.holdings.map(h => h.type === 'stock' ? h.ticker : h.name.slice(0, 15));
+                const data = client.holdings.map(h => h.allocationPct);
+                const colors = client.holdings.map(h =>
+                    h.type === 'stock' ? (SECTOR_COLORS[h.sector] || COLORS.neutral) : COLORS.bonds
+                );
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#1e293b' }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: true, cutout: '45%',
+                        plugins: {
+                            legend: { position: 'bottom', rtl: true, labels: { color: '#94a3b8', font: { size: 10 }, padding: 6, usePointStyle: true, pointStyleWidth: 6 } },
+                            tooltip: { rtl: true, callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+                        }
                     }
-                }
-            });
+                });
+            } else {
+                // Empty/cash-only portfolio — show placeholder ring
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { labels: ['אין נתונים'], datasets: [{ data: [1], backgroundColor: ['#334155'], borderColor: ['#475569'], borderWidth: 2 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: true, cutout: '45%',
+                        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                    }
+                });
+            }
         }
 
         // Performance chart — uses unified renderer from charts.js
@@ -716,6 +734,15 @@ async function addClient() {
         if (finalClient) clients.push(finalClient);
         closeMgmtModal();
         refreshDashboard();
+
+        // Force a live price update for the new portfolio's holdings
+        // Bypass the TTL cache so prices are fetched immediately
+        if (holdingsData.length > 0 && supabaseConnected) {
+            priceCacheTimestamp = 0; // Reset cache TTL to force fresh fetch
+            updatePricesFromAPI(() => {
+                refreshDashboard();
+            }).catch(e => console.warn('Post-create price update:', e.message));
+        }
     } catch (err) {
         console.error('addClient error:', err);
         alert('שגיאה ביצירת התיק');
@@ -1016,6 +1043,7 @@ function _collectHoldingRows() {
 
     const rows = tbody.querySelectorAll('tr');
     const holdings = [];
+    let extraCash = 0;
 
     rows.forEach(row => {
         const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase();
@@ -1023,17 +1051,32 @@ function _collectHoldingRows() {
         const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
         const currency = row.dataset?.currency || 'USD';
 
-        if (ticker && shares > 0 && price > 0) {
-            holdings.push({
-                type: 'stock',
-                ticker,
-                stockName: ticker,
-                price,
-                quantity: shares,
-                currency
-            });
+        if (!ticker || shares <= 0 || price <= 0) return;
+
+        // Detect cash rows — route to cash balance, not holdings
+        if (typeof _isCashRow === 'function' && _isCashRow(ticker)) {
+            extraCash += shares * price;
+            return;
         }
+
+        holdings.push({
+            type: 'stock',
+            ticker,
+            stockName: ticker,
+            price,
+            quantity: shares,
+            currency
+        });
     });
+
+    // If cash rows were found, add to the cash input field
+    if (extraCash > 0) {
+        const cashInput = document.getElementById('mgmt-cash');
+        if (cashInput) {
+            const existing = parseFloat(cashInput.value) || 0;
+            cashInput.value = (existing + extraCash).toFixed(2);
+        }
+    }
 
     return holdings;
 }
@@ -1084,19 +1127,39 @@ async function handleDropzoneFile(file) {
     if (dropzone) dropzone.style.opacity = '0.5';
 
     try {
-        const parsed = await handleImportFile(file);
+        const result = await handleImportFile(file);
 
-        if (parsed && parsed.length > 0) {
+        // handleImportFile returns { holdings: [...], cashTotal: number }
+        const parsed = result.holdings || [];
+        const cashFromFile = result.cashTotal || 0;
+
+        if (parsed.length > 0 || cashFromFile > 0) {
             // Clear existing rows
             const tbody = document.getElementById('mgmt-holdings-tbody');
             if (tbody) tbody.innerHTML = '';
 
-            // Add parsed rows
+            // Add parsed holdings rows
             parsed.forEach(row => addHoldingRow(row));
 
-            if (statusEl) {
-                statusEl.innerHTML = `<div class="file-status-success">נטענו ${parsed.length} אחזקות מ-${file.name}</div>`;
+            // Add cash from file to the cash balance field
+            if (cashFromFile > 0) {
+                const cashInput = document.getElementById('mgmt-cash');
+                if (cashInput) {
+                    const existing = parseFloat(cashInput.value) || 0;
+                    cashInput.value = (existing + cashFromFile).toFixed(2);
+                }
             }
+
+            // Build status message
+            let statusMsg = `נטענו ${parsed.length} אחזקות`;
+            if (cashFromFile > 0) statusMsg += ` + $${cashFromFile.toLocaleString()} מזומן`;
+            statusMsg += ` מ-${file.name}`;
+
+            if (statusEl) {
+                statusEl.innerHTML = `<div class="file-status-success">${statusMsg}</div>`;
+            }
+
+            updateAddClientRisk();
         } else {
             if (statusEl) {
                 statusEl.innerHTML = '<div class="file-status-error">לא נמצאו אחזקות בקובץ. נסה קובץ אחר או הזן ידנית.</div>';

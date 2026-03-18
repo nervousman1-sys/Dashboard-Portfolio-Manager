@@ -131,6 +131,82 @@ async function searchTwelveDataSymbols(query) {
     }
 }
 
+// ========== SINGLE-TICKER LIVE PRICE FETCH ==========
+// Used by supaAddHolding when priceCache is empty (e.g. brand-new user).
+// Tries Twelve Data → FMP → Finnhub in sequence. Returns {price, previousClose} or null.
+
+async function fetchSingleTickerPrice(ticker) {
+    if (!ticker) return null;
+    const sym = ticker.toUpperCase().trim();
+
+    // Try Twelve Data first
+    try {
+        if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+            const res = await fetch(`https://api.twelvedata.com/quote?symbol=${sym}&apikey=${TWELVE_DATA_API_KEY}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status !== 'error' && data.close) {
+                    const result = {
+                        price: parseFloat(data.close),
+                        previousClose: parseFloat(data.previous_close),
+                        change: parseFloat(data.change),
+                        changePct: parseFloat(data.percent_change),
+                        currency: data.currency || 'USD'
+                    };
+                    // Store in priceCache for subsequent holdings
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        }
+    } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', sym, e.message); }
+
+    // Try FMP
+    try {
+        if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0 && data[0].price) {
+                    const q = data[0];
+                    const result = {
+                        price: q.price,
+                        previousClose: q.previousClose || q.price,
+                        change: q.change || 0,
+                        changePct: q.changePercentage || 0,
+                        currency: 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        }
+    } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
+
+    // Try Finnhub
+    try {
+        if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
+            const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_API_KEY}`);
+            if (res.ok) {
+                const q = await res.json();
+                if (q && q.c && q.c > 0) {
+                    const result = {
+                        price: q.c,
+                        previousClose: q.pc || q.c,
+                        change: q.d || 0,
+                        changePct: q.dp || 0,
+                        currency: 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        }
+    } catch (e) { console.warn('[fetchSingleTickerPrice] Finnhub failed for', sym, e.message); }
+
+    return null;
+}
+
 // ========== FMP FALLBACK (all tickers in parallel) ==========
 
 async function fetchFMPPrices(tickers) {
@@ -224,6 +300,12 @@ function _applyPricesToClientsInMemory(priceMap) {
             if (h.type === 'stock' && priceMap[h.ticker]) {
                 const newPrice = priceMap[h.ticker].price;
                 if (Math.abs(newPrice - h.price) > 0.001) {
+                    // LOCK: Don't "update" price if the API returned the same as purchase price
+                    const purchasePrice = (h.costBasis && h.shares > 0) ? h.costBasis / h.shares : 0;
+                    if (purchasePrice > 0 && Math.abs(newPrice - purchasePrice) < 0.001 && Math.abs(h.price - purchasePrice) > 0.001) {
+                        // The API returned the purchase price but we already have a different live price — keep it
+                        return;
+                    }
                     h.previousClose = priceMap[h.ticker].previousClose;
                     h.price = newPrice;
                     h.value = h.shares * newPrice;
@@ -465,7 +547,14 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
                     continue;
                 }
 
-                if (Math.abs(newPrice - h.price) < 0.001) continue;
+                // LOCK MECHANISM: Reject writes where the "live" price is identical to
+                // the purchase price (costBasis / shares). This means no real API data was
+                // fetched and we'd be persisting the purchase price as current price → 0% return.
+                const purchasePrice = (h.costBasis && h.shares > 0) ? h.costBasis / h.shares : 0;
+                if (purchasePrice > 0 && Math.abs(newPrice - purchasePrice) < 0.001) {
+                    console.warn(`[PriceService] LOCK: Skipping ${h.ticker} — price ${newPrice} === purchase price ${purchasePrice.toFixed(2)}`);
+                    continue;
+                }
 
                 const newValue = h.shares * newPrice;
                 affectedPortfolios.add(client.id);
@@ -497,8 +586,11 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
             clients.map(c => supaRecordPerformanceSnapshot(c.id))
         );
 
-        // Final re-fetch from Supabase and refresh UI
-        clients = await supaFetchClients();
+        // Re-assert live prices in memory (guard against supaRecalcClient reading stale DB).
+        // DO NOT re-fetch clients from Supabase here — the in-memory state with API prices
+        // is the source of truth. A full re-fetch would overwrite live prices with potentially
+        // stale DB values if the writes above failed (RLS, network, timing).
+        _applyPricesToClientsInMemory(priceMap);
         saveClientsToCache(clients);
 
         if (onUpdate) onUpdate();

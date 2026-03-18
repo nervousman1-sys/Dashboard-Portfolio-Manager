@@ -85,6 +85,18 @@ async function supaAddClient(name, cashBalance = 0) {
     if (!user) return null;
 
     // New portfolio starts with only cash → 0% stocks → risk = low
+    // Seed performance_history with an initial snapshot so charts have a starting point
+    const now = new Date();
+    const initialSnapshot = cashBalance > 0 ? [{
+        date: now.toLocaleDateString('he-IL'),
+        value: cashBalance,
+        returnPct: 0,
+        year: now.getFullYear(),
+        month: now.getMonth(),
+        yearLabel: now.getFullYear().toString(),
+        monthLabel: now.toLocaleDateString('he-IL', { month: 'short', year: 'numeric' })
+    }] : [];
+
     const { data, error } = await supabaseClient
         .from('portfolios')
         .insert({
@@ -97,7 +109,7 @@ async function supaAddClient(name, cashBalance = 0) {
             portfolio_value: cashBalance,
             initial_investment: cashBalance,
             cash_balance: cashBalance,
-            performance_history: []
+            performance_history: initialSnapshot
         })
         .select('*, holdings(*)')
         .single();
@@ -126,8 +138,9 @@ async function supaAddClientWithHoldings(name, cashBalance, holdings) {
         .update({ initial_investment: totalInvestment })
         .eq('id', portfolio.id);
 
-    // Step 4: Final recalc and return
+    // Step 4: Final recalc + record a performance snapshot with the real portfolio value
     await supaRecalcClient(portfolio.id);
+    await supaRecordPerformanceSnapshot(portfolio.id);
     return await supaFetchClient(portfolio.id);
 }
 
@@ -196,15 +209,37 @@ async function supaAddHolding(clientId, holdingData) {
         name = holdingData.stockName || holdingTicker;
         sector = type === 'stock' ? (SECTOR_MAP[holdingTicker] || 'Other') : null;
         currency = holdingData.currency || 'USD';
-        currentPrice = price;
-        previousClose = price * (1 + (Math.random() - 0.5) * 0.03);
+
+        // Use real market price from priceCache if available, otherwise fetch live
+        let cached = (typeof priceCache !== 'undefined') ? priceCache[holdingTicker] : null;
+
+        // If priceCache is empty for this ticker (e.g. brand-new user), fetch live
+        if ((!cached || !cached.price) && typeof fetchSingleTickerPrice === 'function') {
+            try {
+                cached = await fetchSingleTickerPrice(holdingTicker);
+            } catch (e) {
+                console.warn('Live price fetch failed for', holdingTicker, e.message);
+            }
+        }
+
+        if (cached && cached.price) {
+            currentPrice = cached.price;
+            previousClose = cached.previousClose || cached.price;
+        } else {
+            // No live price available — store purchase price as placeholder.
+            // Mark with _livePriceResolved = false so the lock mechanism
+            // knows this is NOT a confirmed market price and allows future updates.
+            currentPrice = price;
+            previousClose = price;
+            console.warn(`[supaAddHolding] No live price for ${holdingTicker} — using purchase price as placeholder`);
+        }
     } else {
         name = (bondName || '').trim();
         holdingTicker = 'BOND_' + Date.now();
         sector = null;
         currency = 'ILS';
         currentPrice = price;
-        previousClose = price * (1 + (Math.random() - 0.5) * 0.003);
+        previousClose = price;
     }
 
     const costBasis = price * quantity;

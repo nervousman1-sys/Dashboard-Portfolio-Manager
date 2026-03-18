@@ -15,6 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <!-- Chart.js can defer — charts render after DOM is ready -->
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <!-- xlsx and pdf.js are lazy-loaded only when the Add Portfolio modal opens -->
@@ -28,24 +29,8 @@
     <div class="auth-overlay hidden" id="authOverlay"></div>
 
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="skeleton-dashboard">
-            <div class="skeleton-header">
-                <div class="skeleton-line skeleton-title"></div>
-                <div class="skeleton-line skeleton-subtitle"></div>
-            </div>
-            <div class="skeleton-summary">
-                <div class="skeleton-summary-card"><div class="skeleton-line short"></div><div class="skeleton-line wide"></div><div class="skeleton-line short"></div></div>
-                <div class="skeleton-summary-card"><div class="skeleton-line short"></div><div class="skeleton-line wide"></div><div class="skeleton-line short"></div></div>
-                <div class="skeleton-summary-card"><div class="skeleton-line short"></div><div class="skeleton-line wide"></div><div class="skeleton-line short"></div></div>
-                <div class="skeleton-summary-card"><div class="skeleton-line short"></div><div class="skeleton-line wide"></div><div class="skeleton-line short"></div></div>
-            </div>
-            <div class="skeleton-cards">
-                <div class="skeleton-card"><div class="skeleton-card-header"><div class="skeleton-line short"></div><div class="skeleton-badge"></div></div><div class="skeleton-chart"></div><div class="skeleton-line wide"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>
-                <div class="skeleton-card"><div class="skeleton-card-header"><div class="skeleton-line short"></div><div class="skeleton-badge"></div></div><div class="skeleton-chart"></div><div class="skeleton-line wide"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>
-                <div class="skeleton-card"><div class="skeleton-card-header"><div class="skeleton-line short"></div><div class="skeleton-badge"></div></div><div class="skeleton-chart"></div><div class="skeleton-line wide"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>
-            </div>
-            <div class="loading-text">טוען נתוני שוק...</div>
-        </div>
+        <div class="spinner"></div>
+        <div class="loading-text">טוען נתוני שוק...</div>
     </div>
 
     <header class="header">

@@ -1,5 +1,31 @@
 // ========== CHARTS - Chart.js Rendering (Fullscreen, Benchmark, Sector) ==========
 
+// ========== CHART LIFECYCLE UTILITIES ==========
+
+// Safely destroy a chart by its key in the charts{} map
+function _safeDestroyChart(key) {
+    if (!charts[key]) return;
+    try { charts[key].destroy(); } catch (e) { /* canvas may already be orphaned */ }
+    delete charts[key];
+}
+
+// Destroy any Chart.js instance attached to a canvas element (by canvas ref, not key)
+// Uses Chart.getChart() — the only reliable way to detect orphaned instances
+function _destroyChartOnCanvas(canvasEl) {
+    if (!canvasEl) return;
+    try {
+        const existing = Chart.getChart(canvasEl);
+        if (existing) existing.destroy();
+    } catch (e) { /* ignore — canvas might be detached */ }
+}
+
+// Clear a canvas's 2D context to prevent frozen frames between destroy/create
+function _clearCanvas(canvasEl) {
+    if (!canvasEl) return;
+    const ctx2d = canvasEl.getContext('2d');
+    if (ctx2d) ctx2d.clearRect(0, 0, canvasEl.width, canvasEl.height);
+}
+
 // Benchmark configuration
 const BENCHMARK_SYMBOLS = {
     'SPY': 'S&P 500',
@@ -156,204 +182,400 @@ async function _fetchFinnhubBenchmark(symbol, range) {
 
 // ========== UNIFIED PERFORMANCE CHART RENDERER ==========
 
-// Generate synthetic historical data when real history is sparse
-// Creates a realistic performance curve from initialInvestment to current portfolioValue
-function _generateSyntheticHistory(client, range) {
-    const currentValue = client.portfolioValue || 0;
-    const initialValue = client.initialInvestment || currentValue;
-    if (currentValue <= 0) return [];
+// Parse a he-IL date string (DD.MM.YYYY) into a Date object
+// Also handles ISO dates (YYYY-MM-DD) as passthrough
+function _parseHistDate(dateStr) {
+    if (!dateStr) return new Date();
+    // ISO format: YYYY-MM-DD
+    if (dateStr.includes('-') && dateStr.length >= 10) return new Date(dateStr);
+    // he-IL format: DD.MM.YYYY
+    const parts = dateStr.split('.');
+    if (parts.length === 3) {
+        return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+    }
+    return new Date(dateStr);
+}
 
-    const days = _rangeToDays(range);
-    const numPoints = Math.min(days, 250); // max ~1 year of trading days
-    if (numPoints < 2) return [];
+// ========== INTRADAY DATA (1D/5D views) ==========
+// Fetches hourly time_series from Twelve Data for the portfolio's top holdings,
+// then computes weighted portfolio return at each timestamp.
 
-    const now = new Date();
-    const totalReturn = initialValue > 0 ? (currentValue - initialValue) / initialValue : 0;
-    const points = [];
+const _intradayCache = {}; // key: "clientId_range" → { data, timestamp }
+const INTRADAY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-    for (let i = 0; i < numPoints; i++) {
-        const t = i / (numPoints - 1); // 0 to 1
-        const daysAgo = Math.round(days * (1 - t));
-        const date = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
-        const dateStr = date.toLocaleDateString('he-IL');
-
-        // Smooth curve with slight randomness for realistic look
-        const baseReturn = totalReturn * t;
-        // Add small noise that diminishes toward the end (current value is exact)
-        const noise = (i === numPoints - 1) ? 0 : (Math.sin(i * 0.7) * 0.01 + Math.cos(i * 1.3) * 0.008) * (1 - t * 0.5);
-        const value = initialValue * (1 + baseReturn + noise);
-
-        points.push({
-            date: dateStr,
-            value: parseFloat(value.toFixed(2)),
-            returnPct: parseFloat(((baseReturn + noise) * 100).toFixed(2)),
-            year: date.getFullYear(),
-            month: date.getMonth()
-        });
+async function _fetchIntradayPortfolioData(client, range) {
+    const cacheKey = `${client.id}_${range}`;
+    if (_intradayCache[cacheKey] && (Date.now() - _intradayCache[cacheKey].timestamp < INTRADAY_CACHE_TTL)) {
+        return _intradayCache[cacheKey].data;
     }
 
-    return points;
+    if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') return null;
+
+    // Get stock holdings with known prices
+    const stocks = client.holdings.filter(h => h.type === 'stock' && h.shares > 0);
+    if (stocks.length === 0) return null;
+
+    // Use top holdings (by value) to stay within API limits — max 3 symbols per call
+    const topStocks = stocks.sort((a, b) => b.value - a.value).slice(0, 3);
+    const totalPortfolioValue = client.portfolioValue || 1;
+    const interval = (range === '1d') ? '1h' : '4h';
+    const outputSize = (range === '1d') ? 24 : 30;
+
+    try {
+        // Fetch time series for each top holding
+        const seriesResults = await Promise.allSettled(topStocks.map(h => {
+            const sym = (h.currency === 'ILS') ? `${h.ticker}:TASE` : h.ticker;
+            return fetch(`https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(json => {
+                    if (!json || json.status === 'error' || !json.values) return null;
+                    return { ticker: h.ticker, weight: h.value / totalPortfolioValue, values: json.values.reverse() };
+                });
+        }));
+
+        const series = seriesResults
+            .filter(r => r.status === 'fulfilled' && r.value)
+            .map(r => r.value);
+
+        if (series.length === 0) return null;
+
+        // Use the first series as the time backbone
+        const backbone = series[0].values;
+        const points = backbone.map((v, i) => {
+            const date = new Date(v.datetime);
+
+            // Weighted return from each holding at this time point
+            let weightedReturn = 0;
+            series.forEach(s => {
+                if (s.values[i]) {
+                    const firstClose = parseFloat(s.values[0].close);
+                    const thisClose = parseFloat(s.values[i].close);
+                    const holdingReturn = firstClose > 0 ? ((thisClose - firstClose) / firstClose) * 100 : 0;
+                    weightedReturn += holdingReturn * s.weight;
+                }
+            });
+
+            // Approximate portfolio value at this point
+            const portfolioValueAtPoint = totalPortfolioValue * (1 + weightedReturn / 100);
+
+            return {
+                date: date.toLocaleDateString('he-IL'),
+                _dateObj: date,
+                value: parseFloat(portfolioValueAtPoint.toFixed(2)),
+                returnPct: parseFloat(weightedReturn.toFixed(2))
+            };
+        });
+
+        if (points.length > 0) {
+            _intradayCache[cacheKey] = { data: points, timestamp: Date.now() };
+        }
+        return points.length >= 2 ? points : null;
+
+    } catch (e) {
+        console.warn('[Charts] Intraday fetch error:', e.message);
+        return null;
+    }
 }
+
+// ========== MAIN PERFORMANCE CHART RENDERER ==========
+// Production-ready financial chart: real Supabase data mapped to {x: timestamp, y: value}.
+// Data-fitted visible range, 20-year zoom limits, grace-based containment, dynamic granularity.
 
 async function renderPerformanceChart(canvasId, clientId, range, benchmarks, chartKey) {
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
-    // If no performance history, try to generate first snapshot
-    if (!client.performanceHistory || client.performanceHistory.length === 0) {
-        if (supabaseConnected && client.portfolioValue > 0) {
-            await supaRecordPerformanceSnapshot(client.id);
-            const updated = await supaFetchClient(client.id);
-            if (updated) {
-                const idx = clients.findIndex(c => c.id === clientId);
-                if (idx !== -1) clients[idx] = updated;
-                client.performanceHistory = updated.performanceHistory;
-            }
-        }
-    }
-
-    let hist = filterHistoryByRange(client.performanceHistory || [], range);
-
-    // If real history has fewer than 3 points, generate synthetic data for a useful chart
-    if (!hist || hist.length < 3) {
-        hist = _generateSyntheticHistory(client, range);
-    }
-
-    // Show "no data" message if still empty
-    if (!hist || hist.length === 0) {
-        const canvas = document.getElementById(canvasId);
-        if (canvas) {
-            const container = canvas.parentElement;
-            if (container && !container.querySelector('.no-chart-data')) {
-                const msg = document.createElement('div');
-                msg.className = 'no-chart-data';
-                msg.textContent = 'נתוני ביצועים יופיעו לאחר עדכון מחירים';
-                msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;text-align:center;padding:20px;';
-                canvas.style.display = 'none';
-                container.appendChild(msg);
-            }
-        }
-        return null;
-    }
-
-    // Destroy previous chart
-    if (chartKey && charts[chartKey]) {
-        charts[chartKey].destroy();
-        delete charts[chartKey];
-    }
-
+    // ── 1. Canvas & loading overlay ──
     const canvas = document.getElementById(canvasId);
     if (!canvas) return null;
 
-    // Remove "no data" message if it exists
-    canvas.style.display = '';
-    const noDataMsg = canvas.parentElement?.querySelector('.no-chart-data');
-    if (noDataMsg) noDataMsg.remove();
+    const container = canvas.parentElement;
+    _showChartLoading(container);
 
-    // Normalize portfolio data to % from start of visible range
-    const firstValue = hist[0].value || 1;
-    const portfolioData = hist.map(p => ({
-        date: p.date,
-        returnPct: ((p.value - firstValue) / firstValue) * 100
+    // ── 2. Acquire REAL data — never synthetic ──
+    let hist = null;
+    const isIntraday = (range === '1d' || range === '5d');
+
+    // 2a. Intraday: live hourly data from Twelve Data
+    if (isIntraday) {
+        hist = await _fetchIntradayPortfolioData(client, range);
+    }
+
+    // 2b. Longer ranges: Supabase performance_history (recorded daily snapshots)
+    if (!hist) {
+        // If history is empty, try to seed an initial snapshot
+        if (!client.performanceHistory || client.performanceHistory.length === 0) {
+            if (typeof supabaseConnected !== 'undefined' && supabaseConnected && client.portfolioValue > 0) {
+                await supaRecordPerformanceSnapshot(client.id);
+                // Fetch ONLY performanceHistory from DB — do NOT replace the full client
+                // object, as that would overwrite in-memory live prices with stale DB values.
+                const updated = await supaFetchClient(client.id);
+                if (updated && updated.performanceHistory) {
+                    client.performanceHistory = updated.performanceHistory;
+                    // Also patch the clients array entry's history without replacing the object
+                    const idx = clients.findIndex(c => c.id === clientId);
+                    if (idx !== -1) clients[idx].performanceHistory = updated.performanceHistory;
+                }
+            }
+        }
+        hist = filterHistoryByRange(client.performanceHistory || [], range);
+    }
+
+    // ── 3. Empty/insufficient data → clear "No Data" overlay, abort ──
+    _hideChartLoading(container);
+
+    if (!hist || hist.length < 2) {
+        _showNoChartData(canvas, container, isIntraday);
+        return null;
+    }
+
+    // ── 4. Destroy any previous Chart.js instance on this canvas (prevent memory leaks) ──
+    if (chartKey) _safeDestroyChart(chartKey);
+    _destroyChartOnCanvas(canvas);
+    _clearCanvas(canvas);
+
+    canvas.style.display = '';
+    const staleMsg = container?.querySelector('.no-chart-data');
+    if (staleMsg) staleMsg.remove();
+
+    // ── 5. Map Supabase data → { x: ISO-timestamp, y: numeric_value } ──
+    // Every point uses a real Date timestamp and the recorded portfolio total value.
+    const portfolioPoints = hist.map(p => ({
+        x: (p._dateObj || _parseHistDate(p.date)).getTime(),
+        y: p.value
     }));
 
-    const isPositive = (portfolioData[portfolioData.length - 1]?.returnPct || 0) >= 0;
+    const firstVal = portfolioPoints[0].y || 1;
+    const lastVal = portfolioPoints[portfolioPoints.length - 1].y || 0;
+    const isPositive = lastVal >= firstVal;
+    const mainColor = isPositive ? COLORS.profit : COLORS.loss;
+    const fillColor = isPositive ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
 
-    // Build datasets
+    // ── 6. Build datasets ──
     const datasets = [{
-        label: 'תשואת התיק',
-        data: portfolioData.map(p => p.returnPct),
-        borderColor: isPositive ? COLORS.profit : COLORS.loss,
-        backgroundColor: isPositive ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-        borderWidth: 2,
+        label: 'שווי תיק',
+        data: portfolioPoints,
+        borderColor: mainColor,
+        backgroundColor: fillColor,
+        borderWidth: 3,
         fill: true,
         pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.3
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: mainColor,
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        tension: 0.3,
+        clip: true      // CRITICAL: clips line to the chart area rectangle — prevents overflow
     }];
 
-    // Fetch and add benchmark datasets
-    const labels = hist.map((_, i) => i);
+    // Benchmark datasets — normalized to portfolio starting value for visual comparison
     for (const symbol of (benchmarks || [])) {
         const benchData = await fetchBenchmarkData(symbol, range);
         if (!benchData || benchData.length === 0) continue;
 
-        const aligned = _alignBenchmarkToPortfolio(benchData, hist.length);
-
+        const benchBase = benchData[0]?.returnPct || 0;
         datasets.push({
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
-            data: aligned.map(p => p.returnPct),
+            data: benchData.map(p => ({
+                x: new Date(p.date).getTime(),
+                y: firstVal * (1 + (p.returnPct - benchBase) / 100)
+            })),
             borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
             borderWidth: 1.5,
             borderDash: [5, 3],
             fill: false,
             pointRadius: 0,
             pointHoverRadius: 3,
-            tension: 0.3
+            tension: 0.3,
+            clip: true
         });
     }
 
+    // ── 7. Timeline configuration ──
+    const now = new Date();
+    const TEN_YEARS_MS = 10 * 365.25 * 24 * 60 * 60 * 1000;
+
+    // Zoom limits: user can scroll/zoom across a full 20-year window
+    const zoomMin = now.getTime() - TEN_YEARS_MS;
+    const zoomMax = now.getTime() + TEN_YEARS_MS;
+
+    // Visible axis: fit to actual data (NOT the full 20 years — that would compress data to a sliver)
+    const dataMinTime = portfolioPoints[0].x;
+    const dataMaxTime = portfolioPoints[portfolioPoints.length - 1].x;
+
+    // Add 3% padding on each side so the line doesn't touch the axis edges
+    const xPadMs = Math.max((dataMaxTime - dataMinTime) * 0.03, 3600000);
+    const viewMin = dataMinTime - xPadMs;
+    const viewMax = dataMaxTime + xPadMs;
+
+    // Dynamic time unit: granularity matches the visible data span
+    const dataSpanDays = Math.max(1, (dataMaxTime - dataMinTime) / 86400000);
+    let timeUnit;
+    if (dataSpanDays <= 2) timeUnit = 'hour';        // 1D view → show hours
+    else if (dataSpanDays <= 30) timeUnit = 'day';    // 1M view → show days
+    else if (dataSpanDays <= 180) timeUnit = 'week';  // 6M view → show weeks
+    else if (dataSpanDays <= 730) timeUnit = 'month';  // 1-2Y  → show months
+    else if (dataSpanDays <= 3650) timeUnit = 'quarter'; // 2-10Y → show quarters
+    else timeUnit = 'year';                            // 10Y+  → show years
+
+    // ── 8. Construct Chart.js instance — complete options object ──
     const chartInstance = new Chart(canvas, {
         type: 'line',
-        data: { labels, datasets },
+        data: { datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { left: 4, right: 4, top: 4, bottom: 4 } },
-            interaction: { intersect: false, mode: 'index' },
+
+            // Layout padding — safety buffer so line never touches container walls
+            layout: {
+                padding: { top: 30, bottom: 30, left: 15, right: 30 }
+            },
+
+            interaction: {
+                intersect: false,
+                mode: 'index',
+                axis: 'x'
+            },
+
             scales: {
                 x: {
-                    ticks: {
-                        color: '#64748b',
-                        font: { size: 9 },
-                        autoSkip: true,
-                        maxRotation: 0,
-                        maxTicksLimit: 6,
-                        callback: function (v, i) { return getSmartLabel(hist, i, this.chart); }
+                    type: 'time',         // chartjs-adapter-date-fns required (already in index.html)
+                    min: viewMin,          // Fit to data for initial view
+                    max: viewMax,
+                    time: {
+                        // Let Chart.js auto-pick unit based on visible range, using our hint
+                        unit: timeUnit,
+                        displayFormats: {
+                            hour: 'HH:mm',
+                            day: 'dd MMM',
+                            week: 'dd MMM',
+                            month: 'MMM yyyy',
+                            quarter: 'QQQ yyyy',
+                            year: 'yyyy'
+                        },
+                        tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd/MM/yyyy'
                     },
-                    grid: { color: 'rgba(51,65,85,0.15)', drawBorder: false }
+                    ticks: {
+                        source: 'auto',   // Chart.js computes tick positions from the time scale
+                        autoSkip: true,
+                        maxTicksLimit: 12,
+                        maxRotation: 0,
+                        color: '#94a3b8',
+                        font: { size: 10 }
+                    },
+                    grid: {
+                        color: 'rgba(148,163,184,0.07)',
+                        drawTicks: false
+                    },
+                    border: { display: true, color: 'rgba(148,163,184,0.15)' }
                 },
+
                 y: {
                     position: 'right',
+                    beginAtZero: false,
+                    grace: '15%',         // Expands scale 15% beyond data extremes → line never touches edges
                     ticks: {
-                        color: '#64748b',
-                        font: { size: 9 },
-                        callback: v => v.toFixed(1) + '%',
-                        maxTicksLimit: 5,
-                        padding: 4
+                        color: '#94a3b8',
+                        font: { size: 10 },
+                        callback: function(v) {
+                            if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+                            if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
+                            return '$' + v.toFixed(0);
+                        },
+                        maxTicksLimit: 6,
+                        padding: 8
                     },
-                    grid: { color: 'rgba(51,65,85,0.15)', drawBorder: false }
+                    grid: {
+                        color: 'rgba(148,163,184,0.07)',
+                        drawTicks: false
+                    },
+                    border: { display: false }
                 }
             },
+
             plugins: {
                 legend: {
                     display: datasets.length > 1,
                     position: 'top',
                     rtl: true,
-                    labels: { color: '#94a3b8', font: { size: 10 }, usePointStyle: true, pointStyleWidth: 6, padding: 8, boxWidth: 6 }
+                    labels: {
+                        color: '#94a3b8',
+                        font: { size: 10 },
+                        usePointStyle: true,
+                        pointStyleWidth: 6,
+                        padding: 10,
+                        boxWidth: 6
+                    }
                 },
+
                 tooltip: {
                     rtl: true,
-                    backgroundColor: 'rgba(30,41,59,0.95)',
-                    titleFont: { size: 11 },
+                    backgroundColor: 'rgba(15,23,42,0.92)',
+                    borderColor: 'rgba(148,163,184,0.2)',
+                    borderWidth: 1,
+                    titleFont: { size: 11, weight: '600' },
                     bodyFont: { size: 11 },
-                    padding: 8,
+                    padding: 10,
+                    cornerRadius: 6,
+                    displayColors: true,
+                    boxWidth: 8,
+                    boxHeight: 8,
+                    boxPadding: 4,
                     callbacks: {
-                        title: (items) => {
-                            const idx = items[0].dataIndex;
-                            return hist[idx] ? hist[idx].date : '';
-                        },
-                        label: (ctx) => {
-                            const sign = ctx.parsed.y >= 0 ? '+' : '';
-                            return ` ${ctx.dataset.label}: ${sign}${ctx.parsed.y.toFixed(2)}%`;
+                        label: function(ctx) {
+                            const val = ctx.parsed.y;
+                            const pct = firstVal > 0 ? ((val - firstVal) / firstVal * 100) : 0;
+                            const sign = pct >= 0 ? '+' : '';
+                            return ` ${ctx.dataset.label}: ${formatCurrency(val)} (${sign}${pct.toFixed(2)}%)`;
                         }
                     }
                 },
+
                 zoom: {
                     pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' }
+                    zoom: {
+                        wheel: { enabled: true, speed: 0.1 },
+                        pinch: { enabled: true },
+                        mode: 'x'
+                    },
+                    limits: {
+                        x: {
+                            min: zoomMin,        // 10 years back
+                            max: zoomMax,        // 10 years forward
+                            minRange: 3600000    // minimum 1 hour visible when zoomed in
+                        }
+                    }
                 }
             }
+        },
+
+        // Inline plugin: vertical crosshair line on hover (Bloomberg-style)
+        plugins: [{
+            id: 'crosshairLine',
+            afterDraw: function(chart) {
+                const tooltip = chart.tooltip;
+                if (!tooltip || tooltip.opacity === 0 || !tooltip.caretX) return;
+                const ctx = chart.ctx;
+                const x = tooltip.caretX;
+                const yScale = chart.scales.y;
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(x, yScale.top);
+                ctx.lineTo(x, yScale.bottom);
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+                ctx.setLineDash([4, 3]);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }]
+    });
+
+    // Force a resize after first paint — fixes first-load rendering when modal is still
+    // animating or canvas has not yet received final layout dimensions from CSS flex.
+    requestAnimationFrame(() => {
+        if (chartInstance && !chartInstance._destroyed) {
+            chartInstance.resize();
         }
     });
 
@@ -361,18 +583,48 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     return chartInstance;
 }
 
-// Align benchmark array to target length by sampling evenly
-function _alignBenchmarkToPortfolio(benchData, targetLength) {
-    if (benchData.length === targetLength) return benchData;
-    if (benchData.length === 0) return [];
+// ========== NO-DATA OVERLAY ==========
+// Shown when portfolio_history is empty or has insufficient points for the selected range.
 
-    const result = [];
-    const step = (benchData.length - 1) / Math.max(1, targetLength - 1);
-    for (let i = 0; i < targetLength; i++) {
-        const idx = Math.min(Math.round(i * step), benchData.length - 1);
-        result.push(benchData[idx]);
-    }
-    return result;
+function _showNoChartData(canvas, container, isIntraday) {
+    if (!canvas || !container) return;
+    const oldMsg = container.querySelector('.no-chart-data');
+    if (oldMsg) oldMsg.remove();
+
+    const msg = document.createElement('div');
+    msg.className = 'no-chart-data';
+    msg.innerHTML = `
+        <div class="no-chart-data-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.35">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+        </div>
+        <div class="no-chart-data-title">${isIntraday ? 'אין נתונים זמינים לטווח זה' : 'No Data Available for this Range'}</div>
+        <div class="no-chart-data-sub">${isIntraday
+            ? 'נתוני יום המסחר יופיעו בשעות הפעילות'
+            : 'נתוני ביצועים נאספים אוטומטית — הגרף יופיע לאחר עדכון המחירים הבא'
+        }</div>`;
+    msg.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;text-align:center;padding:24px;gap:6px;';
+    canvas.style.display = 'none';
+    container.appendChild(msg);
+}
+
+// ========== LOADING OVERLAY HELPERS ==========
+
+function _showChartLoading(container) {
+    if (!container) return;
+    _hideChartLoading(container); // remove any existing
+    const overlay = document.createElement('div');
+    overlay.className = 'chart-loading-overlay';
+    overlay.innerHTML = '<div class="chart-loading-spinner"></div><span>טוען נתונים...</span>';
+    container.style.position = 'relative';
+    container.appendChild(overlay);
+}
+
+function _hideChartLoading(container) {
+    if (!container) return;
+    const existing = container.querySelector('.chart-loading-overlay');
+    if (existing) existing.remove();
 }
 
 // ========== MODAL PERFORMANCE CHART CONTROLS ==========
@@ -428,13 +680,35 @@ async function _refreshModalPerfChart() {
 function renderModalSectorChart(client) {
     const ctx = document.getElementById('modal-sector-chart');
     if (!ctx) return;
-    if (charts['modal-sector']) charts['modal-sector'].destroy();
+    _safeDestroyChart('modal-sector');
+    _destroyChartOnCanvas(ctx);
+    _clearCanvas(ctx);
     const sectorData = {};
     client.holdings.filter(h => h.type === 'stock').forEach(h => {
         const s = h.sector || SECTOR_MAP[h.ticker] || 'Other';
         sectorData[s] = (sectorData[s] || 0) + h.value;
     });
     const sorted = Object.entries(sectorData).sort((a, b) => b[1] - a[1]);
+    const totalSectorValue = sorted.reduce((s, e) => s + e[1], 0);
+
+    // Empty-state: no sector data or all values are 0
+    if (sorted.length === 0 || totalSectorValue <= 0) {
+        const container = ctx.parentElement;
+        if (container) {
+            ctx.style.display = 'none';
+            const existing = container.querySelector('.chart-empty-state');
+            if (!existing) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'chart-empty-state';
+                placeholder.innerHTML = '<div class="chart-empty-circle"></div><span>אין נתוני סקטורים</span>';
+                placeholder.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;gap:8px;';
+                container.appendChild(placeholder);
+            }
+        }
+        return;
+    }
+    ctx.style.display = '';
+
     charts['modal-sector'] = new Chart(ctx, {
         type: 'doughnut',
         data: {

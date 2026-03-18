@@ -7,11 +7,13 @@ function setFilter(type, value, btn) {
     document.querySelectorAll(`[data-filter="${type}"]`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    renderExposureSection();
     renderClientCards();
 }
 
 function searchClients(query) {
     activeFilters.search = query;
+    renderExposureSection();
     renderClientCards();
 }
 
@@ -22,6 +24,7 @@ function setSizeFilter(size, btn) {
     else if (size === 'small') { activeFilters.sizeMin = null; activeFilters.sizeMax = 250000; }
     else if (size === 'medium') { activeFilters.sizeMin = 250000; activeFilters.sizeMax = 500000; }
     else if (size === 'large') { activeFilters.sizeMin = 500000; activeFilters.sizeMax = null; }
+    renderExposureSection();
     renderClientCards();
 }
 
@@ -33,6 +36,7 @@ function setSort(value) {
 // ========== TIME RANGE ==========
 
 function filterHistoryByRange(history, range) {
+    if (!history || !Array.isArray(history)) return [];
     if (range === 'all' || range === 'max' || !history.length) return history;
     const now = new Date();
     let cutoff;
@@ -67,12 +71,17 @@ function setCardTimeRange(clientId, range, btn) {
     const hist = filterHistoryByRange(client.performanceHistory, range);
     if (!hist.length) return;
 
-    if (charts[`perf-${clientId}`]) { charts[`perf-${clientId}`].destroy(); delete charts[`perf-${clientId}`]; }
+    _safeDestroyChart(`perf-${clientId}`);
 
     const perfCtx = document.getElementById(`perf-${clientId}`);
     if (!perfCtx) return;
 
-    const isPositive = (hist[hist.length - 1]?.returnPct || 0) >= 0;
+    _destroyChartOnCanvas(perfCtx);
+    _clearCanvas(perfCtx);
+
+    const firstVal = hist[0]?.value || 0;
+    const lastVal = hist[hist.length - 1]?.value || 0;
+    const isPositive = lastVal >= firstVal;
     const lineColor = isPositive ? COLORS.profit : COLORS.loss;
     const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
 
@@ -80,12 +89,18 @@ function setCardTimeRange(clientId, range, btn) {
         type: 'line',
         data: {
             labels: hist.map(p => p.date),
-            datasets: [{ data: hist.map(p => p.returnPct), borderColor: lineColor, backgroundColor: bgColor, borderWidth: 1.5, fill: true, pointRadius: 0, tension: 0.3 }]
+            datasets: [{
+                data: hist.map(p => p.value),
+                borderColor: lineColor, backgroundColor: bgColor,
+                borderWidth: 2, fill: true, pointRadius: 0, tension: 0.3,
+                clip: true
+            }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            scales: { x: { display: false }, y: { display: false, beginAtZero: false } },
-            plugins: { legend: { display: false }, tooltip: { rtl: true, callbacks: { title: (items) => items[0].label, label: (ctx) => ` תשואה: ${ctx.parsed.y.toFixed(2)}%` } } },
+            layout: { padding: { top: 4, bottom: 4 } },
+            scales: { x: { display: false }, y: { display: false, beginAtZero: false, grace: '15%' } },
+            plugins: { legend: { display: false }, tooltip: { rtl: true, callbacks: { title: (items) => items[0].label, label: (ctx) => ` שווי: ${formatCurrency(ctx.parsed.y)}` } } },
             interaction: { intersect: false, mode: 'index' }
         }
     });

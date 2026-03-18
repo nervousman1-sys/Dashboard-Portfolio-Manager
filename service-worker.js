@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v21';
+const CACHE_NAME = 'portfolio-dashboard-v33';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -55,7 +55,23 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch - stale-while-revalidate for static, network-only for APIs
+// Critical files that MUST use network-first strategy.
+// These contain auth logic, price protection, and state management — a stale
+// cached version could cause the price overwrite loop or auth UI disappearance.
+const NETWORK_FIRST_FILES = [
+    'index.html',
+    'auth.js',
+    'init.js',
+    'price-service.js',
+    'supabase-config.js'
+];
+
+// Check if a URL matches a network-first file
+function _isNetworkFirst(pathname) {
+    return NETWORK_FIRST_FILES.some(f => pathname.endsWith(f) || pathname === '/' || pathname === './');
+}
+
+// Fetch - network-first for critical files, stale-while-revalidate for rest
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
@@ -91,7 +107,25 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Static assets - STALE-WHILE-REVALIDATE
+    // CRITICAL FILES — NETWORK-FIRST with cache fallback
+    // Always try to fetch the latest version from the server first.
+    // Only fall back to cache if the network is unavailable.
+    if (_isNetworkFirst(url.pathname)) {
+        event.respondWith(
+            fetch(event.request).then((response) => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                }
+                return response;
+            }).catch(() => {
+                return caches.match(event.request);
+            })
+        );
+        return;
+    }
+
+    // Other static assets - STALE-WHILE-REVALIDATE
     // Serve from cache immediately, fetch fresh version in background
     event.respondWith(
         caches.match(event.request).then((cached) => {

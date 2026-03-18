@@ -262,9 +262,14 @@ function updateUserDisplay() {
                 <button class="logout-btn" onclick="logout()">התנתק</button>
             </div>
         `;
-        userArea.style.display = '';
+        userArea.style.cssText = 'display: flex !important;';
     } else {
         userArea.innerHTML = '';
-        userArea.style.display = 'none';
+        userArea.style.cssText = 'display: none !important;';
     }
 }
+
+// Immediately show user area if a session exists in localStorage.
+// The onAuthStateChange(INITIAL_SESSION) in supabase-config.js fires BEFORE
+// this script loads, so updateUserDisplay() was skipped. Call it now.
+updateUserDisplay();

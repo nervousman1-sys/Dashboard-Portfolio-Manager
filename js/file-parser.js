@@ -229,6 +229,12 @@ function _detectHeaderRow(sortedRows) {
 function _findTickerInRow(row) {
     for (let i = 0; i < row.length; i++) {
         const text = row[i].text.trim();
+
+        // Check for cash/liquidity identifiers (Hebrew or English) before ticker regex
+        if (_isCashRow(text)) {
+            return { ticker: text, itemIndex: i, x: row[i].x };
+        }
+
         // Match common ticker patterns: AAPL, BRK.B, GOOGL, META
         const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
         const match = text.match(tickerPattern);
@@ -371,11 +377,18 @@ function _extractFromScatteredItems(items) {
 
     for (let i = 0; i < items.length; i++) {
         const text = items[i].text.trim();
-        const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
-        const match = text.match(tickerPattern);
-        if (!match || _isCommonWord(match[1])) continue;
 
-        const ticker = match[1];
+        // Check for cash/liquidity identifiers first
+        let ticker;
+        if (_isCashRow(text)) {
+            ticker = text;
+        } else {
+            const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
+            const match = text.match(tickerPattern);
+            if (!match || _isCommonWord(match[1])) continue;
+            ticker = match[1];
+        }
+
         const y = items[i].y;
 
         // Find numbers on the same line (within 5px Y)
@@ -439,8 +452,13 @@ function _findMatchingColumn(headers, patterns) {
 
 function _cleanTicker(val) {
     if (!val) return '';
-    const str = String(val).trim().toUpperCase();
-    const cleaned = str.replace(/[^A-Z0-9.]/g, '');
+    const str = String(val).trim();
+
+    // Preserve cash/liquidity identifiers (may contain Hebrew or spaces)
+    if (_isCashRow(str)) return str;
+
+    const upper = str.toUpperCase();
+    const cleaned = upper.replace(/[^A-Z0-9.]/g, '');
     if (cleaned.length >= 1 && cleaned.length <= 6 && /^[A-Z]/.test(cleaned)) {
         return cleaned;
     }
@@ -460,18 +478,55 @@ function _isCommonWord(word) {
     return common.includes(word);
 }
 
+// ========== CASH ROW DETECTION ==========
+// Identifies rows that represent cash/liquidity, not tradable securities.
+// These should be added to the portfolio's cash balance, not as holdings.
+
+const CASH_IDENTIFIERS = [
+    'cash', 'מזומן', 'מזומנים', 'liquidity', 'נזילות', 'כסף מזומן',
+    'cash & equivalents', 'money market', 'פיקדון', 'עו"ש'
+];
+
+function _isCashRow(ticker) {
+    if (!ticker) return false;
+    const lower = ticker.toLowerCase().trim();
+    return CASH_IDENTIFIERS.some(id => lower === id || lower.includes(id));
+}
+
+// Separates parsed rows into holdings and cash amounts.
+// Returns { holdings: Array<{ticker, shares, avgPrice}>, cashTotal: number }
+function separateCashFromHoldings(parsedRows) {
+    const holdings = [];
+    let cashTotal = 0;
+
+    for (const row of parsedRows) {
+        if (_isCashRow(row.ticker)) {
+            // Cash row: value = shares * avgPrice (or just shares if avgPrice is 0/1)
+            const cashValue = row.avgPrice > 0 ? row.shares * row.avgPrice : row.shares;
+            cashTotal += cashValue;
+        } else {
+            holdings.push(row);
+        }
+    }
+
+    return { holdings, cashTotal };
+}
+
 // ========== FILE HANDLER (entry point from dropzone) ==========
 
 async function handleImportFile(file) {
     const name = file.name.toLowerCase();
     const ext = name.split('.').pop();
 
+    let rawRows;
     if (['xlsx', 'xls', 'csv'].includes(ext)) {
-        return await parseExcelFile(file);
+        rawRows = await parseExcelFile(file);
     } else if (ext === 'pdf') {
-        return await parsePDFFile(file);
+        rawRows = await parsePDFFile(file);
     } else {
         alert('סוג קובץ לא נתמך. יש להעלות קובץ Excel, CSV או PDF.');
-        return [];
+        return { holdings: [], cashTotal: 0 };
     }
+
+    return separateCashFromHoldings(rawRows);
 }

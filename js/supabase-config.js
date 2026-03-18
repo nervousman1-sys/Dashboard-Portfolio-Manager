@@ -24,6 +24,45 @@ try {
     console.error('Failed to create Supabase client:', e.message, '| URL:', SUPABASE_URL);
 }
 
+// ========== AUTH STATE CHANGE LISTENER ==========
+// Keeps username/logout button visible across page loads, token refreshes, and OAuth redirects.
+if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        console.log('[Auth] State change:', event);
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            if (session && session.user) {
+                const username = session.user.user_metadata?.full_name
+                    || session.user.user_metadata?.username
+                    || session.user.email;
+                // Persist to localStorage so updateUserDisplay() can read it
+                localStorage.setItem('authToken', session.access_token);
+                localStorage.setItem('authUser', JSON.stringify({
+                    id: session.user.id,
+                    username
+                }));
+                // Update UI if auth.js has loaded
+                if (typeof updateUserDisplay === 'function') {
+                    updateUserDisplay();
+                } else {
+                    // auth.js not loaded yet — force #userArea visible directly
+                    const ua = document.getElementById('userArea');
+                    if (ua) ua.style.cssText = 'display: flex !important;';
+                }
+            }
+        } else if (event === 'SIGNED_OUT') {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('authUser');
+            if (typeof updateUserDisplay === 'function') {
+                updateUserDisplay();
+            } else {
+                const ua = document.getElementById('userArea');
+                if (ua) ua.style.cssText = 'display: none !important;';
+            }
+        }
+    });
+}
+
 // Connection status flag
 let supabaseConnected = false;
 
