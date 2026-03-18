@@ -65,37 +65,9 @@ function invalidateSyntheticCache(clientId) {
 async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
 
-    // ── Primary: Twelve Data time_series ──
-    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
-        try {
-            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=1day&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
-            const res = await fetch(url);
-            if (res.ok && res.status !== 429) {
-                const json = await res.json();
-
-                // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
-                if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
-                    console.warn(`[SyntheticHistory] Twelve Data rate-limited for ${ticker}: ${json.message}`);
-                    // Fall through to FMP/Finnhub
-                } else if (json.values && json.values.length > 0) {
-                    // Twelve Data returns newest-first — reverse to chronological
-                    const values = json.values;
-                    const result = new Array(values.length);
-                    for (let i = values.length - 1, j = 0; i >= 0; i--, j++) {
-                        result[j] = {
-                            date: values[i].datetime.split(' ')[0],
-                            close: parseFloat(values[i].close)
-                        };
-                    }
-                    return result;
-                }
-            }
-        } catch (e) {
-            console.warn(`[SyntheticHistory] Twelve Data failed for ${ticker}:`, e.message);
-        }
-    }
-
-    // ── Fallback: FMP historical-price-full ──
+    // ── Primary: FMP historical-price-full ──
+    // FMP is primary for bulk fetches: 250 calls/day, no per-minute limit,
+    // which works much better for large portfolios (20+ holdings).
     if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
         try {
             const url = `https://financialmodelingprep.com/stable/historical-price-full/${ticker}?apikey=${FMP_API_KEY}`;
@@ -115,6 +87,38 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
             }
         } catch (e) {
             console.warn(`[SyntheticHistory] FMP failed for ${ticker}:`, e.message);
+        }
+    }
+
+    // ── Fallback: Twelve Data time_series ──
+    // Secondary because Twelve Data free tier only allows 8 calls/min,
+    // which chokes on portfolios with >8 holdings.
+    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+        try {
+            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=1day&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+            const res = await fetch(url);
+            if (res.ok && res.status !== 429) {
+                const json = await res.json();
+
+                // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
+                if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
+                    console.warn(`[SyntheticHistory] Twelve Data rate-limited for ${ticker}: ${json.message}`);
+                    // Fall through to Finnhub
+                } else if (json.values && json.values.length > 0) {
+                    // Twelve Data returns newest-first — reverse to chronological
+                    const values = json.values;
+                    const result = new Array(values.length);
+                    for (let i = values.length - 1, j = 0; i >= 0; i--, j++) {
+                        result[j] = {
+                            date: values[i].datetime.split(' ')[0],
+                            close: parseFloat(values[i].close)
+                        };
+                    }
+                    return result;
+                }
+            }
+        } catch (e) {
+            console.warn(`[SyntheticHistory] Twelve Data failed for ${ticker}:`, e.message);
         }
     }
 
@@ -171,18 +175,29 @@ async function fetchSyntheticHistory(client, range) {
     }
 
     // Step 1: Filter eligible holdings — stocks AND funds (ETFs) have ticker-based history
-    const eligibleHoldings = client.holdings.filter(
+    let eligibleHoldings = client.holdings.filter(
         h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0 && h.ticker
     );
     if (eligibleHoldings.length === 0) return null;
 
+    // Cap to top 12 holdings by value — covers 90%+ of portfolio for most clients.
+    // This prevents API exhaustion for large portfolios (20+ holdings).
+    // Remaining holdings are approximated via costBasis (forward-fill at constant value).
+    const MAX_TICKERS = 12;
+    if (eligibleHoldings.length > MAX_TICKERS) {
+        eligibleHoldings.sort((a, b) => (b.value || 0) - (a.value || 0));
+        console.log(`[SyntheticHistory] Capping from ${eligibleHoldings.length} to top ${MAX_TICKERS} holdings by value`);
+        eligibleHoldings = eligibleHoldings.slice(0, MAX_TICKERS);
+    }
+
     const outputSize = _rangeToOutputSize(range); // Reuse existing charts.js helper
     console.log(`[SyntheticHistory] Fetching ${outputSize} days for ${eligibleHoldings.length} tickers: ${eligibleHoldings.map(h => h.ticker).join(', ')}`);
 
-    // Step 2: Fetch historical data — batched with rate limiting
-    //         3 concurrent fetches balances speed vs API rate limits
+    // Step 2: Fetch historical data — batched
+    //         FMP is now primary (250 calls/day, no per-minute limit),
+    //         so we can use larger batch sizes with shorter delays.
     const tickerSeries = {};
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 5;
 
     for (let i = 0; i < eligibleHoldings.length; i += BATCH_SIZE) {
         const batch = eligibleHoldings.slice(i, i + BATCH_SIZE);
@@ -196,9 +211,9 @@ async function fetchSyntheticHistory(client, range) {
             }
         }
 
-        // Rate-limit delay between batches (Twelve Data allows 8 calls/min on free tier)
+        // Short delay between batches — FMP has generous limits, but be polite
         if (i + BATCH_SIZE < eligibleHoldings.length) {
-            await new Promise(r => setTimeout(r, 1200));
+            await new Promise(r => setTimeout(r, 300));
         }
     }
 
@@ -233,6 +248,12 @@ async function fetchSyntheticHistory(client, range) {
 
     // Step 5: Single-pass portfolio value computation
     //         Pre-allocate output array for zero GC pressure
+    //
+    //         Iterate ALL stock/fund holdings (not just the top N that were fetched).
+    //         Holdings without fetched data are held at constant costBasis.
+    const allStockFundHoldings = client.holdings.filter(
+        h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0 && h.ticker
+    );
     const n = backbone.length;
     const history = new Array(n);
     const lastKnown = {};    // Forward-fill buffer: ticker → last known close
@@ -242,8 +263,8 @@ async function fetchSyntheticHistory(client, range) {
         const date = backbone[i].date;
         let totalValue = cashBalance; // Cash is constant throughout synthetic history
 
-        for (let j = 0; j < eligibleHoldings.length; j++) {
-            const h = eligibleHoldings[j];
+        for (let j = 0; j < allStockFundHoldings.length; j++) {
+            const h = allStockFundHoldings[j];
             const dateMap = priceLookup.get(h.ticker);
 
             if (dateMap) {
@@ -260,7 +281,7 @@ async function fetchSyntheticHistory(client, range) {
                     totalValue += h.costBasis || 0;
                 }
             } else {
-                // Ticker fetch failed entirely — hold at cost basis
+                // Ticker fetch failed or was capped — hold at cost basis
                 totalValue += h.costBasis || 0;
             }
         }
