@@ -140,46 +140,59 @@ async function fetchBenchmarkData(symbol, range) {
     return null;
 }
 
+// Twelve Data sometimes needs the INDEX symbol instead of the ETF ticker.
+// Try the ETF first (SPY, QQQ, DIA, IWM), then the index alias.
+const _TWELVE_DATA_ALIASES = {
+    'QQQ': ['QQQ', 'IXIC'],   // Nasdaq 100 ETF → Nasdaq Composite index
+    'DIA': ['DIA', 'DJI'],    // Dow Jones ETF → Dow Jones index
+    'IWM': ['IWM', 'RUT']     // Russell 2000 ETF → Russell 2000 index
+};
+
 async function _fetchTwelveDataBenchmark(symbol, range) {
     if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') return null;
 
     const interval = _rangeToInterval(range);
     const outputSize = _rangeToOutputSize(range);
 
-    try {
-        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
-        const res = await fetch(url);
-        if (!res.ok || res.status === 429) {
-            console.warn(`[Benchmark] Twelve Data ${res.status} for ${symbol}`);
-            return null;
+    // Try ETF ticker first, then index alias if available
+    const symbolsToTry = _TWELVE_DATA_ALIASES[symbol] || [symbol];
+
+    for (const sym of symbolsToTry) {
+        try {
+            const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
+            const res = await fetch(url);
+            if (!res.ok || res.status === 429) {
+                console.warn(`[Benchmark] Twelve Data ${res.status} for ${sym} (alias of ${symbol})`);
+                continue;
+            }
+            const json = await res.json();
+
+            // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
+            if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
+                console.warn(`[Benchmark] Twelve Data rate-limited for ${sym}: ${json.message}`);
+                return null; // Rate-limited — don't retry alias, it will also fail
+            }
+
+            if (json.status === 'error' || !json.values || json.values.length === 0) {
+                console.warn(`[Benchmark] Twelve Data no data for ${sym}:`, json.message || 'empty');
+                continue; // Try next alias
+            }
+
+            // Twelve Data returns newest first — reverse to chronological order
+            const values = json.values.reverse();
+            const firstClose = parseFloat(values[0].close);
+
+            console.log(`[Benchmark] Twelve Data success for ${symbol} (via ${sym}): ${values.length} points`);
+            return values.map(v => ({
+                date: v.datetime.split(' ')[0], // YYYY-MM-DD
+                close: parseFloat(v.close),
+                returnPct: ((parseFloat(v.close) - firstClose) / firstClose) * 100
+            }));
+        } catch (e) {
+            console.warn(`[Benchmark] Twelve Data fetch error for ${sym}:`, e.message);
         }
-        const json = await res.json();
-
-        // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
-        if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
-            console.warn(`[Benchmark] Twelve Data rate-limited for ${symbol}: ${json.message}`);
-            return null;
-        }
-
-        if (json.status === 'error' || !json.values || json.values.length === 0) {
-            console.warn(`[Benchmark] Twelve Data no data for ${symbol}:`, json.message || 'empty');
-            return null;
-        }
-
-        // Twelve Data returns newest first — reverse to chronological order
-        const values = json.values.reverse();
-        const firstClose = parseFloat(values[0].close);
-
-        console.log(`[Benchmark] Twelve Data success for ${symbol}: ${values.length} points`);
-        return values.map(v => ({
-            date: v.datetime.split(' ')[0], // YYYY-MM-DD
-            close: parseFloat(v.close),
-            returnPct: ((parseFloat(v.close) - firstClose) / firstClose) * 100
-        }));
-    } catch (e) {
-        console.warn(`[Benchmark] Twelve Data fetch error for ${symbol}:`, e.message);
-        return null;
     }
+    return null;
 }
 
 async function _fetchFMPBenchmark(symbol, range) {
@@ -465,7 +478,7 @@ async function _fetchIntradayPortfolioData(client, range) {
 
 // ========== Y-AXIS AUTO-SCALE ==========
 // Recalculates Y min/max based on currently visible X range.
-// Called after zoom/pan so the chart never looks "flat" or lines disappear.
+// Called by manual button only — NOT on every zoom/pan (prevents snap-back).
 function _autoScaleY(chart) {
     const xScale = chart.scales.x;
     const xMin = xScale.min;
@@ -488,6 +501,95 @@ function _autoScaleY(chart) {
     chart.options.scales.y.max = yMax + yRange * 0.1;
     chart.update('none');
 }
+
+// ========== TRADINGVIEW-STYLE Y-AXIS DRAG PLUGIN ==========
+// Clicking and dragging on the Y-axis area (right side) stretches/compresses
+// the vertical scale. Double-click resets to auto-scale.
+// This is a Chart.js inline plugin — attached to each chart instance.
+const _yAxisDragPlugin = {
+    id: 'yAxisDrag',
+    beforeInit(chart) {
+        chart._yDrag = { active: false, startY: 0, startMin: 0, startMax: 0 };
+    },
+    afterInit(chart) {
+        const canvas = chart.canvas;
+        if (!canvas || canvas._yDragBound) return;
+        canvas._yDragBound = true;
+
+        // Detect if mouse is in Y-axis area (right side gutter)
+        function _isInYAxis(e) {
+            const yScale = chart.scales.y;
+            if (!yScale) return false;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            // Y-axis is on the right — check if cursor is in the axis label zone
+            return x >= yScale.left && x <= rect.width;
+        }
+
+        canvas.addEventListener('mousedown', function(e) {
+            if (!_isInYAxis(e)) return;
+            const yScale = chart.scales.y;
+            if (!yScale) return;
+            chart._yDrag.active = true;
+            chart._yDrag.startY = e.clientY;
+            chart._yDrag.startMin = yScale.min;
+            chart._yDrag.startMax = yScale.max;
+            canvas.style.cursor = 'ns-resize';
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            // Update cursor when hovering Y-axis area
+            if (_isInYAxis(e) && !chart._yDrag.active) {
+                canvas.style.cursor = 'ns-resize';
+            } else if (!chart._yDrag.active) {
+                canvas.style.cursor = '';
+            }
+
+            if (!chart._yDrag.active) return;
+
+            const dy = e.clientY - chart._yDrag.startY;
+            const yScale = chart.scales.y;
+            const chartHeight = yScale.bottom - yScale.top;
+            if (chartHeight <= 0) return;
+
+            // Scale factor: dragging up expands range (zoom out), dragging down compresses (zoom in)
+            const sensitivity = 2.0;
+            const scaleFactor = 1 + (dy / chartHeight) * sensitivity;
+            if (scaleFactor <= 0.05 || scaleFactor > 20) return; // safety clamp
+
+            const origRange = chart._yDrag.startMax - chart._yDrag.startMin;
+            const origMid = (chart._yDrag.startMax + chart._yDrag.startMin) / 2;
+            const newRange = origRange * scaleFactor;
+
+            chart.options.scales.y.min = origMid - newRange / 2;
+            chart.options.scales.y.max = origMid + newRange / 2;
+            chart.update('none');
+
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        function _endDrag() {
+            if (chart._yDrag.active) {
+                chart._yDrag.active = false;
+                canvas.style.cursor = '';
+            }
+        }
+        canvas.addEventListener('mouseup', _endDrag);
+        canvas.addEventListener('mouseleave', _endDrag);
+
+        // Double-click on Y-axis → reset to auto-scale
+        canvas.addEventListener('dblclick', function(e) {
+            if (!_isInYAxis(e)) return;
+            // Reset Y-axis to auto-fit visible data
+            _autoScaleY(chart);
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    }
+};
 
 // ========== MAIN PERFORMANCE CHART RENDERER ==========
 // Production-ready financial chart: real Supabase data mapped to {x: timestamp, y: value}.
@@ -853,15 +955,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                 zoom: {
                     pan: {
                         enabled: true,
-                        mode: 'xy',
+                        mode: 'x',      // X-only — Y-axis is handled by custom _yAxisDragPlugin
                         threshold: 0
-                        // No onPanComplete — user's manual Y position must be preserved
                     },
                     zoom: {
                         wheel: { enabled: true, speed: 0.1 },
                         pinch: { enabled: true },
-                        mode: 'xy'
-                        // No onZoomComplete — prevents Y-axis snap-back after zoom
+                        mode: 'x'       // X-only — vertical scaling via Y-axis drag
                     },
                     limits: {
                         x: {
@@ -874,26 +974,29 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             }
         },
 
-        // Inline plugin: vertical crosshair line on hover (Bloomberg-style)
-        plugins: [{
-            id: 'crosshairLine',
-            afterDraw: function(chart) {
-                const tooltip = chart.tooltip;
-                if (!tooltip || tooltip.opacity === 0 || !tooltip.caretX) return;
-                const ctx = chart.ctx;
-                const x = tooltip.caretX;
-                const yScale = chart.scales.y;
-                ctx.save();
-                ctx.beginPath();
-                ctx.moveTo(x, yScale.top);
-                ctx.lineTo(x, yScale.bottom);
-                ctx.lineWidth = 1;
-                ctx.strokeStyle = 'rgba(148,163,184,0.35)';
-                ctx.setLineDash([4, 3]);
-                ctx.stroke();
-                ctx.restore();
-            }
-        }]
+        // Inline plugins: crosshair + TradingView-style Y-axis drag
+        plugins: [
+            {
+                id: 'crosshairLine',
+                afterDraw: function(chart) {
+                    const tooltip = chart.tooltip;
+                    if (!tooltip || tooltip.opacity === 0 || !tooltip.caretX) return;
+                    const ctx = chart.ctx;
+                    const x = tooltip.caretX;
+                    const yScale = chart.scales.y;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x, yScale.top);
+                    ctx.lineTo(x, yScale.bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+                    ctx.setLineDash([4, 3]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            },
+            _yAxisDragPlugin
+        ]
     });
 
     // Force a resize after first paint — fixes first-load rendering when modal is still
