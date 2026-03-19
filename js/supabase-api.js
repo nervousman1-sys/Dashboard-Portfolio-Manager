@@ -169,65 +169,44 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
 }
 
 // Create portfolio with initial holdings in one go (BATCH optimized)
-// Old approach: 6 network calls × N holdings = ~120 calls for 20 holdings (timeout)
-// New approach: 1 portfolio insert + parallel price fetch + 1 bulk holdings insert
-//             + 1 bulk transactions insert + 1 recalc + 1 fetch = ~7 calls total
+// ZERO external API calls during creation — uses purchase price as placeholder.
+// Live prices are fetched AFTER creation by the normal updatePricesFromAPI cycle.
+// Total: 1 portfolio insert + 1 bulk holdings insert + 1 recalc + 1 fetch = ~5 Supabase calls
 async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onProgress) {
     const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות' };
 
-    // --- Step 1: Create the empty portfolio shell (1 call) ---
+    // --- Step 1: Create the empty portfolio shell (1 Supabase call) ---
     if (onProgress) onProgress('יוצר תיק...');
     const portfolio = await supaAddClient(name, cashUsd, cashIls);
     if (!portfolio) return null;
 
     const totalCash = cashUsd + cashIls;
 
-    // --- Step 2: Resolve live prices in PARALLEL for all stock/fund tickers ---
-    if (onProgress) onProgress(`טוען מחירים (${holdings.length} נכסים)...`);
+    // --- Step 2: Build all holding rows in memory (NO API calls) ---
+    if (onProgress) onProgress(`מכין ${holdings.length} נכסים...`);
 
-    // Deduplicate tickers so we don't fetch the same price twice
-    const tickersToFetch = [...new Set(
-        holdings
-            .filter(h => h.type === 'stock' || h.type === 'fund')
-            .map(h => (h.ticker || '').toUpperCase().trim())
-            .filter(Boolean)
-    )];
-
-    // Fetch all prices in parallel (max ~3s total instead of 20×2s sequential)
-    const priceResults = {};
-    await Promise.allSettled(tickersToFetch.map(async (sym) => {
-        // Check local cache first
-        let cached = (typeof priceCache !== 'undefined') ? priceCache[sym] : null;
-        if (cached && cached.price) { priceResults[sym] = cached; return; }
-        // Fetch live
-        if (typeof fetchSingleTickerPrice === 'function') {
-            try {
-                const result = await fetchSingleTickerPrice(sym);
-                if (result) priceResults[sym] = result;
-            } catch (e) { console.warn('Batch price fetch failed for', sym, e.message); }
-        }
-    }));
-
-    // --- Step 3: Build all holding rows in memory ---
-    if (onProgress) onProgress('שומר נכסים...');
-
-    // Aggregate duplicate tickers: if same ticker appears multiple times, merge into one row
+    // Use only the in-memory priceCache (already populated from dashboard).
+    // If a ticker isn't cached, use purchase price as placeholder.
+    // The post-creation price refresh will update them within seconds.
     const aggregated = new Map();
     let totalHoldingsCost = 0;
 
     for (const h of holdings) {
         const type = h.type || 'stock';
         const isStock = type === 'stock' || type === 'fund';
-        const ticker = isStock ? (h.ticker || '').toUpperCase().trim() : ('BOND_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
+        const ticker = isStock
+            ? (h.ticker || '').toUpperCase().trim()
+            : ('BOND_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
         const currency = isStock ? (h.currency || 'USD') : 'ILS';
-        const cached = priceResults[ticker];
+
+        // Check in-memory cache only (instant, no network)
+        const cached = (typeof priceCache !== 'undefined') ? priceCache[ticker] : null;
         const currentPrice = (cached && cached.price) ? cached.price : h.price;
         const previousClose = (cached && cached.previousClose) ? cached.previousClose : h.price;
         const costBasis = h.price * h.quantity;
         totalHoldingsCost += costBasis;
 
         if (isStock && aggregated.has(ticker)) {
-            // Merge: weighted average cost basis
             const existing = aggregated.get(ticker);
             existing.shares += h.quantity;
             existing.cost_basis += costBasis;
@@ -254,19 +233,19 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
 
     const holdingRows = Array.from(aggregated.values());
 
-    // --- Step 4: SINGLE bulk insert for all holdings (1 call instead of N) ---
+    // --- Step 3: SINGLE bulk insert for all holdings (1 Supabase call) ---
+    if (onProgress) onProgress('שומר נכסים...');
     const { error: bulkErr } = await supabaseClient
         .from('holdings')
         .insert(holdingRows);
 
     if (bulkErr) {
         console.error('supaAddClientWithHoldings bulk insert failed:', bulkErr.message);
-        // Cleanup: delete the empty portfolio we just created
         await supabaseClient.from('portfolios').delete().eq('id', portfolio.id);
         return null;
     }
 
-    // --- Step 5: Bulk-log all buy transactions (1 call) ---
+    // --- Step 4: Bulk-log all buy transactions ---
     const txRows = holdingRows.map(row => ({
         portfolio_id: portfolio.id,
         type: 'buy',
@@ -274,22 +253,21 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         name: row.name,
         asset_type: row.type,
         shares: row.shares,
-        price: row.cost_basis / row.shares,  // average purchase price
+        price: row.cost_basis / row.shares,
         total: row.cost_basis
     }));
 
-    // localStorage logs (instant)
+    // localStorage logs (instant, no network)
     txRows.forEach(tx => {
-        const record = {
+        _saveTransactionLocal(portfolio.id, {
             id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             portfolio_id: portfolio.id,
             created_at: new Date().toISOString(),
             ...tx
-        };
-        _saveTransactionLocal(portfolio.id, record);
+        });
     });
 
-    // Supabase transaction log (optional, don't block)
+    // Supabase transaction log (fire-and-forget, don't block creation)
     if (_supaTransactionsAvailable) {
         supabaseClient.from('transactions').insert(txRows).then(({ error }) => {
             if (error && error.message && error.message.includes('transactions')) {
@@ -298,7 +276,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         });
     }
 
-    // --- Step 6: Update initial_investment + single recalc + snapshot (3 calls) ---
+    // --- Step 5: Finalize — update totals + recalc + snapshot (3 Supabase calls) ---
     if (onProgress) onProgress('מחשב תיק...');
     const totalInvestment = totalCash + totalHoldingsCost;
     await supabaseClient

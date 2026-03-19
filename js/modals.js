@@ -794,10 +794,9 @@ async function addClient() {
         let finalClient;
 
         if (supabaseConnected) {
-            // Timeout: 45s for portfolios with holdings (batch), 15s for empty portfolios
-            const timeoutMs = holdingsData.length > 0 ? 45000 : 15000;
+            // 30s timeout — no external API calls during creation, only Supabase DB calls
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error(`timeout: Supabase did not respond within ${timeoutMs / 1000} seconds`)), timeoutMs)
+                setTimeout(() => reject(new Error('timeout')), 30000)
             );
             const supaPromise = holdingsData.length > 0
                 ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress)
@@ -819,7 +818,7 @@ async function addClient() {
         closeMgmtModal();
         refreshDashboard();
 
-        // Force a live price update for the new portfolio's holdings
+        // Fetch live prices in background AFTER portfolio is created and modal is closed
         if (holdingsData.length > 0 && supabaseConnected) {
             priceCacheTimestamp = 0;
             updatePricesFromAPI(() => {
@@ -828,7 +827,11 @@ async function addClient() {
         }
     } catch (err) {
         console.error('addClient error:', err);
-        alert('שגיאה ביצירת התיק: ' + (err.message || err));
+        if (err.message === 'timeout') {
+            alert('השרת עמוס. ייתכן שהתיק נוצר ברקע — רענן את הדף בעוד דקה.');
+        } else {
+            alert('שגיאה ביצירת התיק: ' + (err.message || err));
+        }
     } finally {
         // ALWAYS reset button — whether success, error, or timeout
         if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'הוסף תיק'; }
