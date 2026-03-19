@@ -19,6 +19,11 @@ function saveClientsToCache(data) {
         }
         localStorage.setItem(CLIENTS_CACHE_KEY, JSON.stringify(data));
         localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+        // Tag cache with current user ID so Phase 0 can verify ownership
+        const user = getUser();
+        if (user && user.id) {
+            localStorage.setItem('portfolio_cache_uid', user.id);
+        }
     } catch (e) {
         // localStorage full — silent fail
     }
@@ -59,10 +64,21 @@ if ('serviceWorker' in navigator) {
 
 // ========== PHASE 0: SYNCHRONOUS CACHE RENDER (runs before ANY network call) ==========
 // This block executes at script parse time — no await, no async, pure localStorage read.
+// SECURITY: Only render from cache if the cached user matches the currently logged-in user.
 
 let _cacheRendered = false;
 
 (function renderFromCacheImmediately() {
+    // Verify the logged-in user matches the cached data owner
+    const currentUser = getUser(); // from auth.js — reads localStorage only
+    const cachedUserId = localStorage.getItem('portfolio_cache_uid');
+
+    // If no user logged in, or cache belongs to a different user, skip cache render
+    if (!currentUser || !cachedUserId || currentUser.id !== cachedUserId) {
+        console.log('[Init] Phase 0: Skipped — no user match for cached data');
+        return;
+    }
+
     const cached = loadClientsFromCache();
     if (cached && cached.length > 0) {
         console.log(`[Init] Phase 0: Instant render of ${cached.length} cached portfolios`);

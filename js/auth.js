@@ -229,9 +229,75 @@ async function handleRegister() {
 // ========== AUTH SUCCESS ==========
 
 function onAuthSuccess() {
+    // Security: clear any stale data from a previous user session before loading new data
+    clearAllAppData();
     document.getElementById('authOverlay').classList.add('hidden');
+    // Show loading overlay while fetching new user data
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('hidden');
     updateUserDisplay();
     init();
+}
+
+// ========== CLEAR ALL APP DATA (security: prevent data leakage between sessions) ==========
+
+function clearAllAppData() {
+    // 1. Clear all app-specific localStorage keys
+    const keysToRemove = ['portfolio_clients_cache', 'portfolio_cache_ts', 'portfolio_cache_uid', 'readMacroAlerts'];
+    // Also find and remove all dynamic keys (ticker history, benchmark, transactions)
+    const dynamicPrefixes = ['ticker_hist_', 'benchmark_', 'portfolio_transactions_'];
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (keysToRemove.includes(key) || dynamicPrefixes.some(p => key.startsWith(p))) {
+            localStorage.removeItem(key);
+        }
+    }
+
+    // 2. Reset all global state variables
+    clients = [];
+    priceCache = {};
+    activeFilters = { risk: 'all', asset: 'all', search: '', sector: 'all', returnMin: null, returnMax: null, sizeMin: null, sizeMax: null, sort: 'none' };
+    currentModalClientId = null;
+    alerts = [];
+    readAlertIds = [];
+    _cachedUserId = null;
+    _cacheRendered = false;
+
+    // 3. Destroy all Chart.js instances
+    if (typeof charts !== 'undefined') {
+        Object.keys(charts).forEach(key => {
+            try { if (charts[key]) charts[key].destroy(); } catch (e) { /* silent */ }
+        });
+        charts = {};
+    }
+    if (fullscreenChartInstance) {
+        try { fullscreenChartInstance.destroy(); } catch (e) { /* silent */ }
+        fullscreenChartInstance = null;
+    }
+
+    // 4. Clear in-memory caches (charts.js, synthetic-history.js)
+    if (typeof _benchmarkCache !== 'undefined') {
+        Object.keys(_benchmarkCache).forEach(k => delete _benchmarkCache[k]);
+    }
+    if (typeof _intradayCache !== 'undefined') {
+        Object.keys(_intradayCache).forEach(k => delete _intradayCache[k]);
+    }
+    if (typeof _syntheticCache !== 'undefined') {
+        Object.keys(_syntheticCache).forEach(k => delete _syntheticCache[k]);
+    }
+    if (typeof priceCacheTimestamp !== 'undefined') {
+        priceCacheTimestamp = 0;
+    }
+
+    // 5. Clear DOM sections
+    const summaryBar = document.getElementById('summaryBar');
+    const exposureSection = document.getElementById('exposureSection');
+    const clientsGrid = document.getElementById('clientsGrid');
+    if (summaryBar) summaryBar.innerHTML = '';
+    if (exposureSection) exposureSection.innerHTML = '';
+    if (clientsGrid) clientsGrid.innerHTML = '';
+    const modalOverlay = document.getElementById('modalOverlay');
+    if (modalOverlay) modalOverlay.classList.remove('active');
 }
 
 // ========== LOGOUT ==========
@@ -239,11 +305,7 @@ function onAuthSuccess() {
 async function logout() {
     await supabaseClient.auth.signOut();
     clearToken();
-    clients = [];
-    document.getElementById('summaryBar').innerHTML = '';
-    document.getElementById('exposureSection').innerHTML = '';
-    document.getElementById('clientsGrid').innerHTML = '';
-    document.getElementById('modalOverlay').classList.remove('active');
+    clearAllAppData();
     showLoginForm();
     updateUserDisplay();
 }

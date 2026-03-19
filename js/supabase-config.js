@@ -53,6 +53,10 @@ if (supabaseClient) {
         } else if (event === 'SIGNED_OUT') {
             localStorage.removeItem('authToken');
             localStorage.removeItem('authUser');
+            // Security: clear all cached app data to prevent leakage to next user
+            if (typeof clearAllAppData === 'function') {
+                clearAllAppData();
+            }
             if (typeof updateUserDisplay === 'function') {
                 updateUserDisplay();
             } else {
