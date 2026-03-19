@@ -61,14 +61,16 @@ async function openModal(clientId) {
         const currSymbol = h.currency === 'ILS' ? '₪' : '$';
         const purchasePrice = h.shares > 0 ? (h.costBasis / h.shares) : 0;
         const heName = typeof getHebrewName === 'function' ? getHebrewName(h) : '';
-        const displayName = h.type === 'stock' ? h.ticker : h.name;
-        const subName = heName && heName !== displayName ? `<span style="font-size:10px;color:var(--text-muted)">${heName}</span>` : '';
+        // Hebrew name is PRIMARY when available; ticker/English name shown as secondary
+        const primaryName = heName || (h.type === 'stock' ? h.ticker : h.name);
+        const secondaryName = heName ? (h.type === 'stock' ? h.ticker : '') : '';
+        const subName = secondaryName ? `<span style="font-size:10px;color:var(--text-muted)">${secondaryName}</span>` : '';
         totalHoldingsValue += h.value;
         totalHoldingsPnL += isStale ? 0 : holdingProfit;
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
-                    <span style="font-weight:600;color:var(--text-primary)">${displayName}</span>
+                    <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
                     ${subName}
                     <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                 </div>
@@ -513,6 +515,7 @@ function openMgmtModal(action, data) {
                         <option value="Corp Bond">אג"ח קונצרני</option>
                     </select>
                 </div>
+                <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
                 <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="buy-cost-summary">
@@ -529,11 +532,14 @@ function openMgmtModal(action, data) {
     else if (action === 'editHolding') {
         const { client: c, holdingId, holding: h } = data;
         const isStock = h.type === 'stock';
+        const editCurrSymbol = h.currency === 'ILS' ? '₪' : '$';
+        const editHeName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+        const editDisplayName = editHeName || (isStock ? h.ticker : h.name);
         html = `
-            <div class="mgmt-header"><h3>עריכת נכס - ${isStock ? h.ticker : h.name}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
+            <div class="mgmt-header"><h3>עריכת נכס - ${editDisplayName}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>${isStock ? 'סימול (Ticker)' : 'שם האג"ח'}</label><input type="text" id="mgmt-edit-name" value="${isStock ? h.ticker : h.name}" ${isStock ? 'style="direction:ltr;text-align:left"' : ''} /></div>
-                <div class="mgmt-field"><label>מחיר קנייה ($)</label><input type="number" id="mgmt-edit-price" step="0.01" min="0" value="${h.shares > 0 ? (h.costBasis / h.shares).toFixed(2) : h.price.toFixed(2)}" style="direction:ltr;text-align:left" /></div>
+                <div class="mgmt-field"><label>מחיר קנייה (${editCurrSymbol})</label><input type="number" id="mgmt-edit-price" step="0.01" min="0" value="${h.shares > 0 ? (h.costBasis / h.shares).toFixed(2) : h.price.toFixed(2)}" style="direction:ltr;text-align:left" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" value="${h.shares}" style="direction:ltr;text-align:left" /></div>
             </div>
             <div class="mgmt-footer">
@@ -640,6 +646,14 @@ function onAssetTypeChange() {
     // Update price label currency — bonds default to ₪, stocks/funds reset to $
     const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabel) priceCurrLabel.textContent = type === 'bond' ? '₪' : '$';
+    // For bonds, also set hidden currency field to ILS
+    if (type === 'bond') {
+        const tickerCurrEl = document.getElementById('mgmt-ticker-currency');
+        if (tickerCurrEl) tickerCurrEl.value = 'ILS';
+    }
+    // Hide live price preview when switching types
+    const preview = document.getElementById('mgmt-live-price-preview');
+    if (preview) { preview.textContent = ''; preview.style.display = 'none'; }
     // Clear previous selection when switching type
     clearTickerSelection();
     // Update buy cost display for currency switch
@@ -712,33 +726,98 @@ function onTickerSearch() {
             return;
         }
 
-        dropdown.innerHTML = results.map(r =>
-            `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${r.name.replace(/'/g, "\\'")}', '${r.currency}', '${r.exchange}')">
+        dropdown.innerHTML = results.map(r => {
+            const hebrewName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '';
+            const displayName = hebrewName || r.name;
+            const secondaryInfo = hebrewName ? r.name : '';
+            return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${r.name.replace(/'/g, "\\'")}', '${r.currency}', '${r.exchange}')">
                 <span class="ticker-search-symbol">${r.symbol}</span>
-                <span class="ticker-search-name">${r.name}</span>
-                <span class="ticker-search-meta">${r.exchange} · ${r.currency}</span>
-            </div>`
-        ).join('');
+                <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
+                <span class="ticker-search-meta">${r.exchange} · ${r.currency === 'ILS' || r.currency === 'ILA' ? '₪ ILS' : r.currency}</span>
+            </div>`;
+        }).join('');
     }, 300);
 }
 
+function _isIsraeliAsset(symbol, currency) {
+    if (currency === 'ILS' || currency === 'ILA') return true;
+    if (symbol.endsWith('.TA') || symbol.endsWith('.TASE')) return true;
+    // 7-9 digit purely numeric symbol = Israeli bond ISIN fragment
+    if (/^\d{7,9}$/.test(symbol)) return true;
+    return false;
+}
+
 function selectSearchResult(symbol, name, currency, exchange) {
+    // Detect Israeli asset — force currency to ILS
+    const isIsraeli = _isIsraeliAsset(symbol, currency);
+    const effectiveCurrency = isIsraeli ? 'ILS' : (currency || 'USD');
+
     document.getElementById('mgmt-ticker-symbol').value = symbol;
-    document.getElementById('mgmt-ticker-currency').value = currency;
+    document.getElementById('mgmt-ticker-currency').value = effectiveCurrency;
     document.getElementById('mgmt-ticker-name').value = name;
+
+    // Hebrew name priority — show Hebrew name if available
+    const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[symbol.replace('.TA', '').toUpperCase()] : '';
+    const displayLabel = heName ? `${symbol} — ${heName}` : `${symbol} — ${name}`;
+    const currLabel = effectiveCurrency === 'ILS' ? '₪' : '$';
 
     // Show selected badge, hide search input
     const badge = document.getElementById('mgmt-ticker-selected');
-    badge.innerHTML = `<span>${symbol} — ${name} (${exchange}, ${currency})</span><button class="ticker-clear-btn" onclick="clearTickerSelection()">&times;</button>`;
+    badge.innerHTML = `<span>${displayLabel} (${exchange}, ${currLabel})</span><button class="ticker-clear-btn" onclick="clearTickerSelection()">&times;</button>`;
     badge.style.display = 'flex';
 
     document.getElementById('mgmt-ticker-search').style.display = 'none';
     document.getElementById('mgmt-ticker-dropdown').style.display = 'none';
 
-    // Update price label to match the selected ticker's currency
-    const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
-    if (priceCurrLabel) priceCurrLabel.textContent = currency === 'ILS' ? '₪' : '$';
+    // Update price label to match the asset's currency
+    const priceCurrLabelEl = document.getElementById('mgmt-price-currency-label');
+    if (priceCurrLabelEl) priceCurrLabelEl.textContent = currLabel;
+
+    // If 7-9 digit numeric symbol, auto-switch to bond type
+    if (/^\d{7,9}$/.test(symbol)) {
+        const typeSelect = document.getElementById('mgmt-asset-type');
+        if (typeSelect) {
+            typeSelect.value = 'bond';
+            onAssetTypeChange();
+            // Re-populate bond name from the search result
+            const bondNameInput = document.getElementById('mgmt-bondname');
+            if (bondNameInput) bondNameInput.value = name || symbol;
+        }
+    }
+
     updateBuyCost();
+
+    // Live price preview — fetch current market price in background
+    _fetchLivePricePreview(symbol);
+}
+
+async function _fetchLivePricePreview(symbol) {
+    const previewEl = document.getElementById('mgmt-live-price-preview');
+    if (!previewEl) return;
+
+    previewEl.textContent = 'טוען מחיר שוק...';
+    previewEl.style.display = '';
+
+    try {
+        const result = (typeof fetchSingleTickerPrice === 'function')
+            ? await fetchSingleTickerPrice(symbol)
+            : null;
+
+        // Element may have been removed if modal closed
+        const el = document.getElementById('mgmt-live-price-preview');
+        if (!el) return;
+
+        if (result && result.price > 0) {
+            const curr = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
+            const sym = curr === 'ILS' ? '₪' : '$';
+            el.innerHTML = `<span style="color:var(--accent-blue);font-weight:600">מחיר שוק נוכחי: ${result.price.toFixed(2)} ${sym}</span>`;
+        } else {
+            el.textContent = 'לא ניתן לטעון מחיר שוק';
+        }
+    } catch (e) {
+        const el = document.getElementById('mgmt-live-price-preview');
+        if (el) el.textContent = '';
+    }
 }
 
 function clearTickerSelection() {
@@ -755,6 +834,14 @@ function clearTickerSelection() {
     searchInput.focus();
 
     document.getElementById('mgmt-ticker-dropdown').style.display = 'none';
+
+    // Reset price currency label to default ($)
+    const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
+    if (priceCurrLabel) priceCurrLabel.textContent = '$';
+
+    // Hide live price preview
+    const preview = document.getElementById('mgmt-live-price-preview');
+    if (preview) { preview.textContent = ''; preview.style.display = 'none'; }
 }
 
 // Close dropdown when clicking outside
@@ -1114,13 +1201,15 @@ function onRowTickerSearch(rowId) {
             return;
         }
 
-        dropdown.innerHTML = results.map(r =>
-            `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
+        dropdown.innerHTML = results.map(r => {
+            const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '';
+            const rowDisplayName = heName || r.name;
+            return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
                 <span class="ticker-search-symbol">${r.symbol}</span>
-                <span class="ticker-search-name">${r.name}</span>
-                <span class="ticker-search-meta">${r.exchange} · ${r.currency}</span>
-            </div>`
-        ).join('');
+                <span class="ticker-search-name">${rowDisplayName}${heName ? ` <span style="color:var(--text-muted);font-size:11px">(${r.name})</span>` : ''}</span>
+                <span class="ticker-search-meta">${r.exchange} · ${r.currency === 'ILS' || r.currency === 'ILA' ? '₪ ILS' : r.currency}</span>
+            </div>`;
+        }).join('');
     }, 300);
 }
 
