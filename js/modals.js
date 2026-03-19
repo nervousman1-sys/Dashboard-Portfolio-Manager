@@ -45,7 +45,7 @@ async function openModal(clientId) {
     const totalProfitClass = totalProfit >= 0 ? 'positive' : 'negative';
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
 
-    // Holdings table — columns: נכס, מחיר נוכחי, כמות, שווי כולל, שינוי יומי %, רווח $, תשואה %, פעולות
+    // Holdings table — columns: נכס, מחיר קנייה, מחיר נוכחי, כמות, שווי כולל, שינוי יומי %, רווח $, תשואה %, פעולות
     let holdingsRows = '';
     let totalHoldingsValue = 0;
     let totalHoldingsPnL = 0;
@@ -59,15 +59,21 @@ async function openModal(clientId) {
         const holdingProfitClass = holdingProfit >= 0 ? 'positive' : 'negative';
         const holdingProfitSign = holdingProfit >= 0 ? '+' : '';
         const currSymbol = h.currency === 'ILS' ? '₪' : '$';
+        const purchasePrice = h.shares > 0 ? (h.costBasis / h.shares) : 0;
+        const heName = typeof getHebrewName === 'function' ? getHebrewName(h) : '';
+        const displayName = h.type === 'stock' ? h.ticker : h.name;
+        const subName = heName && heName !== displayName ? `<span style="font-size:10px;color:var(--text-muted)">${heName}</span>` : '';
         totalHoldingsValue += h.value;
         totalHoldingsPnL += isStale ? 0 : holdingProfit;
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
-                    <span style="font-weight:600;color:var(--text-primary)">${h.type === 'stock' ? h.ticker : h.name}</span>
+                    <span style="font-weight:600;color:var(--text-primary)">${displayName}</span>
+                    ${subName}
                     <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                 </div>
             </td>
+            <td>${purchasePrice.toFixed(2)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
             <td>${h.shares}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
@@ -89,6 +95,7 @@ async function openModal(clientId) {
     const totalReturnPctHoldings = totalCostBasis > 0 ? (totalHoldingsPnL / totalCostBasis * 100) : 0;
     const holdingsFooter = `<tr class="holdings-footer-row">
         <td style="font-weight:700;color:var(--text-primary)">סה"כ</td>
+        <td></td>
         <td></td>
         <td></td>
         <td style="font-weight:700;color:var(--text-primary)">${formatCurrency(totalHoldingsValue)}</td>
@@ -212,7 +219,7 @@ async function openModal(clientId) {
             <div class="modal-tab-content" id="tab-holdings">
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
                 <table class="holdings-table">
-                    <thead><tr><th>נכס</th><th>מחיר נוכחי</th><th>כמות</th><th>שווי כולל</th><th>שינוי יומי</th><th>רווח/הפסד</th><th>תשואה</th><th>פעולות</th></tr></thead>
+                    <thead><tr><th>נכס</th><th>מחיר קנייה</th><th>מחיר נוכחי</th><th>כמות</th><th>שווי כולל</th><th>שינוי יומי</th><th>רווח/הפסד</th><th>תשואה</th><th>פעולות</th></tr></thead>
                     <tbody>${holdingsRows}${holdingsFooter}</tbody>
                 </table>
             </div>
@@ -506,7 +513,7 @@ function openMgmtModal(action, data) {
                         <option value="Corp Bond">אג"ח קונצרני</option>
                     </select>
                 </div>
-                <div class="mgmt-field"><label>מחיר קנייה ($)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
@@ -630,6 +637,9 @@ function onAssetTypeChange() {
     if (searchLabel) {
         searchLabel.textContent = type === 'fund' ? 'חיפוש קרן נאמנות' : 'חיפוש מניה';
     }
+    // Update price label currency — bonds default to ₪, stocks/funds reset to $
+    const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
+    if (priceCurrLabel) priceCurrLabel.textContent = type === 'bond' ? '₪' : '$';
     // Clear previous selection when switching type
     clearTickerSelection();
     // Update buy cost display for currency switch
@@ -724,6 +734,11 @@ function selectSearchResult(symbol, name, currency, exchange) {
 
     document.getElementById('mgmt-ticker-search').style.display = 'none';
     document.getElementById('mgmt-ticker-dropdown').style.display = 'none';
+
+    // Update price label to match the selected ticker's currency
+    const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
+    if (priceCurrLabel) priceCurrLabel.textContent = currency === 'ILS' ? '₪' : '$';
+    updateBuyCost();
 }
 
 function clearTickerSelection() {

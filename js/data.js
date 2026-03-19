@@ -1,5 +1,24 @@
 // ========== DATA - Constants & Static Data ==========
 
+// ========== HEBREW NAME MAPPING FOR TASE ASSETS ==========
+const HEBREW_NAMES = {
+    'TEVA': 'טבע', 'NICE': 'נייס', 'LUMI': 'לומי', 'BEZQ': 'בזק',
+    'ICL': 'כיל', 'HARL': 'הראל', 'DSCT': 'דיסקונט', 'POLI': 'פולי',
+    'MZTF': 'מזרחי טפחות', 'TASE': 'הבורסה', 'ELCO': 'אלקו', 'ORA': 'אורה',
+    'AMOT': 'אמות', 'AZRG': 'עזריאלי', 'ILDC': 'כלל', 'FIBI': 'הבינלאומי',
+    'LUMI': 'לאומי', 'PHOE': 'הפניקס', 'MGDL': 'מגדל', 'BIMB': 'בנק ירושלים',
+    'CEL': 'סלקום', 'PTNR': 'פרטנר', 'ESLT': 'אלביט', 'BIRG': 'ברג',
+    'ALHE': 'אלון רבוע כחול', 'SHPG': 'שופרסל', 'AFRE': 'אפריקה ישראל',
+    'ARPT': 'ארפט', 'SPNS': 'ספאנס', 'GZIT': 'גזית גלוב',
+};
+
+function getHebrewName(holding) {
+    if (!holding) return '';
+    if (holding.type === 'bond') return holding.name;
+    const ticker = (holding.ticker || '').replace('.TA', '').toUpperCase();
+    return HEBREW_NAMES[ticker] || '';
+}
+
 const ISRAELI_NAMES = [
     'יונתן כהן', 'נועה לוי', 'אורי גולדברג', 'מיכל אברהם', 'דניאל שרון',
     'רונית פרידמן', 'עידו מזרחי', 'שירה ביטון', 'אלון דוד', 'תמר רוזנברג',
