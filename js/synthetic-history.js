@@ -375,7 +375,9 @@ function _buildCostBasisFallback(client, range) {
     const startDate = new Date(today.getTime() - days * 86400000);
 
     // Linear interpolation between costBasis and current value
-    const n = Math.min(days, 365); // cap at 365 points
+    // For 5Y/MAX: sample monthly (every ~21 trading days) to keep points manageable.
+    // For shorter ranges: daily points (capped at 500).
+    const n = days > 500 ? Math.min(Math.ceil(days / 21), 260) : Math.min(days, 500);
     const history = new Array(n);
     for (let i = 0; i < n; i++) {
         const t = i / (n - 1); // 0 → 1

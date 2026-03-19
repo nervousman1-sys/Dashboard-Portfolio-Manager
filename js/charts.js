@@ -175,7 +175,8 @@ function _rangeToOutputSize(range) {
     if (days <= 90) return 90;
     if (days <= 180) return 180;
     if (days <= 365) return 365;
-    return 1825;
+    if (days <= 1825) return 1825;    // 5Y — ~1,260 trading days
+    return 3650;                       // MAX — up to 10Y of daily data
 }
 
 // One-time diagnostic: log API key status on first benchmark fetch
@@ -470,14 +471,31 @@ async function _fetchFMPBenchmark(symbol, range) {
     return null;
 }
 
-// ========== STATIC S&P 500 FALLBACK ==========
-// Approximate monthly S&P 500 close prices (SPY ETF) for the last ~2 years.
+// ========== STATIC BENCHMARK FALLBACK DATA (5-YEAR) ==========
+// Approximate monthly close prices for 6 benchmarks, covering Mar 2021 → Mar 2026.
 // Used only when ALL live APIs fail — ensures the user sees a benchmark line.
-// Source: approximate SPY monthly closes, rounded.
+// Each array has ~60 monthly data points to support the full 5Y timeframe.
 
-// Updated March 2026 — aligned with S&P 500 at ~6,625 (SPY ≈ S&P/10).
-// Source: approximate SPY monthly closes calibrated to Google Finance 1Y return (+17.99%).
+// SPY (S&P 500 ETF): Mar 2021 ~$396 → Mar 2026 ~$662 (~+67% over 5Y)
 const _STATIC_SPY_MONTHLY = [
+    { date: '2021-03-31', close: 396 }, { date: '2021-04-30', close: 411 },
+    { date: '2021-05-28', close: 417 }, { date: '2021-06-30', close: 428 },
+    { date: '2021-07-30', close: 438 }, { date: '2021-08-31', close: 451 },
+    { date: '2021-09-30', close: 429 }, { date: '2021-10-29', close: 460 },
+    { date: '2021-11-30', close: 457 }, { date: '2021-12-31', close: 474 },
+    { date: '2022-01-31', close: 449 }, { date: '2022-02-28', close: 437 },
+    { date: '2022-03-31', close: 452 }, { date: '2022-04-29', close: 412 },
+    { date: '2022-05-31', close: 412 }, { date: '2022-06-30', close: 377 },
+    { date: '2022-07-29', close: 412 }, { date: '2022-08-31', close: 389 },
+    { date: '2022-09-30', close: 357 }, { date: '2022-10-31', close: 386 },
+    { date: '2022-11-30', close: 407 }, { date: '2022-12-30', close: 382 },
+    { date: '2023-01-31', close: 408 }, { date: '2023-02-28', close: 396 },
+    { date: '2023-03-31', close: 409 }, { date: '2023-04-28', close: 412 },
+    { date: '2023-05-31', close: 419 }, { date: '2023-06-30', close: 443 },
+    { date: '2023-07-31', close: 457 }, { date: '2023-08-31', close: 450 },
+    { date: '2023-09-29', close: 427 }, { date: '2023-10-31', close: 418 },
+    { date: '2023-11-30', close: 456 }, { date: '2023-12-29', close: 475 },
+    { date: '2024-01-31', close: 482 }, { date: '2024-02-29', close: 507 },
     { date: '2024-03-28', close: 524 }, { date: '2024-04-30', close: 501 },
     { date: '2024-05-31', close: 528 }, { date: '2024-06-28', close: 545 },
     { date: '2024-07-31', close: 552 }, { date: '2024-08-30', close: 563 },
@@ -493,9 +511,26 @@ const _STATIC_SPY_MONTHLY = [
     { date: '2026-03-18', close: 662 }
 ];
 
-// Approximate monthly QQQ (Nasdaq 100 ETF) close prices.
-// QQQ ≈ Nasdaq-100 / 43. Calibrated to ~+22% YoY (Mar 2025→Mar 2026).
+// QQQ (Nasdaq 100 ETF): Mar 2021 ~$316 → Mar 2026 ~$578 (~+83% over 5Y)
 const _STATIC_QQQ_MONTHLY = [
+    { date: '2021-03-31', close: 316 }, { date: '2021-04-30', close: 335 },
+    { date: '2021-05-28', close: 332 }, { date: '2021-06-30', close: 354 },
+    { date: '2021-07-30', close: 362 }, { date: '2021-08-31', close: 379 },
+    { date: '2021-09-30', close: 359 }, { date: '2021-10-29', close: 392 },
+    { date: '2021-11-30', close: 394 }, { date: '2021-12-31', close: 397 },
+    { date: '2022-01-31', close: 355 }, { date: '2022-02-28', close: 342 },
+    { date: '2022-03-31', close: 362 }, { date: '2022-04-29', close: 313 },
+    { date: '2022-05-31', close: 305 }, { date: '2022-06-30', close: 281 },
+    { date: '2022-07-29', close: 314 }, { date: '2022-08-31', close: 296 },
+    { date: '2022-09-30', close: 266 }, { date: '2022-10-31', close: 275 },
+    { date: '2022-11-30', close: 291 }, { date: '2022-12-30', close: 265 },
+    { date: '2023-01-31', close: 294 }, { date: '2023-02-28', close: 290 },
+    { date: '2023-03-31', close: 313 }, { date: '2023-04-28', close: 318 },
+    { date: '2023-05-31', close: 341 }, { date: '2023-06-30', close: 368 },
+    { date: '2023-07-31', close: 383 }, { date: '2023-08-31', close: 380 },
+    { date: '2023-09-29', close: 358 }, { date: '2023-10-31', close: 354 },
+    { date: '2023-11-30', close: 393 }, { date: '2023-12-29', close: 413 },
+    { date: '2024-01-31', close: 421 }, { date: '2024-02-29', close: 437 },
     { date: '2024-03-28', close: 444 }, { date: '2024-04-30', close: 424 },
     { date: '2024-05-31', close: 455 }, { date: '2024-06-28', close: 480 },
     { date: '2024-07-31', close: 472 }, { date: '2024-08-30', close: 483 },
@@ -511,9 +546,26 @@ const _STATIC_QQQ_MONTHLY = [
     { date: '2026-03-18', close: 578 }
 ];
 
-// Approximate monthly DIA (Dow Jones ETF) close prices.
-// DIA ≈ DJIA / 100. Calibrated to ~+14% YoY (Mar 2025→Mar 2026).
+// DIA (Dow Jones ETF): Mar 2021 ~$330 → Mar 2026 ~$480 (~+45% over 5Y)
 const _STATIC_DIA_MONTHLY = [
+    { date: '2021-03-31', close: 330 }, { date: '2021-04-30', close: 340 },
+    { date: '2021-05-28', close: 344 }, { date: '2021-06-30', close: 343 },
+    { date: '2021-07-30', close: 348 }, { date: '2021-08-31', close: 353 },
+    { date: '2021-09-30', close: 338 }, { date: '2021-10-29', close: 358 },
+    { date: '2021-11-30', close: 347 }, { date: '2021-12-31', close: 364 },
+    { date: '2022-01-31', close: 349 }, { date: '2022-02-28', close: 338 },
+    { date: '2022-03-31', close: 348 }, { date: '2022-04-29', close: 331 },
+    { date: '2022-05-31', close: 330 }, { date: '2022-06-30', close: 308 },
+    { date: '2022-07-29', close: 325 }, { date: '2022-08-31', close: 316 },
+    { date: '2022-09-30', close: 289 }, { date: '2022-10-31', close: 326 },
+    { date: '2022-11-30', close: 343 }, { date: '2022-12-30', close: 332 },
+    { date: '2023-01-31', close: 340 }, { date: '2023-02-28', close: 329 },
+    { date: '2023-03-31', close: 332 }, { date: '2023-04-28', close: 339 },
+    { date: '2023-05-31', close: 329 }, { date: '2023-06-30', close: 342 },
+    { date: '2023-07-31', close: 357 }, { date: '2023-08-31', close: 349 },
+    { date: '2023-09-29', close: 337 }, { date: '2023-10-31', close: 330 },
+    { date: '2023-11-30', close: 355 }, { date: '2023-12-29', close: 376 },
+    { date: '2024-01-31', close: 383 }, { date: '2024-02-29', close: 391 },
     { date: '2024-03-28', close: 399 }, { date: '2024-04-30', close: 383 },
     { date: '2024-05-31', close: 389 }, { date: '2024-06-28', close: 393 },
     { date: '2024-07-31', close: 408 }, { date: '2024-08-30', close: 415 },
@@ -529,9 +581,26 @@ const _STATIC_DIA_MONTHLY = [
     { date: '2026-03-18', close: 480 }
 ];
 
-// Approximate monthly IWM (Russell 2000 ETF) close prices.
-// IWM ≈ Russell 2000 / 10. Calibrated to ~+20% over 2Y (Mar 2024→Mar 2026).
+// IWM (Russell 2000 ETF): Mar 2021 ~$221 → Mar 2026 ~$251 (~+14% over 5Y)
 const _STATIC_IWM_MONTHLY = [
+    { date: '2021-03-31', close: 221 }, { date: '2021-04-30', close: 226 },
+    { date: '2021-05-28', close: 224 }, { date: '2021-06-30', close: 229 },
+    { date: '2021-07-30', close: 221 }, { date: '2021-08-31', close: 224 },
+    { date: '2021-09-30', close: 219 }, { date: '2021-10-29', close: 228 },
+    { date: '2021-11-30', close: 221 }, { date: '2021-12-31', close: 224 },
+    { date: '2022-01-31', close: 199 }, { date: '2022-02-28', close: 202 },
+    { date: '2022-03-31', close: 208 }, { date: '2022-04-29', close: 189 },
+    { date: '2022-05-31', close: 185 }, { date: '2022-06-30', close: 170 },
+    { date: '2022-07-29', close: 185 }, { date: '2022-08-31', close: 181 },
+    { date: '2022-09-30', close: 163 }, { date: '2022-10-31', close: 181 },
+    { date: '2022-11-30', close: 186 }, { date: '2022-12-30', close: 176 },
+    { date: '2023-01-31', close: 193 }, { date: '2023-02-28', close: 189 },
+    { date: '2023-03-31', close: 177 }, { date: '2023-04-28', close: 175 },
+    { date: '2023-05-31', close: 176 }, { date: '2023-06-30', close: 191 },
+    { date: '2023-07-31', close: 200 }, { date: '2023-08-31', close: 194 },
+    { date: '2023-09-29', close: 177 }, { date: '2023-10-31', close: 170 },
+    { date: '2023-11-30', close: 185 }, { date: '2023-12-29', close: 203 },
+    { date: '2024-01-31', close: 196 }, { date: '2024-02-29', close: 203 },
     { date: '2024-03-28', close: 209 }, { date: '2024-04-30', close: 198 },
     { date: '2024-05-31', close: 207 }, { date: '2024-06-28', close: 203 },
     { date: '2024-07-31', close: 222 }, { date: '2024-08-30', close: 218 },
@@ -547,9 +616,26 @@ const _STATIC_IWM_MONTHLY = [
     { date: '2026-03-18', close: 251 }
 ];
 
-// Approximate monthly TA-125 (Tel Aviv 125 Index) close prices.
-// TA-125 was ~1,950 in Mar 2024 and ~2,350 in Mar 2026 (~+20% over 2Y).
+// TA-125 (Tel Aviv 125 Index): Mar 2021 ~$1,610 → Mar 2026 ~$2,350 (~+46% over 5Y)
 const _STATIC_TA125_MONTHLY = [
+    { date: '2021-03-31', close: 1610 }, { date: '2021-04-30', close: 1640 },
+    { date: '2021-05-31', close: 1625 }, { date: '2021-06-30', close: 1680 },
+    { date: '2021-07-30', close: 1700 }, { date: '2021-08-31', close: 1730 },
+    { date: '2021-09-30', close: 1710 }, { date: '2021-10-29', close: 1760 },
+    { date: '2021-11-30', close: 1780 }, { date: '2021-12-31', close: 1820 },
+    { date: '2022-01-31', close: 1790 }, { date: '2022-02-28', close: 1760 },
+    { date: '2022-03-31', close: 1830 }, { date: '2022-04-29', close: 1780 },
+    { date: '2022-05-31', close: 1740 }, { date: '2022-06-30', close: 1680 },
+    { date: '2022-07-29', close: 1720 }, { date: '2022-08-31', close: 1700 },
+    { date: '2022-09-30', close: 1650 }, { date: '2022-10-31', close: 1680 },
+    { date: '2022-11-30', close: 1710 }, { date: '2022-12-30', close: 1690 },
+    { date: '2023-01-31', close: 1730 }, { date: '2023-02-28', close: 1710 },
+    { date: '2023-03-31', close: 1680 }, { date: '2023-04-28', close: 1700 },
+    { date: '2023-05-31', close: 1720 }, { date: '2023-06-30', close: 1770 },
+    { date: '2023-07-31', close: 1810 }, { date: '2023-08-31', close: 1790 },
+    { date: '2023-09-29', close: 1750 }, { date: '2023-10-31', close: 1650 },
+    { date: '2023-11-30', close: 1730 }, { date: '2023-12-29', close: 1800 },
+    { date: '2024-01-31', close: 1840 }, { date: '2024-02-29', close: 1890 },
     { date: '2024-03-28', close: 1950 }, { date: '2024-04-30', close: 1900 },
     { date: '2024-05-31', close: 1930 }, { date: '2024-06-28', close: 1960 },
     { date: '2024-07-31', close: 1980 }, { date: '2024-08-30', close: 1945 },
@@ -565,9 +651,26 @@ const _STATIC_TA125_MONTHLY = [
     { date: '2026-03-18', close: 2350 }
 ];
 
-// Approximate monthly TA-35 (Tel Aviv 35 Index) close prices.
-// TA-35 was ~1,780 in Mar 2024 and ~2,100 in Mar 2026 (~+18% over 2Y).
+// TA-35 (Tel Aviv 35 Index): Mar 2021 ~$1,530 → Mar 2026 ~$2,100 (~+37% over 5Y)
 const _STATIC_TA35_MONTHLY = [
+    { date: '2021-03-31', close: 1530 }, { date: '2021-04-30', close: 1560 },
+    { date: '2021-05-31', close: 1545 }, { date: '2021-06-30', close: 1590 },
+    { date: '2021-07-30', close: 1610 }, { date: '2021-08-31', close: 1640 },
+    { date: '2021-09-30', close: 1620 }, { date: '2021-10-29', close: 1660 },
+    { date: '2021-11-30', close: 1680 }, { date: '2021-12-31', close: 1710 },
+    { date: '2022-01-31', close: 1690 }, { date: '2022-02-28', close: 1660 },
+    { date: '2022-03-31', close: 1720 }, { date: '2022-04-29', close: 1680 },
+    { date: '2022-05-31', close: 1650 }, { date: '2022-06-30', close: 1590 },
+    { date: '2022-07-29', close: 1620 }, { date: '2022-08-31', close: 1610 },
+    { date: '2022-09-30', close: 1560 }, { date: '2022-10-31', close: 1580 },
+    { date: '2022-11-30', close: 1610 }, { date: '2022-12-30', close: 1600 },
+    { date: '2023-01-31', close: 1630 }, { date: '2023-02-28', close: 1620 },
+    { date: '2023-03-31', close: 1590 }, { date: '2023-04-28', close: 1610 },
+    { date: '2023-05-31', close: 1620 }, { date: '2023-06-30', close: 1660 },
+    { date: '2023-07-31', close: 1700 }, { date: '2023-08-31', close: 1680 },
+    { date: '2023-09-29', close: 1650 }, { date: '2023-10-31', close: 1560 },
+    { date: '2023-11-30', close: 1630 }, { date: '2023-12-29', close: 1690 },
+    { date: '2024-01-31', close: 1720 }, { date: '2024-02-29', close: 1750 },
     { date: '2024-03-28', close: 1780 }, { date: '2024-04-30', close: 1740 },
     { date: '2024-05-31', close: 1760 }, { date: '2024-06-28', close: 1790 },
     { date: '2024-07-31', close: 1810 }, { date: '2024-08-30', close: 1785 },
@@ -1164,7 +1267,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //     For 1D/5D: intraday APIs are the primary source. If they fail, we accept
     //     even 2 performance_history points (better than "No Data"). Synthetic daily
     //     history is also attempted as a last resort for 5D.
-    const _minPointsForRange = { '1d': 2, '5d': 3, '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 200, 'max': 60, 'all': 10 };
+    const _minPointsForRange = { '1d': 2, '5d': 3, '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 400, 'max': 200, 'all': 10 };
     const minPoints = _minPointsForRange[range] || 10;
     const histTooSparse = !hist || hist.length < minPoints;
 
