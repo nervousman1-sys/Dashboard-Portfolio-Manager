@@ -1819,8 +1819,24 @@ body {
 
 /* Disabled buy button */
 .mgmt-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Loading spinner inside buttons */
+.btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: btn-spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
 }
 
 /* Ticker search dropdown */

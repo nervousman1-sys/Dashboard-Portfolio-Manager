@@ -779,19 +779,28 @@ async function addClient() {
     const portfolioData = { name, cashUsd, cashIls, holdingsCount: holdingsData.length };
     console.log('addClient: submitting data:', portfolioData);
 
-    // --- Step 2: Show loading state ---
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
+    // --- Step 2: Show loading state with progress ---
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="btn-spinner"></span> יוצר תיק...';
+    }
+
+    // Progress callback: updates button text as batch progresses
+    const onProgress = (msg) => {
+        if (submitBtn) submitBtn.innerHTML = '<span class="btn-spinner"></span> ' + msg;
+    };
 
     try {
         let finalClient;
 
         if (supabaseConnected) {
-            // Timeout protection: if Supabase hangs (auth stale, network), bail after 15s
+            // Timeout: 45s for portfolios with holdings (batch), 15s for empty portfolios
+            const timeoutMs = holdingsData.length > 0 ? 45000 : 15000;
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('timeout: Supabase did not respond within 15 seconds')), 15000)
+                setTimeout(() => reject(new Error(`timeout: Supabase did not respond within ${timeoutMs / 1000} seconds`)), timeoutMs)
             );
             const supaPromise = holdingsData.length > 0
-                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData)
+                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress)
                 : supaAddClient(name, cashUsd, cashIls);
 
             finalClient = await Promise.race([supaPromise, timeoutPromise]);
@@ -822,7 +831,7 @@ async function addClient() {
         alert('שגיאה ביצירת התיק: ' + (err.message || err));
     } finally {
         // ALWAYS reset button — whether success, error, or timeout
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'הוסף תיק'; }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'הוסף תיק'; }
     }
 }
 
