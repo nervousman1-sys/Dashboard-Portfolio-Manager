@@ -1459,30 +1459,29 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     }
 
     // ── 9. Timeline configuration ──
-    // Derive ALL bounds from actual data — prevents empty gaps when data
-    // doesn't span the full theoretical range (e.g. MAX shows 5Y of data, not 10Y).
+    // ALL bounds are derived from actual data points — NEVER from theoretical range duration.
+    // This prevents the "empty gap to 2016" bug: if MAX data only starts in 2021,
+    // the X-axis starts in 2021, not 10 years before today.
 
-    // Find the true min/max X across ALL datasets (portfolio + benchmarks)
-    let dataMinTime = portfolioPoints[0].x;
-    let dataMaxTime = portfolioPoints[portfolioPoints.length - 1].x;
-    for (const ds of datasets) {
-        if (!ds.data || ds.data.length === 0) continue;
-        const dsMin = ds.data[0].x;
-        const dsMax = ds.data[ds.data.length - 1].x;
-        if (dsMin < dataMinTime) dataMinTime = dsMin;
-        if (dsMax > dataMaxTime) dataMaxTime = dsMax;
-    }
+    // Scan ALL datasets (portfolio + every benchmark) for the true global min/max X.
+    // flatMap approach guarantees no dataset is missed, including late-added benchmarks.
+    const allXValues = datasets.flatMap(ds => (ds.data || []).map(p => p.x));
+    const dataMinTime = Math.min(...allXValues);
+    const dataMaxTime = Math.max(...allXValues);
 
-    // Add 3% padding on each side so the line doesn't touch the axis edges
-    const xPadMs = Math.max((dataMaxTime - dataMinTime) * 0.03, 3600000);
+    // Small padding (2%) so the line doesn't touch axis edges.
+    // Capped at 1 day minimum to avoid zero-padding on very short ranges.
+    const dataSpan = dataMaxTime - dataMinTime;
+    const xPadMs = Math.max(dataSpan * 0.02, 86400000);
     const viewMin = dataMinTime - xPadMs;
     const viewMax = dataMaxTime + xPadMs;
 
-    // Zoom/pan limits: allow scrolling 1 year before data start and 6 months after end.
-    // This prevents the old 10-year-window bug where MAX showed an empty 2016→2021 gap.
-    const ONE_YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
-    const zoomMin = dataMinTime - ONE_YEAR_MS;
-    const zoomMax = dataMaxTime + ONE_YEAR_MS / 2;
+    // Zoom/pan limits — tightly bound to the data with a small margin.
+    // The margin allows panning slightly beyond the data edges for UX comfort,
+    // but NOT years into the past where there's no data.
+    const THIRTY_DAYS_MS = 30 * 86400000;
+    const zoomMin = viewMin - THIRTY_DAYS_MS;
+    const zoomMax = viewMax + THIRTY_DAYS_MS;
 
     // Dynamic time unit: granularity matches the visible data span
     const dataSpanDays = Math.max(1, (dataMaxTime - dataMinTime) / 86400000);
