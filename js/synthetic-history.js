@@ -369,8 +369,11 @@ function _buildCostBasisFallback(client, range) {
 
     const startValue = totalCostBasis + (client.cashBalance || 0);
 
-    // Generate daily points from range start → today
-    const days = _rangeToOutputSize(range);
+    // Generate daily points from range start → today.
+    // Cap at 5Y (1825 days) — our static benchmark data only goes back 5Y,
+    // so generating portfolio history beyond that creates an empty gap on the chart.
+    const rawDays = _rangeToOutputSize(range);
+    const days = Math.min(rawDays, 1825);
     const today = new Date();
     const startDate = new Date(today.getTime() - days * 86400000);
 

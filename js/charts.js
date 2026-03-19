@@ -1515,6 +1515,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             scales: {
                 x: {
                     type: 'time',         // chartjs-adapter-date-fns required (already in index.html)
+                    bounds: 'data',        // CRITICAL: prevents Chart.js from extending axis beyond data
                     min: viewMin,          // Fit to data for initial view
                     max: viewMax,
                     time: {
@@ -1530,9 +1531,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd MMM yyyy'
                     },
                     ticks: {
-                        source: isIntraday ? 'data' : 'auto', // 'data' for intraday removes overnight gaps
+                        source: 'data',    // Only generate ticks at actual data points — never auto-extend
                         autoSkip: true,
-                        maxTicksLimit: 10,
+                        maxTicksLimit: 12,
                         maxRotation: 0,
                         color: '#94a3b8',
                         font: { size: 10 }
