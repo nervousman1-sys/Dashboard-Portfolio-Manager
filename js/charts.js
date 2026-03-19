@@ -381,20 +381,22 @@ async function _fetchFMPBenchmark(symbol, range) {
 // Used only when ALL live APIs fail — ensures the user sees a benchmark line.
 // Source: approximate SPY monthly closes, rounded.
 
+// Updated March 2026 — aligned with S&P 500 at ~6,625 (SPY ≈ S&P/10).
+// Source: approximate SPY monthly closes calibrated to Google Finance 1Y return (+17.99%).
 const _STATIC_SPY_MONTHLY = [
     { date: '2024-03-28', close: 524 }, { date: '2024-04-30', close: 501 },
     { date: '2024-05-31', close: 528 }, { date: '2024-06-28', close: 545 },
-    { date: '2024-07-31', close: 547 }, { date: '2024-08-30', close: 564 },
-    { date: '2024-09-30', close: 572 }, { date: '2024-10-31', close: 570 },
-    { date: '2024-11-29', close: 602 }, { date: '2024-12-31', close: 590 },
-    { date: '2025-01-31', close: 603 }, { date: '2025-02-28', close: 596 },
-    { date: '2025-03-31', close: 570 }, { date: '2025-04-30', close: 556 },
-    { date: '2025-05-30', close: 589 }, { date: '2025-06-30', close: 603 },
-    { date: '2025-07-31', close: 610 }, { date: '2025-08-29', close: 598 },
-    { date: '2025-09-30', close: 582 }, { date: '2025-10-31', close: 595 },
-    { date: '2025-11-28', close: 608 }, { date: '2025-12-31', close: 600 },
-    { date: '2026-01-30', close: 612 }, { date: '2026-02-27', close: 605 },
-    { date: '2026-03-17', close: 598 }
+    { date: '2024-07-31', close: 552 }, { date: '2024-08-30', close: 563 },
+    { date: '2024-09-30', close: 571 }, { date: '2024-10-31', close: 574 },
+    { date: '2024-11-29', close: 603 }, { date: '2024-12-31', close: 592 },
+    { date: '2025-01-31', close: 605 }, { date: '2025-02-28', close: 598 },
+    { date: '2025-03-31', close: 562 }, { date: '2025-04-30', close: 548 },
+    { date: '2025-05-30', close: 583 }, { date: '2025-06-30', close: 600 },
+    { date: '2025-07-31', close: 612 }, { date: '2025-08-29', close: 605 },
+    { date: '2025-09-30', close: 588 }, { date: '2025-10-31', close: 601 },
+    { date: '2025-11-28', close: 620 }, { date: '2025-12-31', close: 635 },
+    { date: '2026-01-30', close: 648 }, { date: '2026-02-27', close: 655 },
+    { date: '2026-03-18', close: 662 }
 ];
 
 function _getStaticSPYFallback(range) {
@@ -858,12 +860,42 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
-    let isSynthetic = false;
     const isIntraday = (range === '1d' || range === '5d');
 
-    // 2a. Intraday: live hourly data from Twelve Data
+    // 2a. Intraday: live 5min/1h data from FMP/Twelve Data
     if (isIntraday) {
         hist = await _fetchIntradayPortfolioData(client, range);
+    }
+
+    // 2a-fallback. If intraday APIs failed (rate-limited, no key, market closed),
+    // build a minimal 2-point chart from the most recent daily snapshot → current value.
+    // This ensures 1D/5D never shows "No Data" if we have any historical record.
+    if (isIntraday && !hist && client.portfolioValue > 0) {
+        const perfHist = client.performanceHistory || [];
+        if (perfHist.length >= 1) {
+            // Find the most recent snapshot — this becomes our "open" value
+            const lastSnap = perfHist[perfHist.length - 1];
+            const prevValue = lastSnap.value || client.initialInvestment || client.portfolioValue;
+            const now = new Date();
+            // For 1D: market open → now.  For 5D: 5 days ago → now.
+            const startTime = new Date(now);
+            if (range === '1d') {
+                startTime.setHours(9, 30, 0, 0); // Market open
+                if (startTime > now) startTime.setDate(startTime.getDate() - 1);
+            } else {
+                startTime.setDate(startTime.getDate() - 5);
+                startTime.setHours(9, 30, 0, 0);
+            }
+
+            const dayChange = client.portfolioValue - prevValue;
+            const dayChangePct = prevValue > 0 ? (dayChange / prevValue * 100) : 0;
+
+            hist = [
+                { date: startTime.toLocaleDateString('he-IL'), _dateObj: startTime, value: prevValue, returnPct: 0 },
+                { date: now.toLocaleDateString('he-IL'), _dateObj: now, value: client.portfolioValue, returnPct: dayChangePct }
+            ];
+            console.log(`[PerfChart] 1D/5D fallback: ${prevValue.toFixed(0)} → ${client.portfolioValue.toFixed(0)} (${dayChangePct >= 0 ? '+' : ''}${dayChangePct.toFixed(2)}%)`);
+        }
     }
 
     // 2b. Longer ranges: Supabase performance_history (recorded daily snapshots)
@@ -908,7 +940,6 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             const synth = await fetchSyntheticHistory(client, range);
             if (synth && synth.length >= 2) {
                 hist = synth;
-                isSynthetic = true;
                 console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points, range=${range})`);
             }
         }
@@ -966,20 +997,43 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 7. Map history → Chart.js points ──
     //
-    // NORMALIZATION (% mode):
-    //   returnPct = ((Vᵢ − V₀) / V₀) × 100
+    // NORMALIZATION (% mode) — TWO STRATEGIES:
     //
-    //   CRITICAL: Always compute from the first VISIBLE data point's VALUE,
-    //   never from the stored returnPct. The stored returnPct in Supabase snapshots
-    //   is relative to initialInvestment — a different baseline than the first
-    //   visible point. Using it would make the portfolio start at +15% while
-    //   the benchmark starts at 0%, destroying the apples-to-apples comparison.
-    const firstValue = hist[0].value || 1; // Denominator for normalization
+    //   A. WITH BENCHMARKS:  normalize from first visible point (all start at 0%).
+    //      Standard apples-to-apples comparison. Both portfolio and benchmark rebased
+    //      to the same 0% origin on the first visible date.
+    //
+    //   B. WITHOUT BENCHMARKS:  normalize from costBasis (holdings only, excludes cash).
+    //      This matches the dashboard "תשואה משוכללת" metric exactly:
+    //        returnPct = (holdingsValue − costBasis) / costBasis × 100
+    //      The endpoint will equal the card's return percentage, preventing the
+    //      confusing mismatch where the chart shows 27% but the card shows 33%.
+    //      The difference was caused by idle cash diluting the denominator.
+    //
+    const totalCostBasis = client.holdings.reduce((s, h) => s + (h.costBasis || 0), 0);
+    const cashBal = client.cashBalance || 0;
+    const useCostBasisNorm = usePercentMode && !hasBenchmarks && totalCostBasis > 0;
+
+    // Ensure the LAST point uses the actual current portfolio value (not a stale
+    // synthetic estimate), so the endpoint always reflects reality.
+    if (hist.length >= 2 && client.portfolioValue > 0) {
+        hist[hist.length - 1].value = client.portfolioValue;
+    }
+
+    const firstValue = useCostBasisNorm
+        ? totalCostBasis               // costBasis denominator (matches dashboard)
+        : (hist[0].value || 1);        // first visible point (for benchmark comparison)
 
     const portfolioPoints = hist.map(p => {
         const x = (p._dateObj || _parseHistDate(p.date)).getTime();
         if (usePercentMode) {
-            // Always compute from values — never use stored returnPct for comparisons
+            if (useCostBasisNorm) {
+                // Holdings-only return — subtract cash so denominator = costBasis only
+                const holdingsValue = (p.value || 0) - cashBal;
+                const returnPct = ((holdingsValue - totalCostBasis) / totalCostBasis) * 100;
+                return { x, y: returnPct };
+            }
+            // With benchmarks: normalize from first visible point (all start at 0%)
             const returnPct = firstValue > 0
                 ? ((p.value - firstValue) / firstValue) * 100
                 : 0;
@@ -988,7 +1042,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         return { x, y: p.value };
     });
 
-    const firstVal = usePercentMode ? 0 : (portfolioPoints[0].y || 1);
+    const firstVal = usePercentMode ? portfolioPoints[0].y : (portfolioPoints[0].y || 1);
     const lastVal = portfolioPoints[portfolioPoints.length - 1].y || 0;
     const isPositive = lastVal >= firstVal;
     const mainColor = isPositive ? COLORS.profit : COLORS.loss;
@@ -996,7 +1050,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 8. Build datasets ──
     const datasets = [{
-        label: isSynthetic ? 'תשואה משוחזרת' : (usePercentMode ? 'תשואת תיק' : 'שווי תיק'),
+        label: usePercentMode ? 'תשואת תיק' : 'שווי תיק',
         data: portfolioPoints,
         borderColor: mainColor,
         backgroundColor: fillColor,
