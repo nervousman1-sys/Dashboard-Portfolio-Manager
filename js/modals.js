@@ -755,48 +755,64 @@ document.addEventListener('click', (e) => {
 
 async function addClient() {
     const submitBtn = document.getElementById('addClientSubmitBtn');
+
+    // --- Step 1: Client-side validation (synchronous, before any async work) ---
+    const name = (document.getElementById('mgmt-name')?.value || '').trim();
+    const rawUsd = document.getElementById('mgmt-cash-usd')?.value;
+    const rawIls = document.getElementById('mgmt-cash-ils')?.value;
+    const cashUsd = parseFloat(rawUsd) || 0;
+    const cashIls = parseFloat(rawIls) || 0;
+
+    if (!name) {
+        console.warn('addClient validation: name is empty');
+        alert('נא להזין שם לקוח');
+        return;
+    }
+    if (cashUsd < 0 || cashIls < 0) {
+        alert('ערך מזומן לא יכול להיות שלילי');
+        return;
+    }
+
+    // Collect holdings from dynamic table
+    const holdingsData = _collectHoldingRows();
+
+    const portfolioData = { name, cashUsd, cashIls, holdingsCount: holdingsData.length };
+    console.log('addClient: submitting data:', portfolioData);
+
+    // --- Step 2: Show loading state ---
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
+
     try {
-        const name = (document.getElementById('mgmt-name')?.value || '').trim();
-        const cashUsd = parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0;
-        const cashIls = parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0;
-
-        if (!name) {
-            console.warn('addClient: name is empty. mgmt-name element:', document.getElementById('mgmt-name'));
-            alert('נא להזין שם לקוח');
-            return;
-        }
-
-        // Collect holdings from dynamic table
-        const holdingsData = _collectHoldingRows();
-
-        const portfolioData = { name, cashUsd, cashIls, holdingsCount: holdingsData.length };
-        console.log('Submitting data:', portfolioData);
-
-        // Show loading state
-        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
-
         let finalClient;
 
         if (supabaseConnected) {
-            if (holdingsData.length > 0) {
-                finalClient = await supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData);
-            } else {
-                finalClient = await supaAddClient(name, cashUsd, cashIls);
-            }
+            // Timeout protection: if Supabase hangs (auth stale, network), bail after 15s
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('timeout: Supabase did not respond within 15 seconds')), 15000)
+            );
+            const supaPromise = holdingsData.length > 0
+                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData)
+                : supaAddClient(name, cashUsd, cashIls);
+
+            finalClient = await Promise.race([supaPromise, timeoutPromise]);
         } else {
             finalClient = await apiAddClient(name, 'low');
         }
 
-        console.log('addClient result:', finalClient ? 'success (id=' + finalClient.id + ')' : 'null');
+        console.log('addClient result:', finalClient ? 'success (id=' + finalClient.id + ')' : 'null — check console for supaAddClient errors');
 
-        if (finalClient) clients.push(finalClient);
+        if (!finalClient) {
+            alert('יצירת התיק נכשלה — בדוק את הקונסול (F12) לפרטי השגיאה');
+            return;  // finally block will reset button
+        }
+
+        clients.push(finalClient);
         closeMgmtModal();
         refreshDashboard();
 
         // Force a live price update for the new portfolio's holdings
-        // Bypass the TTL cache so prices are fetched immediately
         if (holdingsData.length > 0 && supabaseConnected) {
-            priceCacheTimestamp = 0; // Reset cache TTL to force fresh fetch
+            priceCacheTimestamp = 0;
             updatePricesFromAPI(() => {
                 refreshDashboard();
             }).catch(e => console.warn('Post-create price update:', e.message));
@@ -804,6 +820,8 @@ async function addClient() {
     } catch (err) {
         console.error('addClient error:', err);
         alert('שגיאה ביצירת התיק: ' + (err.message || err));
+    } finally {
+        // ALWAYS reset button — whether success, error, or timeout
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'הוסף תיק'; }
     }
 }

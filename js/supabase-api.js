@@ -102,8 +102,11 @@ async function supaFetchClient(clientId) {
 // ========== CLIENT CRUD ==========
 
 async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return null;
+    console.log('supaAddClient: starting, name=', name, 'cashUsd=', cashUsd, 'cashIls=', cashIls);
+
+    const { data: { user }, error: authErr } = await supabaseClient.auth.getUser();
+    if (authErr) { console.error('supaAddClient: auth error:', authErr.message); return null; }
+    if (!user) { console.error('supaAddClient: no user session'); return null; }
 
     const totalCash = cashUsd + cashIls;
 
@@ -120,26 +123,48 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
         monthLabel: now.toLocaleDateString('he-IL', { month: 'short', year: 'numeric' })
     }] : [];
 
+    const insertPayload = {
+        user_id: user.id,
+        name,
+        risk: 'low',
+        risk_label: 'נמוך',
+        stock_pct: 0,
+        bond_pct: 0,
+        portfolio_value: totalCash,
+        initial_investment: totalCash,
+        cash_balance: totalCash,
+        cash_usd: cashUsd,
+        cash_ils: cashIls,
+        performance_history: initialSnapshot
+    };
+    console.table(insertPayload);
+
     const { data, error } = await supabaseClient
         .from('portfolios')
-        .insert({
-            user_id: user.id,
-            name,
-            risk: 'low',
-            risk_label: 'נמוך',
-            stock_pct: 0,
-            bond_pct: 0,
-            portfolio_value: totalCash,
-            initial_investment: totalCash,
-            cash_balance: totalCash,
-            cash_usd: cashUsd,
-            cash_ils: cashIls,
-            performance_history: initialSnapshot
-        })
+        .insert(insertPayload)
         .select('*, holdings(*)')
         .single();
 
-    if (error) { console.error('supaAddClient:', error.message); return null; }
+    if (error) {
+        console.error('supaAddClient INSERT failed:', error.message, '| code:', error.code, '| details:', error.details);
+        // If cash_usd/cash_ils columns don't exist yet, retry without them
+        if (error.message && error.message.includes('cash_usd')) {
+            console.warn('supaAddClient: cash_usd column missing — retrying without currency columns');
+            delete insertPayload.cash_usd;
+            delete insertPayload.cash_ils;
+            insertPayload.cash_balance = totalCash;
+            const retry = await supabaseClient
+                .from('portfolios')
+                .insert(insertPayload)
+                .select('*, holdings(*)')
+                .single();
+            if (retry.error) { console.error('supaAddClient retry failed:', retry.error.message); return null; }
+            console.log('supaAddClient: retry succeeded (without currency columns)');
+            return mapPortfolio(retry.data);
+        }
+        return null;
+    }
+    console.log('supaAddClient: success, id=', data.id);
     return mapPortfolio(data);
 }
 
