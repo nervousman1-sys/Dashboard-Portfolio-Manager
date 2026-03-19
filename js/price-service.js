@@ -304,8 +304,12 @@ function _recalcPortfolioWithFx(client) {
     });
 
     // Convert cash buckets to display currency
-    const cashUsd = client.cash?.usd || 0;
-    const cashIls = client.cash?.ils || 0;
+    // Legacy fallback: if client.cash doesn't exist, use cashBalance as USD
+    let cashUsd = client.cash?.usd || 0;
+    let cashIls = client.cash?.ils || 0;
+    if (cashUsd === 0 && cashIls === 0 && (client.cashBalance || 0) > 0) {
+        cashUsd = client.cashBalance;
+    }
     const cashConverted = convertToDisplayCurrency(cashUsd, 'USD', displayCurrency)
                         + convertToDisplayCurrency(cashIls, 'ILS', displayCurrency);
 

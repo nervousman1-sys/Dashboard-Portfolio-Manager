@@ -606,7 +606,6 @@ async function supaRecalcClient(clientId) {
     const holdings = holdingsRes.data;
     const cashUsd = portfolioRes.data?.cash_usd ?? 0;
     const cashIls = portfolioRes.data?.cash_ils ?? 0;
-    const totalCash = cashUsd + cashIls;
 
     // FX-aware valuation: convert all holdings + cash to display currency (USD)
     const displayCurrency = 'USD';

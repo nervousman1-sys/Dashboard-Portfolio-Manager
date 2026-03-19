@@ -145,13 +145,23 @@ async function init() {
 
     // ── Phase 1: Fetch fresh portfolio structure from Supabase ──
     // checkSupabaseConnection() is synchronous now (no network call)
-    const useSupabase = await checkSupabaseConnection();
+    let useSupabase = false;
+    try {
+        useSupabase = await checkSupabaseConnection();
+    } catch (e) {
+        console.warn('[Init] Phase 1: Supabase connection check failed:', e.message);
+    }
 
     let freshClients;
-    if (useSupabase) {
-        freshClients = await supaFetchClients();
-    } else {
-        freshClients = await fetchClients();
+    try {
+        if (useSupabase) {
+            freshClients = await supaFetchClients();
+        } else {
+            freshClients = typeof fetchClients === 'function' ? await fetchClients() : null;
+        }
+    } catch (e) {
+        console.error('[Init] Phase 1: Client fetch failed:', e.message);
+        freshClients = null;
     }
 
     if (freshClients && freshClients.length > 0) {
@@ -164,7 +174,7 @@ async function init() {
         renderClientCards();
     }
 
-    // ── Hide overlay if it was still showing (first-ever visit) ──
+    // ── Hide overlay ALWAYS — never leave user stuck on loading screen ──
     if (overlay && !overlay.classList.contains('hidden')) {
         updateUserDisplay();
         overlay.classList.add('hidden');
