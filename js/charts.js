@@ -1459,21 +1459,30 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     }
 
     // ── 9. Timeline configuration ──
-    const now = new Date();
-    const TEN_YEARS_MS = 10 * 365.25 * 24 * 60 * 60 * 1000;
+    // Derive ALL bounds from actual data — prevents empty gaps when data
+    // doesn't span the full theoretical range (e.g. MAX shows 5Y of data, not 10Y).
 
-    // Zoom limits: user can scroll/zoom across a full 20-year window
-    const zoomMin = now.getTime() - TEN_YEARS_MS;
-    const zoomMax = now.getTime() + TEN_YEARS_MS;
-
-    // Visible axis: fit to actual data (NOT the full 20 years — that would compress data to a sliver)
-    const dataMinTime = portfolioPoints[0].x;
-    const dataMaxTime = portfolioPoints[portfolioPoints.length - 1].x;
+    // Find the true min/max X across ALL datasets (portfolio + benchmarks)
+    let dataMinTime = portfolioPoints[0].x;
+    let dataMaxTime = portfolioPoints[portfolioPoints.length - 1].x;
+    for (const ds of datasets) {
+        if (!ds.data || ds.data.length === 0) continue;
+        const dsMin = ds.data[0].x;
+        const dsMax = ds.data[ds.data.length - 1].x;
+        if (dsMin < dataMinTime) dataMinTime = dsMin;
+        if (dsMax > dataMaxTime) dataMaxTime = dsMax;
+    }
 
     // Add 3% padding on each side so the line doesn't touch the axis edges
     const xPadMs = Math.max((dataMaxTime - dataMinTime) * 0.03, 3600000);
     const viewMin = dataMinTime - xPadMs;
     const viewMax = dataMaxTime + xPadMs;
+
+    // Zoom/pan limits: allow scrolling 1 year before data start and 6 months after end.
+    // This prevents the old 10-year-window bug where MAX showed an empty 2016→2021 gap.
+    const ONE_YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
+    const zoomMin = dataMinTime - ONE_YEAR_MS;
+    const zoomMax = dataMaxTime + ONE_YEAR_MS / 2;
 
     // Dynamic time unit: granularity matches the visible data span
     const dataSpanDays = Math.max(1, (dataMaxTime - dataMinTime) / 86400000);
