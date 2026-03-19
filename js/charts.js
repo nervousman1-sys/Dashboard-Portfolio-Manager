@@ -388,8 +388,8 @@ async function _fetchFMPBenchmark(symbol, range) {
         const fmpInterval = (range === '1d') ? '5min' : '1hour';
         for (const sym of symbolsToTry) {
             const intradayUrls = [
-                `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`,
-                `https://financialmodelingprep.com/stable/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`
+                `https://financialmodelingprep.com/stable/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`,
+                `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${sym}?apikey=${FMP_API_KEY}`
             ];
             for (const url of intradayUrls) {
                 try {
@@ -434,17 +434,21 @@ async function _fetchFMPBenchmark(symbol, range) {
     // ── Daily: historical-price-full (for ranges > 5D) ──
     const outputSize = _rangeToOutputSize(range);
 
-    // Try each symbol alias against both FMP endpoints (/api/v3/ first — wider coverage)
+    // Try each symbol alias against both FMP endpoints (/stable/ first — works on free plans)
     for (const sym of symbolsToTry) {
         const urls = [
-            `https://financialmodelingprep.com/api/v3/historical-price-full/${sym}?apikey=${FMP_API_KEY}`,
-            `https://financialmodelingprep.com/stable/historical-price-full/${sym}?apikey=${FMP_API_KEY}`
+            `https://financialmodelingprep.com/stable/historical-price-full/${sym}?apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/api/v3/historical-price-full/${sym}?apikey=${FMP_API_KEY}`
         ];
 
         for (const url of urls) {
             try {
                 const res = await fetch(url);
                 if (!res.ok) {
+                    if (res.status === 429) {
+                        console.warn(`[Benchmark] FMP rate-limited (429) for ${sym} — skipping all FMP attempts`);
+                        return null; // Bail entirely on 429 — don't burn more requests
+                    }
                     console.warn(`[Benchmark] FMP ${res.status} for ${sym} at ${url.split('?')[0]}`);
                     continue;
                 }
@@ -697,6 +701,37 @@ const _STATIC_BENCHMARK_DATA = {
     'TA35.TA': _STATIC_TA35_MONTHLY
 };
 
+// Interpolate monthly data to ~weekly points for smoother benchmark curves.
+// Linear interpolation between consecutive monthly closes, producing 4 points per month.
+function _interpolateToWeekly(monthlyData) {
+    if (!monthlyData || monthlyData.length < 2) return monthlyData;
+
+    const weekly = [];
+    for (let i = 0; i < monthlyData.length - 1; i++) {
+        const curr = monthlyData[i];
+        const next = monthlyData[i + 1];
+        const t0 = new Date(curr.date).getTime();
+        const t1 = new Date(next.date).getTime();
+        const span = t1 - t0;
+        const WEEK = 7 * 86400000;
+        const steps = Math.max(1, Math.round(span / WEEK));
+
+        for (let s = 0; s < steps; s++) {
+            const frac = s / steps;
+            const t = t0 + span * frac;
+            const close = curr.close + (next.close - curr.close) * frac;
+            const d = new Date(t);
+            weekly.push({
+                date: d.toISOString().split('T')[0],
+                close: Math.round(close * 100) / 100
+            });
+        }
+    }
+    // Add the last point
+    weekly.push({ ...monthlyData[monthlyData.length - 1] });
+    return weekly;
+}
+
 function _getStaticBenchmarkFallback(symbol, range) {
     // Resolve symbol → static dataset key.
     // Supports ETF tickers, index symbols, and common user-facing aliases.
@@ -718,43 +753,51 @@ function _getStaticBenchmarkFallback(symbol, range) {
     const filtered = staticData.filter(p => new Date(p.date) >= cutoff);
     if (filtered.length < 2) return null;
 
-    const firstClose = filtered[0].close;
-    return filtered.map(p => ({
+    // Interpolate monthly → weekly for smoother curves (~4x more points)
+    const dense = _interpolateToWeekly(filtered);
+
+    const firstClose = dense[0].close;
+    return dense.map(p => ({
         date: p.date,
         close: p.close,
         returnPct: ((p.close - firstClose) / firstClose) * 100
     }));
 }
 
-// ========== MASTER TIMELINE ALIGNMENT ==========
-// Maps benchmark data to the portfolio's exact timestamps using forward-fill.
-// If a benchmark has no price for a given portfolio date, the previous available
-// close is used ("hold last known price"). This guarantees:
-//   1. Benchmark and portfolio share identical X coordinates (no stray dots)
-//   2. No missing points create visual gaps
-//   3. All lines start at the same timestamp (perfect normalization anchor)
+// ========== BENCHMARK TIMELINE PREPARATION ==========
+// Trims benchmark data to the portfolio's date range and converts to Chart.js format.
+// Unlike the old _alignBenchmarkToTimeline which compressed benchmark data to match
+// the portfolio's sparse timestamps (causing straight lines for new portfolios),
+// this preserves ALL benchmark data points within the range.
+// Chart.js time axis handles mixed-resolution datasets natively.
 
-function _alignBenchmarkToTimeline(benchData, portfolioPoints) {
+function _prepareBenchmarkTimeline(benchData, portfolioPoints) {
     if (!benchData || benchData.length === 0 || !portfolioPoints || portfolioPoints.length === 0) return [];
 
-    // Pre-convert benchmark dates to timestamps for binary-style search
-    const benchTimestamps = benchData.map(b => new Date(b.date).getTime());
-    const aligned = [];
-    let benchIdx = 0;
+    // Portfolio date range — trim benchmark to this window
+    const pStart = portfolioPoints[0].x;
+    const pEnd = portfolioPoints[portfolioPoints.length - 1].x;
 
-    for (const pp of portfolioPoints) {
-        const t = pp.x;
+    // Convert benchmark to timestamped format and filter to portfolio range.
+    // Include one point BEFORE pStart (if available) so the benchmark line
+    // starts at or before the portfolio's first date.
+    const benchWithTs = benchData.map(b => ({
+        x: new Date(b.date).getTime(),
+        close: b.close
+    }));
 
-        // Advance benchmark pointer to the last point <= portfolio timestamp
-        while (benchIdx < benchTimestamps.length - 1 && benchTimestamps[benchIdx + 1] <= t) {
-            benchIdx++;
-        }
-
-        // Forward-fill: use the most recent benchmark close at or before this timestamp
-        aligned.push({ x: t, close: benchData[benchIdx].close });
+    // Find the last benchmark point at or before portfolio start
+    let startIdx = 0;
+    for (let i = 0; i < benchWithTs.length; i++) {
+        if (benchWithTs[i].x <= pStart) startIdx = i;
+        else break;
     }
 
-    return aligned;
+    // Filter: from startIdx to the last point <= pEnd (+ one day buffer)
+    const buffer = 86400000; // 1 day
+    const trimmed = benchWithTs.filter((p, i) => i >= startIdx && p.x <= pEnd + buffer);
+
+    return trimmed; // Array of { x: timestamp, close: number }
 }
 
 // ========== UNIFIED PERFORMANCE CHART RENDERER ==========
@@ -1417,28 +1460,31 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         clip: true
     }];
 
-    // Benchmark datasets — MASTER TIMELINE ALIGNMENT.
+    // Benchmark datasets — NATIVE TIMELINE (no compression).
     //
-    // Every benchmark is mapped onto the portfolio's exact timestamps using
-    // forward-fill interpolation (_alignBenchmarkToTimeline). This guarantees:
-    //   1. All lines share identical X coordinates — no stray dots or gaps
-    //   2. The benchmark's first Y value is the price at the portfolio's first date
-    //   3. Normalization to 0% uses that first aligned price as the base
+    // Each benchmark keeps its OWN dense timestamps instead of being compressed
+    // to the portfolio's sparse timeline. Chart.js time axis handles mixed-
+    // resolution datasets natively. This prevents the "straight line" bug where
+    // a new portfolio with 2-3 data points would compress 60+ benchmark points
+    // into 2-3 points.
+    //
+    // The benchmark is trimmed to the portfolio's date range (start → end) and
+    // normalized from the first benchmark price in that window.
     //
     // Formula: benchmarkReturn = ((close - baseClose) / baseClose) * 100
 
     for (const { symbol, data: benchData } of benchmarkResults) {
-        // Align to portfolio timeline — forward-fill missing dates
-        const aligned = _alignBenchmarkToTimeline(benchData, portfolioPoints);
-        if (aligned.length < 2) continue;
+        // Trim to portfolio date range — keep benchmark's native timestamps
+        const trimmed = _prepareBenchmarkTimeline(benchData, portfolioPoints);
+        if (trimmed.length < 2) continue;
 
-        // Base price = benchmark close at portfolio's first visible date
-        const benchBaseClose = aligned[0].close;
+        // Base price = first benchmark close in the trimmed range
+        const benchBaseClose = trimmed[0].close;
         if (!benchBaseClose || benchBaseClose <= 0) continue;
 
         datasets.push({
             label: BENCHMARK_SYMBOLS[symbol] || symbol,
-            data: aligned.map(p => {
+            data: trimmed.map(p => {
                 const pctFromBase = ((p.close - benchBaseClose) / benchBaseClose) * 100;
                 return {
                     x: p.x,
@@ -1508,7 +1554,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             interaction: {
                 intersect: false,
-                mode: 'index',
+                // 'index' requires identical X values across datasets — only works
+                // when portfolio is the sole dataset. With benchmarks (which keep
+                // their native dense timestamps), use 'nearest' for proper tooltip.
+                mode: hasBenchmarks ? 'nearest' : 'index',
                 axis: 'x'
             },
 
@@ -1531,7 +1580,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd MMM yyyy'
                     },
                     ticks: {
-                        source: 'data',    // Only generate ticks at actual data points — never auto-extend
+                        source: hasBenchmarks ? 'auto' : 'data',  // 'auto' for mixed-resolution datasets
                         autoSkip: true,
                         maxTicksLimit: 12,
                         maxRotation: 0,
