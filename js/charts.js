@@ -57,6 +57,54 @@ let _modalPerfChartInstance = null;
 // Display mode toggle: 'percent' (default) or 'value'
 let _chartDisplayMode = 'percent';
 
+// ========== MARKET HOURS DETECTION ==========
+// US markets: NYSE/NASDAQ open 9:30–16:00 ET, Mon–Fri.
+// If the market is currently closed, 1D data should show the last available trading day.
+
+function _isUSMarketOpen() {
+    const now = new Date();
+    // Convert to Eastern Time
+    const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const et = new Date(etStr);
+    const day = et.getDay(); // 0=Sun, 6=Sat
+    const hours = et.getHours();
+    const minutes = et.getMinutes();
+    const timeInMinutes = hours * 60 + minutes;
+
+    // Weekends
+    if (day === 0 || day === 6) return false;
+
+    // Market hours: 9:30 (570 min) to 16:00 (960 min)
+    if (timeInMinutes < 570 || timeInMinutes >= 960) return false;
+
+    return true;
+}
+
+// Returns the last trading day as YYYY-MM-DD.
+// If today is a trading day and market is open/was open, returns today.
+// Otherwise walks back to the most recent weekday.
+function _getLastTradingDay() {
+    const now = new Date();
+    const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const et = new Date(etStr);
+    const day = et.getDay();
+    const hours = et.getHours();
+
+    let d = new Date(et);
+
+    // If before market open on a weekday, use previous trading day
+    if (day >= 1 && day <= 5 && hours < 4) {
+        d.setDate(d.getDate() - 1);
+    }
+
+    // Walk back from weekends to Friday
+    while (d.getDay() === 0 || d.getDay() === 6) {
+        d.setDate(d.getDate() - 1);
+    }
+
+    return d.toISOString().split('T')[0];
+}
+
 // ========== FETCH BENCHMARK DATA FROM API ==========
 
 function _rangeToDays(range) {
@@ -154,15 +202,14 @@ async function fetchBenchmarkData(symbol, range) {
         return data;
     }
 
-    // Static fallback for S&P 500: if all APIs fail, use approximate historical data
-    if (symbol === 'SPY') {
-        const staticData = _getStaticSPYFallback(range);
-        if (staticData && staticData.length > 0) {
-            console.log(`[Benchmark] Using static S&P 500 fallback (range=${range})`);
-            const cacheEntry = { data: staticData, timestamp: Date.now() };
-            _benchmarkCache[cacheKey] = cacheEntry;
-            return staticData;
-        }
+    // Static fallback: if all APIs fail, use approximate historical data.
+    // Covers SPY, QQQ, and DIA — the 3 most commonly toggled benchmarks.
+    const staticData = _getStaticBenchmarkFallback(symbol, range);
+    if (staticData && staticData.length > 0) {
+        console.log(`[Benchmark] Using static fallback for ${symbol} (range=${range}, ${staticData.length} points)`);
+        const cacheEntry = { data: staticData, timestamp: Date.now() };
+        _benchmarkCache[cacheKey] = cacheEntry;
+        return staticData;
     }
 
     console.error(`[Benchmark] ALL APIs FAILED for ${symbol} (range=${range}). Check: 1) API keys configured? 2) Rate limits exceeded? 3) Symbol valid?`);
@@ -171,11 +218,14 @@ async function fetchBenchmarkData(symbol, range) {
 
 // Twelve Data sometimes needs the INDEX symbol instead of the ETF ticker.
 // Try the ETF first, then the index alias. Twelve Data uses symbols WITHOUT ^ prefix.
+// If an index fails, fall back to its ETF proxy — the correlation is >99%.
 const _TWELVE_DATA_ALIASES = {
-    'SPY': ['SPY', 'GSPC'],   // S&P 500 ETF → ^GSPC index (without ^)
-    'QQQ': ['QQQ', 'IXIC'],   // Nasdaq 100 ETF → ^IXIC (Nasdaq Composite)
-    'DIA': ['DIA', 'DJI'],    // Dow Jones ETF → ^DJI index
-    'IWM': ['IWM', 'RUT']     // Russell 2000 ETF → ^RUT index
+    'SPY': ['SPY', 'GSPC'],          // S&P 500 ETF → ^GSPC index
+    'QQQ': ['QQQ', 'NDX', 'IXIC'],   // Nasdaq 100 ETF → ^NDX index → ^IXIC composite
+    'DIA': ['DIA', 'DJI'],           // Dow Jones ETF → ^DJI index
+    'IWM': ['IWM', 'RUT'],           // Russell 2000 ETF → ^RUT index
+    'TA125.TA': ['TA125.TA'],        // Tel Aviv 125 — Twelve Data TASE symbol
+    'TA35.TA': ['TA35.TA']           // Tel Aviv 35 — Twelve Data TASE symbol
 };
 
 // ── Twelve Data Rate-Limit Queue ──
@@ -399,11 +449,66 @@ const _STATIC_SPY_MONTHLY = [
     { date: '2026-03-18', close: 662 }
 ];
 
-function _getStaticSPYFallback(range) {
+// Approximate monthly QQQ (Nasdaq 100 ETF) close prices.
+// QQQ ≈ Nasdaq-100 / 43. Calibrated to ~+22% YoY (Mar 2025→Mar 2026).
+const _STATIC_QQQ_MONTHLY = [
+    { date: '2024-03-28', close: 444 }, { date: '2024-04-30', close: 424 },
+    { date: '2024-05-31', close: 455 }, { date: '2024-06-28', close: 480 },
+    { date: '2024-07-31', close: 472 }, { date: '2024-08-30', close: 483 },
+    { date: '2024-09-30', close: 488 }, { date: '2024-10-31', close: 494 },
+    { date: '2024-11-29', close: 525 }, { date: '2024-12-31', close: 513 },
+    { date: '2025-01-31', close: 528 }, { date: '2025-02-28', close: 510 },
+    { date: '2025-03-31', close: 468 }, { date: '2025-04-30', close: 455 },
+    { date: '2025-05-30', close: 498 }, { date: '2025-06-30', close: 518 },
+    { date: '2025-07-31', close: 530 }, { date: '2025-08-29', close: 522 },
+    { date: '2025-09-30', close: 505 }, { date: '2025-10-31', close: 520 },
+    { date: '2025-11-28', close: 540 }, { date: '2025-12-31', close: 555 },
+    { date: '2026-01-30', close: 565 }, { date: '2026-02-27', close: 572 },
+    { date: '2026-03-18', close: 578 }
+];
+
+// Approximate monthly DIA (Dow Jones ETF) close prices.
+// DIA ≈ DJIA / 100. Calibrated to ~+14% YoY (Mar 2025→Mar 2026).
+const _STATIC_DIA_MONTHLY = [
+    { date: '2024-03-28', close: 399 }, { date: '2024-04-30', close: 383 },
+    { date: '2024-05-31', close: 389 }, { date: '2024-06-28', close: 393 },
+    { date: '2024-07-31', close: 408 }, { date: '2024-08-30', close: 415 },
+    { date: '2024-09-30', close: 421 }, { date: '2024-10-31', close: 418 },
+    { date: '2024-11-29', close: 442 }, { date: '2024-12-31', close: 428 },
+    { date: '2025-01-31', close: 445 }, { date: '2025-02-28', close: 438 },
+    { date: '2025-03-31', close: 415 }, { date: '2025-04-30', close: 402 },
+    { date: '2025-05-30', close: 420 }, { date: '2025-06-30', close: 435 },
+    { date: '2025-07-31', close: 445 }, { date: '2025-08-29', close: 440 },
+    { date: '2025-09-30', close: 430 }, { date: '2025-10-31', close: 442 },
+    { date: '2025-11-28', close: 455 }, { date: '2025-12-31', close: 462 },
+    { date: '2026-01-30', close: 470 }, { date: '2026-02-27', close: 475 },
+    { date: '2026-03-18', close: 480 }
+];
+
+// Unified static fallback — covers SPY, QQQ, DIA.
+// Maps ETF symbol to its static dataset, then filters by range.
+const _STATIC_BENCHMARK_DATA = {
+    'SPY': _STATIC_SPY_MONTHLY,
+    'QQQ': _STATIC_QQQ_MONTHLY,
+    'DIA': _STATIC_DIA_MONTHLY
+};
+
+function _getStaticBenchmarkFallback(symbol, range) {
+    // Resolve symbol → static dataset
+    // Support both ETF tickers and index aliases
+    const _symbolToETF = {
+        'SPY': 'SPY', 'GSPC': 'SPY', '%5EGSPC': 'SPY',
+        'QQQ': 'QQQ', 'NDX': 'QQQ', 'IXIC': 'QQQ', '%5ENDX': 'QQQ',
+        'DIA': 'DIA', 'DJI': 'DIA', '%5EDJI': 'DIA'
+    };
+    const etfKey = _symbolToETF[symbol] || symbol;
+    const staticData = _STATIC_BENCHMARK_DATA[etfKey];
+    if (!staticData) return null;
+
     const days = _rangeToDays(range);
     const cutoff = new Date(Date.now() - days * 86400000);
 
-    const filtered = _STATIC_SPY_MONTHLY.filter(p => new Date(p.date) >= cutoff);
+    const filtered = staticData.filter(p => new Date(p.date) >= cutoff);
     if (filtered.length < 2) return null;
 
     const firstClose = filtered[0].close;
@@ -590,10 +695,30 @@ async function _fetchIntradayPortfolioData(client, range) {
     let filteredBackbone = backbone.values;
     let filteredSeries = series;
 
+    // For 1D: capture previous day's closing price PER holding BEFORE filtering.
+    // This becomes the baseline (0%) — Google Finance style: Y-axis = % change from previous close.
+    const prevDayClose = {}; // ticker → previous day's last close price
+
     if (range === '1d' && backbone.values.length > 0) {
+        const marketOpen = _isUSMarketOpen();
+        const expectedTradingDay = _getLastTradingDay();
+        console.log(`[Intraday] Market ${marketOpen ? 'OPEN' : 'CLOSED'}. Expected last trading day: ${expectedTradingDay}`);
+
         // Find the most recent trading date in the data
         const lastDatetime = new Date(backbone.values[backbone.values.length - 1].datetime);
         const lastDateStr = lastDatetime.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        // Extract previous day's closing price for each holding
+        // The "previous close" is the LAST data point BEFORE the current trading day.
+        for (const s of series) {
+            const prevDayPoints = s.values.filter(v => {
+                const vDate = new Date(v.datetime).toISOString().split('T')[0];
+                return vDate < lastDateStr;
+            });
+            if (prevDayPoints.length > 0) {
+                prevDayClose[s.ticker] = prevDayPoints[prevDayPoints.length - 1].close;
+            }
+        }
 
         // Filter each series to only include points from the last trading day
         filteredSeries = series.map(s => {
@@ -612,7 +737,10 @@ async function _fetchIntradayPortfolioData(client, range) {
         filteredBackbone = longestFiltered.values;
 
         console.log(`[Intraday] 1D filter: ${backbone.values.length} raw points → ${filteredBackbone.length} points for ${lastDateStr}`);
+        console.log(`[Intraday] Previous-close baselines:`, Object.entries(prevDayClose).map(([t, c]) => `${t}=$${c}`).join(', '));
     }
+
+    const is1D = (range === '1d');
 
     const points = filteredBackbone.map((v, i) => {
         const date = new Date(v.datetime);
@@ -621,10 +749,14 @@ async function _fetchIntradayPortfolioData(client, range) {
         let weightedReturn = 0;
         for (const s of filteredSeries) {
             if (s.values[i]) {
-                const firstClose = s.values[0].close;
+                // 1D baseline: use PREVIOUS DAY'S close if available (Google Finance style).
+                // Other ranges: use first data point as baseline (cumulative return).
+                const baseClose = (is1D && prevDayClose[s.ticker])
+                    ? prevDayClose[s.ticker]
+                    : s.values[0].close;
                 const thisClose = s.values[i].close;
-                if (firstClose > 0) {
-                    weightedReturn += ((thisClose - firstClose) / firstClose) * 100 * s.weight;
+                if (baseClose > 0) {
+                    weightedReturn += ((thisClose - baseClose) / baseClose) * 100 * s.weight;
                 }
             }
         }
@@ -635,7 +767,8 @@ async function _fetchIntradayPortfolioData(client, range) {
             date: date.toLocaleDateString('he-IL'),
             _dateObj: date,
             value: parseFloat(portfolioValueAtPoint.toFixed(2)),
-            returnPct: parseFloat(weightedReturn.toFixed(2))
+            returnPct: parseFloat(weightedReturn.toFixed(2)),
+            _isPrevCloseBaseline: is1D  // flag for normalization in renderPerformanceChart
         };
     });
 
@@ -890,9 +1023,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             const dayChange = client.portfolioValue - prevValue;
             const dayChangePct = prevValue > 0 ? (dayChange / prevValue * 100) : 0;
 
+            const is1DFallback = (range === '1d');
             hist = [
-                { date: startTime.toLocaleDateString('he-IL'), _dateObj: startTime, value: prevValue, returnPct: 0 },
-                { date: now.toLocaleDateString('he-IL'), _dateObj: now, value: client.portfolioValue, returnPct: dayChangePct }
+                { date: startTime.toLocaleDateString('he-IL'), _dateObj: startTime, value: prevValue, returnPct: 0, _isPrevCloseBaseline: is1DFallback },
+                { date: now.toLocaleDateString('he-IL'), _dateObj: now, value: client.portfolioValue, returnPct: dayChangePct, _isPrevCloseBaseline: is1DFallback }
             ];
             console.log(`[PerfChart] 1D/5D fallback: ${prevValue.toFixed(0)} → ${client.portfolioValue.toFixed(0)} (${dayChangePct >= 0 ? '+' : ''}${dayChangePct.toFixed(2)}%)`);
         }
@@ -997,13 +1131,17 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 7. Map history → Chart.js points ──
     //
-    // NORMALIZATION (% mode) — TWO STRATEGIES:
+    // NORMALIZATION (% mode) — THREE STRATEGIES:
     //
-    //   A. WITH BENCHMARKS:  normalize from first visible point (all start at 0%).
+    //   A. 1D INTRADAY:  use pre-computed returnPct from previous day's close.
+    //      Google Finance style: baseline (0%) = yesterday's close.
+    //      The returnPct was already computed in _fetchIntradayPortfolioData.
+    //
+    //   B. WITH BENCHMARKS:  normalize from first visible point (all start at 0%).
     //      Standard apples-to-apples comparison. Both portfolio and benchmark rebased
     //      to the same 0% origin on the first visible date.
     //
-    //   B. WITHOUT BENCHMARKS:  normalize from costBasis (holdings only, excludes cash).
+    //   C. WITHOUT BENCHMARKS:  normalize from costBasis (holdings only, excludes cash).
     //      This matches the dashboard "תשואה משוכללת" metric exactly:
     //        returnPct = (holdingsValue − costBasis) / costBasis × 100
     //      The endpoint will equal the card's return percentage, preventing the
@@ -1012,11 +1150,14 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //
     const totalCostBasis = client.holdings.reduce((s, h) => s + (h.costBasis || 0), 0);
     const cashBal = client.cashBalance || 0;
-    const useCostBasisNorm = usePercentMode && !hasBenchmarks && totalCostBasis > 0;
+
+    // 1D data already has returnPct relative to previous close — use it directly.
+    const is1DPrevCloseNorm = isIntraday && range === '1d' && hist.length > 0 && hist[0]._isPrevCloseBaseline;
+    const useCostBasisNorm = usePercentMode && !hasBenchmarks && !is1DPrevCloseNorm && totalCostBasis > 0;
 
     // Ensure the LAST point uses the actual current portfolio value (not a stale
     // synthetic estimate), so the endpoint always reflects reality.
-    if (hist.length >= 2 && client.portfolioValue > 0) {
+    if (hist.length >= 2 && client.portfolioValue > 0 && !is1DPrevCloseNorm) {
         hist[hist.length - 1].value = client.portfolioValue;
     }
 
@@ -1027,6 +1168,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const portfolioPoints = hist.map(p => {
         const x = (p._dateObj || _parseHistDate(p.date)).getTime();
         if (usePercentMode) {
+            // 1D: returnPct is already relative to previous day's close
+            if (is1DPrevCloseNorm) {
+                return { x, y: p.returnPct || 0 };
+            }
             if (useCostBasisNorm) {
                 // Holdings-only return — subtract cash so denominator = costBasis only
                 const holdingsValue = (p.value || 0) - cashBal;
