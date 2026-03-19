@@ -7,7 +7,15 @@ const RISK_BOND_PCT_MAP = { high: 20, medium: 50, low: 85 };
 
 // ========== HELPER: map DB row (snake_case) to frontend object (camelCase) ==========
 
+function _inferAssetClass(type) {
+    if (type === 'bond') return 'Gov Bond';
+    return 'Stock';
+}
+
 function mapPortfolio(p) {
+    // Backward compat: if cash_usd/cash_ils don't exist yet, fall back to cash_balance as USD
+    const cashUsd = p.cash_usd ?? p.cash_balance ?? 0;
+    const cashIls = p.cash_ils ?? 0;
     return {
         id: p.id,
         name: p.name,
@@ -17,7 +25,8 @@ function mapPortfolio(p) {
         bondPct: p.bond_pct,
         portfolioValue: p.portfolio_value,
         initialInvestment: p.initial_investment,
-        cashBalance: p.cash_balance || 0,
+        cash: { usd: cashUsd, ils: cashIls },
+        cashBalance: cashUsd + cashIls,  // backward compat — total across currencies
         performanceHistory: p.performance_history || [],
         holdings: (p.holdings || []).map(mapHolding)
     };
@@ -43,6 +52,7 @@ function mapHolding(h) {
         price: h.price,
         previousClose: h.previous_close,
         currency: h.currency,
+        assetClass: h.asset_class || _inferAssetClass(h.type),
         _livePriceResolved: (h.type !== 'stock') || !priceMatchesPurchase
     };
 }
@@ -86,16 +96,18 @@ async function supaFetchClient(clientId) {
 
 // ========== CLIENT CRUD ==========
 
-async function supaAddClient(name, cashBalance = 0) {
+async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) return null;
+
+    const totalCash = cashUsd + cashIls;
 
     // New portfolio starts with only cash → 0% stocks → risk = low
     // Seed performance_history with an initial snapshot so charts have a starting point
     const now = new Date();
-    const initialSnapshot = cashBalance > 0 ? [{
+    const initialSnapshot = totalCash > 0 ? [{
         date: now.toLocaleDateString('he-IL'),
-        value: cashBalance,
+        value: totalCash,
         returnPct: 0,
         year: now.getFullYear(),
         month: now.getMonth(),
@@ -112,9 +124,11 @@ async function supaAddClient(name, cashBalance = 0) {
             risk_label: 'נמוך',
             stock_pct: 0,
             bond_pct: 0,
-            portfolio_value: cashBalance,
-            initial_investment: cashBalance,
-            cash_balance: cashBalance,
+            portfolio_value: totalCash,
+            initial_investment: totalCash,
+            cash_balance: totalCash,
+            cash_usd: cashUsd,
+            cash_ils: cashIls,
             performance_history: initialSnapshot
         })
         .select('*, holdings(*)')
@@ -125,10 +139,12 @@ async function supaAddClient(name, cashBalance = 0) {
 }
 
 // Create portfolio with initial holdings in one go
-async function supaAddClientWithHoldings(name, cashBalance, holdings) {
+async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings) {
     // Step 1: Create the portfolio
-    const portfolio = await supaAddClient(name, cashBalance);
+    const portfolio = await supaAddClient(name, cashUsd, cashIls);
     if (!portfolio) return null;
+
+    const totalCash = cashUsd + cashIls;
 
     // Step 2: Add each holding sequentially (handles aggregation)
     let totalHoldingsCost = 0;
@@ -138,7 +154,7 @@ async function supaAddClientWithHoldings(name, cashBalance, holdings) {
     }
 
     // Step 3: Update initial_investment to include holdings cost
-    const totalInvestment = cashBalance + totalHoldingsCost;
+    const totalInvestment = totalCash + totalHoldingsCost;
     await supabaseClient
         .from('portfolios')
         .update({ initial_investment: totalInvestment })
@@ -292,6 +308,8 @@ async function supaAddHolding(clientId, holdingData) {
     // New holding — insert fresh row
     const value = currentPrice * quantity;
 
+    const assetClass = holdingData.assetClass || _inferAssetClass(type);
+
     const { error } = await supabaseClient
         .from('holdings')
         .insert({
@@ -307,7 +325,8 @@ async function supaAddHolding(clientId, holdingData) {
             shares: quantity,
             price: currentPrice,
             previous_close: previousClose,
-            currency
+            currency,
+            asset_class: assetClass
         });
 
     if (error) { console.error('supaAddHolding:', error.message); return null; }
@@ -335,21 +354,24 @@ async function supaEditHolding(clientId, holdingId, data) {
 
     if (fetchErr || !h) { console.error('supaEditHolding fetch:', fetchErr?.message); return null; }
 
-    // If quantity decreased, transfer sale proceeds to cash_balance
+    // If quantity decreased, transfer sale proceeds to correct currency cash bucket
     if (newQty < h.shares) {
         const soldShares = h.shares - newQty;
         const saleProceeds = soldShares * h.price;
+        const cashCol = (h.currency === 'ILS') ? 'cash_ils' : 'cash_usd';
 
         const { data: portfolio } = await supabaseClient
             .from('portfolios')
-            .select('cash_balance')
+            .select('cash_usd, cash_ils')
             .eq('id', clientId)
             .single();
 
         if (portfolio) {
+            const newCashInBucket = (portfolio[cashCol] || 0) + saleProceeds;
+            const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) + saleProceeds;
             await supabaseClient
                 .from('portfolios')
-                .update({ cash_balance: (portfolio.cash_balance || 0) + saleProceeds })
+                .update({ [cashCol]: newCashInBucket, cash_balance: totalCash })
                 .eq('id', clientId);
         }
     }
@@ -407,18 +429,21 @@ async function supaRemoveHolding(clientId, holdingId) {
     if (hErr || !holding) { console.error('supaRemoveHolding fetch:', hErr?.message); return null; }
 
     const saleProceeds = holding.shares * holding.price;
+    const cashCol = (holding.currency === 'ILS') ? 'cash_ils' : 'cash_usd';
 
-    // Get current cash balance and add sale proceeds
+    // Get current cash balances and add sale proceeds to correct currency bucket
     const { data: portfolio, error: pErr } = await supabaseClient
         .from('portfolios')
-        .select('cash_balance')
+        .select('cash_usd, cash_ils')
         .eq('id', clientId)
         .single();
 
     if (!pErr && portfolio) {
+        const newCashInBucket = (portfolio[cashCol] || 0) + saleProceeds;
+        const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) + saleProceeds;
         await supabaseClient
             .from('portfolios')
-            .update({ cash_balance: (portfolio.cash_balance || 0) + saleProceeds })
+            .update({ [cashCol]: newCashInBucket, cash_balance: totalCash })
             .eq('id', clientId);
     }
 
@@ -451,17 +476,19 @@ async function supaRecalcClient(clientId) {
     // Fetch holdings + portfolio cash in parallel (2 queries instead of sequential)
     const [holdingsRes, portfolioRes] = await Promise.all([
         supabaseClient.from('holdings').select('*').eq('portfolio_id', clientId),
-        supabaseClient.from('portfolios').select('cash_balance').eq('id', clientId).single()
+        supabaseClient.from('portfolios').select('cash_usd, cash_ils').eq('id', clientId).single()
     ]);
 
     if (holdingsRes.error) return;
     const holdings = holdingsRes.data;
-    const cashBalance = portfolioRes.data?.cash_balance || 0;
+    const cashUsd = portfolioRes.data?.cash_usd ?? 0;
+    const cashIls = portfolioRes.data?.cash_ils ?? 0;
+    const totalCash = cashUsd + cashIls;
 
     let holdingsValue = 0;
     holdings.forEach(h => { holdingsValue += h.shares * h.price; });
 
-    const totalValue = holdingsValue + cashBalance;
+    const totalValue = holdingsValue + totalCash;
 
     // Update all holdings in parallel (not one-by-one)
     await Promise.all(holdings.map(h => {
@@ -483,7 +510,7 @@ async function supaRecalcClient(clientId) {
         });
     }
 
-    const initialInvestment = holdings.reduce((s, h) => s + h.cost_basis, 0) + cashBalance;
+    const initialInvestment = holdings.reduce((s, h) => s + h.cost_basis, 0) + totalCash;
 
     // Dynamic risk level based on actual stock allocation
     let risk, riskLabel;
@@ -496,6 +523,7 @@ async function supaRecalcClient(clientId) {
         .update({
             portfolio_value: totalValue,
             initial_investment: initialInvestment,
+            cash_balance: totalCash,
             stock_pct: stockPct,
             bond_pct: bondPct,
             risk,
@@ -714,17 +742,20 @@ async function supaSellHolding(clientId, holdingId, sellQty, sellPrice) {
     const avgCostPerShare = h.cost_basis / h.shares;
     const realizedPnL = (actualSellPrice - avgCostPerShare) * sellQty;
 
-    // Add sale proceeds to cash_balance
+    // Add sale proceeds to correct currency cash bucket
+    const cashCol = (h.currency === 'ILS') ? 'cash_ils' : 'cash_usd';
     const { data: portfolio } = await supabaseClient
         .from('portfolios')
-        .select('cash_balance')
+        .select('cash_usd, cash_ils')
         .eq('id', clientId)
         .single();
 
     if (portfolio) {
+        const newCashInBucket = (portfolio[cashCol] || 0) + saleProceeds;
+        const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) + saleProceeds;
         await supabaseClient
             .from('portfolios')
-            .update({ cash_balance: (portfolio.cash_balance || 0) + saleProceeds })
+            .update({ [cashCol]: newCashInBucket, cash_balance: totalCash })
             .eq('id', clientId);
     }
 

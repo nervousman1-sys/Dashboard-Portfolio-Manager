@@ -173,7 +173,8 @@ async function openModal(clientId) {
                     <div class="modal-stat"><div class="stat-label">תשואה משוכללת</div><div class="stat-value price-change ${totalProfitClass}" style="font-size:22px">${totalProfitSign}${totalReturnPct.toFixed(2)}%</div></div>
                     <div class="modal-stat"><div class="stat-label">שווי מניות</div><div class="stat-value" style="color:var(--color-neutral)">${formatCurrency(totalStockValue)}</div></div>
                     <div class="modal-stat"><div class="stat-label">שווי אג"ח</div><div class="stat-value" style="color:var(--color-bonds)">${formatCurrency(totalBondValue)}</div></div>
-                    <div class="modal-stat"><div class="stat-label">מזומן פנוי</div><div class="stat-value" style="color:var(--accent-green)">${formatCurrency(client.cashBalance || 0)}</div></div>
+                    <div class="modal-stat"><div class="stat-label">מזומן (USD)</div><div class="stat-value" style="color:var(--accent-green)">${formatCurrency(client.cash?.usd || 0, 'USD')}</div></div>
+                    <div class="modal-stat"><div class="stat-label">מזומן (ILS)</div><div class="stat-value" style="color:var(--accent-green)">${formatCurrency(client.cash?.ils || 0, 'ILS')}</div></div>
                 </div>
                 <div class="modal-charts-row">
                     <div class="modal-chart-container modal-chart-small" style="margin:0"><canvas id="modal-chart"></canvas></div>
@@ -391,7 +392,8 @@ function openMgmtModal(action, data) {
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
                 <div class="mgmt-field"><label>שם הלקוח</label><input type="text" id="mgmt-name" placeholder="הזן שם לקוח..." /></div>
-                <div class="mgmt-field"><label>מזומן פנוי בתיק ($)</label><input type="number" id="mgmt-cash" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
+                <div class="mgmt-field"><label>מזומן (USD)</label><input type="number" id="mgmt-cash-usd" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
+                <div class="mgmt-field"><label>מזומן (ILS)</label><input type="number" id="mgmt-cash-ils" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
 
                 <div class="mgmt-section-divider">הוספת אחזקות</div>
 
@@ -464,15 +466,21 @@ function openMgmtModal(action, data) {
     }
     else if (action === 'addHolding') {
         const c = data;
-        const availableCash = c.cashBalance || 0;
+        const cashUsd = c.cash?.usd || 0;
+        const cashIls = c.cash?.ils || 0;
         html = `
             <div class="mgmt-header"><h3>קניית נכס - ${c.name}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
                 <div class="cash-balance-display">
-                    <span>מזומן פנוי בתיק:</span>
-                    <span class="cash-amount">${formatCurrency(availableCash)}</span>
+                    <span>מזומן (USD):</span>
+                    <span class="cash-amount">${formatCurrency(cashUsd, 'USD')}</span>
                 </div>
-                <input type="hidden" id="mgmt-available-cash" value="${availableCash}" />
+                <div class="cash-balance-display">
+                    <span>מזומן (ILS):</span>
+                    <span class="cash-amount">${formatCurrency(cashIls, 'ILS')}</span>
+                </div>
+                <input type="hidden" id="mgmt-available-cash-usd" value="${cashUsd}" />
+                <input type="hidden" id="mgmt-available-cash-ils" value="${cashIls}" />
                 <div class="mgmt-field"><label>סוג נכס</label>
                     <select id="mgmt-asset-type" onchange="onAssetTypeChange()">
                         <option value="stock">מניה</option>
@@ -492,6 +500,12 @@ function openMgmtModal(action, data) {
                     </div>
                 </div>
                 <div class="mgmt-field" id="mgmt-bondname-field" style="display:none"><label>שם האג"ח</label><input type="text" id="mgmt-bondname" placeholder='לדוגמה: אג"ח ממשלתי צמוד' /></div>
+                <div class="mgmt-field" id="mgmt-asset-class-field" style="display:none"><label>סיווג אג"ח</label>
+                    <select id="mgmt-asset-class">
+                        <option value="Gov Bond">אג"ח ממשלתי</option>
+                        <option value="Corp Bond">אג"ח קונצרני</option>
+                    </select>
+                </div>
                 <div class="mgmt-field"><label>מחיר קנייה ($)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="buy-cost-summary">
@@ -562,17 +576,30 @@ function openMgmtModal(action, data) {
     }
     else if (action === 'depositCash') {
         const c = data;
-        const currentCash = c.cashBalance || 0;
+        const cashUsd = c.cash?.usd || 0;
+        const cashIls = c.cash?.ils || 0;
         html = `
             <div class="mgmt-header"><h3>הפקדת מזומן - ${c.name}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
                 <div class="cash-balance-display">
-                    <span>יתרה נוכחית:</span>
-                    <span class="cash-amount">${formatCurrency(currentCash)}</span>
+                    <span>יתרה נוכחית (USD):</span>
+                    <span class="cash-amount">${formatCurrency(cashUsd, 'USD')}</span>
                 </div>
-                <div class="mgmt-field"><label>סכום להפקדה ($)</label><input type="number" id="mgmt-deposit-amount" step="100" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateDepositPreview(${currentCash})" /></div>
+                <div class="cash-balance-display">
+                    <span>יתרה נוכחית (ILS):</span>
+                    <span class="cash-amount">${formatCurrency(cashIls, 'ILS')}</span>
+                </div>
+                <div class="mgmt-field"><label>מטבע</label>
+                    <select id="mgmt-deposit-currency" onchange="updateDepositPreview()">
+                        <option value="USD">USD ($)</option>
+                        <option value="ILS">ILS (₪)</option>
+                    </select>
+                </div>
+                <input type="hidden" id="mgmt-deposit-cash-usd" value="${cashUsd}" />
+                <input type="hidden" id="mgmt-deposit-cash-ils" value="${cashIls}" />
+                <div class="mgmt-field"><label>סכום להפקדה</label><input type="number" id="mgmt-deposit-amount" step="100" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateDepositPreview()" /></div>
                 <div class="buy-cost-summary">
-                    <div class="buy-cost-row"><span>יתרה לאחר הפקדה:</span><span id="mgmt-deposit-new-balance">${formatCurrency(currentCash)}</span></div>
+                    <div class="buy-cost-row"><span>יתרה לאחר הפקדה:</span><span id="mgmt-deposit-new-balance">${formatCurrency(cashUsd, 'USD')}</span></div>
                 </div>
             </div>
             <div class="mgmt-footer">
@@ -595,6 +622,9 @@ function onAssetTypeChange() {
     // Stock and fund use ticker search; bond uses free-text name
     document.getElementById('mgmt-ticker-field').style.display = (type === 'stock' || type === 'fund') ? '' : 'none';
     document.getElementById('mgmt-bondname-field').style.display = type === 'bond' ? '' : 'none';
+    // Show asset_class selector only for bonds
+    const assetClassField = document.getElementById('mgmt-asset-class-field');
+    if (assetClassField) assetClassField.style.display = type === 'bond' ? '' : 'none';
     // Update search label
     const searchLabel = document.querySelector('#mgmt-ticker-field label');
     if (searchLabel) {
@@ -602,14 +632,23 @@ function onAssetTypeChange() {
     }
     // Clear previous selection when switching type
     clearTickerSelection();
+    // Update buy cost display for currency switch
+    updateBuyCost();
 }
 
 // Live buy cost calculation
 function updateBuyCost() {
     const price = parseFloat(document.getElementById('mgmt-price')?.value) || 0;
     const qty = parseInt(document.getElementById('mgmt-qty')?.value) || 0;
-    const availableCash = parseFloat(document.getElementById('mgmt-available-cash')?.value) || 0;
     const total = price * qty;
+
+    // Determine which currency bucket to check based on selected ticker's currency
+    const tickerCurrency = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
+    const assetType = document.getElementById('mgmt-asset-type')?.value || 'stock';
+    const currency = (assetType === 'bond') ? 'ILS' : tickerCurrency;
+    const availableCash = (currency === 'ILS')
+        ? (parseFloat(document.getElementById('mgmt-available-cash-ils')?.value) || 0)
+        : (parseFloat(document.getElementById('mgmt-available-cash-usd')?.value) || 0);
     const remaining = availableCash - total;
 
     const totalEl = document.getElementById('mgmt-buy-total');
@@ -617,9 +656,9 @@ function updateBuyCost() {
     const warningEl = document.getElementById('mgmt-cash-warning');
     const buyBtn = document.getElementById('mgmt-buy-btn');
 
-    if (totalEl) totalEl.textContent = formatCurrency(total);
+    if (totalEl) totalEl.textContent = formatCurrency(total, currency);
     if (remainingEl) {
-        remainingEl.textContent = formatCurrency(Math.max(0, remaining));
+        remainingEl.textContent = formatCurrency(Math.max(0, remaining), currency);
         remainingEl.style.color = remaining < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
     }
     if (warningEl) warningEl.style.display = (total > 0 && remaining < 0) ? '' : 'none';
@@ -627,10 +666,14 @@ function updateBuyCost() {
 }
 
 // Live deposit preview
-function updateDepositPreview(currentCash) {
+function updateDepositPreview() {
     const amount = parseFloat(document.getElementById('mgmt-deposit-amount')?.value) || 0;
+    const currency = document.getElementById('mgmt-deposit-currency')?.value || 'USD';
+    const currentCash = (currency === 'ILS')
+        ? (parseFloat(document.getElementById('mgmt-deposit-cash-ils')?.value) || 0)
+        : (parseFloat(document.getElementById('mgmt-deposit-cash-usd')?.value) || 0);
     const newBalanceEl = document.getElementById('mgmt-deposit-new-balance');
-    if (newBalanceEl) newBalanceEl.textContent = formatCurrency(currentCash + amount);
+    if (newBalanceEl) newBalanceEl.textContent = formatCurrency(currentCash + amount, currency);
 }
 
 // --- Ticker Search (Twelve Data symbol_search) ---
@@ -712,7 +755,8 @@ document.addEventListener('click', (e) => {
 
 async function addClient() {
     const name = document.getElementById('mgmt-name').value.trim();
-    const cashBalance = parseFloat(document.getElementById('mgmt-cash')?.value) || 0;
+    const cashUsd = parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0;
+    const cashIls = parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0;
     if (!name) { alert('נא להזין שם לקוח'); return; }
 
     // Collect holdings from dynamic table
@@ -727,9 +771,9 @@ async function addClient() {
 
         if (supabaseConnected) {
             if (holdingsData.length > 0) {
-                finalClient = await supaAddClientWithHoldings(name, cashBalance, holdingsData);
+                finalClient = await supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData);
             } else {
-                finalClient = await supaAddClient(name, cashBalance);
+                finalClient = await supaAddClient(name, cashUsd, cashIls);
             }
         } else {
             finalClient = await apiAddClient(name, 'low');
@@ -805,6 +849,7 @@ async function addHolding(clientId) {
         const bondName = (document.getElementById('mgmt-bondname').value || '').trim();
         if (!bondName) { alert('נא להזין שם אג"ח'); return; }
         holdingData.bondName = bondName;
+        holdingData.assetClass = document.getElementById('mgmt-asset-class')?.value || 'Gov Bond';
     }
 
     // Use portfolioBuyAsset which checks cash balance
@@ -812,7 +857,8 @@ async function addHolding(clientId) {
     if (supabaseConnected) {
         updated = await portfolioBuyAsset(clientId, holdingData);
         if (updated && updated.error === 'insufficient_cash') {
-            alert(`אין מספיק מזומן בתיק.\nנדרש: ${formatCurrency(updated.required)}\nזמין: ${formatCurrency(updated.available)}`);
+            const cur = holdingData.currency || 'USD';
+            alert(`אין מספיק מזומן (${cur}) בתיק.\nנדרש: ${formatCurrency(updated.required, cur)}\nזמין: ${formatCurrency(updated.available, cur)}`);
             return;
         }
         if (updated && updated.error) {
@@ -836,9 +882,10 @@ async function addHolding(clientId) {
 
 async function depositCash(clientId) {
     const amount = parseFloat(document.getElementById('mgmt-deposit-amount')?.value);
+    const currency = document.getElementById('mgmt-deposit-currency')?.value || 'USD';
     if (!amount || amount <= 0) { alert('נא להזין סכום תקין'); return; }
 
-    const updated = await portfolioDepositCash(clientId, amount);
+    const updated = await portfolioDepositCash(clientId, amount, currency);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     closeMgmtModal();
@@ -1087,7 +1134,7 @@ function _collectHoldingRows() {
 
 // Real-time risk calculation
 function updateAddClientRisk() {
-    const cash = parseFloat(document.getElementById('mgmt-cash')?.value) || 0;
+    const cash = (parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0) + (parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0);
     const tbody = document.getElementById('mgmt-holdings-tbody');
 
     let totalStockValue = 0;

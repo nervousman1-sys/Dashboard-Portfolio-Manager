@@ -446,15 +446,29 @@ function renderClientCards() {
             }
         }
 
-        // Cash balance row
-        if (client.cashBalance > 0) {
+        // Cash balance rows (per currency)
+        const _cashUsd = client.cash?.usd || 0;
+        const _cashIls = client.cash?.ils || 0;
+        let _cashBorderAdded = false;
+        if (_cashUsd > 0) {
             holdingsHTML += `
                 <div class="allocation-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
                     <span class="allocation-label">
                         <span class="allocation-dot" style="background:var(--accent-green)"></span>
-                        מזומן פנוי
+                        מזומן (USD)
                     </span>
-                    <span class="allocation-value">${formatCurrency(client.cashBalance)}</span>
+                    <span class="allocation-value">${formatCurrency(_cashUsd, 'USD')}</span>
+                </div>`;
+            _cashBorderAdded = true;
+        }
+        if (_cashIls > 0) {
+            holdingsHTML += `
+                <div class="allocation-row" style="${!_cashBorderAdded ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:4px' : ''}">
+                    <span class="allocation-label">
+                        <span class="allocation-dot" style="background:var(--accent-green)"></span>
+                        מזומן (ILS)
+                    </span>
+                    <span class="allocation-value">${formatCurrency(_cashIls, 'ILS')}</span>
                 </div>`;
         }
 

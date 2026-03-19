@@ -6,10 +6,13 @@
 async function portfolioBuyAsset(clientId, holdingData) {
     if (!supabaseConnected) return null;
 
-    // Fetch current cash balance
+    const currency = holdingData.currency || 'USD';
+    const cashCol = (currency === 'ILS') ? 'cash_ils' : 'cash_usd';
+
+    // Fetch current cash balances
     const { data: portfolio, error: pErr } = await supabaseClient
         .from('portfolios')
-        .select('cash_balance')
+        .select('cash_usd, cash_ils')
         .eq('id', clientId)
         .single();
 
@@ -18,18 +21,20 @@ async function portfolioBuyAsset(clientId, holdingData) {
         return { error: 'fetch_failed' };
     }
 
-    const cashBalance = portfolio.cash_balance || 0;
+    const availableInBucket = portfolio[cashCol] || 0;
     const totalCost = holdingData.price * holdingData.quantity;
 
-    // Check sufficient funds
-    if (totalCost > cashBalance) {
-        return { error: 'insufficient_cash', available: cashBalance, required: totalCost };
+    // Check sufficient funds in the correct currency bucket
+    if (totalCost > availableInBucket) {
+        return { error: 'insufficient_cash', available: availableInBucket, required: totalCost };
     }
 
-    // Deduct cash balance
+    // Deduct from correct currency bucket
+    const newCashInBucket = availableInBucket - totalCost;
+    const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) - totalCost;
     const { error: updateErr } = await supabaseClient
         .from('portfolios')
-        .update({ cash_balance: cashBalance - totalCost })
+        .update({ [cashCol]: newCashInBucket, cash_balance: totalCash })
         .eq('id', clientId);
 
     if (updateErr) {
@@ -62,14 +67,16 @@ async function portfolioSellAsset(clientId, holdingId, sellQty) {
 // ========== DEPOSIT CASH ==========
 // Add external money to portfolio cash balance
 
-async function portfolioDepositCash(clientId, amount) {
+async function portfolioDepositCash(clientId, amount, currency = 'USD') {
     if (!supabaseConnected) return null;
     if (!amount || amount <= 0) return null;
+
+    const cashCol = (currency === 'ILS') ? 'cash_ils' : 'cash_usd';
 
     // Fetch current values
     const { data: portfolio, error: pErr } = await supabaseClient
         .from('portfolios')
-        .select('cash_balance, portfolio_value, initial_investment')
+        .select('cash_usd, cash_ils, portfolio_value, initial_investment')
         .eq('id', clientId)
         .single();
 
@@ -78,7 +85,8 @@ async function portfolioDepositCash(clientId, amount) {
         return null;
     }
 
-    const newCash = (portfolio.cash_balance || 0) + amount;
+    const newCashInBucket = (portfolio[cashCol] || 0) + amount;
+    const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) + amount;
     const newPortfolioValue = (portfolio.portfolio_value || 0) + amount;
     const newInitialInvestment = (portfolio.initial_investment || 0) + amount;
 
@@ -86,7 +94,8 @@ async function portfolioDepositCash(clientId, amount) {
     const { error: updateErr } = await supabaseClient
         .from('portfolios')
         .update({
-            cash_balance: newCash,
+            [cashCol]: newCashInBucket,
+            cash_balance: totalCash,
             portfolio_value: newPortfolioValue,
             initial_investment: newInitialInvestment
         })
@@ -101,7 +110,7 @@ async function portfolioDepositCash(clientId, amount) {
     await supaLogTransaction(clientId, {
         type: 'deposit',
         ticker: 'CASH',
-        name: 'הפקדת מזומן',
+        name: currency === 'ILS' ? 'הפקדת מזומן (ILS)' : 'הפקדת מזומן (USD)',
         asset_type: 'cash',
         shares: 1,
         price: amount,
@@ -119,25 +128,31 @@ async function portfolioDepositCash(clientId, amount) {
 // ========== WITHDRAW CASH ==========
 // Remove money from portfolio cash balance
 
-async function portfolioWithdrawCash(clientId, amount) {
+async function portfolioWithdrawCash(clientId, amount, currency = 'USD') {
     if (!supabaseConnected) return null;
     if (!amount || amount <= 0) return null;
 
+    const cashCol = (currency === 'ILS') ? 'cash_ils' : 'cash_usd';
+
     const { data: portfolio, error: pErr } = await supabaseClient
         .from('portfolios')
-        .select('cash_balance, portfolio_value, initial_investment')
+        .select('cash_usd, cash_ils, portfolio_value, initial_investment')
         .eq('id', clientId)
         .single();
 
     if (pErr || !portfolio) return null;
 
-    const cashBalance = portfolio.cash_balance || 0;
-    if (amount > cashBalance) return { error: 'insufficient_cash' };
+    const availableInBucket = portfolio[cashCol] || 0;
+    if (amount > availableInBucket) return { error: 'insufficient_cash' };
+
+    const newCashInBucket = availableInBucket - amount;
+    const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) - amount;
 
     const { error: updateErr } = await supabaseClient
         .from('portfolios')
         .update({
-            cash_balance: cashBalance - amount,
+            [cashCol]: newCashInBucket,
+            cash_balance: totalCash,
             portfolio_value: (portfolio.portfolio_value || 0) - amount,
             initial_investment: (portfolio.initial_investment || 0) - amount
         })
@@ -148,7 +163,7 @@ async function portfolioWithdrawCash(clientId, amount) {
     await supaLogTransaction(clientId, {
         type: 'withdraw',
         ticker: 'CASH',
-        name: 'משיכת מזומן',
+        name: currency === 'ILS' ? 'משיכת מזומן (ILS)' : 'משיכת מזומן (USD)',
         asset_type: 'cash',
         shares: 1,
         price: amount,
