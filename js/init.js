@@ -104,6 +104,11 @@ let _cacheRendered = false;
 async function refreshAllPrices() {
     document.getElementById('lastUpdate').textContent = 'מעדכן...';
 
+    // Refresh FX rates on manual refresh
+    if (typeof fetchFxRates === 'function') {
+        fetchFxRates().catch(e => console.warn('[Refresh] FX rate fetch failed:', e.message));
+    }
+
     const onRefreshUpdate = () => {
         renderSummaryBar();
         renderExposureSection();
@@ -167,6 +172,13 @@ async function init() {
 
     // Restore state from URL query params
     restoreStateFromURL();
+
+    // ── Phase 1.5: Fetch FX rates for multi-currency valuation ──
+    // Non-blocking — has hardcoded fallback if APIs fail.
+    // Must resolve before price update so portfolio totals are FX-converted.
+    if (typeof fetchFxRates === 'function') {
+        fetchFxRates().catch(e => console.warn('[Init] FX rate fetch failed, using fallback:', e.message));
+    }
 
     // ── Phase 2: Update live market prices in background ──
     // Use requestIdleCallback so we don't compete with rendering

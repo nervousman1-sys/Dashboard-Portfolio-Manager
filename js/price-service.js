@@ -286,6 +286,50 @@ function simulateBondPrice(holding) {
     return { price: Math.round(newPrice * 100) / 100, previousClose: holding.price };
 }
 
+// ========== FX-AWARE PORTFOLIO RECALCULATION ==========
+// Recomputes portfolio totals with currency conversion.
+// Each holding's native-currency value (h.value) is preserved for per-holding display.
+// The portfolio total converts everything to USD (display currency) using live FX rates.
+// Uses getFxRate() and convertToDisplayCurrency() from fx-service.js.
+
+function _recalcPortfolioWithFx(client) {
+    const displayCurrency = 'USD';
+    let holdingsValueConverted = 0;
+
+    client.holdings.forEach(h => {
+        // h.value stays in native currency (used for per-holding display in modals)
+        // _valueInDisplayCurrency is the FX-converted value for portfolio totals
+        h._valueInDisplayCurrency = getHoldingValueInDisplayCurrency(h, displayCurrency);
+        holdingsValueConverted += h._valueInDisplayCurrency;
+    });
+
+    // Convert cash buckets to display currency
+    const cashUsd = client.cash?.usd || 0;
+    const cashIls = client.cash?.ils || 0;
+    const cashConverted = convertToDisplayCurrency(cashUsd, 'USD', displayCurrency)
+                        + convertToDisplayCurrency(cashIls, 'ILS', displayCurrency);
+
+    client.portfolioValue = holdingsValueConverted + cashConverted;
+
+    // Allocation % based on FX-converted values (apples-to-apples comparison)
+    const totalValue = client.portfolioValue;
+    let stockPct = 0, bondPct = 0;
+
+    client.holdings.forEach(h => {
+        h.allocationPct = totalValue > 0 ? (h._valueInDisplayCurrency / totalValue * 100) : 0;
+        const pct = h.allocationPct;
+        if (h.type === 'stock') stockPct += pct;
+        else bondPct += pct;
+    });
+
+    client.stockPct = stockPct;
+    client.bondPct = bondPct;
+
+    if (stockPct > 70) { client.risk = 'high'; client.riskLabel = 'גבוה'; }
+    else if (stockPct >= 40) { client.risk = 'medium'; client.riskLabel = 'בינוני'; }
+    else { client.risk = 'low'; client.riskLabel = 'נמוך'; }
+}
+
 // ========== IN-MEMORY PRICE APPLICATION ==========
 // Updates the global `clients` array with new prices, recalculates per-portfolio metrics.
 // Returns true if anything changed.
@@ -308,8 +352,8 @@ function _applyPricesToClientsInMemory(priceMap) {
                 if (newPrice > 0) {
                     h.previousClose = newPrevClose;
                     h.price = newPrice;
-                    h.value = h.shares * newPrice;
-                    h._livePriceResolved = true; // Flag: this price came from a live API
+                    h.value = h.shares * newPrice; // Native currency value (for per-holding display)
+                    h._livePriceResolved = true;
                     clientChanged = true;
                 }
             }
@@ -317,26 +361,7 @@ function _applyPricesToClientsInMemory(priceMap) {
 
         if (clientChanged) {
             anyChanged = true;
-
-            const holdingsValue = client.holdings.reduce((s, h) => s + h.value, 0);
-            client.portfolioValue = holdingsValue + client.cashBalance;
-
-            const totalValue = client.portfolioValue;
-            let stockPct = 0, bondPct = 0;
-
-            client.holdings.forEach(h => {
-                h.allocationPct = totalValue > 0 ? (h.value / totalValue * 100) : 0;
-                const pct = totalValue > 0 ? (h.value / totalValue * 100) : 0;
-                if (h.type === 'stock') stockPct += pct;
-                else bondPct += pct;
-            });
-
-            client.stockPct = stockPct;
-            client.bondPct = bondPct;
-
-            if (stockPct > 70) { client.risk = 'high'; client.riskLabel = 'גבוה'; }
-            else if (stockPct >= 40) { client.risk = 'medium'; client.riskLabel = 'בינוני'; }
-            else { client.risk = 'low'; client.riskLabel = 'נמוך'; }
+            _recalcPortfolioWithFx(client);
         }
     });
 

@@ -608,18 +608,36 @@ async function supaRecalcClient(clientId) {
     const cashIls = portfolioRes.data?.cash_ils ?? 0;
     const totalCash = cashUsd + cashIls;
 
+    // FX-aware valuation: convert all holdings + cash to display currency (USD)
+    const displayCurrency = 'USD';
     let holdingsValue = 0;
-    holdings.forEach(h => { holdingsValue += h.shares * h.price; });
+    holdings.forEach(h => {
+        const currency = h.currency || 'USD';
+        const nativeValue = h.shares * h.price;
+        const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, displayCurrency) : 1;
+        holdingsValue += nativeValue * fxRate;
+    });
 
-    const totalValue = holdingsValue + totalCash;
+    // Convert cash buckets to display currency
+    const cashUsdConverted = (typeof convertToDisplayCurrency === 'function')
+        ? convertToDisplayCurrency(cashUsd, 'USD', displayCurrency) : cashUsd;
+    const cashIlsConverted = (typeof convertToDisplayCurrency === 'function')
+        ? convertToDisplayCurrency(cashIls, 'ILS', displayCurrency) : cashIls;
+    const totalCashConverted = cashUsdConverted + cashIlsConverted;
+
+    const totalValue = holdingsValue + totalCashConverted;
 
     // Update all holdings in parallel (not one-by-one)
+    // Store native-currency value in DB (value column), allocation uses FX-converted total
     await Promise.all(holdings.map(h => {
-        const value = h.shares * h.price;
-        const allocationPct = totalValue > 0 ? (value / totalValue * 100) : 0;
+        const nativeValue = h.shares * h.price;
+        const currency = h.currency || 'USD';
+        const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, displayCurrency) : 1;
+        const convertedValue = nativeValue * fxRate;
+        const allocationPct = totalValue > 0 ? (convertedValue / totalValue * 100) : 0;
         return supabaseClient
             .from('holdings')
-            .update({ value, allocation_pct: allocationPct })
+            .update({ value: nativeValue, allocation_pct: allocationPct })
             .eq('id', h.id);
     }));
 
@@ -627,12 +645,16 @@ async function supaRecalcClient(clientId) {
     let stockPct = 0, bondPct = 0;
     if (totalValue > 0) {
         holdings.forEach(h => {
-            const pct = (h.shares * h.price) / totalValue * 100;
+            const nativeValue = h.shares * h.price;
+            const currency = h.currency || 'USD';
+            const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, displayCurrency) : 1;
+            const pct = (nativeValue * fxRate) / totalValue * 100;
             if (h.type === 'stock') stockPct += pct;
             else bondPct += pct;
         });
     }
 
+    const totalCash = cashUsd + cashIls; // Raw sum for cash_balance column (backward compat)
     const initialInvestment = holdings.reduce((s, h) => s + h.cost_basis, 0) + totalCash;
 
     // Dynamic risk level based on actual stock allocation
