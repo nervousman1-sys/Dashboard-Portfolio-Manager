@@ -1794,7 +1794,7 @@ function toggleChartDisplayMode(btn) {
 
     // Refresh whichever chart is currently active
     if (document.getElementById('fullscreenOverlay')?.classList.contains('active')) {
-        _renderFullscreenChart(currentModalClientId);
+        _renderFullscreenChart();
     } else {
         _refreshModalPerfChart();
     }
@@ -1898,7 +1898,12 @@ function renderModalSectorChart(client) {
 
 // ========== FULLSCREEN CHART ==========
 
-// State for fullscreen
+// State for fullscreen — _fullscreenClientId is the single source of truth
+// for which portfolio is displayed. It is set once when fullscreen opens and
+// used by ALL subsequent actions (range change, benchmark toggle, display mode).
+// This decouples fullscreen from the modal's currentModalClientId, which may
+// be null when fullscreen is opened directly from the client grid shortcut.
+let _fullscreenClientId = null;
 let _fullscreenRange = '1y';
 let _fullscreenBenchmarks = [];
 
@@ -1907,7 +1912,8 @@ function openFullscreenChart(clientId) {
     if (!client) return;
     // Don't block on empty performanceHistory — synthetic history will handle it
 
-    // Reset state
+    // Reset state — save clientId for all subsequent fullscreen actions
+    _fullscreenClientId = clientId;
     _fullscreenRange = _modalPerfRange || '1y';
     _fullscreenBenchmarks = [..._modalPerfBenchmarks];
 
@@ -1950,10 +1956,25 @@ function openFullscreenChart(clientId) {
         fullscreenChartInstance = null;
     }
 
-    _renderFullscreenChart(clientId);
+    _renderFullscreenChart();
 }
 
-async function _renderFullscreenChart(clientId) {
+async function _renderFullscreenChart() {
+    // Use the saved _fullscreenClientId — set once in openFullscreenChart().
+    // This is the ONLY place that determines which portfolio to render.
+    const clientId = _fullscreenClientId;
+    if (!clientId) {
+        console.warn('[Fullscreen] No client ID set — cannot render chart');
+        return;
+    }
+
+    // Verify the client still exists in the local store
+    const client = clients.find(c => c.id === clientId);
+    if (!client) {
+        console.warn(`[Fullscreen] Client ${clientId} not found in local store`);
+        return;
+    }
+
     if (fullscreenChartInstance) {
         fullscreenChartInstance.destroy();
         fullscreenChartInstance = null;
@@ -1961,11 +1982,12 @@ async function _renderFullscreenChart(clientId) {
 
     // Wait for CSS transition to finish and canvas to have real dimensions.
     const canvas = document.getElementById('fullscreen-chart');
+    if (!canvas) return;
     await new Promise(resolve => {
         let tries = 0;
         const check = () => {
             tries++;
-            if ((canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) || tries > 20) {
+            if ((canvas.offsetWidth > 0 && canvas.offsetHeight > 0) || tries > 20) {
                 resolve();
             } else {
                 requestAnimationFrame(check);
@@ -1993,7 +2015,7 @@ function setFullscreenRange(range, btn) {
     const container = btn.closest('.perf-time-range');
     if (container) container.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    _renderFullscreenChart(currentModalClientId);
+    _renderFullscreenChart();
 }
 
 function toggleFullscreenBenchmark(symbol, btn) {
@@ -2007,7 +2029,7 @@ function toggleFullscreenBenchmark(symbol, btn) {
         btn.classList.add('active');
         btn.style.color = BENCHMARK_COLORS[symbol] || '';
     }
-    _renderFullscreenChart(currentModalClientId);
+    _renderFullscreenChart();
 }
 
 function fullscreenZoom(action) {
@@ -2056,4 +2078,5 @@ function closeFullscreen(event) {
         fullscreenChartInstance.destroy();
         fullscreenChartInstance = null;
     }
+    _fullscreenClientId = null;
 }
