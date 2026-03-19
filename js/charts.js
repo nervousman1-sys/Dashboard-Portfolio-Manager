@@ -105,6 +105,51 @@ function _getLastTradingDay() {
     return d.toISOString().split('T')[0];
 }
 
+// ========== TASE (Tel Aviv Stock Exchange) MARKET HOURS ==========
+// TASE operates Sun–Thu, 09:59–17:15 Israel Time (Asia/Jerusalem).
+// Used for Israeli benchmarks (TA-35, TA-125) to detect last trading day.
+
+function _isTASEMarketOpen() {
+    const now = new Date();
+    const ilStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
+    const il = new Date(ilStr);
+    const day = il.getDay(); // 0=Sun, 6=Sat
+    const timeInMinutes = il.getHours() * 60 + il.getMinutes();
+
+    // TASE closed on Friday and Saturday
+    if (day === 5 || day === 6) return false;
+
+    // Trading hours: 09:59 (599 min) to 17:15 (1035 min)
+    if (timeInMinutes < 599 || timeInMinutes >= 1035) return false;
+
+    return true;
+}
+
+function _getLastTASETradingDay() {
+    const now = new Date();
+    const ilStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
+    const il = new Date(ilStr);
+    let d = new Date(il);
+
+    // If before market open on a trading day, use previous trading day
+    const day = d.getDay();
+    if (day >= 0 && day <= 4 && d.getHours() < 4) {
+        d.setDate(d.getDate() - 1);
+    }
+
+    // Walk back from Fri/Sat to Thursday
+    while (d.getDay() === 5 || d.getDay() === 6) {
+        d.setDate(d.getDate() - 1);
+    }
+
+    return d.toISOString().split('T')[0];
+}
+
+// Detect if a benchmark symbol is Israeli (.TA suffix or TA-prefixed)
+function _isIsraeliIndex(symbol) {
+    return symbol.includes('.TA') || symbol.includes(':TASE') || /^TA\d+/.test(symbol);
+}
+
 // ========== FETCH BENCHMARK DATA FROM API ==========
 
 function _rangeToDays(range) {
@@ -142,7 +187,7 @@ function _logBenchmarkDiag() {
     const tdOk = TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY' && TWELVE_DATA_API_KEY !== '';
     console.log(`[Benchmark] API Key Status — FMP: ${fmpOk ? '✓ configured' : '✗ MISSING'}, Twelve Data: ${tdOk ? '✓ configured' : '✗ MISSING'}`);
     if (!fmpOk && !tdOk) {
-        console.error('[Benchmark] ⚠ NO API KEYS CONFIGURED — benchmarks will use static fallback only (SPY). Configure FMP_API_KEY and/or TWELVE_DATA_API_KEY in env-config.js or build process.');
+        console.error('[Benchmark] ⚠ NO API KEYS CONFIGURED — benchmarks will use static fallback only (SPY, QQQ, DIA, IWM, TA-125, TA-35). Configure FMP_API_KEY and/or TWELVE_DATA_API_KEY in env-config.js or build process.');
     } else if (!fmpOk) {
         console.warn('[Benchmark] FMP key missing — all benchmarks depend on Twelve Data (8 req/min rate limit). Some benchmarks may fail.');
     }
@@ -203,7 +248,7 @@ async function fetchBenchmarkData(symbol, range) {
     }
 
     // Static fallback: if all APIs fail, use approximate historical data.
-    // Covers SPY, QQQ, and DIA — the 3 most commonly toggled benchmarks.
+    // Covers SPY, QQQ, DIA, IWM, TA-125, TA-35 — all 6 supported benchmarks.
     const staticData = _getStaticBenchmarkFallback(symbol, range);
     if (staticData && staticData.length > 0) {
         console.log(`[Benchmark] Using static fallback for ${symbol} (range=${range}, ${staticData.length} points)`);
@@ -224,8 +269,8 @@ const _TWELVE_DATA_ALIASES = {
     'QQQ': ['QQQ', 'NDX', 'IXIC'],   // Nasdaq 100 ETF → ^NDX index → ^IXIC composite
     'DIA': ['DIA', 'DJI'],           // Dow Jones ETF → ^DJI index
     'IWM': ['IWM', 'RUT'],           // Russell 2000 ETF → ^RUT index
-    'TA125.TA': ['TA125.TA'],        // Tel Aviv 125 — Twelve Data TASE symbol
-    'TA35.TA': ['TA35.TA']           // Tel Aviv 35 — Twelve Data TASE symbol
+    'TA125.TA': ['TA125:TASE', 'TA125.TA'],  // Tel Aviv 125 — Twelve Data TASE format first
+    'TA35.TA': ['TA35:TASE', 'TA35.TA']      // Tel Aviv 35 — Twelve Data TASE format first
 };
 
 // ── Twelve Data Rate-Limit Queue ──
@@ -319,7 +364,9 @@ const _FMP_SYMBOL_ALIASES = {
     'SPY': ['SPY', '%5EGSPC'],       // S&P 500 ETF → ^GSPC index
     'QQQ': ['QQQ', '%5ENDX'],        // Nasdaq 100 ETF → ^NDX index
     'DIA': ['DIA', '%5EDJI'],        // Dow Jones ETF → ^DJI index
-    'IWM': ['IWM', '%5ERUT']         // Russell 2000 ETF → ^RUT index
+    'IWM': ['IWM', '%5ERUT'],        // Russell 2000 ETF → ^RUT index
+    'TA125.TA': ['TA125.TA'],        // Tel Aviv 125 — FMP TASE format
+    'TA35.TA': ['TA35.TA']           // Tel Aviv 35 — FMP TASE format
 };
 
 async function _fetchFMPBenchmark(symbol, range) {
@@ -328,11 +375,8 @@ async function _fetchFMPBenchmark(symbol, range) {
         return null;
     }
 
-    // FMP doesn't support Israeli indices (.TA suffix) — skip immediately
-    if (symbol.includes('.TA')) {
-        console.log(`[Benchmark] FMP skipping Israeli index ${symbol}`);
-        return null;
-    }
+    // FMP has limited support for Israeli indices (.TA suffix) — attempt but expect failure.
+    // The function will fall through to Twelve Data / static fallback if FMP returns nothing.
 
     const isIntraday = (range === '1d' || range === '5d');
     const symbolsToTry = _FMP_SYMBOL_ALIASES[symbol] || [symbol];
@@ -485,24 +529,84 @@ const _STATIC_DIA_MONTHLY = [
     { date: '2026-03-18', close: 480 }
 ];
 
-// Unified static fallback — covers SPY, QQQ, DIA.
-// Maps ETF symbol to its static dataset, then filters by range.
+// Approximate monthly IWM (Russell 2000 ETF) close prices.
+// IWM ≈ Russell 2000 / 10. Calibrated to ~+20% over 2Y (Mar 2024→Mar 2026).
+const _STATIC_IWM_MONTHLY = [
+    { date: '2024-03-28', close: 209 }, { date: '2024-04-30', close: 198 },
+    { date: '2024-05-31', close: 207 }, { date: '2024-06-28', close: 203 },
+    { date: '2024-07-31', close: 222 }, { date: '2024-08-30', close: 218 },
+    { date: '2024-09-30', close: 221 }, { date: '2024-10-31', close: 219 },
+    { date: '2024-11-29', close: 240 }, { date: '2024-12-31', close: 225 },
+    { date: '2025-01-31', close: 230 }, { date: '2025-02-28', close: 215 },
+    { date: '2025-03-31', close: 205 }, { date: '2025-04-30', close: 198 },
+    { date: '2025-05-30', close: 215 }, { date: '2025-06-30', close: 225 },
+    { date: '2025-07-31', close: 232 }, { date: '2025-08-29', close: 228 },
+    { date: '2025-09-30', close: 220 }, { date: '2025-10-31', close: 230 },
+    { date: '2025-11-28', close: 238 }, { date: '2025-12-31', close: 242 },
+    { date: '2026-01-30', close: 245 }, { date: '2026-02-27', close: 248 },
+    { date: '2026-03-18', close: 251 }
+];
+
+// Approximate monthly TA-125 (Tel Aviv 125 Index) close prices.
+// TA-125 was ~1,950 in Mar 2024 and ~2,350 in Mar 2026 (~+20% over 2Y).
+const _STATIC_TA125_MONTHLY = [
+    { date: '2024-03-28', close: 1950 }, { date: '2024-04-30', close: 1900 },
+    { date: '2024-05-31', close: 1930 }, { date: '2024-06-28', close: 1960 },
+    { date: '2024-07-31', close: 1980 }, { date: '2024-08-30', close: 1945 },
+    { date: '2024-09-30', close: 1970 }, { date: '2024-10-31', close: 1920 },
+    { date: '2024-11-29', close: 2000 }, { date: '2024-12-31', close: 2020 },
+    { date: '2025-01-31', close: 2050 }, { date: '2025-02-28', close: 2030 },
+    { date: '2025-03-31', close: 2010 }, { date: '2025-04-30', close: 1980 },
+    { date: '2025-05-30', close: 2060 }, { date: '2025-06-30', close: 2100 },
+    { date: '2025-07-31', close: 2150 }, { date: '2025-08-29', close: 2120 },
+    { date: '2025-09-30', close: 2080 }, { date: '2025-10-31', close: 2140 },
+    { date: '2025-11-28', close: 2200 }, { date: '2025-12-31', close: 2250 },
+    { date: '2026-01-30', close: 2290 }, { date: '2026-02-27', close: 2320 },
+    { date: '2026-03-18', close: 2350 }
+];
+
+// Approximate monthly TA-35 (Tel Aviv 35 Index) close prices.
+// TA-35 was ~1,780 in Mar 2024 and ~2,100 in Mar 2026 (~+18% over 2Y).
+const _STATIC_TA35_MONTHLY = [
+    { date: '2024-03-28', close: 1780 }, { date: '2024-04-30', close: 1740 },
+    { date: '2024-05-31', close: 1760 }, { date: '2024-06-28', close: 1790 },
+    { date: '2024-07-31', close: 1810 }, { date: '2024-08-30', close: 1785 },
+    { date: '2024-09-30', close: 1800 }, { date: '2024-10-31', close: 1760 },
+    { date: '2024-11-29', close: 1830 }, { date: '2024-12-31', close: 1850 },
+    { date: '2025-01-31', close: 1880 }, { date: '2025-02-28', close: 1860 },
+    { date: '2025-03-31', close: 1840 }, { date: '2025-04-30', close: 1810 },
+    { date: '2025-05-30', close: 1870 }, { date: '2025-06-30', close: 1910 },
+    { date: '2025-07-31', close: 1950 }, { date: '2025-08-29', close: 1930 },
+    { date: '2025-09-30', close: 1900 }, { date: '2025-10-31', close: 1940 },
+    { date: '2025-11-28', close: 1990 }, { date: '2025-12-31', close: 2030 },
+    { date: '2026-01-30', close: 2060 }, { date: '2026-02-27', close: 2080 },
+    { date: '2026-03-18', close: 2100 }
+];
+
+// Unified static fallback — covers SPY, QQQ, DIA, IWM, TA-125, TA-35.
+// Maps ETF/index symbol to its static dataset, then filters by range.
 const _STATIC_BENCHMARK_DATA = {
     'SPY': _STATIC_SPY_MONTHLY,
     'QQQ': _STATIC_QQQ_MONTHLY,
-    'DIA': _STATIC_DIA_MONTHLY
+    'DIA': _STATIC_DIA_MONTHLY,
+    'IWM': _STATIC_IWM_MONTHLY,
+    'TA125.TA': _STATIC_TA125_MONTHLY,
+    'TA35.TA': _STATIC_TA35_MONTHLY
 };
 
 function _getStaticBenchmarkFallback(symbol, range) {
-    // Resolve symbol → static dataset
-    // Support both ETF tickers and index aliases
-    const _symbolToETF = {
+    // Resolve symbol → static dataset key.
+    // Supports ETF tickers, index symbols, and common user-facing aliases.
+    const _symbolToKey = {
         'SPY': 'SPY', 'GSPC': 'SPY', '%5EGSPC': 'SPY',
         'QQQ': 'QQQ', 'NDX': 'QQQ', 'IXIC': 'QQQ', '%5ENDX': 'QQQ',
-        'DIA': 'DIA', 'DJI': 'DIA', '%5EDJI': 'DIA'
+        'DIA': 'DIA', 'DJI': 'DIA', '%5EDJI': 'DIA',
+        'IWM': 'IWM', 'RUT': 'IWM', '%5ERUT': 'IWM',
+        'TA125.TA': 'TA125.TA', 'TA125': 'TA125.TA', 'TA-125': 'TA125.TA', 'TA125:TASE': 'TA125.TA',
+        'TA35.TA': 'TA35.TA', 'TA35': 'TA35.TA', 'TA-35': 'TA35.TA', 'TA35:TASE': 'TA35.TA'
     };
-    const etfKey = _symbolToETF[symbol] || symbol;
-    const staticData = _STATIC_BENCHMARK_DATA[etfKey];
+    const dataKey = _symbolToKey[symbol] || symbol;
+    const staticData = _STATIC_BENCHMARK_DATA[dataKey];
     if (!staticData) return null;
 
     const days = _rangeToDays(range);
