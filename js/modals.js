@@ -510,7 +510,7 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
-                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(availableCash)}</span></div>
+                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
                     <div class="insufficient-cash-warning" id="mgmt-cash-warning" style="display:none">אין מספיק מזומן בתיק</div>
                 </div>
             </div>
@@ -754,19 +754,19 @@ document.addEventListener('click', (e) => {
 // --- Client CRUD (routes to Supabase when connected, fallback to backend API) ---
 
 async function addClient() {
-    const name = document.getElementById('mgmt-name').value.trim();
-    const cashUsd = parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0;
-    const cashIls = parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0;
-    if (!name) { alert('נא להזין שם לקוח'); return; }
-
-    // Collect holdings from dynamic table
-    const holdingsData = _collectHoldingRows();
-
-    // Show loading state
     const submitBtn = document.getElementById('addClientSubmitBtn');
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
-
     try {
+        const name = (document.getElementById('mgmt-name')?.value || '').trim();
+        const cashUsd = parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0;
+        const cashIls = parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0;
+        if (!name) { alert('נא להזין שם לקוח'); return; }
+
+        // Collect holdings from dynamic table
+        const holdingsData = _collectHoldingRows();
+
+        // Show loading state
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
+
         let finalClient;
 
         if (supabaseConnected) {
@@ -793,7 +793,7 @@ async function addClient() {
         }
     } catch (err) {
         console.error('addClient error:', err);
-        alert('שגיאה ביצירת התיק');
+        alert('שגיאה ביצירת התיק: ' + (err.message || err));
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'הוסף תיק'; }
     }
 }
@@ -1120,9 +1120,9 @@ function _collectHoldingRows() {
         });
     });
 
-    // If cash rows were found, add to the cash input field
+    // If cash rows were found, add to the USD cash input field
     if (extraCash > 0) {
-        const cashInput = document.getElementById('mgmt-cash');
+        const cashInput = document.getElementById('mgmt-cash-usd');
         if (cashInput) {
             const existing = parseFloat(cashInput.value) || 0;
             cashInput.value = (existing + extraCash).toFixed(2);
@@ -1192,9 +1192,9 @@ async function handleDropzoneFile(file) {
             // Add parsed holdings rows
             parsed.forEach(row => addHoldingRow(row));
 
-            // Add cash from file to the cash balance field
+            // Add cash from file to the USD cash balance field
             if (cashFromFile > 0) {
-                const cashInput = document.getElementById('mgmt-cash');
+                const cashInput = document.getElementById('mgmt-cash-usd');
                 if (cashInput) {
                     const existing = parseFloat(cashInput.value) || 0;
                     cashInput.value = (existing + cashFromFile).toFixed(2);
