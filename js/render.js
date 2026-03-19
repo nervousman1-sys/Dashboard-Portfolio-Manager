@@ -446,9 +446,13 @@ function renderClientCards() {
             }
         }
 
-        // Cash balance rows (per currency)
-        const _cashUsd = client.cash?.usd || 0;
-        const _cashIls = client.cash?.ils || 0;
+        // Cash balance rows (per currency, with legacy fallback)
+        let _cashUsd = client.cash?.usd || 0;
+        let _cashIls = client.cash?.ils || 0;
+        // Legacy fallback: if both buckets are 0 but cashBalance exists, show as USD
+        if (_cashUsd === 0 && _cashIls === 0 && (client.cashBalance || 0) > 0) {
+            _cashUsd = client.cashBalance;
+        }
         let _cashBorderAdded = false;
         if (_cashUsd > 0) {
             holdingsHTML += `

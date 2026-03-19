@@ -759,10 +759,18 @@ async function addClient() {
         const name = (document.getElementById('mgmt-name')?.value || '').trim();
         const cashUsd = parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0;
         const cashIls = parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0;
-        if (!name) { alert('נא להזין שם לקוח'); return; }
+
+        if (!name) {
+            console.warn('addClient: name is empty. mgmt-name element:', document.getElementById('mgmt-name'));
+            alert('נא להזין שם לקוח');
+            return;
+        }
 
         // Collect holdings from dynamic table
         const holdingsData = _collectHoldingRows();
+
+        const portfolioData = { name, cashUsd, cashIls, holdingsCount: holdingsData.length };
+        console.log('Submitting data:', portfolioData);
 
         // Show loading state
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'יוצר תיק...'; }
@@ -778,6 +786,8 @@ async function addClient() {
         } else {
             finalClient = await apiAddClient(name, 'low');
         }
+
+        console.log('addClient result:', finalClient ? 'success (id=' + finalClient.id + ')' : 'null');
 
         if (finalClient) clients.push(finalClient);
         closeMgmtModal();

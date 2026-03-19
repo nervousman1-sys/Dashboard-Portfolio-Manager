@@ -13,9 +13,14 @@ function _inferAssetClass(type) {
 }
 
 function mapPortfolio(p) {
-    // Backward compat: if cash_usd/cash_ils don't exist yet, fall back to cash_balance as USD
-    const cashUsd = p.cash_usd ?? p.cash_balance ?? 0;
-    const cashIls = p.cash_ils ?? 0;
+    // Legacy fallback: ?? only handles null/undefined, NOT 0.
+    // If DB migration added cash_usd column with DEFAULT 0, existing rows have cash_usd=0
+    // even though cash_balance has the real value. Detect this and migrate in-memory.
+    let cashUsd = p.cash_usd ?? 0;
+    let cashIls = p.cash_ils ?? 0;
+    if (cashUsd === 0 && cashIls === 0 && (p.cash_balance || 0) > 0) {
+        cashUsd = p.cash_balance;  // Legacy data: treat all cash_balance as USD
+    }
     return {
         id: p.id,
         name: p.name,
