@@ -1859,41 +1859,81 @@ body {
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 .ticker-search-item {
-    display: block;
-    padding: 8px 12px;
+    padding: 7px 10px;
     cursor: pointer;
     transition: background 0.15s;
-    direction: ltr;
-    text-align: left;
 }
 .ticker-search-item:hover {
     background: var(--bg-card-hover);
 }
-/* Search dropdown: grid layout — name (shrinks w/ ellipsis) | price | ticker (fixed) */
-.ticker-search-item .search-live-price {
-    font-variant-numeric: tabular-nums;
-}
 .ticker-search-item:active {
     background: rgba(59,130,246,0.12);
 }
-.ticker-search-symbol {
-    font-weight: 700;
-    color: var(--accent-blue);
-    min-width: 60px;
-    font-size: 13px;
+/* 4-column grid: Name (flexible) | Ticker (fixed) | Exchange (fixed) | Price (fixed) */
+.search-row-grid {
+    display: grid;
+    grid-template-columns: 1fr 72px 68px 68px;
+    align-items: center;
+    gap: 6px;
+    direction: ltr;
+    text-align: left;
+    width: 100%;
 }
-.ticker-search-name {
-    flex: 1;
+.search-col-name {
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.search-name-primary {
+    font-weight: 600;
+    font-size: 13px;
     color: var(--text-primary);
-    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.ticker-search-meta {
+.search-name-secondary {
+    font-size: 10px;
     color: var(--text-muted);
-    font-size: 11px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-col-ticker {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent-blue);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: ltr;
+}
+.search-col-exchange {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.search-col-price {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    white-space: nowrap;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+}
+.search-bond-tag {
+    display: inline-block;
+    color: var(--accent-purple, #a855f7);
+    font-size: 9px;
+    font-weight: 600;
+    border: 1px solid var(--accent-purple, #a855f7);
+    border-radius: 3px;
+    padding: 0 3px;
+    margin-left: 4px;
+    vertical-align: middle;
 }
 .ticker-search-empty, .ticker-search-loading {
     padding: 12px;

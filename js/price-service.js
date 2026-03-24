@@ -178,8 +178,8 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                 let price = parseFloat(data.close);
                 let prevClose = parseFloat(data.previous_close);
                 // TASE prices sometimes returned in Agurot (×100) — detect & convert
-                // If basePrice known: compare. If unknown: any Israeli price > 1000 is likely Agurot.
-                if (isIsraeli && price > 1000 && (!basePrice || basePrice < 1000)) {
+                // If basePrice known: compare. If unknown: any Israeli price > 500 is likely Agurot.
+                if (isIsraeli && price > 500 && (!basePrice || basePrice < 500)) {
                     price /= 100;
                     prevClose /= 100;
                 }
@@ -212,8 +212,8 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                 const q = data[0];
                 let fmpPrice = q.price;
                 let fmpPrev = q.previousClose || q.price;
-                // Agurot detection: Israeli stock prices > 1000 → likely in Agurot
-                if (isIsraeli && fmpPrice > 1000 && (!basePrice || basePrice < 1000)) {
+                // Agurot detection: Israeli stock prices > 500 → likely in Agurot
+                if (isIsraeli && fmpPrice > 500 && (!basePrice || basePrice < 500)) {
                     fmpPrice /= 100;
                     fmpPrev /= 100;
                 }
@@ -243,7 +243,7 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                     let yPrice = meta.regularMarketPrice;
                     let yPrev = meta.chartPreviousClose || meta.previousClose || yPrice;
                     // Agurot detection
-                    if (isIsraeli && yPrice > 1000 && (!basePrice || basePrice < 1000)) {
+                    if (isIsraeli && yPrice > 500 && (!basePrice || basePrice < 500)) {
                         yPrice /= 100;
                         yPrev /= 100;
                     }

@@ -711,6 +711,7 @@ function updateDepositPreview() {
 let _lastSearchResultType = null;
 
 // Shared renderer for both main and row dropdowns
+// 4-column grid: [Name] [Ticker] [Exchange] [Price]
 function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
@@ -719,27 +720,21 @@ function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
     dropdown.innerHTML = results.map(r => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const safeName = (r.name || '').replace(/'/g, "\\'");
-        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         const exchangeLabel = r.exchange || '';
         const primaryLabel = heName || r.name || r.symbol;
         const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
         const safeId = (r.symbol || '').replace(/[^a-zA-Z0-9]/g, '_');
-        const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
+        const bondTag = r.type === 'Bond' ? ' <span class="search-bond-tag">אג"ח</span>' : '';
         const rType = r.type || 'Common Stock';
-        return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')" style="padding:8px 10px;cursor:pointer">
-            <div style="display:grid;grid-template-columns:60% 20% 20%;align-items:center;width:100%;gap:0">
-                <div style="min-width:0;overflow:hidden;padding-right:4px">
-                    <div style="display:flex;align-items:center;gap:4px">
-                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%">${primaryLabel}</span>
-                        ${typeLabel}
-                    </div>
-                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${secondaryLabel}</div>` : ''}
+        return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')">
+            <div class="search-row-grid">
+                <div class="search-col-name">
+                    <span class="search-name-primary">${primaryLabel}${bondTag}</span>
+                    ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_${safeId}" style="text-align:center;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr;white-space:nowrap"></span>
-                <div style="text-align:right;white-space:nowrap;overflow:hidden">
-                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr;overflow:hidden;text-overflow:ellipsis">${r.symbol}</div>
-                    <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
-                </div>
+                <div class="search-col-ticker">${r.symbol}</div>
+                <div class="search-col-exchange">${exchangeLabel}</div>
+                <div class="search-col-price" id="slp_${safeId}"></div>
             </div>
         </div>`;
     }).join('');
@@ -766,28 +761,25 @@ let _searchPriceBatchId = 0;
 
 async function _fetchSearchResultPrices(results, idPrefix = '') {
     const batchId = ++_searchPriceBatchId;
-    // Limit to first 5 results to avoid API rate limits
     const toFetch = results.slice(0, 5);
 
     for (const r of toFetch) {
-        // Bail if a newer search replaced this dropdown
         if (_searchPriceBatchId !== batchId) return;
 
         const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
         const el = document.getElementById(`slp_${idPrefix}${safeId}`);
         if (!el) continue;
 
+        const cs = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         el.textContent = '...';
 
         // Check priceCache first (instant hit)
         const cached = (typeof priceCache !== 'undefined') ? priceCache[r.symbol.toUpperCase().trim()] : null;
         if (cached && cached.price > 0) {
-            const cs = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
-            el.textContent = `${cached.price.toFixed(2)} ${cs}`;
+            el.textContent = `${cs}${cached.price.toFixed(2)}`;
             continue;
         }
 
-        // Fire async fetch (don't await all — fire sequentially to avoid hammering)
         try {
             const result = (typeof fetchSingleTickerPrice === 'function')
                 ? await fetchSingleTickerPrice(r.symbol, r.currency || null)
@@ -796,8 +788,7 @@ async function _fetchSearchResultPrices(results, idPrefix = '') {
             const el2 = document.getElementById(`slp_${idPrefix}${safeId}`);
             if (!el2) continue;
             if (result && result.price > 0) {
-                const cs = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
-                el2.textContent = `${result.price.toFixed(2)} ${cs}`;
+                el2.textContent = `${cs}${result.price.toFixed(2)}`;
             } else {
                 el2.textContent = '—';
             }
@@ -1309,26 +1300,20 @@ function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices = false)
     }
     dropdown.innerHTML = results.map(r => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
-        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         const exchangeLabel = r.exchange || '';
         const primaryLabel = heName || r.name || r.symbol;
         const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
         const safeId = (r.symbol || '').replace(/[^a-zA-Z0-9]/g, '_');
-        const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
-        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="padding:8px 10px;cursor:pointer">
-            <div style="display:grid;grid-template-columns:60% 20% 20%;align-items:center;width:100%;gap:0">
-                <div style="min-width:0;overflow:hidden;padding-right:4px">
-                    <div style="display:flex;align-items:center;gap:4px">
-                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%">${primaryLabel}</span>
-                        ${typeLabel}
-                    </div>
-                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${secondaryLabel}</div>` : ''}
+        const bondTag = r.type === 'Bond' ? ' <span class="search-bond-tag">אג"ח</span>' : '';
+        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
+            <div class="search-row-grid">
+                <div class="search-col-name">
+                    <span class="search-name-primary">${primaryLabel}${bondTag}</span>
+                    ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_row_${safeId}" style="text-align:center;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr;white-space:nowrap"></span>
-                <div style="text-align:right;white-space:nowrap;overflow:hidden">
-                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr;overflow:hidden;text-overflow:ellipsis">${r.symbol}</div>
-                    <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
-                </div>
+                <div class="search-col-ticker">${r.symbol}</div>
+                <div class="search-col-exchange">${exchangeLabel}</div>
+                <div class="search-col-price" id="slp_row_${safeId}"></div>
             </div>
         </div>`;
     }).join('');
