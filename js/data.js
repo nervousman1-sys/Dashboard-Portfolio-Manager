@@ -19,6 +19,30 @@ function getHebrewName(holding) {
     return HEBREW_NAMES[ticker] || '';
 }
 
+// Reverse lookup: search Hebrew names by query string (Hebrew or English).
+// Returns array of { symbol, name, hebrewName, currency, exchange } for local matches.
+function searchHebrewNames(query) {
+    if (!query || query.length < 1) return [];
+    const q = query.trim().toLowerCase();
+    const results = [];
+    for (const [ticker, heName] of Object.entries(HEBREW_NAMES)) {
+        const matchesHebrew = heName.includes(q);
+        const matchesTicker = ticker.toLowerCase().includes(q);
+        if (matchesHebrew || matchesTicker) {
+            results.push({
+                symbol: ticker + '.TA',
+                name: heName,
+                hebrewName: heName,
+                currency: 'ILS',
+                exchange: 'TASE',
+                type: 'Common Stock',
+                _localMatch: true
+            });
+        }
+    }
+    return results;
+}
+
 const ISRAELI_NAMES = [
     'יונתן כהן', 'נועה לוי', 'אורי גולדברג', 'מיכל אברהם', 'דניאל שרון',
     'רונית פרידמן', 'עידו מזרחי', 'שירה ביטון', 'אלון דוד', 'תמר רוזנברג',

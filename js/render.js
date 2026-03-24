@@ -414,15 +414,19 @@ function renderClientCards() {
                 const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
                 const changeClass = change >= 0 ? 'positive' : 'negative';
                 const changeSign = change >= 0 ? '+' : '';
+                const heName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+                const cardStockName = heName || h.ticker;
+                const currSym = h.currency === 'ILS' ? '₪' : '$';
                 holdingsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-blue)"></span>
-                            ${h.ticker}
+                            ${cardStockName}${heName ? ` <span style="color:var(--text-muted);font-size:10px">${h.ticker}</span>` : ''}
                         </span>
                         <span class="allocation-value">
                             ${h.allocationPct.toFixed(1)}%
                             <small class="price-change ${changeClass}" style="font-size:10px; margin-right:4px">${changeSign}${change.toFixed(1)}%</small>
+                            <small style="color:var(--text-muted);font-size:9px">${currSym}${h.price.toFixed(0)}</small>
                         </span>
                     </div>`;
             });
@@ -432,13 +436,14 @@ function renderClientCards() {
         }
         if (showBonds) {
             bondHoldings.slice(0, 2).forEach(h => {
+                const bondCurrSym = h.currency === 'ILS' ? '₪' : '$';
                 holdingsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-purple)"></span>
                             ${h.name.length > 20 ? h.name.slice(0, 20) + '...' : h.name}
                         </span>
-                        <span class="allocation-value">${h.allocationPct.toFixed(1)}%</span>
+                        <span class="allocation-value">${h.allocationPct.toFixed(1)}% <small style="color:var(--text-muted);font-size:9px">${bondCurrSym}${h.price.toFixed(0)}</small></span>
                     </div>`;
             });
             if (bondHoldings.length > 2) {

@@ -328,7 +328,9 @@ function generateReport(clientId) {
     let holdingsTableHTML = client.holdings.map(h => {
         const profit = h.value - h.costBasis;
         const ret = h.costBasis > 0 ? (profit / h.costBasis * 100) : 0;
-        return `<tr><td>${h.type === 'stock' ? h.ticker : h.name}</td><td>${h.type === 'stock' ? 'מניה' : 'אג"ח'}</td><td>${h.allocationPct.toFixed(1)}%</td><td>${formatCurrency(h.value, h.currency)}</td><td style="color:${ret >= 0 ? 'green' : 'red'}">${(ret >= 0 ? '+' : '') + ret.toFixed(2)}%</td></tr>`;
+        const rptHeName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+        const rptName = rptHeName || (h.type === 'stock' ? h.ticker : h.name);
+        return `<tr><td>${rptName}</td><td>${h.type === 'stock' ? 'מניה' : 'אג"ח'}</td><td>${h.allocationPct.toFixed(1)}%</td><td>${formatCurrency(h.value, h.currency)}</td><td style="color:${ret >= 0 ? 'green' : 'red'}">${(ret >= 0 ? '+' : '') + ret.toFixed(2)}%</td></tr>`;
     }).join('');
 
     const dateStr = new Date().toLocaleDateString('he-IL');
@@ -549,7 +551,8 @@ function openMgmtModal(action, data) {
     }
     else if (action === 'removeHolding') {
         const { client: c, holdingId, holding: h } = data;
-        const displayName = h.type === 'stock' ? h.ticker : h.name;
+        const removeHeName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+        const displayName = removeHeName || (h.type === 'stock' ? h.ticker : h.name);
         html = `
             <div class="mgmt-header"><h3>הסרת נכס</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
@@ -562,7 +565,8 @@ function openMgmtModal(action, data) {
     }
     else if (action === 'sellHolding') {
         const { client: c, holdingId, holding: h } = data;
-        const displayName = h.type === 'stock' ? h.ticker : h.name;
+        const sellHeName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+        const displayName = sellHeName || (h.type === 'stock' ? h.ticker : h.name);
         const currSymbol = h.currency === 'ILS' ? '₪' : '$';
         const avgCost = h.shares > 0 ? (h.costBasis / h.shares) : 0;
         html = `
@@ -700,7 +704,41 @@ function updateDepositPreview() {
     if (newBalanceEl) newBalanceEl.textContent = formatCurrency(currentCash + amount, currency);
 }
 
-// --- Ticker Search (Twelve Data symbol_search) ---
+// --- Ticker Search (Twelve Data symbol_search + local Hebrew lookup) ---
+
+// Shared renderer for both main and row dropdowns
+function _renderSearchDropdown(results, dropdown) {
+    if (results.length === 0) {
+        dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
+        return;
+    }
+    dropdown.innerHTML = results.map(r => {
+        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
+        const displayName = heName || r.name;
+        const secondaryInfo = (heName && r.name !== heName) ? r.name : '';
+        const safeName = (r.name || '').replace(/'/g, "\\'");
+        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪ ILS' : r.currency;
+        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')">
+            <span class="ticker-search-symbol">${r.symbol}</span>
+            <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
+            <span class="ticker-search-meta">${r.exchange} · ${currDisplay}</span>
+        </div>`;
+    }).join('');
+}
+
+function _mergeLocalAndApiResults(localResults, apiResults) {
+    const seen = new Set();
+    const merged = [];
+    localResults.forEach(r => {
+        const key = r.symbol.toUpperCase();
+        if (!seen.has(key)) { seen.add(key); merged.push(r); }
+    });
+    apiResults.forEach(r => {
+        const key = r.symbol.toUpperCase();
+        if (!seen.has(key)) { seen.add(key); merged.push(r); }
+    });
+    return merged;
+}
 
 function onTickerSearch() {
     clearTimeout(tickerSearchTimeout);
@@ -714,28 +752,19 @@ function onTickerSearch() {
         return;
     }
 
-    // Show loading
-    dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
+    // Instantly show local Hebrew matches while API loads
+    const localResults = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
     dropdown.style.display = 'block';
+    if (localResults.length > 0) {
+        _renderSearchDropdown(localResults, dropdown);
+    } else {
+        dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
+    }
 
     tickerSearchTimeout = setTimeout(async () => {
-        const results = await searchTwelveDataSymbols(query);
-
-        if (results.length === 0) {
-            dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאה מניה תואמת ב-Twelve Data</div>';
-            return;
-        }
-
-        dropdown.innerHTML = results.map(r => {
-            const hebrewName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '';
-            const displayName = hebrewName || r.name;
-            const secondaryInfo = hebrewName ? r.name : '';
-            return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${r.name.replace(/'/g, "\\'")}', '${r.currency}', '${r.exchange}')">
-                <span class="ticker-search-symbol">${r.symbol}</span>
-                <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
-                <span class="ticker-search-meta">${r.exchange} · ${r.currency === 'ILS' || r.currency === 'ILA' ? '₪ ILS' : r.currency}</span>
-            </div>`;
-        }).join('');
+        const apiResults = await searchTwelveDataSymbols(query);
+        const merged = _mergeLocalAndApiResults(localResults, apiResults);
+        _renderSearchDropdown(merged, dropdown);
     }, 300);
 }
 
@@ -774,15 +803,21 @@ function selectSearchResult(symbol, name, currency, exchange) {
     if (priceCurrLabelEl) priceCurrLabelEl.textContent = currLabel;
 
     // If 7-9 digit numeric symbol, auto-switch to bond type
+    // NOTE: Do NOT call onAssetTypeChange() here — it calls clearTickerSelection()
+    // which would wipe the values we just set. Instead, toggle UI fields directly.
     if (/^\d{7,9}$/.test(symbol)) {
         const typeSelect = document.getElementById('mgmt-asset-type');
-        if (typeSelect) {
-            typeSelect.value = 'bond';
-            onAssetTypeChange();
-            // Re-populate bond name from the search result
-            const bondNameInput = document.getElementById('mgmt-bondname');
-            if (bondNameInput) bondNameInput.value = name || symbol;
-        }
+        if (typeSelect) typeSelect.value = 'bond';
+        // Show bond fields, hide ticker search (already hidden by badge)
+        const bondNameField = document.getElementById('mgmt-bondname-field');
+        if (bondNameField) bondNameField.style.display = '';
+        const assetClassField = document.getElementById('mgmt-asset-class-field');
+        if (assetClassField) assetClassField.style.display = '';
+        // Pre-fill bond name
+        const bondNameInput = document.getElementById('mgmt-bondname');
+        if (bondNameInput) bondNameInput.value = name || symbol;
+        // Set hidden currency to ILS
+        document.getElementById('mgmt-ticker-currency').value = 'ILS';
     }
 
     updateBuyCost();
@@ -1173,6 +1208,24 @@ function clearRowTicker(rowId) {
     updateAddClientRisk();
 }
 
+function _renderRowSearchDropdown(results, dropdown, rowId) {
+    if (results.length === 0) {
+        dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
+        return;
+    }
+    dropdown.innerHTML = results.map(r => {
+        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
+        const displayName = heName || r.name;
+        const secondaryInfo = (heName && r.name !== heName) ? r.name : '';
+        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪ ILS' : r.currency;
+        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
+            <span class="ticker-search-symbol">${r.symbol}</span>
+            <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
+            <span class="ticker-search-meta">${r.exchange} · ${currDisplay}</span>
+        </div>`;
+    }).join('');
+}
+
 function onRowTickerSearch(rowId) {
     if (_rowSearchTimeouts[rowId]) clearTimeout(_rowSearchTimeouts[rowId]);
 
@@ -1187,29 +1240,22 @@ function onRowTickerSearch(rowId) {
         return;
     }
 
+    // Instantly show local Hebrew matches
+    const localResults = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
     if (dropdown) {
-        dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
         dropdown.style.display = 'block';
+        if (localResults.length > 0) {
+            _renderRowSearchDropdown(localResults, dropdown, rowId);
+        } else {
+            dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
+        }
     }
 
     _rowSearchTimeouts[rowId] = setTimeout(async () => {
-        const results = await searchTwelveDataSymbols(query);
+        const apiResults = await searchTwelveDataSymbols(query);
         if (!dropdown) return;
-
-        if (results.length === 0) {
-            dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
-            return;
-        }
-
-        dropdown.innerHTML = results.map(r => {
-            const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '';
-            const rowDisplayName = heName || r.name;
-            return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
-                <span class="ticker-search-symbol">${r.symbol}</span>
-                <span class="ticker-search-name">${rowDisplayName}${heName ? ` <span style="color:var(--text-muted);font-size:11px">(${r.name})</span>` : ''}</span>
-                <span class="ticker-search-meta">${r.exchange} · ${r.currency === 'ILS' || r.currency === 'ILA' ? '₪ ILS' : r.currency}</span>
-            </div>`;
-        }).join('');
+        const merged = _mergeLocalAndApiResults(localResults, apiResults);
+        _renderRowSearchDropdown(merged, dropdown, rowId);
     }, 300);
 }
 
