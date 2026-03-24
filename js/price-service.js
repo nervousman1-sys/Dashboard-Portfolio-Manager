@@ -135,9 +135,30 @@ async function searchTwelveDataSymbols(query) {
 // Used by supaAddHolding when priceCache is empty (e.g. brand-new user).
 // Tries Twelve Data → FMP → Finnhub in sequence. Returns {price, previousClose} or null.
 
-async function fetchSingleTickerPrice(ticker) {
+async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null) {
     if (!ticker) return null;
     const sym = ticker.toUpperCase().trim();
+
+    // --- Israeli asset detection ---
+    const isIsraeli = currency === 'ILS' || currency === 'ILA'
+        || sym.endsWith('.TA') || sym.endsWith('.TASE');
+    const isBond = /^\d{7,9}$/.test(sym);
+
+    // Bonds (7-9 digit numeric): no API can fetch these, use simulation
+    if (isBond) {
+        const bp = basePrice || 100;
+        const variation = (Math.random() - 0.5) * 0.006;
+        const price = Math.round(bp * (1 + variation) * 100) / 100;
+        const result = { price, previousClose: bp, change: +(price - bp).toFixed(2), changePct: +((price - bp) / bp * 100).toFixed(2), currency: 'ILS' };
+        if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+        return result;
+    }
+
+    // Build Twelve Data symbol: strip .TA suffix and append :TASE for Israeli assets
+    let tdSymbol = sym;
+    if (isIsraeli) {
+        tdSymbol = sym.replace('.TA', '').replace('.TASE', '') + ':TASE';
+    }
 
     // Helper: bail immediately on 429 rate-limit (don't cascade to next provider)
     function _parseResult(res, data, provider) {
@@ -148,63 +169,73 @@ async function fetchSingleTickerPrice(ticker) {
         return data;
     }
 
-    // Try Twelve Data first
+    // Try Twelve Data first (with correct :TASE format for Israeli assets)
     try {
         if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
-            const res = await fetch(`https://api.twelvedata.com/quote?symbol=${sym}&apikey=${TWELVE_DATA_API_KEY}`);
+            const res = await fetch(`https://api.twelvedata.com/quote?symbol=${tdSymbol}&apikey=${TWELVE_DATA_API_KEY}`);
             const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
             if (data && data.status !== 'error' && data.close) {
+                let price = parseFloat(data.close);
+                let prevClose = parseFloat(data.previous_close);
+                // TASE prices sometimes returned in Agurot (×100) — detect & convert
+                if (isIsraeli && price > 10000 && basePrice && basePrice < 1000) {
+                    price /= 100;
+                    prevClose /= 100;
+                }
                 const result = {
-                    price: parseFloat(data.close),
-                    previousClose: parseFloat(data.previous_close),
-                    change: parseFloat(data.change),
-                    changePct: parseFloat(data.percent_change),
-                    currency: data.currency || 'USD'
+                    price,
+                    previousClose: prevClose,
+                    change: parseFloat(data.change) || +(price - prevClose).toFixed(2),
+                    changePct: parseFloat(data.percent_change) || +((price - prevClose) / prevClose * 100).toFixed(2),
+                    currency: data.currency === 'ILA' ? 'ILS' : (data.currency || (isIsraeli ? 'ILS' : 'USD'))
                 };
                 if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                 return result;
             }
         }
-    } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', sym, e.message); }
+    } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', tdSymbol, e.message); }
 
-    // Try FMP
-    try {
-        if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
-            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
-            const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
-            if (Array.isArray(data) && data.length > 0 && data[0].price) {
-                const q = data[0];
-                const result = {
-                    price: q.price,
-                    previousClose: q.previousClose || q.price,
-                    change: q.change || 0,
-                    changePct: q.changePercentage || 0,
-                    currency: 'USD'
-                };
-                if (typeof priceCache !== 'undefined') priceCache[sym] = result;
-                return result;
+    // FMP/Finnhub fallbacks — only for non-Israeli assets (they don't support TASE)
+    if (!isIsraeli) {
+        // Try FMP
+        try {
+            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+                const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
+                if (Array.isArray(data) && data.length > 0 && data[0].price) {
+                    const q = data[0];
+                    const result = {
+                        price: q.price,
+                        previousClose: q.previousClose || q.price,
+                        change: q.change || 0,
+                        changePct: q.changePercentage || 0,
+                        currency: 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
             }
-        }
-    } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
 
-    // Try Finnhub
-    try {
-        if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
-            const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_API_KEY}`);
-            const data = _parseResult(res, res.ok ? await res.json() : null, 'Finnhub');
-            if (data && data.c && data.c > 0) {
-                const result = {
-                    price: data.c,
-                    previousClose: data.pc || data.c,
-                    change: data.d || 0,
-                    changePct: data.dp || 0,
-                    currency: 'USD'
-                };
-                if (typeof priceCache !== 'undefined') priceCache[sym] = result;
-                return result;
+        // Try Finnhub
+        try {
+            if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
+                const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'Finnhub');
+                if (data && data.c && data.c > 0) {
+                    const result = {
+                        price: data.c,
+                        previousClose: data.pc || data.c,
+                        change: data.d || 0,
+                        changePct: data.dp || 0,
+                        currency: 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
             }
-        }
-    } catch (e) { console.warn('[fetchSingleTickerPrice] Finnhub failed for', sym, e.message); }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Finnhub failed for', sym, e.message); }
+    }
 
     return null;
 }

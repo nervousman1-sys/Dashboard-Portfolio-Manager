@@ -708,7 +708,7 @@ function updateDepositPreview() {
 // --- Ticker Search (Twelve Data symbol_search + local Hebrew lookup) ---
 
 // Shared renderer for both main and row dropdowns
-function _renderSearchDropdown(results, dropdown) {
+function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
         return;
@@ -718,22 +718,25 @@ function _renderSearchDropdown(results, dropdown) {
         const safeName = (r.name || '').replace(/'/g, "\\'");
         const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         const exchangeLabel = r.exchange || '';
-        // Full name display: Hebrew name primary, English secondary — never truncated
         const primaryLabel = heName || r.name;
         const secondaryLabel = heName ? r.name : '';
-        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')" style="white-space:normal;padding:8px 10px">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:8px">
-                <div style="display:flex;flex-direction:column;min-width:0;flex:1">
-                    <span style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
-                    ${secondaryLabel ? `<span style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+        const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
+        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')" style="padding:8px 10px">
+            <div style="display:flex;align-items:center;width:100%;gap:8px">
+                <div style="display:flex;flex-direction:column;min-width:0;flex:1;overflow:hidden">
+                    <span class="ticker-search-item-name" style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
+                    ${secondaryLabel ? `<span class="ticker-search-item-name" style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
                 </div>
-                <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0">
+                <span class="search-live-price" id="slp_${safeId}"></span>
+                <div class="ticker-search-item-info" style="display:flex;flex-direction:column;align-items:flex-end">
                     <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
                     <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
                 </div>
             </div>
         </div>`;
     }).join('');
+
+    if (fetchPrices) _fetchSearchResultPrices(results);
 }
 
 function _mergeLocalAndApiResults(localResults, apiResults) {
@@ -748,6 +751,53 @@ function _mergeLocalAndApiResults(localResults, apiResults) {
         if (!seen.has(key)) { seen.add(key); merged.push(r); }
     });
     return merged;
+}
+
+// --- Live price fetching for search dropdown results ---
+let _searchPriceBatchId = 0;
+
+async function _fetchSearchResultPrices(results, idPrefix = '') {
+    const batchId = ++_searchPriceBatchId;
+    // Limit to first 5 results to avoid API rate limits
+    const toFetch = results.slice(0, 5);
+
+    for (const r of toFetch) {
+        // Bail if a newer search replaced this dropdown
+        if (_searchPriceBatchId !== batchId) return;
+
+        const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
+        const el = document.getElementById(`slp_${idPrefix}${safeId}`);
+        if (!el) continue;
+
+        el.textContent = '...';
+
+        // Check priceCache first (instant hit)
+        const cached = (typeof priceCache !== 'undefined') ? priceCache[r.symbol.toUpperCase().trim()] : null;
+        if (cached && cached.price > 0) {
+            const cs = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
+            el.textContent = `${cached.price.toFixed(2)} ${cs}`;
+            continue;
+        }
+
+        // Fire async fetch (don't await all — fire sequentially to avoid hammering)
+        try {
+            const result = (typeof fetchSingleTickerPrice === 'function')
+                ? await fetchSingleTickerPrice(r.symbol, r.currency || null)
+                : null;
+            if (_searchPriceBatchId !== batchId) return;
+            const el2 = document.getElementById(`slp_${idPrefix}${safeId}`);
+            if (!el2) continue;
+            if (result && result.price > 0) {
+                const cs = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
+                el2.textContent = `${result.price.toFixed(2)} ${cs}`;
+            } else {
+                el2.textContent = '—';
+            }
+        } catch (e) {
+            const el2 = document.getElementById(`slp_${idPrefix}${safeId}`);
+            if (el2) el2.textContent = '—';
+        }
+    }
 }
 
 function onTickerSearch() {
@@ -774,7 +824,7 @@ function onTickerSearch() {
     tickerSearchTimeout = setTimeout(async () => {
         const apiResults = await searchTwelveDataSymbols(query);
         const merged = _mergeLocalAndApiResults(localResults, apiResults);
-        _renderSearchDropdown(merged, dropdown);
+        _renderSearchDropdown(merged, dropdown, true);
     }, 300);
 }
 
@@ -843,9 +893,11 @@ async function _fetchLivePricePreview(symbol) {
     previewEl.textContent = 'טוען מחיר שוק...';
     previewEl.style.display = '';
 
+    const currency = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
+
     try {
         const result = (typeof fetchSingleTickerPrice === 'function')
-            ? await fetchSingleTickerPrice(symbol)
+            ? await fetchSingleTickerPrice(symbol, currency)
             : null;
 
         // Element may have been removed if modal closed
@@ -1231,7 +1283,7 @@ function clearRowTicker(rowId) {
     updateAddClientRisk();
 }
 
-function _renderRowSearchDropdown(results, dropdown, rowId) {
+function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices = false) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
         return;
@@ -1242,19 +1294,23 @@ function _renderRowSearchDropdown(results, dropdown, rowId) {
         const exchangeLabel = r.exchange || '';
         const primaryLabel = heName || r.name;
         const secondaryLabel = heName ? r.name : '';
-        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="white-space:normal;padding:8px 10px">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:8px">
-                <div style="display:flex;flex-direction:column;min-width:0;flex:1">
-                    <span style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
-                    ${secondaryLabel ? `<span style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+        const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
+        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="padding:8px 10px">
+            <div style="display:flex;align-items:center;width:100%;gap:8px">
+                <div style="display:flex;flex-direction:column;min-width:0;flex:1;overflow:hidden">
+                    <span class="ticker-search-item-name" style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
+                    ${secondaryLabel ? `<span class="ticker-search-item-name" style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
                 </div>
-                <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0">
+                <span class="search-live-price" id="slp_row_${safeId}"></span>
+                <div class="ticker-search-item-info" style="display:flex;flex-direction:column;align-items:flex-end">
                     <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
                     <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
                 </div>
             </div>
         </div>`;
     }).join('');
+
+    if (fetchPrices) _fetchSearchResultPrices(results, 'row_');
 }
 
 function onRowTickerSearch(rowId) {
@@ -1286,7 +1342,7 @@ function onRowTickerSearch(rowId) {
         const apiResults = await searchTwelveDataSymbols(query);
         if (!dropdown) return;
         const merged = _mergeLocalAndApiResults(localResults, apiResults);
-        _renderRowSearchDropdown(merged, dropdown, rowId);
+        _renderRowSearchDropdown(merged, dropdown, rowId, true);
     }, 300);
 }
 
@@ -1355,7 +1411,7 @@ async function _fetchRowLivePrice(rowId, symbol, currency) {
 
     try {
         const result = (typeof fetchSingleTickerPrice === 'function')
-            ? await fetchSingleTickerPrice(symbol)
+            ? await fetchSingleTickerPrice(symbol, currency)
             : null;
 
         // Row may have been removed while we were fetching
