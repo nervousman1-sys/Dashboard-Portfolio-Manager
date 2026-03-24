@@ -707,6 +707,9 @@ function updateDepositPreview() {
 
 // --- Ticker Search (Twelve Data symbol_search + local Hebrew lookup) ---
 
+// Track the type of the last clicked search result (for bond detection in selectSearchResult)
+let _lastSearchResultType = null;
+
 // Shared renderer for both main and row dropdowns
 function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
     if (results.length === 0) {
@@ -714,23 +717,28 @@ function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
         return;
     }
     dropdown.innerHTML = results.map(r => {
-        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
+        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const safeName = (r.name || '').replace(/'/g, "\\'");
         const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         const exchangeLabel = r.exchange || '';
-        const primaryLabel = heName || r.name;
-        const secondaryLabel = heName ? r.name : '';
-        const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
-        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')" style="padding:8px 10px">
-            <div style="display:flex;align-items:center;width:100%;gap:8px">
-                <div style="display:flex;flex-direction:column;min-width:0;flex:1;overflow:hidden">
-                    <span class="ticker-search-item-name" style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
-                    ${secondaryLabel ? `<span class="ticker-search-item-name" style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+        const primaryLabel = heName || r.name || r.symbol;
+        const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
+        const safeId = (r.symbol || '').replace(/[^a-zA-Z0-9]/g, '_');
+        const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
+        const rType = r.type || 'Common Stock';
+        return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')" style="padding:8px 10px;cursor:pointer">
+            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;width:100%;gap:6px">
+                <div style="min-width:0;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:4px">
+                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${primaryLabel}</span>
+                        ${typeLabel}
+                    </div>
+                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${secondaryLabel}</div>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_${safeId}"></span>
-                <div class="ticker-search-item-info" style="display:flex;flex-direction:column;align-items:flex-end">
-                    <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
-                    <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
+                <span class="search-live-price" id="slp_${safeId}" style="min-width:55px;text-align:right;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr"></span>
+                <div style="text-align:right;white-space:nowrap;min-width:60px">
+                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</div>
+                    <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
                 </div>
             </div>
         </div>`;
@@ -812,8 +820,10 @@ function onTickerSearch() {
         return;
     }
 
-    // Instantly show local Hebrew matches while API loads
-    const localResults = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
+    // Instantly show local Hebrew + bond matches while API loads
+    const localStocks = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
+    const localBonds = (typeof searchLocalBonds === 'function') ? searchLocalBonds(query) : [];
+    const localResults = [...localStocks, ...localBonds];
     dropdown.style.display = 'block';
     if (localResults.length > 0) {
         _renderSearchDropdown(localResults, dropdown);
@@ -841,18 +851,25 @@ function selectSearchResult(symbol, name, currency, exchange) {
     const isIsraeli = _isIsraeliAsset(symbol, currency);
     const effectiveCurrency = isIsraeli ? 'ILS' : (currency || 'USD');
 
+    // Detect bond: 7-9 digit numeric, or selected from BONDS array (type=Bond in search result)
+    const isBondNumeric = /^\d{7,9}$/.test(symbol);
+    const isBondFromSearch = _lastSearchResultType === 'Bond';
+    const isBondId = typeof BONDS !== 'undefined' && BONDS.some(b => b.id === symbol || b.ticker === symbol);
+    const isBond = isBondNumeric || isBondFromSearch || isBondId;
+
     document.getElementById('mgmt-ticker-symbol').value = symbol;
-    document.getElementById('mgmt-ticker-currency').value = effectiveCurrency;
+    document.getElementById('mgmt-ticker-currency').value = isBond && isIsraeli ? 'ILS' : effectiveCurrency;
     document.getElementById('mgmt-ticker-name').value = name;
 
     // Hebrew name priority — show Hebrew name if available
-    const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[symbol.replace('.TA', '').toUpperCase()] : '';
+    const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(symbol || '').replace('.TA', '').toUpperCase()] : '';
     const displayLabel = heName ? `${symbol} — ${heName}` : `${symbol} — ${name}`;
-    const currLabel = effectiveCurrency === 'ILS' ? '₪' : '$';
+    const currLabel = (isBond && isIsraeli) ? '₪' : (effectiveCurrency === 'ILS' ? '₪' : '$');
 
     // Show selected badge, hide search input
     const badge = document.getElementById('mgmt-ticker-selected');
-    badge.innerHTML = `<span>${displayLabel} (${exchange}, ${currLabel})</span><button class="ticker-clear-btn" onclick="clearTickerSelection()">&times;</button>`;
+    const bondTag = isBond ? ' <span style="color:var(--accent-purple,#a855f7);font-size:10px">[אג"ח]</span>' : '';
+    badge.innerHTML = `<span>${displayLabel} (${exchange}, ${currLabel})${bondTag}</span><button class="ticker-clear-btn" onclick="clearTickerSelection()">&times;</button>`;
     badge.style.display = 'flex';
 
     document.getElementById('mgmt-ticker-search').style.display = 'none';
@@ -862,28 +879,30 @@ function selectSearchResult(symbol, name, currency, exchange) {
     const priceCurrLabelEl = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabelEl) priceCurrLabelEl.textContent = currLabel;
 
-    // If 7-9 digit numeric symbol, auto-switch to bond type
+    // If bond detected, auto-switch to bond type
     // NOTE: Do NOT call onAssetTypeChange() here — it calls clearTickerSelection()
     // which would wipe the values we just set. Instead, toggle UI fields directly.
-    if (/^\d{7,9}$/.test(symbol)) {
+    if (isBond) {
         const typeSelect = document.getElementById('mgmt-asset-type');
         if (typeSelect) typeSelect.value = 'bond';
-        // Show bond fields, hide ticker search (already hidden by badge)
         const bondNameField = document.getElementById('mgmt-bondname-field');
         if (bondNameField) bondNameField.style.display = '';
         const assetClassField = document.getElementById('mgmt-asset-class-field');
         if (assetClassField) assetClassField.style.display = '';
-        // Pre-fill bond name
         const bondNameInput = document.getElementById('mgmt-bondname');
         if (bondNameInput) bondNameInput.value = name || symbol;
-        // Set hidden currency to ILS
-        document.getElementById('mgmt-ticker-currency').value = 'ILS';
+        if (isIsraeli || isBondNumeric) {
+            document.getElementById('mgmt-ticker-currency').value = 'ILS';
+        }
     }
 
     updateBuyCost();
 
     // Live price preview — fetch current market price in background
     _fetchLivePricePreview(symbol);
+
+    // Reset the type tracker
+    _lastSearchResultType = null;
 }
 
 async function _fetchLivePricePreview(symbol) {
@@ -1289,22 +1308,26 @@ function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices = false)
         return;
     }
     dropdown.innerHTML = results.map(r => {
-        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
+        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
         const exchangeLabel = r.exchange || '';
-        const primaryLabel = heName || r.name;
-        const secondaryLabel = heName ? r.name : '';
-        const safeId = r.symbol.replace(/[^a-zA-Z0-9]/g, '_');
-        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="padding:8px 10px">
-            <div style="display:flex;align-items:center;width:100%;gap:8px">
-                <div style="display:flex;flex-direction:column;min-width:0;flex:1;overflow:hidden">
-                    <span class="ticker-search-item-name" style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
-                    ${secondaryLabel ? `<span class="ticker-search-item-name" style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+        const primaryLabel = heName || r.name || r.symbol;
+        const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
+        const safeId = (r.symbol || '').replace(/[^a-zA-Z0-9]/g, '_');
+        const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
+        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="padding:8px 10px;cursor:pointer">
+            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;width:100%;gap:6px">
+                <div style="min-width:0;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:4px">
+                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${primaryLabel}</span>
+                        ${typeLabel}
+                    </div>
+                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${secondaryLabel}</div>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_row_${safeId}"></span>
-                <div class="ticker-search-item-info" style="display:flex;flex-direction:column;align-items:flex-end">
-                    <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
-                    <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
+                <span class="search-live-price" id="slp_row_${safeId}" style="min-width:55px;text-align:right;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr"></span>
+                <div style="text-align:right;white-space:nowrap;min-width:60px">
+                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</div>
+                    <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
                 </div>
             </div>
         </div>`;
@@ -1327,8 +1350,10 @@ function onRowTickerSearch(rowId) {
         return;
     }
 
-    // Instantly show local Hebrew matches
-    const localResults = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
+    // Instantly show local Hebrew + bond matches
+    const localStocks = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
+    const localBonds = (typeof searchLocalBonds === 'function') ? searchLocalBonds(query) : [];
+    const localResults = [...localStocks, ...localBonds];
     if (dropdown) {
         dropdown.style.display = 'block';
         if (localResults.length > 0) {

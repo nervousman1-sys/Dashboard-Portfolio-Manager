@@ -1871,27 +1871,12 @@ body {
 .ticker-search-item:hover {
     background: var(--bg-card-hover);
 }
-/* Search dropdown layout: name column (truncates) | price | ticker/exchange (fixed) */
-.ticker-search-item-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 100%;
-}
-.ticker-search-item-info {
-    flex-shrink: 0;
-    min-width: 72px;
-    text-align: right;
-}
-.search-live-price {
-    flex-shrink: 0;
-    min-width: 62px;
-    text-align: right;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--accent-blue);
+/* Search dropdown: grid layout — name (shrinks w/ ellipsis) | price | ticker (fixed) */
+.ticker-search-item .search-live-price {
     font-variant-numeric: tabular-nums;
-    direction: ltr;
+}
+.ticker-search-item:active {
+    background: rgba(59,130,246,0.12);
 }
 .ticker-search-symbol {
     font-weight: 700;

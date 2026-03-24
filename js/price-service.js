@@ -195,29 +195,73 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         }
     } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', tdSymbol, e.message); }
 
-    // FMP/Finnhub fallbacks — only for non-Israeli assets (they don't support TASE)
-    if (!isIsraeli) {
-        // Try FMP
+    // --- FMP fallback ---
+    // FMP supports both US tickers and TASE with .TA suffix (e.g. LUMI.TA)
+    try {
+        if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+            // For Israeli assets, FMP uses .TA suffix format
+            const fmpSymbol = isIsraeli
+                ? sym.replace('.TASE', '.TA').replace(/:TASE$/i, '.TA') + (sym.includes('.TA') ? '' : '.TA')
+                : sym;
+            // Dedupe: avoid "LUMI.TA.TA"
+            const fmpClean = fmpSymbol.replace(/\.TA\.TA/g, '.TA');
+            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpClean}&apikey=${FMP_API_KEY}`);
+            const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
+            if (Array.isArray(data) && data.length > 0 && data[0].price) {
+                const q = data[0];
+                let fmpPrice = q.price;
+                let fmpPrev = q.previousClose || q.price;
+                // Agurot detection: Israeli stock prices > 10000 with known low base → divide by 100
+                if (isIsraeli && fmpPrice > 10000 && basePrice && basePrice < 1000) {
+                    fmpPrice /= 100;
+                    fmpPrev /= 100;
+                }
+                const result = {
+                    price: fmpPrice,
+                    previousClose: fmpPrev,
+                    change: q.change || +(fmpPrice - fmpPrev).toFixed(2),
+                    changePct: q.changePercentage || +((fmpPrice - fmpPrev) / fmpPrev * 100).toFixed(2),
+                    currency: isIsraeli ? 'ILS' : 'USD'
+                };
+                if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                return result;
+            }
+        }
+    } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
+
+    // --- Yahoo Finance fallback (Israeli assets use .TA suffix natively) ---
+    if (isIsraeli) {
         try {
-            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
-                const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
-                const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
-                if (Array.isArray(data) && data.length > 0 && data[0].price) {
-                    const q = data[0];
+            const yahooSym = sym.replace('.TASE', '.TA').replace(/:TASE$/i, '.TA') + (sym.includes('.TA') ? '' : '.TA');
+            const yahooClean = yahooSym.replace(/\.TA\.TA/g, '.TA');
+            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooClean}?range=1d&interval=1d`);
+            if (res.ok) {
+                const data = await res.json();
+                const meta = data?.chart?.result?.[0]?.meta;
+                if (meta && meta.regularMarketPrice > 0) {
+                    let yPrice = meta.regularMarketPrice;
+                    let yPrev = meta.chartPreviousClose || meta.previousClose || yPrice;
+                    // Agurot detection
+                    if (yPrice > 10000 && basePrice && basePrice < 1000) {
+                        yPrice /= 100;
+                        yPrev /= 100;
+                    }
                     const result = {
-                        price: q.price,
-                        previousClose: q.previousClose || q.price,
-                        change: q.change || 0,
-                        changePct: q.changePercentage || 0,
-                        currency: 'USD'
+                        price: yPrice,
+                        previousClose: yPrev,
+                        change: +(yPrice - yPrev).toFixed(2),
+                        changePct: +((yPrice - yPrev) / yPrev * 100).toFixed(2),
+                        currency: meta.currency === 'ILA' ? 'ILS' : (meta.currency || 'ILS')
                     };
                     if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                     return result;
                 }
             }
-        } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', sym, e.message); }
+    }
 
-        // Try Finnhub
+    // --- Finnhub fallback (US assets only — Finnhub doesn't support TASE) ---
+    if (!isIsraeli) {
         try {
             if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
                 const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_API_KEY}`);

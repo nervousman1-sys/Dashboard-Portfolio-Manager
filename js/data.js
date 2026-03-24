@@ -57,6 +57,33 @@ function searchHebrewNames(query) {
     return results;
 }
 
+// Search local BONDS array by name (Hebrew partial match) or ID.
+// Returns array matching the same shape as searchHebrewNames for unified merge.
+function searchLocalBonds(query) {
+    if (!query || query.length < 1 || typeof BONDS === 'undefined') return [];
+    const q = query.trim().toLowerCase();
+    // Also match the generic Hebrew word for bond
+    const isBondQuery = q.includes('אג') || q.includes('גליל') || q.includes('bond') || q.includes('treasury');
+    const results = [];
+    for (const b of BONDS) {
+        const matchesName = b.name.toLowerCase().includes(q) || b.name.includes(q);
+        const matchesId = b.id.toLowerCase().includes(q);
+        if (matchesName || matchesId || isBondQuery) {
+            results.push({
+                symbol: b.ticker || b.id,
+                name: b.name,
+                hebrewName: b.name,
+                currency: b.type.startsWith('il') ? 'ILS' : 'USD',
+                exchange: b.type.startsWith('il') ? 'TASE' : 'NYSE',
+                type: 'Bond',
+                basePrice: b.basePrice,
+                _localMatch: true
+            });
+        }
+    }
+    return results;
+}
+
 const ISRAELI_NAMES = [
     'יונתן כהן', 'נועה לוי', 'אורי גולדברג', 'מיכל אברהם', 'דניאל שרון',
     'רונית פרידמן', 'עידו מזרחי', 'שירה ביטון', 'אלון דוד', 'תמר רוזנברג',
