@@ -2,14 +2,28 @@
 
 // ========== HEBREW NAME MAPPING FOR TASE ASSETS ==========
 const HEBREW_NAMES = {
-    'TEVA': 'טבע', 'NICE': 'נייס', 'LUMI': 'לאומי', 'BEZQ': 'בזק',
-    'ICL': 'כיל', 'HARL': 'הראל', 'DSCT': 'דיסקונט', 'POLI': 'פולי',
-    'MZTF': 'מזרחי טפחות', 'TASE': 'הבורסה', 'ELCO': 'אלקו', 'ORA': 'אורה',
-    'AMOT': 'אמות', 'AZRG': 'עזריאלי', 'ILDC': 'כלל', 'FIBI': 'הבינלאומי',
-    'PHOE': 'הפניקס', 'MGDL': 'מגדל', 'BIMB': 'בנק ירושלים',
-    'CEL': 'סלקום', 'PTNR': 'פרטנר', 'ESLT': 'אלביט', 'BIRG': 'ברג',
-    'ALHE': 'אלון רבוע כחול', 'SHPG': 'שופרסל', 'AFRE': 'אפריקה ישראל',
-    'ARPT': 'ארפט', 'SPNS': 'ספאנס', 'GZIT': 'גזית גלוב',
+    // Major Banks
+    'LUMI': 'בנק לאומי', 'DSCT': 'בנק דיסקונט', 'MZTF': 'מזרחי טפחות',
+    'FIBI': 'הבינלאומי', 'BIMB': 'בנק ירושלים', 'POLI': 'בנק הפועלים',
+    // Insurance & Finance
+    'HARL': 'הראל', 'PHOE': 'הפניקס', 'MGDL': 'מגדל', 'ILDC': 'כלל ביטוח',
+    // Tech & Telecom
+    'NICE': 'נייס', 'CEL': 'סלקום', 'PTNR': 'פרטנר', 'BEZQ': 'בזק',
+    // Defense & Industry
+    'ESLT': 'אלביט מערכות', 'TEVA': 'טבע', 'ICL': 'כיל',
+    // Real Estate
+    'AZRG': 'עזריאלי', 'AMOT': 'אמות', 'GZIT': 'גזית גלוב',
+    'ALHE': 'אלון רבוע כחול',
+    // Retail & Consumer
+    'SHPG': 'שופרסל', 'ORA': 'אורה', 'ELCO': 'אלקו',
+    // Other
+    'TASE': 'הבורסה', 'AFRE': 'אפריקה ישראל', 'ARPT': 'ארפט',
+    'SPNS': 'ספאנס', 'BIRG': 'ברג',
+    // Additional TA-125 Companies
+    'ITMR': 'איתמר מדיקל', 'ENLT': 'אנלייט אנרגיה', 'DLEKG': 'דלק גרופ',
+    'DELT': 'דלתא גליל', 'OPC': 'או.פי.סי אנרגיה', 'CRSM': 'כרמל',
+    'FTAL': 'פתאל', 'MVNE': 'מבנה', 'SPEN': 'שפיר הנדסה',
+    'TDRN': 'תדיראן', 'RMLI': 'רמלי', 'NAWI': 'נאווי',
 };
 
 function getHebrewName(holding) {

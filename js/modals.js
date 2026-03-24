@@ -425,10 +425,11 @@ function openMgmtModal(action, data) {
                     <table class="mgmt-holdings-table" id="mgmt-holdings-table">
                         <thead>
                             <tr>
-                                <th style="width:40%">סימול</th>
-                                <th style="width:20%">כמות</th>
-                                <th style="width:25%">מחיר קנייה ($)</th>
-                                <th style="width:15%"></th>
+                                <th style="width:32%">סימול</th>
+                                <th style="width:15%">כמות</th>
+                                <th style="width:20%" id="addPortfolio-price-header">מחיר קנייה ($)</th>
+                                <th style="width:22%">מחיר נוכחי</th>
+                                <th style="width:11%"></th>
                             </tr>
                         </thead>
                         <tbody id="mgmt-holdings-tbody"></tbody>
@@ -506,7 +507,7 @@ function openMgmtModal(action, data) {
                         <input type="hidden" id="mgmt-ticker-currency" />
                         <input type="hidden" id="mgmt-ticker-name" />
                         <div id="mgmt-ticker-selected" class="ticker-selected-badge" style="display:none"></div>
-                        <input type="text" id="mgmt-ticker-search" placeholder="הקלד שם או סימול מניה..." style="direction:ltr;text-align:left" oninput="onTickerSearch()" autocomplete="off" />
+                        <input type="text" id="mgmt-ticker-search" placeholder='חפש: AAPL, טבע, לאומי...' style="text-align:left" oninput="onTickerSearch()" autocomplete="off" />
                         <div id="mgmt-ticker-dropdown" class="ticker-search-dropdown"></div>
                     </div>
                 </div>
@@ -714,14 +715,23 @@ function _renderSearchDropdown(results, dropdown) {
     }
     dropdown.innerHTML = results.map(r => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
-        const displayName = heName || r.name;
-        const secondaryInfo = (heName && r.name !== heName) ? r.name : '';
         const safeName = (r.name || '').replace(/'/g, "\\'");
-        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪ ILS' : r.currency;
-        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')">
-            <span class="ticker-search-symbol">${r.symbol}</span>
-            <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
-            <span class="ticker-search-meta">${r.exchange} · ${currDisplay}</span>
+        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
+        const exchangeLabel = r.exchange || '';
+        // Full name display: Hebrew name primary, English secondary — never truncated
+        const primaryLabel = heName || r.name;
+        const secondaryLabel = heName ? r.name : '';
+        return `<div class="ticker-search-item" onclick="selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${r.exchange}')" style="white-space:normal;padding:8px 10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:8px">
+                <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+                    <span style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
+                    ${secondaryLabel ? `<span style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0">
+                    <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
+                    <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
+                </div>
+            </div>
         </div>`;
     }).join('');
 }
@@ -1167,7 +1177,7 @@ function addHoldingRow(prefill = null) {
             <div class="row-ticker-wrapper">
                 <input type="hidden" class="row-ticker-symbol" value="${prefill?.ticker || ''}" />
                 <div class="row-ticker-badge" style="display:${prefill?.ticker ? 'flex' : 'none'}">${prefill?.ticker || ''}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button></div>
-                <input type="text" class="row-ticker-search" placeholder="חפש סימול..."
+                <input type="text" class="row-ticker-search" placeholder="חפש שם או סימול..."
                        style="direction:ltr;text-align:left;${prefill?.ticker ? 'display:none' : ''}"
                        oninput="onRowTickerSearch('${rowId}')" autocomplete="off" />
                 <div class="row-ticker-dropdown" id="dropdown_${rowId}"></div>
@@ -1177,6 +1187,7 @@ function addHoldingRow(prefill = null) {
                    style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
         <td><input type="number" class="row-price" min="0" step="0.01" value="${prefill?.avgPrice || ''}" placeholder="0.00"
                    style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
+        <td class="row-live-price" style="font-size:12px;color:var(--text-muted);text-align:center">—</td>
         <td><button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -1187,11 +1198,18 @@ function addHoldingRow(prefill = null) {
         const searchInput = tr.querySelector('.row-ticker-search');
         if (searchInput) searchInput.focus();
     }
+
+    // If prefilled with ticker, fetch live price
+    if (prefill?.ticker) {
+        tr.dataset.currency = prefill.currency || 'USD';
+        _fetchRowLivePrice(rowId, prefill.ticker, prefill.currency || 'USD');
+    }
 }
 
 function removeHoldingRow(rowId) {
     const row = document.getElementById(rowId);
     if (row) row.remove();
+    _updateAddPortfolioPriceHeader();
     updateAddClientRisk();
 }
 
@@ -1201,10 +1219,15 @@ function clearRowTicker(rowId) {
     row.querySelector('.row-ticker-symbol').value = '';
     row.querySelector('.row-ticker-badge').style.display = 'none';
     row.querySelector('.row-ticker-badge').textContent = '';
+    delete row.dataset.currency;
     const searchInput = row.querySelector('.row-ticker-search');
     searchInput.style.display = '';
     searchInput.value = '';
     searchInput.focus();
+    // Reset live price cell
+    const priceCell = row.querySelector('.row-live-price');
+    if (priceCell) priceCell.innerHTML = '<span style="color:var(--text-muted);font-size:11px">—</span>';
+    _updateAddPortfolioPriceHeader();
     updateAddClientRisk();
 }
 
@@ -1215,13 +1238,21 @@ function _renderRowSearchDropdown(results, dropdown, rowId) {
     }
     dropdown.innerHTML = results.map(r => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[r.symbol.replace('.TA', '').toUpperCase()] : '');
-        const displayName = heName || r.name;
-        const secondaryInfo = (heName && r.name !== heName) ? r.name : '';
-        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪ ILS' : r.currency;
-        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
-            <span class="ticker-search-symbol">${r.symbol}</span>
-            <span class="ticker-search-name">${displayName}${secondaryInfo ? ` <span style="color:var(--text-muted);font-size:11px">(${secondaryInfo})</span>` : ''}</span>
-            <span class="ticker-search-meta">${r.exchange} · ${currDisplay}</span>
+        const currDisplay = (r.currency === 'ILS' || r.currency === 'ILA') ? '₪' : '$';
+        const exchangeLabel = r.exchange || '';
+        const primaryLabel = heName || r.name;
+        const secondaryLabel = heName ? r.name : '';
+        return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="white-space:normal;padding:8px 10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:8px">
+                <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+                    <span style="font-weight:600;color:var(--text-primary);font-size:13px">${primaryLabel}</span>
+                    ${secondaryLabel ? `<span style="color:var(--text-muted);font-size:11px">${secondaryLabel}</span>` : ''}
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0">
+                    <span style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</span>
+                    <span style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</span>
+                </div>
+            </div>
         </div>`;
     }).join('');
 }
@@ -1263,18 +1294,84 @@ function selectRowTicker(rowId, symbol, currency) {
     const row = document.getElementById(rowId);
     if (!row) return;
 
-    row.querySelector('.row-ticker-symbol').value = symbol;
-    row.dataset.currency = currency || 'USD';
+    // Detect Israeli asset — force currency to ILS
+    const isIsraeli = (typeof _isIsraeliAsset === 'function') ? _isIsraeliAsset(symbol, currency) : false;
+    const effectiveCurrency = isIsraeli ? 'ILS' : (currency || 'USD');
 
+    row.querySelector('.row-ticker-symbol').value = symbol;
+    row.dataset.currency = effectiveCurrency;
+
+    // Show Hebrew name in badge if available
+    const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[symbol.replace('.TA', '').toUpperCase()] : '';
+    const currSym = effectiveCurrency === 'ILS' ? '₪' : '$';
+    const badgeLabel = heName ? `${heName} (${symbol})` : symbol;
     const badge = row.querySelector('.row-ticker-badge');
-    badge.innerHTML = `${symbol}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button>`;
+    badge.innerHTML = `<span style="font-size:12px">${badgeLabel} <span style="color:var(--text-muted);font-size:10px">${currSym}</span></span><button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button>`;
     badge.style.display = 'flex';
 
     row.querySelector('.row-ticker-search').style.display = 'none';
     const dropdown = document.getElementById('dropdown_' + rowId);
     if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
 
+    // Update the price header to reflect the latest row's currency
+    _updateAddPortfolioPriceHeader();
+
     updateAddClientRisk();
+
+    // Fetch live price for this row in the background
+    _fetchRowLivePrice(rowId, symbol, effectiveCurrency);
+}
+
+// Dynamic price header: scans all rows' currencies and updates the table header
+function _updateAddPortfolioPriceHeader() {
+    const header = document.getElementById('addPortfolio-price-header');
+    if (!header) return;
+    const tbody = document.getElementById('mgmt-holdings-tbody');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    let hasILS = false, hasUSD = false;
+    rows.forEach(row => {
+        const curr = row.dataset?.currency || '';
+        if (curr === 'ILS') hasILS = true;
+        else if (curr === 'USD' || !curr) hasUSD = true;
+    });
+    if (hasILS && hasUSD) {
+        header.textContent = 'מחיר קנייה ($/₪)';
+    } else if (hasILS) {
+        header.textContent = 'מחיר קנייה (₪)';
+    } else {
+        header.textContent = 'מחיר קנייה ($)';
+    }
+}
+
+// Fetch live price for a dynamic row and display in the "מחיר נוכחי" cell
+async function _fetchRowLivePrice(rowId, symbol, currency) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const priceCell = row.querySelector('.row-live-price');
+    if (!priceCell) return;
+
+    priceCell.innerHTML = '<span style="color:var(--text-muted);font-size:11px">טוען...</span>';
+
+    try {
+        const result = (typeof fetchSingleTickerPrice === 'function')
+            ? await fetchSingleTickerPrice(symbol)
+            : null;
+
+        // Row may have been removed while we were fetching
+        const el = document.getElementById(rowId)?.querySelector('.row-live-price');
+        if (!el) return;
+
+        if (result && result.price > 0) {
+            const currSym = currency === 'ILS' ? '₪' : '$';
+            el.innerHTML = `<span style="color:var(--accent-blue);font-weight:600;font-size:12px">${result.price.toFixed(2)} ${currSym}</span>`;
+        } else {
+            el.innerHTML = '<span style="color:var(--text-muted);font-size:11px">—</span>';
+        }
+    } catch (e) {
+        const el = document.getElementById(rowId)?.querySelector('.row-live-price');
+        if (el) el.innerHTML = '<span style="color:var(--text-muted);font-size:11px">—</span>';
+    }
 }
 
 // Collect all holding rows into an array for submission
