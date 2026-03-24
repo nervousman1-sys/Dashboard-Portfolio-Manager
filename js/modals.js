@@ -727,17 +727,17 @@ function _renderSearchDropdown(results, dropdown, fetchPrices = false) {
         const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
         const rType = r.type || 'Common Stock';
         return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')" style="padding:8px 10px;cursor:pointer">
-            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;width:100%;gap:6px">
-                <div style="min-width:0;overflow:hidden">
+            <div style="display:grid;grid-template-columns:60% 20% 20%;align-items:center;width:100%;gap:0">
+                <div style="min-width:0;overflow:hidden;padding-right:4px">
                     <div style="display:flex;align-items:center;gap:4px">
-                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${primaryLabel}</span>
+                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%">${primaryLabel}</span>
                         ${typeLabel}
                     </div>
-                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${secondaryLabel}</div>` : ''}
+                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${secondaryLabel}</div>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_${safeId}" style="min-width:55px;text-align:right;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr"></span>
-                <div style="text-align:right;white-space:nowrap;min-width:60px">
-                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</div>
+                <span class="search-live-price" id="slp_${safeId}" style="text-align:center;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr;white-space:nowrap"></span>
+                <div style="text-align:right;white-space:nowrap;overflow:hidden">
+                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr;overflow:hidden;text-overflow:ellipsis">${r.symbol}</div>
                     <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
                 </div>
             </div>
@@ -1316,17 +1316,17 @@ function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices = false)
         const safeId = (r.symbol || '').replace(/[^a-zA-Z0-9]/g, '_');
         const typeLabel = r.type === 'Bond' ? '<span style="color:var(--accent-purple,#a855f7);font-size:9px;font-weight:600;border:1px solid var(--accent-purple,#a855f7);border-radius:3px;padding:0 3px;margin-left:4px">אג"ח</span>' : '';
         return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')" style="padding:8px 10px;cursor:pointer">
-            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;width:100%;gap:6px">
-                <div style="min-width:0;overflow:hidden">
+            <div style="display:grid;grid-template-columns:60% 20% 20%;align-items:center;width:100%;gap:0">
+                <div style="min-width:0;overflow:hidden;padding-right:4px">
                     <div style="display:flex;align-items:center;gap:4px">
-                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${primaryLabel}</span>
+                        <span style="font-weight:600;color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%">${primaryLabel}</span>
                         ${typeLabel}
                     </div>
-                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${secondaryLabel}</div>` : ''}
+                    ${secondaryLabel ? `<div style="color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${secondaryLabel}</div>` : ''}
                 </div>
-                <span class="search-live-price" id="slp_row_${safeId}" style="min-width:55px;text-align:right;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr"></span>
-                <div style="text-align:right;white-space:nowrap;min-width:60px">
-                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr">${r.symbol}</div>
+                <span class="search-live-price" id="slp_row_${safeId}" style="text-align:center;font-size:12px;font-weight:600;color:var(--accent-blue);direction:ltr;white-space:nowrap"></span>
+                <div style="text-align:right;white-space:nowrap;overflow:hidden">
+                    <div style="font-weight:600;color:var(--accent-blue);font-size:12px;direction:ltr;overflow:hidden;text-overflow:ellipsis">${r.symbol}</div>
                     <div style="color:var(--text-muted);font-size:10px">${exchangeLabel} · ${currDisplay}</div>
                 </div>
             </div>
