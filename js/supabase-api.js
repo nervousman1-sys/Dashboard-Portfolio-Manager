@@ -58,6 +58,7 @@ function mapHolding(h) {
         previousClose: h.previous_close,
         currency: h.currency,
         assetClass: h.asset_class || _inferAssetClass(h.type),
+        bondType: h.bond_type || null,
         _livePriceResolved: (h.type !== 'stock') || !priceMatchesPurchase
     };
 }
@@ -226,7 +227,8 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
                 price: currentPrice,
                 previous_close: previousClose,
                 currency,
-                asset_class: h.assetClass || _inferAssetClass(type)
+                asset_class: h.assetClass || _inferAssetClass(type),
+                bond_type: h.bondType || null
             });
         }
     }
@@ -387,6 +389,9 @@ async function supaAddHolding(clientId, holdingData) {
         previousClose = price;
     }
 
+    // Bond sub-type (government / corporate) — auto-detected by classifyAsset
+    const bondType = holdingData.bondType || null;
+
     const costBasis = price * quantity;
 
     // Check if same ticker already exists in portfolio — aggregate if so
@@ -449,7 +454,8 @@ async function supaAddHolding(clientId, holdingData) {
             price: currentPrice,
             previous_close: previousClose,
             currency,
-            asset_class: assetClass
+            asset_class: assetClass,
+            bond_type: bondType
         });
 
     if (error) { console.error('supaAddHolding:', error.message); return null; }

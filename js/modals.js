@@ -506,11 +506,10 @@ function openMgmtModal(action, data) {
                     </div>
                 </div>
                 <div class="mgmt-field" id="mgmt-bondname-field" style="display:none"><label>Bond Name</label><input type="text" id="mgmt-bondname" placeholder='e.g. IL Gov Bond CPI-Linked' /></div>
-                <div class="mgmt-field" id="mgmt-asset-class-field" style="display:none"><label>Bond Classification</label>
-                    <select id="mgmt-asset-class">
-                        <option value="Gov Bond">Gov Bond</option>
-                        <option value="Corp Bond">Corp Bond</option>
-                    </select>
+                <input type="hidden" id="mgmt-asset-class" value="Gov Bond" />
+                <div class="mgmt-field" id="mgmt-bond-class-display" style="display:none">
+                    <label>סיווג אוטומטי</label>
+                    <div class="auto-class-badge" id="mgmt-bond-class-badge">Gov Bond</div>
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
                 <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
@@ -665,38 +664,53 @@ function detectAssetType(symbol, name, apiType) {
     const nm = (name || '').toLowerCase();
     const api = (apiType || '').toLowerCase();
 
+    // Helper: classify bond sub-type (government vs corporate)
+    function _classifyBondType(nameStr) {
+        const n = (nameStr || '').toLowerCase();
+        const govKeywords = ['ממשלתי', 'ממשל', 'גליל', 'שחר', 'כפיר', 'מלווה',
+            'gov bond', 'gov', 'il gov', 'cpi-linked', 'treasury', 'fixed rate', 'variable rate'];
+        const corpKeywords = ['קונצרני', 'נאמנות', 'corp bond', 'corp', 'corporate'];
+        if (corpKeywords.some(kw => n.includes(kw))) return { bondType: 'corporate', assetClass: 'Corp Bond' };
+        if (govKeywords.some(kw => n.includes(kw))) return { bondType: 'government', assetClass: 'Gov Bond' };
+        return { bondType: 'government', assetClass: 'Gov Bond' };
+    }
+
     // Rule 1: API explicitly says Bond
-    if (api.includes('bond')) return { type: 'bond', assetClass: nm.includes('gov') || nm.includes('ממשלתי') ? 'Gov Bond' : 'Corp Bond' };
+    if (api.includes('bond')) {
+        const cls = _classifyBondType(name);
+        return { type: 'bond', ...cls };
+    }
 
     // Rule 2: Israeli numeric security (7-9 digits)
     if (/^\d{7,9}$/.test(sym)) {
-        // Government bond prefixes
         if (sym.startsWith('11') || sym.startsWith('95')) {
-            return { type: 'bond', assetClass: 'Gov Bond' };
+            return { type: 'bond', bondType: 'government', assetClass: 'Gov Bond' };
         }
-        // Hebrew bond name keywords
-        const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'שקלי', 'גליל', 'מלווה', 'bond', 'gov bond', 'cpi-linked', 'treasury'];
+        const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה',
+            'קונצרני', 'נאמנות', 'bond', 'gov bond', 'cpi-linked', 'treasury', 'corp bond'];
         if (bondKeywords.some(kw => nm.includes(kw))) {
-            return { type: 'bond', assetClass: nm.includes('קונצרני') || nm.includes('corp') ? 'Corp Bond' : 'Gov Bond' };
+            const cls = _classifyBondType(name);
+            return { type: 'bond', ...cls };
         }
-        // Default numeric Israeli = bond (most 7-9 digit TASE IDs are bonds)
-        return { type: 'bond', assetClass: 'Gov Bond' };
+        return { type: 'bond', bondType: 'government', assetClass: 'Gov Bond' };
     }
 
     // Rule 3: Name-based bond detection (for non-numeric symbols)
-    const bondNameKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'שקלי', 'גליל', 'מלווה',
-        'gov bond', 'cpi-linked', 'treasury', 'corp bond', 'il gov bond'];
+    const bondNameKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה',
+        'קונצרני', 'נאמנות', 'gov bond', 'cpi-linked', 'treasury', 'corp bond', 'il gov bond', 'corporate bond'];
     if (bondNameKeywords.some(kw => nm.includes(kw))) {
-        return { type: 'bond', assetClass: nm.includes('קונצרני') || nm.includes('corp') ? 'Corp Bond' : 'Gov Bond' };
+        const cls = _classifyBondType(name);
+        return { type: 'bond', ...cls };
     }
 
     // Rule 4: Check if mapped in ISRAELI_BOND_TO_YAHOO (price-service.js)
     if (typeof ISRAELI_BOND_TO_YAHOO !== 'undefined' && ISRAELI_BOND_TO_YAHOO[sym]) {
-        return { type: 'bond', assetClass: 'Gov Bond' };
+        const cls = _classifyBondType(name);
+        return { type: 'bond', ...cls };
     }
 
     // Default: stock
-    return { type: 'stock', assetClass: null };
+    return { type: 'stock', assetClass: null, bondType: null };
 }
 
 // Live buy cost calculation
@@ -896,12 +910,18 @@ function selectSearchResult(symbol, name, currency, exchange) {
     if (isBond) {
         const bondNameField = document.getElementById('mgmt-bondname-field');
         if (bondNameField) bondNameField.style.display = '';
-        const assetClassField = document.getElementById('mgmt-asset-class-field');
-        if (assetClassField) assetClassField.style.display = '';
         const bondNameInput = document.getElementById('mgmt-bondname');
         if (bondNameInput) bondNameInput.value = name || symbol;
-        const assetClassSelect = document.getElementById('mgmt-asset-class');
-        if (assetClassSelect && detected.assetClass) assetClassSelect.value = detected.assetClass;
+        // Auto-set hidden asset class + show badge
+        const assetClassHidden = document.getElementById('mgmt-asset-class');
+        if (assetClassHidden && detected.assetClass) assetClassHidden.value = detected.assetClass;
+        const bondClassDisplay = document.getElementById('mgmt-bond-class-display');
+        if (bondClassDisplay) bondClassDisplay.style.display = '';
+        const bondClassBadge = document.getElementById('mgmt-bond-class-badge');
+        if (bondClassBadge) {
+            bondClassBadge.textContent = detected.assetClass || 'Gov Bond';
+            bondClassBadge.className = 'auto-class-badge ' + (detected.bondType === 'corporate' ? 'corp' : 'gov');
+        }
         if (isIsraeli) {
             document.getElementById('mgmt-ticker-currency').value = 'ILS';
         }
@@ -909,8 +929,8 @@ function selectSearchResult(symbol, name, currency, exchange) {
         // Stock selected — hide bond fields
         const bondNameField = document.getElementById('mgmt-bondname-field');
         if (bondNameField) bondNameField.style.display = 'none';
-        const assetClassField = document.getElementById('mgmt-asset-class-field');
-        if (assetClassField) assetClassField.style.display = 'none';
+        const bondClassDisplay = document.getElementById('mgmt-bond-class-display');
+        if (bondClassDisplay) bondClassDisplay.style.display = 'none';
     }
 
     updateBuyCost();
@@ -977,11 +997,13 @@ function clearTickerSelection() {
     const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabel) priceCurrLabel.textContent = '$';
 
-    // Hide bond-specific fields
+    // Hide bond-specific fields and reset auto-classification
     const bondNameField = document.getElementById('mgmt-bondname-field');
     if (bondNameField) bondNameField.style.display = 'none';
-    const assetClassField = document.getElementById('mgmt-asset-class-field');
-    if (assetClassField) assetClassField.style.display = 'none';
+    const bondClassDisplay = document.getElementById('mgmt-bond-class-display');
+    if (bondClassDisplay) bondClassDisplay.style.display = 'none';
+    const assetClassHidden = document.getElementById('mgmt-asset-class');
+    if (assetClassHidden) assetClassHidden.value = 'Gov Bond';
 
     // Hide live price preview
     const preview = document.getElementById('mgmt-live-price-preview');
@@ -1133,10 +1155,13 @@ async function addHolding(clientId) {
 
     let holdingData = { type, price, quantity, ticker, currency, stockName };
 
-    // For bonds: also pass bond-specific fields
+    // For bonds: also pass bond-specific fields + auto-detected bond_type
     if (type === 'bond') {
         holdingData.bondName = document.getElementById('mgmt-bondname')?.value?.trim() || stockName;
         holdingData.assetClass = document.getElementById('mgmt-asset-class')?.value || 'Gov Bond';
+        // Re-detect to get bondType (government/corporate)
+        const detected = detectAssetType(ticker, stockName, '');
+        holdingData.bondType = detected.bondType || 'government';
     }
 
     // Use portfolioBuyAsset which checks cash balance
