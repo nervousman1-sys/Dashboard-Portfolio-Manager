@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v88';
+const CACHE_NAME = 'portfolio-dashboard-v89';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -66,6 +66,8 @@ const NETWORK_FIRST_FILES = [
     'init.js',
     'price-service.js',
     'supabase-config.js',
+    'supabase-api.js',
+    'portfolio.js',
     'charts.js',
     'render.js',
     'synthetic-history.js',

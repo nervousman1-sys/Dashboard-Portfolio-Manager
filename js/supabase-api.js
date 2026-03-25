@@ -230,9 +230,10 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
                 price: currentPrice,
                 previous_close: previousClose,
                 currency,
-                asset_class: h.assetClass || _inferAssetClass(type),
-                bond_type: h.bondType || null
+                asset_class: h.assetClass || _inferAssetClass(type)
             });
+            // Only add bond_type if present (column may not exist in older schemas)
+            if (h.bondType) aggregated.get(ticker).bond_type = h.bondType;
         }
     }
 
@@ -240,9 +241,17 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
 
     // --- Step 3: SINGLE bulk insert for all holdings (1 Supabase call) ---
     if (onProgress) onProgress('שומר נכסים...');
-    const { error: bulkErr } = await supabaseClient
+    let { error: bulkErr } = await supabaseClient
         .from('holdings')
         .insert(holdingRows);
+
+    // Retry without bond_type if column doesn't exist
+    if (bulkErr && bulkErr.message && bulkErr.message.includes('bond_type')) {
+        console.warn('[supaAddClientWithHoldings] bond_type column missing — retrying without it');
+        holdingRows.forEach(r => delete r.bond_type);
+        const retry = await supabaseClient.from('holdings').insert(holdingRows);
+        bulkErr = retry.error;
+    }
 
     if (bulkErr) {
         console.error('supaAddClientWithHoldings bulk insert failed:', bulkErr.message);
@@ -459,25 +468,36 @@ async function supaAddHolding(clientId, holdingData) {
 
     const assetClass = holdingData.assetClass || _inferAssetClass(type);
 
-    const { error } = await supabaseClient
+    const insertPayload = {
+        portfolio_id: clientId,
+        ticker: holdingTicker,
+        name,
+        type,
+        type_label: TYPE_LABELS[type] || type,
+        sector,
+        allocation_pct: 0,
+        value,
+        cost_basis: costBasis,
+        shares: quantity,
+        price: currentPrice,
+        previous_close: previousClose,
+        currency,
+        asset_class: assetClass
+    };
+    // Only include bond_type if it has a value (column may not exist in older schemas)
+    if (bondType) insertPayload.bond_type = bondType;
+
+    let { error } = await supabaseClient
         .from('holdings')
-        .insert({
-            portfolio_id: clientId,
-            ticker: holdingTicker,
-            name,
-            type,
-            type_label: TYPE_LABELS[type] || type,
-            sector,
-            allocation_pct: 0,
-            value,
-            cost_basis: costBasis,
-            shares: quantity,
-            price: currentPrice,
-            previous_close: previousClose,
-            currency,
-            asset_class: assetClass,
-            bond_type: bondType
-        });
+        .insert(insertPayload);
+
+    // Retry without bond_type if column doesn't exist
+    if (error && error.message && error.message.includes('bond_type')) {
+        console.warn('[supaAddHolding] bond_type column missing — retrying without it');
+        delete insertPayload.bond_type;
+        const retry = await supabaseClient.from('holdings').insert(insertPayload);
+        error = retry.error;
+    }
 
     if (error) { console.error('supaAddHolding:', error.message); return null; }
 

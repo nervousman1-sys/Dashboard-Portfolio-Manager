@@ -683,16 +683,29 @@ function detectAssetType(symbol, name, apiType) {
 
     // Rule 2: Israeli numeric security (7-9 digits)
     if (/^\d{7,9}$/.test(sym)) {
+        // 2a: Known STOCK in the numeric-to-Yahoo mapping → it's a stock, not a bond
+        if (typeof ISRAELI_ID_TO_YAHOO !== 'undefined' && ISRAELI_ID_TO_YAHOO[sym]) {
+            return { type: 'stock', assetClass: null, bondType: null };
+        }
+        // 2b: Government bond prefixes (11xxxx = CPI-linked, 95xxxx = fixed/variable)
         if (sym.startsWith('11') || sym.startsWith('95')) {
             return { type: 'bond', bondType: 'government', assetClass: 'Gov Bond' };
         }
+        // 2c: Bond keywords in name
         const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה',
             'קונצרני', 'נאמנות', 'bond', 'gov bond', 'cpi-linked', 'treasury', 'corp bond'];
         if (bondKeywords.some(kw => nm.includes(kw))) {
             const cls = _classifyBondType(name);
             return { type: 'bond', ...cls };
         }
-        return { type: 'bond', bondType: 'government', assetClass: 'Gov Bond' };
+        // 2d: Known BOND in the bond-to-Yahoo mapping
+        if (typeof ISRAELI_BOND_TO_YAHOO !== 'undefined' && ISRAELI_BOND_TO_YAHOO[sym]) {
+            const cls = _classifyBondType(name);
+            return { type: 'bond', ...cls };
+        }
+        // 2e: Unknown numeric ID — default to stock (user can correct if needed)
+        // Previously defaulted to bond which broke purchases of unmapped Israeli stocks
+        return { type: 'stock', assetClass: null, bondType: null };
     }
 
     // Rule 3: Name-based bond detection (for non-numeric symbols)

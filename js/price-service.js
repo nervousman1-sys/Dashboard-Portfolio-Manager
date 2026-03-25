@@ -693,7 +693,7 @@ async function updatePricesFromAPI(onUpdate) {
         return;
     }
 
-    // 1. Collect unique stock + bond tickers + holdings map
+    // 1. Collect unique stock + bond tickers, split Israeli from international
     const stockTickers = new Set();
     const bondTickers = new Set();
     const holdingsMap = {};
@@ -711,66 +711,127 @@ async function updatePricesFromAPI(onUpdate) {
 
     const allStockTickers = [...stockTickers];
     const allBondTickers = [...bondTickers];
-    const allTickers = [...allStockTickers];  // stocks go through Twelve Data first
     if (allStockTickers.length === 0 && allBondTickers.length === 0) {
         console.log('[PriceService] No holdings, skipping.');
         return;
     }
 
-    console.log(`[PriceService] === Price update: ${allTickers.length} tickers: ${allTickers.join(', ')} ===`);
-
-    // Build Twelve Data symbol list (with :TASE suffix for ILS)
-    const allSymbols = allTickers.map(t => {
+    // Split stocks into Israeli (Yahoo-first) and international (Twelve Data-first)
+    const israeliStockTickers = allStockTickers.filter(t => {
         const h = holdingsMap[t];
-        return (h && h.currency === 'ILS') ? `${t}:TASE` : t;
+        return (h && h.currency === 'ILS') || t.endsWith('.TA') || !!ISRAELI_ID_TO_YAHOO[t];
     });
+    const intlStockTickers = allStockTickers.filter(t => !israeliStockTickers.includes(t));
 
-    // 2. FAST PATH: Fetch only the first chunk (up to 8 symbols, one HTTP call, ~1s)
-    //    This is the ONLY await before we return control to the caller.
-    const firstChunkSymbols = allSymbols.slice(0, 8);
-    const firstChunkTickers = allTickers.slice(0, 8);
+    console.log(`[PriceService] === Price update: ${intlStockTickers.length} intl + ${israeliStockTickers.length} Israeli + ${allBondTickers.length} bonds ===`);
+
     let collectedPrices = {};
 
-    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
-        try {
-            const first = await _fetchTwelveDataChunk(firstChunkSymbols, firstChunkTickers, holdingsMap);
+    // Helper: update the status line with granular progress
+    const totalTickers = allStockTickers.length + allBondTickers.length;
+    function _updateStatus(text) {
+        const el = document.getElementById('lastUpdate');
+        if (el) el.textContent = text;
+    }
+
+    // 2. FAST PATH: Fire Israeli Yahoo batch + intl Twelve Data chunk IN PARALLEL
+    //    This is the ONLY await before we return control to the caller.
+    const fastPromises = [];
+
+    // 2a. Israeli stocks → batch Yahoo Finance (parallel, no API key needed)
+    if (israeliStockTickers.length > 0) {
+        _updateStatus(`מעדכן ${israeliStockTickers.length} מניות ישראליות...`);
+        const yahooPromise = _batchFetchYahooIsraeli(israeliStockTickers).then(yahooPrices => {
+            if (yahooPrices && Object.keys(yahooPrices).length > 0) {
+                Object.assign(collectedPrices, yahooPrices);
+                Object.assign(priceCache, yahooPrices);
+                if (_applyPricesToClientsInMemory(yahooPrices) && onUpdate) onUpdate();
+                _updateStatus(`מניות ישראליות: ${Object.keys(yahooPrices).length}/${israeliStockTickers.length} ✓`);
+                console.log(`[PriceService] Israeli batch: ${Object.keys(yahooPrices).length}/${israeliStockTickers.length} from Yahoo`);
+            }
+        }).catch(e => console.warn('[PriceService] Israeli batch failed:', e.message));
+        fastPromises.push(yahooPromise);
+    }
+
+    // 2b. International stocks → Twelve Data first chunk (up to 8 symbols)
+    if (intlStockTickers.length > 0 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+        if (israeliStockTickers.length === 0) _updateStatus(`מעדכן ${intlStockTickers.length} מניות בינלאומיות...`);
+        const intlSymbols = intlStockTickers.slice(0, 8);
+        const tdPromise = _fetchTwelveDataChunk(intlSymbols, intlSymbols, holdingsMap).then(first => {
             if (first.results && Object.keys(first.results).length > 0) {
                 Object.assign(collectedPrices, first.results);
                 Object.assign(priceCache, first.results);
-
-                // Apply to in-memory clients + notify UI
-                if (_applyPricesToClientsInMemory(first.results) && onUpdate) {
-                    onUpdate();
-                }
-
-                console.log(`[PriceService] First batch: ${Object.keys(first.results).length} prices delivered`);
+                if (_applyPricesToClientsInMemory(first.results) && onUpdate) onUpdate();
+                console.log(`[PriceService] Intl first batch: ${Object.keys(first.results).length} from Twelve Data`);
             }
-        } catch (e) {
-            console.warn('[PriceService] First chunk failed:', e.message);
-        }
+        }).catch(e => console.warn('[PriceService] First intl chunk failed:', e.message));
+        fastPromises.push(tdPromise);
+    }
+
+    // Wait for BOTH fast paths to resolve (parallel → faster than sequential)
+    await Promise.allSettled(fastPromises);
+
+    // Show partial status if both paths had work
+    const fastCount = Object.keys(collectedPrices).length;
+    if (fastCount > 0 && fastCount < totalTickers) {
+        _updateStatus(`עודכנו ${fastCount}/${totalTickers} — ממשיך ברקע...`);
     }
 
     // ── RETURN POINT ──
     // The Promise resolves HERE. Caller gets control back.
     // Everything below runs as a detached fire-and-forget background task.
 
-    _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate, allBondTickers);
+    const intlSymbols = intlStockTickers;
+    _backgroundPriceCompletion(intlStockTickers, intlSymbols, holdingsMap, collectedPrices, onUpdate, allBondTickers);
+}
+
+// ========== BATCH YAHOO FETCH FOR ISRAELI STOCKS ==========
+// Fetches all Israeli stock prices via Yahoo Finance in parallel (up to 10 concurrent).
+// Much faster than sequential fetching — all requests fire at once.
+
+async function _batchFetchYahooIsraeli(tickers) {
+    const results = {};
+    const CONCURRENCY = 10;
+
+    for (let i = 0; i < tickers.length; i += CONCURRENCY) {
+        const batch = tickers.slice(i, i + CONCURRENCY);
+        const settled = await Promise.allSettled(
+            batch.map(t => {
+                const yahooSym = _resolveYahooSymbol(t.toUpperCase(), true);
+                return _fetchYahooPrice(yahooSym)
+                    .then(r => r && r.price > 0 ? { ticker: t, ...r } : null);
+            })
+        );
+
+        settled.forEach(r => {
+            if (r.status === 'fulfilled' && r.value) {
+                const { ticker, ...priceData } = r.value;
+                results[ticker] = priceData;
+            }
+        });
+    }
+
+    return results;
 }
 
 // ========== BACKGROUND COMPLETION (detached — never blocks caller) ==========
 
-async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate, bondTickers = []) {
-    try {
-        const sources = Object.keys(collectedPrices).length > 0 ? ['Twelve Data'] : [];
+async function _backgroundPriceCompletion(intlTickers, intlSymbols, holdingsMap, collectedPrices, onUpdate, bondTickers = []) {
+    function _bgStatus(text) {
+        const el = document.getElementById('lastUpdate');
+        if (el) el.textContent = text;
+    }
 
-        // 3. Remaining Twelve Data chunks (if >8 tickers)
-        if (allSymbols.length > 8 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
-            for (let i = 8; i < allSymbols.length; i += 8) {
-                // Respect rate limit: 1s delay between chunks
+    try {
+        const sources = Object.keys(collectedPrices).length > 0 ? ['Yahoo Finance', 'Twelve Data'] : [];
+
+        // 3. Remaining Twelve Data chunks for international tickers (if >8)
+        if (intlSymbols.length > 8 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+            for (let i = 8; i < intlSymbols.length; i += 8) {
                 await new Promise(r => setTimeout(r, 1200));
 
-                const chunkSymbols = allSymbols.slice(i, i + 8);
-                const chunkTickers = allTickers.slice(i, i + 8);
+                const chunkSymbols = intlSymbols.slice(i, i + 8);
+                const chunkTickers = intlTickers.slice(i, i + 8);
 
                 try {
                     const result = await _fetchTwelveDataChunk(chunkSymbols, chunkTickers, holdingsMap);
@@ -779,8 +840,6 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
                     if (result.results && Object.keys(result.results).length > 0) {
                         Object.assign(collectedPrices, result.results);
                         Object.assign(priceCache, result.results);
-
-                        // Incremental UI update per chunk
                         if (_applyPricesToClientsInMemory(result.results) && onUpdate) {
                             onUpdate();
                         }
@@ -794,89 +853,48 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
             }
         }
 
-        // 4. Find tickers still missing after Twelve Data
-        const missingTickers = allTickers.filter(t => !collectedPrices[t]);
+        // 4. Find international tickers still missing after Twelve Data → FMP + Finnhub
+        const missingIntl = intlTickers.filter(t => !collectedPrices[t]);
 
-        if (missingTickers.length > 0) {
-            console.log(`[PriceService] ${missingTickers.length} tickers missing after Twelve Data...`);
+        if (missingIntl.length > 0) {
+            _bgStatus(`מעדכן ${missingIntl.length} מניות נוספות...`);
+            console.log(`[PriceService] ${missingIntl.length} intl tickers missing, trying FMP + Finnhub...`);
+            const [fmpResult, finnhubResult] = await Promise.allSettled([
+                fetchFMPPrices(missingIntl),
+                fetchFinnhubPrices(missingIntl)
+            ]);
 
-            // Split missing tickers into Israeli and non-Israeli
-            const missingIsraeli = missingTickers.filter(t => {
-                const h = holdingsMap[t];
-                return (h && h.currency === 'ILS') || t.endsWith('.TA') || !!ISRAELI_ID_TO_YAHOO[t];
-            });
-            const missingOther = missingTickers.filter(t => !missingIsraeli.includes(t));
+            const fmpPrices = fmpResult.status === 'fulfilled' ? fmpResult.value : null;
+            const finnhubPrices = finnhubResult.status === 'fulfilled' ? finnhubResult.value : null;
+            const fallbackPrices = {};
 
-            // 4a. Israeli tickers: Yahoo Finance via CORS proxy (parallel, up to 5 at a time)
-            if (missingIsraeli.length > 0) {
-                console.log(`[PriceService] Fetching ${missingIsraeli.length} Israeli tickers via Yahoo Finance...`);
-                const yahooResults = await Promise.allSettled(
-                    missingIsraeli.map(t => {
-                        const yahooSym = _resolveYahooSymbol(t.toUpperCase(), true);
-                        return _fetchYahooPrice(yahooSym).then(result => result ? { ticker: t, ...result } : null);
-                    })
-                );
-
-                const yahooPrices = {};
-                yahooResults.forEach(r => {
-                    if (r.status === 'fulfilled' && r.value && r.value.price > 0) {
-                        const { ticker, ...priceData } = r.value;
-                        yahooPrices[ticker] = priceData;
-                    }
+            if (fmpPrices) {
+                Object.assign(fallbackPrices, fmpPrices);
+                if (!sources.includes('FMP')) sources.push('FMP');
+            }
+            if (finnhubPrices) {
+                Object.keys(finnhubPrices).forEach(t => {
+                    if (!fallbackPrices[t]) fallbackPrices[t] = finnhubPrices[t];
                 });
-
-                if (Object.keys(yahooPrices).length > 0) {
-                    Object.assign(collectedPrices, yahooPrices);
-                    Object.assign(priceCache, yahooPrices);
-                    sources.push('Yahoo Finance');
-                    if (_applyPricesToClientsInMemory(yahooPrices) && onUpdate) {
-                        onUpdate();
-                    }
-                    console.log(`[PriceService] Yahoo Finance: got ${Object.keys(yahooPrices).length}/${missingIsraeli.length} Israeli prices`);
+                if (Object.keys(finnhubPrices).some(t => !fmpPrices || !fmpPrices[t])) {
+                    if (!sources.includes('Finnhub')) sources.push('Finnhub');
                 }
             }
 
-            // 4b. Non-Israeli tickers: FMP + Finnhub in parallel
-            if (missingOther.length > 0) {
-                console.log(`[PriceService] ${missingOther.length} non-Israeli tickers, trying FMP + Finnhub...`);
-                const [fmpResult, finnhubResult] = await Promise.allSettled([
-                    fetchFMPPrices(missingOther),
-                    fetchFinnhubPrices(missingOther)
-                ]);
-
-                const fmpPrices = fmpResult.status === 'fulfilled' ? fmpResult.value : null;
-                const finnhubPrices = finnhubResult.status === 'fulfilled' ? finnhubResult.value : null;
-
-                const fallbackPrices = {};
-
-                if (fmpPrices) {
-                    Object.assign(fallbackPrices, fmpPrices);
-                    sources.push('FMP');
-                }
-                if (finnhubPrices) {
-                    Object.keys(finnhubPrices).forEach(t => {
-                        if (!fallbackPrices[t]) fallbackPrices[t] = finnhubPrices[t];
-                    });
-                    if (Object.keys(finnhubPrices).some(t => !fmpPrices || !fmpPrices[t])) {
-                        sources.push('Finnhub');
-                    }
-                }
-
-                if (Object.keys(fallbackPrices).length > 0) {
-                    Object.assign(collectedPrices, fallbackPrices);
-                    Object.assign(priceCache, fallbackPrices);
-                    if (_applyPricesToClientsInMemory(fallbackPrices) && onUpdate) {
-                        onUpdate();
-                    }
+            if (Object.keys(fallbackPrices).length > 0) {
+                Object.assign(collectedPrices, fallbackPrices);
+                Object.assign(priceCache, fallbackPrices);
+                if (_applyPricesToClientsInMemory(fallbackPrices) && onUpdate) {
+                    onUpdate();
                 }
             }
 
-            // 4c. Any STILL missing tickers (Israeli or not) — last-resort Yahoo for non-Israeli
-            const stillMissing = allTickers.filter(t => !collectedPrices[t] && !missingIsraeli.includes(t));
+            // Last resort: Yahoo for still-missing international tickers
+            const stillMissing = intlTickers.filter(t => !collectedPrices[t]);
             if (stillMissing.length > 0) {
-                console.log(`[PriceService] ${stillMissing.length} tickers still missing, trying Yahoo Finance fallback...`);
+                console.log(`[PriceService] ${stillMissing.length} tickers still missing, Yahoo fallback...`);
                 const lastResort = await Promise.allSettled(
-                    stillMissing.map(t => _fetchYahooPrice(t).then(result => result ? { ticker: t, ...result } : null))
+                    stillMissing.map(t => _fetchYahooPrice(t).then(r => r ? { ticker: t, ...r } : null))
                 );
                 const lastPrices = {};
                 lastResort.forEach(r => {
@@ -889,21 +907,19 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
                     Object.assign(collectedPrices, lastPrices);
                     Object.assign(priceCache, lastPrices);
                     if (!sources.includes('Yahoo Finance')) sources.push('Yahoo Finance');
-                    if (_applyPricesToClientsInMemory(lastPrices) && onUpdate) {
-                        onUpdate();
-                    }
+                    if (_applyPricesToClientsInMemory(lastPrices) && onUpdate) onUpdate();
                 }
             }
         }
 
         // 5. Bond price fetching via Yahoo Finance (ISIN-based)
         if (bondTickers.length > 0) {
+            _bgStatus(`מעדכן ${bondTickers.length} אג"ח...`);
             console.log(`[PriceService] Fetching ${bondTickers.length} bond prices via Yahoo Finance...`);
             const bondResults = await Promise.allSettled(
                 bondTickers.map(t => {
                     const bondYahooSym = _resolveBondYahooSymbol(t.toUpperCase());
                     if (!bondYahooSym) {
-                        // No ISIN mapping — use simulation fallback
                         const h = holdingsMap[t];
                         const bp = (h && h.price > 0) ? h.price : 100;
                         const variation = (Math.random() - 0.5) * 0.006;
@@ -936,29 +952,24 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
                 Object.assign(collectedPrices, bondPrices);
                 Object.assign(priceCache, bondPrices);
                 if (realBondCount > 0 && !sources.includes('Yahoo Finance')) sources.push('Yahoo Finance');
-                if (_applyPricesToClientsInMemory(bondPrices) && onUpdate) {
-                    onUpdate();
-                }
+                if (_applyPricesToClientsInMemory(bondPrices) && onUpdate) onUpdate();
                 console.log(`[PriceService] Bonds: ${realBondCount} from Yahoo, ${Object.keys(bondPrices).length - realBondCount} simulated`);
             }
         }
 
         // 6. Finalize
-        const totalTickers = allTickers.length + bondTickers.length;
         const fetchedCount = Object.keys(collectedPrices).length;
         if (fetchedCount > 0) {
             priceCacheTimestamp = Date.now();
-            console.log(`[PriceService] ${fetchedCount}/${totalTickers} prices from ${sources.join(' + ')}`);
+            const now = new Date();
+            _bgStatus(`עודכן: ${now.toLocaleTimeString('he-IL')}`);
+            console.log(`[PriceService] ${fetchedCount} prices from ${sources.join(' + ')}`);
         } else {
+            _bgStatus('לא התקבלו מחירים');
             console.warn('[PriceService] No prices fetched from any API.');
         }
 
-        const skippedCount = totalTickers - fetchedCount;
-        if (skippedCount > 0) {
-            console.log(`[PriceService] ${skippedCount} tickers kept existing DB prices`);
-        }
-
-        // 6. Persist to Supabase (fire-and-forget — never blocks UI)
+        // Persist to Supabase (fire-and-forget — never blocks UI)
         if (supabaseConnected && fetchedCount > 0) {
             _persistPricesToSupabase(collectedPrices, onUpdate);
         }

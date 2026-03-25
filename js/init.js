@@ -164,7 +164,10 @@ async function init() {
         freshClients = null;
     }
 
-    if (freshClients && freshClients.length > 0) {
+    if (freshClients) {
+        // Supabase is the source of truth — always replace local state with fresh data.
+        // Even if freshClients is empty (new user / all portfolios deleted), that is the
+        // correct state and we must clear any stale cache from a previous session.
         clients = freshClients;
         saveClientsToCache(clients);
 
@@ -172,6 +175,15 @@ async function init() {
         renderSummaryBar();
         renderExposureSection();
         renderClientCards();
+
+        if (freshClients.length === 0 && _cacheRendered) {
+            // Cache showed portfolios that no longer exist in Supabase — clear stale UI
+            console.log('[Init] Phase 1: Supabase returned 0 portfolios — clearing stale cache');
+        }
+    } else if (useSupabase) {
+        // Supabase connected but fetch failed — we're running on stale cache
+        console.warn('[Init] Phase 1: Supabase fetch failed — using cached data (may be stale)');
+        document.getElementById('lastUpdate').textContent = 'נתונים מהמטמון (לא מעודכן)';
     }
 
     // ── Phase 1.1: Probe transactions table (non-blocking, fire-and-forget) ──
@@ -192,10 +204,17 @@ async function init() {
     restoreStateFromURL();
 
     // ── Phase 1.5: Fetch FX rates for multi-currency valuation ──
-    // Non-blocking — has hardcoded fallback if APIs fail.
     // Must resolve before price update so portfolio totals are FX-converted.
+    // Await with a short timeout — has hardcoded fallback if APIs fail.
     if (typeof fetchFxRates === 'function') {
-        fetchFxRates().catch(e => console.warn('[Init] FX rate fetch failed, using fallback:', e.message));
+        try {
+            await Promise.race([
+                fetchFxRates(),
+                new Promise(resolve => setTimeout(resolve, 3000))
+            ]);
+        } catch (e) {
+            console.warn('[Init] FX rate fetch failed, using fallback:', e.message);
+        }
     }
 
     // ── Phase 2: Update live market prices in background ──
