@@ -39,6 +39,58 @@ const ISRAELI_ID_TO_YAHOO = {
     '1082709': 'ELCO.TA',   // Elco
 };
 
+// ========== ISRAELI BOND ID → YAHOO ISIN SYMBOL MAPPING ==========
+// Israeli bonds on Yahoo Finance use ISIN format: IL00XXXXXXXX.TA
+// Maps internal bond IDs (from BONDS array), common TASE numeric IDs, and short names
+// to their Yahoo Finance ISIN-based symbols.
+const ISRAELI_BOND_TO_YAHOO = {
+    // --- Government Bonds (אג"ח ממשלתי) - CPI-linked (צמוד מדד) ---
+    'IL_CPI_1':    'IL0011501681.TA',  // אג"ח ממשלתי צמוד 0523
+    'IL_CPI_2':    'IL0011502887.TA',  // אג"ח ממשלתי צמוד 0825
+    'IL_CPI_3':    'IL0011503695.TA',  // אג"ח ממשלתי צמוד 1127
+    'IL_CPI_4':    'IL0011504503.TA',  // גליל צמוד 0530
+    // --- Government Bonds - Fixed rate (שקלי - שחר) ---
+    'IL_SHAHAR_1': 'IL0060401148.TA',  // שחר 0125
+    'IL_SHAHAR_2': 'IL0060402146.TA',  // שחר 0327
+    'IL_SHAHAR_3': 'IL0060403144.TA',  // שחר 0130
+    // --- Government Bonds - Variable rate (גילון) ---
+    'IL_GILON_1':  'IL0072401148.TA',  // גילון 0225
+    'IL_GILON_2':  'IL0072402146.TA',  // גילון 0326
+    // --- Common numeric TASE IDs for government bonds ---
+    '1150168':     'IL0011501681.TA',
+    '1150288':     'IL0011502887.TA',
+    '1150369':     'IL0011503695.TA',
+    '1150450':     'IL0011504503.TA',
+    '6040114':     'IL0060401148.TA',
+    '6040214':     'IL0060402146.TA',
+    '6040314':     'IL0060403144.TA',
+    // --- Corporate Bonds (אג"ח קונצרני) - common issuers ---
+    'LEUMI_BOND':  'IL0010501682.TA',  // אג"ח לאומי
+    'DSCT_BOND':   'IL0010502888.TA',  // אג"ח דיסקונט
+    'BEZQ_BOND':   'IL0010601037.TA',  // אג"ח בזק
+    'ICL_BOND':    'IL0010701035.TA',  // אג"ח כיל
+    'TEVA_BOND':   'IL0010801033.TA',  // אג"ח טבע
+};
+
+// Resolves a bond identifier to its Yahoo Finance ISIN symbol.
+// Checks: direct mapping → ISIN-format pass-through → null (not found).
+function _resolveBondYahooSymbol(sym) {
+    // Direct mapping lookup (internal ID, numeric ID, or named key)
+    if (ISRAELI_BOND_TO_YAHOO[sym]) return ISRAELI_BOND_TO_YAHOO[sym];
+
+    // Already an ISIN with .TA suffix (e.g. IL0011501681.TA)
+    if (/^IL\d{10,12}\.TA$/i.test(sym)) return sym.toUpperCase();
+
+    // Bare ISIN without .TA (e.g. IL0011501681)
+    if (/^IL\d{10,12}$/i.test(sym)) return sym.toUpperCase() + '.TA';
+
+    // Check if numeric ID is in the mapping (without leading zeros)
+    const trimmed = sym.replace(/^0+/, '');
+    if (ISRAELI_BOND_TO_YAHOO[trimmed]) return ISRAELI_BOND_TO_YAHOO[trimmed];
+
+    return null;
+}
+
 // ========== TWELVE DATA: single chunk fetch (up to 8 symbols batched in one HTTP call) ==========
 
 async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
@@ -239,16 +291,49 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
     // --- Israeli asset detection ---
     const isIsraeli = currency === 'ILS' || currency === 'ILA'
         || sym.endsWith('.TA') || sym.endsWith('.TASE')
-        || !!ISRAELI_ID_TO_YAHOO[sym];
-    const isBond = /^\d{7,9}$/.test(sym) && !ISRAELI_ID_TO_YAHOO[sym];
+        || !!ISRAELI_ID_TO_YAHOO[sym]
+        || !!ISRAELI_BOND_TO_YAHOO[sym];
+    const isBondNumeric = /^\d{7,9}$/.test(sym) && !ISRAELI_ID_TO_YAHOO[sym];
+    const isBondMapped = !!_resolveBondYahooSymbol(sym);
+    const isBond = isBondNumeric || isBondMapped;
 
-    // Bonds (7-9 digit numeric that are NOT in the ID map): use simulation
+    // --- Bonds: Try Yahoo Finance (ISIN lookup) → basePrice simulation fallback ---
     if (isBond) {
+        const bondYahooSym = _resolveBondYahooSymbol(sym);
+
+        // Provider 1 (Bond): Yahoo Finance via CORS proxy (ISIN-based)
+        if (bondYahooSym) {
+            try {
+                console.log(`[fetchSingleTickerPrice] Bond ${sym} → Yahoo ISIN: ${bondYahooSym}`);
+                const yahooResult = await _fetchYahooPrice(bondYahooSym);
+                if (yahooResult && yahooResult.price > 0) {
+                    // Bond prices from Yahoo .TA are in Agurot — _fetchYahooPrice already divides by 100
+                    console.log(`[fetchSingleTickerPrice] Bond Yahoo returned ₪${yahooResult.price} for ${bondYahooSym}`);
+                    const result = { ...yahooResult, currency: 'ILS', isBond: true };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            } catch (e) {
+                console.warn('[fetchSingleTickerPrice] Yahoo Finance bond fetch failed for', bondYahooSym, e.message);
+            }
+        }
+
+        // Fallback: basePrice simulation (for corporate bonds not on Yahoo, or API failures)
         const bp = basePrice || 100;
         const variation = (Math.random() - 0.5) * 0.006;
         const price = Math.round(bp * (1 + variation) * 100) / 100;
-        const result = { price, previousClose: bp, change: +(price - bp).toFixed(2), changePct: +((price - bp) / bp * 100).toFixed(2), currency: 'ILS' };
+        const result = {
+            price, previousClose: bp,
+            change: +(price - bp).toFixed(2),
+            changePct: +((price - bp) / bp * 100).toFixed(2),
+            currency: 'ILS',
+            isBond: true,
+            unavailable: !bondYahooSym  // true if no Yahoo mapping exists → UI can show "Price Unavailable"
+        };
         if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+        if (!bondYahooSym) {
+            console.warn(`[fetchSingleTickerPrice] Bond ${sym}: no Yahoo ISIN mapping, using simulated price. UI should show "Price Unavailable".`);
+        }
         return result;
     }
 
@@ -560,16 +645,17 @@ function _applyPricesToClientsInMemory(priceMap) {
         let clientChanged = false;
 
         client.holdings.forEach(h => {
-            if (h.type === 'stock' && priceMap[h.ticker]) {
-                const newPrice = priceMap[h.ticker].price;
-                const newPrevClose = priceMap[h.ticker].previousClose;
+            if (priceMap[h.ticker]) {
+                const entry = priceMap[h.ticker];
+                const newPrice = entry.price;
+                const newPrevClose = entry.previousClose;
 
-                // Always apply live API prices — no locks, no conditions.
-                // The API is the source of truth for current market prices.
+                // Apply live API prices for both stocks and bonds.
+                // Skip entries explicitly marked as unavailable with no real price.
                 if (newPrice > 0) {
                     h.previousClose = newPrevClose;
                     h.price = newPrice;
-                    h.value = h.shares * newPrice; // Native currency value (for per-holding display)
+                    h.value = h.shares * newPrice;
                     h._livePriceResolved = true;
                     clientChanged = true;
                 }
@@ -607,21 +693,27 @@ async function updatePricesFromAPI(onUpdate) {
         return;
     }
 
-    // 1. Collect unique stock tickers + holdings map
+    // 1. Collect unique stock + bond tickers + holdings map
     const stockTickers = new Set();
+    const bondTickers = new Set();
     const holdingsMap = {};
     clients.forEach(c => {
         c.holdings.forEach(h => {
             if (h.type === 'stock') {
                 stockTickers.add(h.ticker);
                 if (!holdingsMap[h.ticker]) holdingsMap[h.ticker] = h;
+            } else if (h.type === 'bond') {
+                bondTickers.add(h.ticker);
+                if (!holdingsMap[h.ticker]) holdingsMap[h.ticker] = h;
             }
         });
     });
 
-    const allTickers = [...stockTickers];
-    if (allTickers.length === 0) {
-        console.log('[PriceService] No stock holdings, skipping.');
+    const allStockTickers = [...stockTickers];
+    const allBondTickers = [...bondTickers];
+    const allTickers = [...allStockTickers];  // stocks go through Twelve Data first
+    if (allStockTickers.length === 0 && allBondTickers.length === 0) {
+        console.log('[PriceService] No holdings, skipping.');
         return;
     }
 
@@ -662,12 +754,12 @@ async function updatePricesFromAPI(onUpdate) {
     // The Promise resolves HERE. Caller gets control back.
     // Everything below runs as a detached fire-and-forget background task.
 
-    _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate);
+    _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate, allBondTickers);
 }
 
 // ========== BACKGROUND COMPLETION (detached — never blocks caller) ==========
 
-async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate) {
+async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, collectedPrices, onUpdate, bondTickers = []) {
     try {
         const sources = Object.keys(collectedPrices).length > 0 ? ['Twelve Data'] : [];
 
@@ -804,16 +896,64 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
             }
         }
 
-        // 5. Finalize
+        // 5. Bond price fetching via Yahoo Finance (ISIN-based)
+        if (bondTickers.length > 0) {
+            console.log(`[PriceService] Fetching ${bondTickers.length} bond prices via Yahoo Finance...`);
+            const bondResults = await Promise.allSettled(
+                bondTickers.map(t => {
+                    const bondYahooSym = _resolveBondYahooSymbol(t.toUpperCase());
+                    if (!bondYahooSym) {
+                        // No ISIN mapping — use simulation fallback
+                        const h = holdingsMap[t];
+                        const bp = (h && h.price > 0) ? h.price : 100;
+                        const variation = (Math.random() - 0.5) * 0.006;
+                        const price = Math.round(bp * (1 + variation) * 100) / 100;
+                        return Promise.resolve({
+                            ticker: t, price, previousClose: bp,
+                            change: +(price - bp).toFixed(2),
+                            changePct: +((price - bp) / bp * 100).toFixed(2),
+                            currency: 'ILS', isBond: true, unavailable: true
+                        });
+                    }
+                    return _fetchYahooPrice(bondYahooSym)
+                        .then(result => result && result.price > 0
+                            ? { ticker: t, ...result, currency: 'ILS', isBond: true }
+                            : null)
+                        .catch(() => null);
+                })
+            );
+
+            const bondPrices = {};
+            bondResults.forEach(r => {
+                if (r.status === 'fulfilled' && r.value && r.value.price > 0) {
+                    const { ticker, ...priceData } = r.value;
+                    bondPrices[ticker] = priceData;
+                }
+            });
+
+            const realBondCount = Object.values(bondPrices).filter(p => !p.unavailable).length;
+            if (Object.keys(bondPrices).length > 0) {
+                Object.assign(collectedPrices, bondPrices);
+                Object.assign(priceCache, bondPrices);
+                if (realBondCount > 0 && !sources.includes('Yahoo Finance')) sources.push('Yahoo Finance');
+                if (_applyPricesToClientsInMemory(bondPrices) && onUpdate) {
+                    onUpdate();
+                }
+                console.log(`[PriceService] Bonds: ${realBondCount} from Yahoo, ${Object.keys(bondPrices).length - realBondCount} simulated`);
+            }
+        }
+
+        // 6. Finalize
+        const totalTickers = allTickers.length + bondTickers.length;
         const fetchedCount = Object.keys(collectedPrices).length;
         if (fetchedCount > 0) {
             priceCacheTimestamp = Date.now();
-            console.log(`[PriceService] ${fetchedCount}/${allTickers.length} prices from ${sources.join(' + ')}`);
+            console.log(`[PriceService] ${fetchedCount}/${totalTickers} prices from ${sources.join(' + ')}`);
         } else {
             console.warn('[PriceService] No prices fetched from any API.');
         }
 
-        const skippedCount = allTickers.length - fetchedCount;
+        const skippedCount = totalTickers - fetchedCount;
         if (skippedCount > 0) {
             console.log(`[PriceService] ${skippedCount} tickers kept existing DB prices`);
         }
@@ -839,10 +979,12 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
             for (const h of client.holdings) {
                 let newPrice, newPreviousClose;
 
-                if (h.type === 'stock' && priceMap[h.ticker]) {
+                if (priceMap[h.ticker]) {
+                    // Use live API price (stocks or bonds fetched from Yahoo/providers)
                     newPrice = priceMap[h.ticker].price;
                     newPreviousClose = priceMap[h.ticker].previousClose;
                 } else if (h.type === 'bond') {
+                    // Bond not in priceMap — use simulation fallback
                     const bondSim = simulateBondPrice(h);
                     newPrice = bondSim.price;
                     newPreviousClose = bondSim.previousClose;
