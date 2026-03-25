@@ -44,18 +44,18 @@ const ISRAELI_ID_TO_YAHOO = {
 // Maps internal bond IDs (from BONDS array), common TASE numeric IDs, and short names
 // to their Yahoo Finance ISIN-based symbols.
 const ISRAELI_BOND_TO_YAHOO = {
-    // --- Government Bonds (אג"ח ממשלתי) - CPI-linked (צמוד מדד) ---
-    'IL_CPI_1':    'IL0011501681.TA',  // אג"ח ממשלתי צמוד 0523
-    'IL_CPI_2':    'IL0011502887.TA',  // אג"ח ממשלתי צמוד 0825
-    'IL_CPI_3':    'IL0011503695.TA',  // אג"ח ממשלתי צמוד 1127
-    'IL_CPI_4':    'IL0011504503.TA',  // גליל צמוד 0530
-    // --- Government Bonds - Fixed rate (שקלי - שחר) ---
-    'IL_SHAHAR_1': 'IL0060401148.TA',  // שחר 0125
-    'IL_SHAHAR_2': 'IL0060402146.TA',  // שחר 0327
-    'IL_SHAHAR_3': 'IL0060403144.TA',  // שחר 0130
-    // --- Government Bonds - Variable rate (גילון) ---
-    'IL_GILON_1':  'IL0072401148.TA',  // גילון 0225
-    'IL_GILON_2':  'IL0072402146.TA',  // גילון 0326
+    // --- IL Gov Bond CPI-Linked ---
+    'IL_CPI_1':    'IL0011501681.TA',  // IL Gov Bond CPI-Linked 0523
+    'IL_CPI_2':    'IL0011502887.TA',  // IL Gov Bond CPI-Linked 0825
+    'IL_CPI_3':    'IL0011503695.TA',  // IL Gov Bond CPI-Linked 1127
+    'IL_CPI_4':    'IL0011504503.TA',  // IL Gov Bond CPI-Linked 0530
+    // --- IL Gov Bond Fixed ---
+    'IL_SHAHAR_1': 'IL0060401148.TA',  // IL Gov Bond Fixed 0125
+    'IL_SHAHAR_2': 'IL0060402146.TA',  // IL Gov Bond Fixed 0327
+    'IL_SHAHAR_3': 'IL0060403144.TA',  // IL Gov Bond Fixed 0130
+    // --- IL Gov Bond Variable ---
+    'IL_GILON_1':  'IL0072401148.TA',  // IL Gov Bond Variable 0225
+    'IL_GILON_2':  'IL0072402146.TA',  // IL Gov Bond Variable 0326
     // --- Common numeric TASE IDs for government bonds ---
     '1150168':     'IL0011501681.TA',
     '1150288':     'IL0011502887.TA',
@@ -64,12 +64,12 @@ const ISRAELI_BOND_TO_YAHOO = {
     '6040114':     'IL0060401148.TA',
     '6040214':     'IL0060402146.TA',
     '6040314':     'IL0060403144.TA',
-    // --- Corporate Bonds (אג"ח קונצרני) - common issuers ---
-    'LEUMI_BOND':  'IL0010501682.TA',  // אג"ח לאומי
-    'DSCT_BOND':   'IL0010502888.TA',  // אג"ח דיסקונט
-    'BEZQ_BOND':   'IL0010601037.TA',  // אג"ח בזק
-    'ICL_BOND':    'IL0010701035.TA',  // אג"ח כיל
-    'TEVA_BOND':   'IL0010801033.TA',  // אג"ח טבע
+    // --- Corporate Bonds - common issuers ---
+    'LEUMI_BOND':  'IL0010501682.TA',  // Leumi Bond
+    'DSCT_BOND':   'IL0010502888.TA',  // Discount Bond
+    'BEZQ_BOND':   'IL0010601037.TA',  // Bezeq Bond
+    'ICL_BOND':    'IL0010701035.TA',  // ICL Bond
+    'TEVA_BOND':   'IL0010801033.TA',  // Teva Bond
 };
 
 // Resolves a bond identifier to its Yahoo Finance ISIN symbol.

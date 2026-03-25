@@ -1,29 +1,44 @@
 // ========== DATA - Constants & Static Data ==========
 
-// ========== HEBREW NAME MAPPING FOR TASE ASSETS ==========
+// ========== ENGLISH NAME MAPPING FOR TASE ASSETS ==========
 const HEBREW_NAMES = {
     // Major Banks
-    'LUMI': 'בנק לאומי', 'DSCT': 'בנק דיסקונט', 'MZTF': 'מזרחי טפחות',
-    'FIBI': 'הבינלאומי', 'BIMB': 'בנק ירושלים', 'POLI': 'בנק הפועלים',
+    'LUMI': 'Bank Leumi', 'DSCT': 'Bank Discount', 'MZTF': 'Mizrahi Tefahot Bank',
+    'FIBI': 'First International Bank', 'BIMB': 'Bank of Jerusalem', 'POLI': 'Bank Hapoalim BM',
     // Insurance & Finance
-    'HARL': 'הראל', 'PHOE': 'הפניקס', 'MGDL': 'מגדל', 'ILDC': 'כלל ביטוח',
+    'HARL': 'Harel Insurance', 'PHOE': 'Phoenix Holdings', 'MGDL': 'Migdal Insurance', 'ILDC': 'Clal Insurance',
     // Tech & Telecom
-    'NICE': 'נייס', 'CEL': 'סלקום', 'PTNR': 'פרטנר', 'BEZQ': 'בזק',
+    'NICE': 'NICE Ltd.', 'CEL': 'Cellcom Israel', 'PTNR': 'Partner Communications', 'BEZQ': 'Bezeq',
     // Defense & Industry
-    'ESLT': 'אלביט מערכות', 'TEVA': 'טבע', 'ICL': 'כיל',
+    'ESLT': 'Elbit Systems', 'TEVA': 'Teva Pharmaceutical', 'ICL': 'ICL Group',
     // Real Estate
-    'AZRG': 'עזריאלי', 'AMOT': 'אמות', 'GZIT': 'גזית גלוב',
-    'ALHE': 'אלון רבוע כחול',
+    'AZRG': 'Azrieli Group', 'AMOT': 'Amot Investments', 'GZIT': 'Gazit Globe',
+    'ALHE': 'Alon Blue Square',
     // Retail & Consumer
-    'SHPG': 'שופרסל', 'ORA': 'אורה', 'ELCO': 'אלקו',
+    'SHPG': 'Shufersal', 'ORA': 'Orah', 'ELCO': 'Elco Ltd.',
     // Other
-    'TASE': 'הבורסה', 'AFRE': 'אפריקה ישראל', 'ARPT': 'ארפט',
-    'SPNS': 'ספאנס', 'BIRG': 'ברג',
+    'TASE': 'Tel Aviv Stock Exchange', 'AFRE': 'Africa Israel', 'ARPT': 'Arapat',
+    'SPNS': 'Sapiens International', 'BIRG': 'B.I.R.G.',
     // Additional TA-125 Companies
-    'ITMR': 'איתמר מדיקל', 'ENLT': 'אנלייט אנרגיה', 'DLEKG': 'דלק גרופ',
-    'DELT': 'דלתא גליל', 'OPC': 'או.פי.סי אנרגיה', 'CRSM': 'כרמל',
-    'FTAL': 'פתאל', 'MVNE': 'מבנה', 'SPEN': 'שפיר הנדסה',
-    'TDRN': 'תדיראן', 'RMLI': 'רמלי', 'NAWI': 'נאווי',
+    'ITMR': 'Itamar Medical', 'ENLT': 'Enlight Renewable Energy', 'DLEKG': 'Delek Group',
+    'DELT': 'Delta Galil', 'OPC': 'OPC Energy', 'CRSM': 'Carmel',
+    'FTAL': 'Fattal Holdings', 'MVNE': 'Mivne Real Estate', 'SPEN': 'Shapir Engineering',
+    'TDRN': 'Tadiran Holdings', 'RMLI': 'Ramli', 'NAWI': 'Nawi',
+};
+
+// Hebrew → ticker reverse lookup for backward-compatible Hebrew search
+const _HEBREW_TO_TICKER = {
+    'לאומי': 'LUMI', 'דיסקונט': 'DSCT', 'מזרחי': 'MZTF', 'טפחות': 'MZTF',
+    'בינלאומי': 'FIBI', 'ירושלים': 'BIMB', 'הפועלים': 'POLI', 'פועלים': 'POLI',
+    'הראל': 'HARL', 'הפניקס': 'PHOE', 'פניקס': 'PHOE', 'מגדל': 'MGDL', 'כלל': 'ILDC',
+    'נייס': 'NICE', 'סלקום': 'CEL', 'פרטנר': 'PTNR', 'בזק': 'BEZQ',
+    'אלביט': 'ESLT', 'טבע': 'TEVA', 'כיל': 'ICL',
+    'עזריאלי': 'AZRG', 'אמות': 'AMOT', 'גזית': 'GZIT',
+    'שופרסל': 'SHPG', 'אלקו': 'ELCO',
+    'הבורסה': 'TASE', 'אפריקה': 'AFRE',
+    'אנלייט': 'ENLT', 'דלק': 'DLEKG', 'דלתא': 'DELT',
+    'פתאל': 'FTAL', 'מבנה': 'MVNE', 'שפיר': 'SPEN',
+    'תדיראן': 'TDRN',
 };
 
 function getHebrewName(holding) {
@@ -33,20 +48,28 @@ function getHebrewName(holding) {
     return HEBREW_NAMES[ticker] || '';
 }
 
-// Reverse lookup: search Hebrew names by query string (Hebrew or English).
+// Reverse lookup: search TASE names by query string (English name, Hebrew, or ticker).
 // Returns array of { symbol, name, hebrewName, currency, exchange } for local matches.
 function searchHebrewNames(query) {
     if (!query || query.length < 1) return [];
     const q = query.trim().toLowerCase();
     const results = [];
-    for (const [ticker, heName] of Object.entries(HEBREW_NAMES)) {
-        const matchesHebrew = heName.includes(q);
+
+    // Check if query is Hebrew — find matching tickers via reverse lookup
+    const hebrewMatchedTickers = new Set();
+    for (const [heb, ticker] of Object.entries(_HEBREW_TO_TICKER)) {
+        if (heb.includes(q)) hebrewMatchedTickers.add(ticker);
+    }
+
+    for (const [ticker, engName] of Object.entries(HEBREW_NAMES)) {
+        const matchesEnglish = engName.toLowerCase().includes(q);
         const matchesTicker = ticker.toLowerCase().includes(q);
-        if (matchesHebrew || matchesTicker) {
+        const matchesHebrew = hebrewMatchedTickers.has(ticker);
+        if (matchesEnglish || matchesTicker || matchesHebrew) {
             results.push({
                 symbol: ticker + '.TA',
-                name: heName,
-                hebrewName: heName,
+                name: engName,
+                hebrewName: engName,
                 currency: 'ILS',
                 exchange: 'TASE',
                 type: 'Common Stock',
@@ -57,13 +80,14 @@ function searchHebrewNames(query) {
     return results;
 }
 
-// Search local BONDS array by name (Hebrew partial match) or ID.
+// Search local BONDS array by name or ID.
 // Returns array matching the same shape as searchHebrewNames for unified merge.
 function searchLocalBonds(query) {
     if (!query || query.length < 1 || typeof BONDS === 'undefined') return [];
     const q = query.trim().toLowerCase();
-    // Also match the generic Hebrew word for bond
-    const isBondQuery = q.includes('אג') || q.includes('גליל') || q.includes('bond') || q.includes('treasury');
+    // Match generic bond search terms (Hebrew and English)
+    const isBondQuery = q.includes('אג') || q.includes('גליל') || q.includes('bond') || q.includes('treasury')
+        || q.includes('gov') || q.includes('cpi') || q.includes('fixed') || q.includes('variable');
     const results = [];
     for (const b of BONDS) {
         const matchesName = b.name.toLowerCase().includes(q) || b.name.includes(q);
@@ -165,10 +189,10 @@ const MACRO_CATEGORY_MAP = {
 };
 
 const BONDS = [
-    { id: 'IL_CPI_1', name: 'אג"ח ממשלתי צמוד 0523', type: 'il_cpi', basePrice: 112.5 },
-    { id: 'IL_CPI_2', name: 'אג"ח ממשלתי צמוד 0825', type: 'il_cpi', basePrice: 105.8 },
-    { id: 'IL_CPI_3', name: 'אג"ח ממשלתי צמוד 1127', type: 'il_cpi', basePrice: 98.3 },
-    { id: 'IL_CPI_4', name: 'גליל צמוד 0530', type: 'il_cpi', basePrice: 101.2 },
+    { id: 'IL_CPI_1', name: 'IL Gov Bond CPI-Linked 0523', type: 'il_cpi', basePrice: 112.5 },
+    { id: 'IL_CPI_2', name: 'IL Gov Bond CPI-Linked 0825', type: 'il_cpi', basePrice: 105.8 },
+    { id: 'IL_CPI_3', name: 'IL Gov Bond CPI-Linked 1127', type: 'il_cpi', basePrice: 98.3 },
+    { id: 'IL_CPI_4', name: 'IL Gov Bond CPI-Linked 0530', type: 'il_cpi', basePrice: 101.2 },
     { id: 'US_30Y', name: 'US Treasury 30Y (TLT)', type: 'us_30y', ticker: 'TLT', basePrice: 92.0 },
     { id: 'US_30Y_2', name: 'US Treasury Bond ETF (VGLT)', type: 'us_30y', ticker: 'VGLT', basePrice: 58.0 },
 ];
