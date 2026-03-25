@@ -244,8 +244,10 @@ function onAuthSuccess() {
 function clearAllAppData() {
     // 1. Clear all app-specific localStorage keys
     const keysToRemove = ['portfolio_clients_cache', 'portfolio_cache_ts', 'portfolio_cache_uid', 'readMacroAlerts'];
-    // Also find and remove all dynamic keys (ticker history, benchmark, transactions)
-    const dynamicPrefixes = ['ticker_hist_', 'benchmark_', 'portfolio_transactions_'];
+    // Also find and remove all dynamic keys (ticker history, benchmark).
+    // NOTE: portfolio_transactions_ are intentionally KEPT — they serve as a safety net
+    // until confirmed migrated to Supabase. The _migrateLocalTransactions() flow handles cleanup.
+    const dynamicPrefixes = ['ticker_hist_', 'benchmark_'];
     for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
         if (keysToRemove.includes(key) || dynamicPrefixes.some(p => key.startsWith(p))) {
@@ -262,6 +264,9 @@ function clearAllAppData() {
     readAlertIds = [];
     _cachedUserId = null;
     _cacheRendered = false;
+
+    // Reset transactions probe so it re-checks on next login
+    if (typeof _supaTransactionsProbed !== 'undefined') _supaTransactionsProbed = false;
 
     // 3. Destroy all Chart.js instances
     if (typeof charts !== 'undefined') {

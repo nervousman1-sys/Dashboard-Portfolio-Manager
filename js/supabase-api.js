@@ -287,13 +287,23 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         });
     });
 
-    // Supabase transaction log (fire-and-forget, don't block creation)
+    // Supabase transaction log (awaited — must persist before proceeding)
     if (_supaTransactionsAvailable) {
-        supabaseClient.from('transactions').insert(txRows).then(({ error }) => {
-            if (error && error.message && error.message.includes('transactions')) {
-                _supaTransactionsAvailable = false;
+        try {
+            const { error } = await supabaseClient.from('transactions').insert(txRows);
+            if (error) {
+                if (error.message && error.message.includes('transactions')) {
+                    _supaTransactionsAvailable = false;
+                    console.warn('[supaAddClientWithHoldings] Transactions table unavailable:', error.message);
+                } else {
+                    console.error('[supaAddClientWithHoldings] Batch tx insert failed:', error.message);
+                }
+            } else {
+                console.log(`[supaAddClientWithHoldings] ✓ ${txRows.length} transactions persisted to Supabase`);
             }
-        });
+        } catch (e) {
+            console.error('[supaAddClientWithHoldings] Batch tx insert exception:', e.message);
+        }
     }
 
     // --- Step 5: Finalize — update totals + recalc + snapshot (3 Supabase calls) ---
@@ -907,6 +917,28 @@ async function _migrateLocalTransactions() {
     }
 }
 
+// ========== SYNC TOAST (visual confirmation) ==========
+
+let _syncToastEl = null;
+let _syncToastTimer = null;
+
+function _showSyncToast(message, type = 'success') {
+    if (!_syncToastEl) {
+        _syncToastEl = document.createElement('div');
+        _syncToastEl.className = 'sync-toast';
+        document.body.appendChild(_syncToastEl);
+    }
+    clearTimeout(_syncToastTimer);
+    _syncToastEl.textContent = message;
+    _syncToastEl.className = `sync-toast ${type}`;
+    // Trigger reflow for animation restart
+    void _syncToastEl.offsetWidth;
+    _syncToastEl.classList.add('visible');
+    _syncToastTimer = setTimeout(() => {
+        _syncToastEl.classList.remove('visible');
+    }, 2500);
+}
+
 function _localTxKey(portfolioId) {
     return `portfolio_transactions_${portfolioId}`;
 }
@@ -953,21 +985,26 @@ async function supaLogTransaction(portfolioId, txData) {
     _saveTransactionLocal(portfolioId, record);
 
     // Persist to Supabase (primary persistent storage)
-    if (_supaTransactionsAvailable) {
+    if (!_supaTransactionsAvailable) return { persisted: false, local: true };
+
+    const supaRecord = {
+        portfolio_id: portfolioId,
+        type: txData.type,
+        ticker: txData.ticker || '-',
+        name: txData.name || '',
+        asset_type: txData.asset_type || 'stock',
+        currency: txData.currency || 'USD',
+        shares: txData.shares ?? 0,
+        price: txData.price ?? 0,
+        total: txData.total ?? 0,
+        realized_pnl: txData.realized_pnl ?? null,
+        description: txData.description || null
+    };
+
+    // Attempt 1
+    let persisted = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-            const supaRecord = {
-                portfolio_id: portfolioId,
-                type: txData.type,
-                ticker: txData.ticker || '-',
-                name: txData.name || '',
-                asset_type: txData.asset_type || 'stock',
-                currency: txData.currency || 'USD',
-                shares: txData.shares ?? 0,
-                price: txData.price ?? 0,
-                total: txData.total ?? 0,
-                realized_pnl: txData.realized_pnl ?? null,
-                description: txData.description || null
-            };
             let { error } = await supabaseClient
                 .from('transactions')
                 .insert(supaRecord);
@@ -979,18 +1016,34 @@ async function supaLogTransaction(portfolioId, txData) {
                 error = retry.error;
             }
 
-            if (error) {
-                if (error.message && (error.message.includes('relation') || error.message.includes('transactions'))) {
-                    _supaTransactionsAvailable = false;
-                    console.warn('[Transactions] Table unavailable — falling back to localStorage');
-                } else {
-                    console.warn('[supaLogTransaction] Insert error:', error.message);
-                }
+            if (!error) {
+                persisted = true;
+                console.log(`[supaLogTransaction] ✓ ${txData.type} ${txData.ticker} persisted to Supabase`);
+                break;
             }
+
+            if (error.message && (error.message.includes('relation') || error.message.includes('transactions'))) {
+                _supaTransactionsAvailable = false;
+                console.error('[supaLogTransaction] Table unavailable — falling back to localStorage only');
+                break;
+            }
+
+            console.error(`[supaLogTransaction] Attempt ${attempt} failed:`, error.message);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 500));
         } catch (e) {
-            // Silent — localStorage already has the data
+            console.error(`[supaLogTransaction] Attempt ${attempt} exception:`, e.message);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 500));
         }
     }
+
+    // Show sync toast
+    if (persisted && typeof _showSyncToast === 'function') {
+        _showSyncToast('נשמר בענן ✓', 'success');
+    } else if (!persisted && typeof _showSyncToast === 'function') {
+        _showSyncToast('שגיאת שמירה — נשמר מקומית', 'error');
+    }
+
+    return { persisted, local: true };
 }
 
 async function supaFetchTransactions(portfolioId) {

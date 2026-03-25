@@ -186,12 +186,14 @@ async function init() {
         document.getElementById('lastUpdate').textContent = 'נתונים מהמטמון (לא מעודכן)';
     }
 
-    // ── Phase 1.1: Probe transactions table (non-blocking, fire-and-forget) ──
-    // Enables persistent transaction history if the Supabase table exists.
+    // ── Phase 1.1: Probe transactions table (BLOCKING — must complete before any sell/buy) ──
+    // Ensures _supaTransactionsAvailable is set correctly before any user action.
     if (useSupabase && typeof _probeTransactionsTable === 'function') {
-        _probeTransactionsTable().catch(e =>
-            console.warn('[Init] Transactions table probe failed:', e.message)
-        );
+        try {
+            await _probeTransactionsTable();
+        } catch (e) {
+            console.warn('[Init] Transactions table probe failed:', e.message);
+        }
     }
 
     // ── Hide overlay ALWAYS — never leave user stuck on loading screen ──
