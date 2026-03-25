@@ -110,14 +110,17 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
     if (authErr) { console.error('supaAddClient: auth error:', authErr.message); return null; }
     if (!user) { console.error('supaAddClient: no user session'); return null; }
 
-    const totalCash = cashUsd + cashIls;
+    // FX-convert ILS cash to USD for portfolio_value and initial_investment
+    const ilsFx = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const totalCashUsd = cashUsd + cashIls * ilsFx;
+    const totalCashRaw = cashUsd + cashIls; // backward compat for cash_balance column
 
     // New portfolio starts with only cash → 0% stocks → risk = low
     // Seed performance_history with an initial snapshot so charts have a starting point
     const now = new Date();
-    const initialSnapshot = totalCash > 0 ? [{
+    const initialSnapshot = totalCashUsd > 0 ? [{
         date: now.toLocaleDateString('he-IL'),
-        value: totalCash,
+        value: totalCashUsd,
         returnPct: 0,
         year: now.getFullYear(),
         month: now.getMonth(),
@@ -132,9 +135,9 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
         risk_label: 'נמוך',
         stock_pct: 0,
         bond_pct: 0,
-        portfolio_value: totalCash,
-        initial_investment: totalCash,
-        cash_balance: totalCash,
+        portfolio_value: totalCashUsd,
+        initial_investment: totalCashUsd,
+        cash_balance: totalCashRaw,
         cash_usd: cashUsd,
         cash_ils: cashIls,
         performance_history: initialSnapshot
@@ -182,7 +185,8 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
     const portfolio = await supaAddClient(name, cashUsd, cashIls);
     if (!portfolio) return null;
 
-    const totalCash = cashUsd + cashIls;
+    const _ilsFxBatch = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const totalCashUsdBatch = cashUsd + cashIls * _ilsFxBatch;
 
     // --- Step 2: Build all holding rows in memory (NO API calls) ---
     if (onProgress) onProgress(`מכין ${holdings.length} נכסים...`);
@@ -294,7 +298,12 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
 
     // --- Step 5: Finalize — update totals + recalc + snapshot (3 Supabase calls) ---
     if (onProgress) onProgress('מחשב תיק...');
-    const totalInvestment = totalCash + totalHoldingsCost;
+    // FX-convert holdings cost to USD before summing with cash
+    const totalHoldingsCostUsd = [...aggregated.values()].reduce((s, h) => {
+        const fx = (typeof getFxRate === 'function') ? getFxRate(h.currency || 'USD', 'USD') : 1;
+        return s + (h.cost_basis || 0) * fx;
+    }, 0);
+    const totalInvestment = totalCashUsdBatch + totalHoldingsCostUsd;
     await supabaseClient
         .from('portfolios')
         .update({ initial_investment: totalInvestment })
@@ -703,7 +712,12 @@ async function supaRecalcClient(clientId) {
     }
 
     const totalCash = cashUsd + cashIls; // Raw sum for cash_balance column (backward compat)
-    const initialInvestment = holdings.reduce((s, h) => s + h.cost_basis, 0) + totalCash;
+    // FX-convert cost_basis to display currency (USD) — must match portfolio_value conversion
+    const initialInvestment = holdings.reduce((s, h) => {
+        const currency = h.currency || 'USD';
+        const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, displayCurrency) : 1;
+        return s + (h.cost_basis || 0) * fxRate;
+    }, 0) + totalCashConverted;
 
     // Dynamic risk level based on actual stock allocation
     let risk, riskLabel;

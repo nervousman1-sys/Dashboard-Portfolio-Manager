@@ -237,12 +237,11 @@ function renderSummaryBar() {
         return;
     }
     const totalAUM = clients.reduce((sum, c) => sum + c.portfolioValue, 0);
-    const totalInvested = clients.reduce((sum, c) => sum + c.initialInvestment, 0);
-    const totalProfit = totalAUM - totalInvested;
-    // Weighted return on invested capital — uses unified calcPortfolioReturn (clients.js)
+    // Unified FX-aware profit/return — uses calcPortfolioReturn (clients.js)
     const allCostBasis = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
     const allCurrentValue = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
-    const totalReturn = allCostBasis > 0 ? ((allCurrentValue - allCostBasis) / allCostBasis * 100) : 0;
+    const totalProfit = allCurrentValue - allCostBasis;
+    const totalReturn = allCostBasis > 0 ? ((totalProfit) / allCostBasis * 100) : 0;
 
     // Global stale detection — if ALL stock holdings have unresolved prices
     const allStockHoldings = clients.flatMap(c => c.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.costBasis > 0));
@@ -358,7 +357,7 @@ function renderClientCards() {
         }
         if (activeFilters.sizeMin !== null && c.portfolioValue < activeFilters.sizeMin) return false;
         if (activeFilters.sizeMax !== null && c.portfolioValue > activeFilters.sizeMax) return false;
-        const returnPct = c.initialInvestment > 0 ? ((c.portfolioValue - c.initialInvestment) / c.initialInvestment * 100) : 0;
+        const returnPct = calcPortfolioReturn(c).returnPct;
         if (activeFilters.returnMin !== null && returnPct < activeFilters.returnMin) return false;
         if (activeFilters.returnMax !== null && returnPct > activeFilters.returnMax) return false;
         return true;
@@ -366,17 +365,9 @@ function renderClientCards() {
 
     // Sorting
     if (activeFilters.sort === 'return-high') {
-        filtered.sort((a, b) => {
-            const ra = (a.portfolioValue - a.initialInvestment) / a.initialInvestment;
-            const rb = (b.portfolioValue - b.initialInvestment) / b.initialInvestment;
-            return rb - ra;
-        });
+        filtered.sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
     } else if (activeFilters.sort === 'return-low') {
-        filtered.sort((a, b) => {
-            const ra = (a.portfolioValue - a.initialInvestment) / a.initialInvestment;
-            const rb = (b.portfolioValue - b.initialInvestment) / b.initialInvestment;
-            return ra - rb;
-        });
+        filtered.sort((a, b) => calcPortfolioReturn(a).returnPct - calcPortfolioReturn(b).returnPct);
     } else if (activeFilters.sort === 'size-high') {
         filtered.sort((a, b) => b.portfolioValue - a.portfolioValue);
     } else if (activeFilters.sort === 'size-low') {
@@ -482,9 +473,9 @@ function renderClientCards() {
         const totalStockPct = stockHoldings.reduce((s, h) => s + h.allocationPct, 0);
         const totalBondPct = bondHoldings.reduce((s, h) => s + h.allocationPct, 0);
 
-        const profit = client.portfolioValue - client.initialInvestment;
         // Unified FX-aware return calculation
         const _pr = calcPortfolioReturn(client);
+        const profit = _pr.profit;
         const returnPct = _pr.returnPct;
 
         // Detect "price not yet resolved" — use _livePriceResolved flag set by mapHolding / price-service

@@ -36,10 +36,10 @@ async function openModal(clientId) {
     const bondHoldings = client.holdings.filter(h => h.type === 'bond');
     const totalStockValue = stockHoldings.reduce((s, h) => s + h.value, 0);
     const totalBondValue = bondHoldings.reduce((s, h) => s + h.value, 0);
-    const totalProfit = client.portfolioValue - client.initialInvestment;
     // Unified FX-aware return calculation (same function used by dashboard cards)
     const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
     const _pReturn = calcPortfolioReturn(client);
+    const totalProfit = _pReturn.profit;
     const totalReturnPct = _pReturn.returnPct;
     const totalProfitClass = totalProfit >= 0 ? 'positive' : 'negative';
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
@@ -308,8 +308,9 @@ function generateReport(clientId) {
     const client = clients.find(c => c.id === clientId);
     if (!client) return;
 
-    const totalProfit = client.portfolioValue - client.initialInvestment;
-    const totalReturn = client.initialInvestment > 0 ? (totalProfit / client.initialInvestment * 100) : 0;
+    const _rpt = calcPortfolioReturn(client);
+    const totalProfit = _rpt.profit;
+    const totalReturn = _rpt.returnPct;
     const profitSign = totalProfit >= 0 ? '+' : '';
 
     // Period returns

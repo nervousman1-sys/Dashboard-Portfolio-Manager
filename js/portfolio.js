@@ -99,8 +99,11 @@ async function portfolioDepositCash(clientId, amount, currency = 'USD') {
 
     const newCashInBucket = (portfolio[cashCol] || 0) + amount;
     const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) + amount;
-    const newPortfolioValue = (portfolio.portfolio_value || 0) + amount;
-    const newInitialInvestment = (portfolio.initial_investment || 0) + amount;
+    // FX-convert to USD for portfolio_value and initial_investment (stored in display currency)
+    const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, 'USD') : 1;
+    const amountUsd = amount * fxRate;
+    const newPortfolioValue = (portfolio.portfolio_value || 0) + amountUsd;
+    const newInitialInvestment = (portfolio.initial_investment || 0) + amountUsd;
 
     // Update portfolio
     const { error: updateErr } = await supabaseClient
@@ -160,14 +163,17 @@ async function portfolioWithdrawCash(clientId, amount, currency = 'USD') {
 
     const newCashInBucket = availableInBucket - amount;
     const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) - amount;
+    // FX-convert to USD for portfolio_value and initial_investment (stored in display currency)
+    const fxRate = (typeof getFxRate === 'function') ? getFxRate(currency, 'USD') : 1;
+    const amountUsd = amount * fxRate;
 
     const { error: updateErr } = await supabaseClient
         .from('portfolios')
         .update({
             [cashCol]: newCashInBucket,
             cash_balance: totalCash,
-            portfolio_value: (portfolio.portfolio_value || 0) - amount,
-            initial_investment: (portfolio.initial_investment || 0) - amount
+            portfolio_value: (portfolio.portfolio_value || 0) - amountUsd,
+            initial_investment: (portfolio.initial_investment || 0) - amountUsd
         })
         .eq('id', clientId);
 
