@@ -401,7 +401,7 @@ function openMgmtModal(action, data) {
     if (action === 'addClient') {
         html = `
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
-            <div class="mgmt-body">
+            <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
                 <div class="mgmt-field"><label>שם הלקוח</label><input type="text" id="mgmt-name" placeholder="הזן שם לקוח..." /></div>
                 <div class="mgmt-field"><label>מזומן (USD)</label><input type="number" id="mgmt-cash-usd" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
                 <div class="mgmt-field"><label>מזומן (ILS)</label><input type="number" id="mgmt-cash-ils" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
