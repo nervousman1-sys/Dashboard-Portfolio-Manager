@@ -174,6 +174,14 @@ async function init() {
         renderClientCards();
     }
 
+    // ── Phase 1.1: Probe transactions table (non-blocking, fire-and-forget) ──
+    // Enables persistent transaction history if the Supabase table exists.
+    if (useSupabase && typeof _probeTransactionsTable === 'function') {
+        _probeTransactionsTable().catch(e =>
+            console.warn('[Init] Transactions table probe failed:', e.message)
+        );
+    }
+
     // ── Hide overlay ALWAYS — never leave user stuck on loading screen ──
     if (overlay && !overlay.classList.contains('hidden')) {
         updateUserDisplay();

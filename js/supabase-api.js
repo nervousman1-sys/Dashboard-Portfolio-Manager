@@ -749,11 +749,125 @@ async function supaRecordPerformanceSnapshot(clientId) {
     }
 }
 
-// ========== TRANSACTION LOG (localStorage primary, Supabase optional) ==========
+// ========== TRANSACTION LOG (Supabase primary, localStorage backup) ==========
 
-// Flag: set to false since the Supabase 'transactions' table doesn't exist.
-// Transactions are stored in localStorage only — no 404 noise in console.
-let _supaTransactionsAvailable = false;
+// Optimistic: assume table exists. _probeTransactionsTable() will disable if not found.
+let _supaTransactionsAvailable = true;
+let _supaTransactionsProbed = false;
+
+// Probe the transactions table once per session. If it doesn't exist, fall back to localStorage.
+async function _probeTransactionsTable() {
+    if (_supaTransactionsProbed) return _supaTransactionsAvailable;
+    _supaTransactionsProbed = true;
+
+    try {
+        const { error } = await supabaseClient
+            .from('transactions')
+            .select('id')
+            .limit(1);
+
+        if (error) {
+            _supaTransactionsAvailable = false;
+            console.warn('[Transactions] Supabase table not available:', error.message);
+            console.info(
+                '[Transactions] To create the table, run this SQL in Supabase SQL Editor:\n\n' +
+                'CREATE TABLE IF NOT EXISTS transactions (\n' +
+                '  id BIGSERIAL PRIMARY KEY,\n' +
+                '  portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,\n' +
+                '  created_at TIMESTAMPTZ DEFAULT NOW(),\n' +
+                '  type TEXT NOT NULL,\n' +
+                '  ticker TEXT DEFAULT \'-\',\n' +
+                '  name TEXT DEFAULT \'\',\n' +
+                '  asset_type TEXT DEFAULT \'stock\',\n' +
+                '  shares NUMERIC DEFAULT 0,\n' +
+                '  price NUMERIC DEFAULT 0,\n' +
+                '  total NUMERIC DEFAULT 0,\n' +
+                '  realized_pnl NUMERIC DEFAULT NULL,\n' +
+                '  description TEXT DEFAULT NULL\n' +
+                ');\n\n' +
+                'ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;\n\n' +
+                'CREATE POLICY "Users can manage their portfolio transactions"\n' +
+                '  ON transactions FOR ALL\n' +
+                '  USING (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()))\n' +
+                '  WITH CHECK (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()));'
+            );
+        } else {
+            _supaTransactionsAvailable = true;
+            console.log('[Transactions] Supabase table available — persistent history enabled');
+            // Migrate any orphaned localStorage transactions to Supabase in background
+            _migrateLocalTransactions();
+        }
+    } catch (e) {
+        _supaTransactionsAvailable = false;
+    }
+
+    return _supaTransactionsAvailable;
+}
+
+// Migrate localStorage transactions to Supabase (one-time, best-effort)
+async function _migrateLocalTransactions() {
+    try {
+        // Find all localStorage keys matching portfolio_transactions_*
+        const keysToMigrate = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('portfolio_transactions_')) {
+                keysToMigrate.push(key);
+            }
+        }
+
+        if (keysToMigrate.length === 0) return;
+
+        for (const key of keysToMigrate) {
+            const portfolioId = parseInt(key.replace('portfolio_transactions_', ''));
+            if (!portfolioId || isNaN(portfolioId)) continue;
+
+            const localTx = JSON.parse(localStorage.getItem(key) || '[]');
+            if (localTx.length === 0) continue;
+
+            // Check how many Supabase transactions exist for this portfolio
+            const { count } = await supabaseClient
+                .from('transactions')
+                .select('id', { count: 'exact', head: true })
+                .eq('portfolio_id', portfolioId);
+
+            // If Supabase already has transactions, skip migration (avoid duplicates)
+            if (count && count > 0) {
+                console.log(`[Transactions] Portfolio ${portfolioId}: ${count} Supabase records exist, skipping localStorage migration`);
+                continue;
+            }
+
+            // Insert local transactions into Supabase (batch, oldest first)
+            const rows = localTx.reverse().map(t => ({
+                portfolio_id: portfolioId,
+                created_at: t.created_at || new Date().toISOString(),
+                type: t.type,
+                ticker: t.ticker || '-',
+                name: t.name || '',
+                asset_type: t.asset_type || 'stock',
+                shares: t.shares ?? 0,
+                price: t.price ?? 0,
+                total: t.total ?? 0,
+                realized_pnl: t.realized_pnl ?? null,
+                description: t.description || null
+            }));
+
+            const { error } = await supabaseClient
+                .from('transactions')
+                .insert(rows);
+
+            if (!error) {
+                console.log(`[Transactions] Migrated ${rows.length} localStorage transactions for portfolio ${portfolioId}`);
+                // Clear localStorage after successful migration
+                localStorage.removeItem(key);
+            } else {
+                console.warn(`[Transactions] Migration failed for portfolio ${portfolioId}:`, error.message);
+            }
+        }
+    } catch (e) {
+        console.warn('[Transactions] Migration error:', e.message);
+    }
+}
 
 function _localTxKey(portfolioId) {
     return `portfolio_transactions_${portfolioId}`;
@@ -781,7 +895,6 @@ function _getLocalTransactions(portfolioId) {
 }
 
 async function supaLogTransaction(portfolioId, txData) {
-    // Build transaction record
     const record = {
         id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
         portfolio_id: portfolioId,
@@ -797,10 +910,10 @@ async function supaLogTransaction(portfolioId, txData) {
         description: txData.description || null
     };
 
-    // Always save to localStorage (primary storage — works instantly)
+    // Always save to localStorage as instant backup
     _saveTransactionLocal(portfolioId, record);
 
-    // Also try Supabase if the table is available (optional, silent)
+    // Persist to Supabase (primary persistent storage)
     if (_supaTransactionsAvailable) {
         try {
             const { error } = await supabaseClient
@@ -813,14 +926,17 @@ async function supaLogTransaction(portfolioId, txData) {
                     asset_type: txData.asset_type || 'stock',
                     shares: txData.shares ?? 0,
                     price: txData.price ?? 0,
-                    total: txData.total ?? 0
+                    total: txData.total ?? 0,
+                    realized_pnl: txData.realized_pnl ?? null,
+                    description: txData.description || null
                 });
 
             if (error) {
-                // If table doesn't exist, disable further Supabase attempts this session
-                if (error.message && error.message.includes('transactions')) {
+                if (error.message && (error.message.includes('relation') || error.message.includes('transactions'))) {
                     _supaTransactionsAvailable = false;
-                    console.log('Transactions table not found in Supabase — using localStorage for this session.');
+                    console.warn('[Transactions] Table unavailable — falling back to localStorage');
+                } else {
+                    console.warn('[supaLogTransaction] Insert error:', error.message);
                 }
             }
         } catch (e) {

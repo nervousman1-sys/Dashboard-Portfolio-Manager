@@ -1174,7 +1174,11 @@ async function addHolding(clientId) {
             return;
         }
         if (updated && updated.error) {
-            alert('שגיאה בביצוע הקנייה');
+            alert(`שגיאה בביצוע הקנייה: ${updated.error}`);
+            return;
+        }
+        if (!updated) {
+            alert('שגיאה בשמירת הנכס. נא לנסות שנית.');
             return;
         }
     } else {

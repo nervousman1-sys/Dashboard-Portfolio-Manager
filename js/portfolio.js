@@ -30,8 +30,10 @@ async function portfolioBuyAsset(clientId, holdingData) {
     }
 
     // Deduct from correct currency bucket
+    const prevCashUsd = portfolio.cash_usd || 0;
+    const prevCashIls = portfolio.cash_ils || 0;
     const newCashInBucket = availableInBucket - totalCost;
-    const totalCash = (portfolio.cash_usd || 0) + (portfolio.cash_ils || 0) - totalCost;
+    const totalCash = prevCashUsd + prevCashIls - totalCost;
     const { error: updateErr } = await supabaseClient
         .from('portfolios')
         .update({ [cashCol]: newCashInBucket, cash_balance: totalCash })
@@ -44,6 +46,16 @@ async function portfolioBuyAsset(clientId, holdingData) {
 
     // Create the holding (supaAddHolding handles insert + transaction log + recalc)
     const updated = await supaAddHolding(clientId, holdingData);
+
+    // If holding creation failed, rollback the cash deduction
+    if (!updated) {
+        console.error('portfolioBuyAsset: supaAddHolding failed — rolling back cash deduction');
+        await supabaseClient
+            .from('portfolios')
+            .update({ [cashCol]: availableInBucket, cash_balance: prevCashUsd + prevCashIls })
+            .eq('id', clientId);
+        return { error: 'insert_failed' };
+    }
 
     // Invalidate synthetic history cache — holdings changed, backfill data is stale
     if (typeof invalidateSyntheticCache === 'function') invalidateSyntheticCache(clientId);
