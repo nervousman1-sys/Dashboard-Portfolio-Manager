@@ -1,5 +1,43 @@
 // ========== RENDER - DOM Rendering (Summary, Exposure, Client Cards) ==========
 
+// ========== QUANTITY FORMATTING ==========
+
+function formatAssetQuantity(qty) {
+    if (qty == null || isNaN(qty)) return '0';
+    const num = Number(qty);
+    // Format with commas: 1,000,000
+    const decimals = num % 1 !== 0 ? (num < 1 ? 6 : 2) : 0;
+    const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals });
+    // K/M suffix for large numbers
+    if (num >= 1000000) {
+        const mVal = num / 1000000;
+        const mStr = mVal % 1 === 0 ? mVal.toFixed(0) : mVal.toFixed(1);
+        return `${formatted}<span class="qty-suffix">(${mStr}M)</span>`;
+    }
+    if (num >= 10000) {
+        const kVal = num / 1000;
+        const kStr = kVal % 1 === 0 ? kVal.toFixed(0) : kVal.toFixed(1);
+        return `${formatted}<span class="qty-suffix">(${kStr}K)</span>`;
+    }
+    return formatted;
+}
+
+// Describe a quantity in Hebrew for live preview (e.g., "1,500,000 → 1.5 מיליון יחידות")
+function describeQuantity(qty) {
+    if (!qty || isNaN(qty) || qty <= 0) return '';
+    const num = Number(qty);
+    const formatted = num.toLocaleString('en-US');
+    if (num >= 1000000) {
+        const m = (num / 1000000);
+        return `${formatted} → ${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)} מיליון יחידות`;
+    }
+    if (num >= 1000) {
+        const k = (num / 1000);
+        return `${formatted} → ${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)} אלף יחידות`;
+    }
+    return `${formatted} יחידות`;
+}
+
 // ========== EXPOSURE ==========
 
 // Version counter — prevents stale setTimeout callbacks from creating orphaned charts

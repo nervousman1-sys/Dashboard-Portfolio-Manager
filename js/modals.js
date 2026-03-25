@@ -77,7 +77,7 @@ async function openModal(clientId) {
             </td>
             <td>${purchasePrice.toFixed(2)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
-            <td>${h.shares.toLocaleString()}</td>
+            <td class="qty-cell">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
@@ -135,7 +135,7 @@ async function openModal(clientId) {
         } else if (t.description) {
             pnlCell = `<span style="color:var(--text-muted);font-size:12px">${t.description}</span>`;
         }
-        const sharesDisplay = t.shares > 0 ? t.shares : '-';
+        const sharesDisplay = t.shares > 0 ? Number(t.shares).toLocaleString('en-US') : '-';
         const priceDisplay = t.price > 0 ? `${t.price.toFixed(2)} $` : '-';
         const totalDisplay = t.total > 0 ? formatCurrency(t.total) : '-';
         transRows += `<tr>
@@ -513,7 +513,7 @@ function openMgmtModal(action, data) {
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
                 <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
-                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
                     <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
@@ -536,7 +536,7 @@ function openMgmtModal(action, data) {
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>${isStock ? 'סימול (Ticker)' : 'שם האג"ח'}</label><input type="text" id="mgmt-edit-name" value="${isStock ? h.ticker : h.name}" ${isStock ? 'style="direction:ltr;text-align:left"' : ''} /></div>
                 <div class="mgmt-field"><label>מחיר קנייה (${editCurrSymbol})</label><input type="number" id="mgmt-edit-price" step="0.01" min="0" value="${h.shares > 0 ? (h.costBasis / h.shares).toFixed(2) : h.price.toFixed(2)}" style="direction:ltr;text-align:left" /></div>
-                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" value="${h.shares}" style="direction:ltr;text-align:left" /></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" value="${h.shares}" style="direction:ltr;text-align:left" oninput="_updateQtyPreview('mgmt-edit-qty','mgmt-edit-qty-preview')" /><div class="qty-live-preview" id="mgmt-edit-qty-preview">${describeQuantity(h.shares)}</div></div>
             </div>
             <div class="mgmt-footer">
                 <button class="mgmt-btn primary" onclick="editHolding(${c.id}, ${holdingId})">שמור שינויים</button>
@@ -568,11 +568,11 @@ function openMgmtModal(action, data) {
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>מחיר שוק נוכחי</label><div class="mgmt-readonly">${h.price.toFixed(2)} ${currSymbol}</div></div>
                 <div class="mgmt-field"><label>עלות ממוצעת למניה</label><div class="mgmt-readonly">${avgCost.toFixed(2)} ${currSymbol}</div></div>
-                <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly">${h.shares}</div></div>
+                <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly qty-cell">${formatAssetQuantity(h.shares)}</div></div>
                 <input type="hidden" id="mgmt-sell-avg-cost" value="${avgCost}" />
                 <input type="hidden" id="mgmt-sell-currency" value="${h.currency || 'USD'}" />
                 <div class="mgmt-field"><label>מחיר מכירה (${currSymbol})</label><input type="number" id="mgmt-sell-price" step="0.01" min="0.01" value="${h.price.toFixed(2)}" style="direction:ltr;text-align:left" oninput="updateSellSummary()" /></div>
-                <div class="mgmt-field"><label>כמות למכירה</label><input type="number" id="mgmt-sell-qty" min="1" max="${h.shares}" value="${h.shares}" style="direction:ltr;text-align:left" oninput="updateSellSummary()" /></div>
+                <div class="mgmt-field"><label>כמות למכירה</label><input type="number" id="mgmt-sell-qty" min="1" max="${h.shares}" value="${h.shares}" style="direction:ltr;text-align:left" oninput="updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ תמורה:</span><span id="mgmt-sell-total" style="color:var(--accent-green);font-weight:700">${formatCurrency(h.price * h.shares, h.currency)}</span></div>
                     <div class="buy-cost-row"><span>רווח/הפסד ממומש:</span><span id="mgmt-sell-pnl" style="font-weight:700"></span></div>
@@ -764,6 +764,15 @@ function classifyAsset(ticker, name) {
 }
 
 // Live buy cost calculation
+// Live quantity preview — updates the description below the input as the user types
+function _updateQtyPreview(inputId, previewId) {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    if (!input || !preview) return;
+    const val = parseFloat(input.value) || 0;
+    preview.textContent = val > 0 ? describeQuantity(val) : '';
+}
+
 function updateBuyCost() {
     const price = parseFloat(document.getElementById('mgmt-price')?.value) || 0;
     const qty = parseInt(document.getElementById('mgmt-qty')?.value) || 0;

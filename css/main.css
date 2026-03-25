@@ -2268,3 +2268,27 @@ body {
     color: var(--accent-red);
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
+
+/* ========== QUANTITY DISPLAY ========== */
+.qty-cell {
+    white-space: nowrap;
+    min-width: 80px;
+    direction: ltr;
+    text-align: left;
+}
+.qty-suffix {
+    margin-right: 4px;
+    font-size: 11px;
+    color: var(--accent-blue);
+    opacity: 0.7;
+    font-weight: 400;
+}
+.qty-live-preview {
+    font-size: 11px;
+    color: var(--accent-blue);
+    opacity: 0.8;
+    margin-top: 3px;
+    min-height: 16px;
+    direction: rtl;
+    text-align: right;
+}
