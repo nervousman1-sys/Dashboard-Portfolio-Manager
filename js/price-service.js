@@ -162,11 +162,11 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
     // Helper: convert Agurot → Shekels. TASE APIs often return prices in Agurot (1/100 ₪).
     // Signal 1: API reports currency as 'ILA' (Israeli Agurot) → always divide.
-    // Signal 2: Israeli asset and raw price > 100 → very likely Agurot (most TASE stocks < ₪1000).
+    // Signal 2: Israeli asset and raw price > 500 → very likely Agurot.
     function _agurotToShekel(rawPrice, apiCurrency) {
         if (!isIsraeli) return rawPrice;
         if (apiCurrency === 'ILA') return rawPrice / 100;
-        if (rawPrice > 100) return rawPrice / 100;
+        if (rawPrice > 500) return rawPrice / 100;
         return rawPrice;
     }
 

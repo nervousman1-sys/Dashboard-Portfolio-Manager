@@ -401,7 +401,7 @@ function openMgmtModal(action, data) {
     if (action === 'addClient') {
         html = `
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
-            <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
+            <div class="mgmt-body">
                 <div class="mgmt-field"><label>שם הלקוח</label><input type="text" id="mgmt-name" placeholder="הזן שם לקוח..." /></div>
                 <div class="mgmt-field"><label>מזומן (USD)</label><input type="number" id="mgmt-cash-usd" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
                 <div class="mgmt-field"><label>מזומן (ILS)</label><input type="number" id="mgmt-cash-ils" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
@@ -711,7 +711,7 @@ function updateDepositPreview() {
 let _lastSearchResultType = null;
 
 // Shared renderer for both main and row dropdowns
-// RTL 3-column grid: [Name (flex)] [Ticker 80px] [Exchange 80px]
+// RTL 3-column grid: [Name (1fr)] [Ticker 80px] [Exchange 100px]
 function _renderSearchDropdown(results, dropdown) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
@@ -725,13 +725,15 @@ function _renderSearchDropdown(results, dropdown) {
         const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
         const bondTag = r.type === 'Bond' ? '<span class="search-bond-tag">אג"ח</span>' : '';
         const rType = r.type || 'Common Stock';
+        // Show .TA suffix for TASE stocks in the display ticker
+        const displayTicker = (exchangeLabel === 'TASE' && !r.symbol.includes('.TA')) ? r.symbol + '.TA' : r.symbol;
         return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')">
             <div class="search-row-grid">
                 <div class="search-col-name">
                     <span class="search-name-primary">${bondTag}${primaryLabel}</span>
                     ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
-                <div class="search-col-ticker">${r.symbol}</div>
+                <div class="search-col-ticker">${displayTicker}</div>
                 <div class="search-col-exchange">${exchangeLabel}</div>
             </div>
         </div>`;
@@ -1259,13 +1261,14 @@ function _renderRowSearchDropdown(results, dropdown, rowId) {
         const primaryLabel = heName || r.name || r.symbol;
         const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
         const bondTag = r.type === 'Bond' ? '<span class="search-bond-tag">אג"ח</span>' : '';
+        const displayTicker = (exchangeLabel === 'TASE' && !r.symbol.includes('.TA')) ? r.symbol + '.TA' : r.symbol;
         return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
             <div class="search-row-grid">
                 <div class="search-col-name">
                     <span class="search-name-primary">${bondTag}${primaryLabel}</span>
                     ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
-                <div class="search-col-ticker">${r.symbol}</div>
+                <div class="search-col-ticker">${displayTicker}</div>
                 <div class="search-col-exchange">${exchangeLabel}</div>
             </div>
         </div>`;
