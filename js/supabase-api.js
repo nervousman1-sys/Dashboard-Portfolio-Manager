@@ -195,10 +195,13 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
     for (const h of holdings) {
         const type = h.type || 'stock';
         const isStock = type === 'stock' || type === 'fund';
+        const rawTicker = (h.ticker || '').toUpperCase().trim();
         const ticker = isStock
-            ? (h.ticker || '').toUpperCase().trim()
-            : ('BOND_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4));
-        const currency = isStock ? (h.currency || 'USD') : 'ILS';
+            ? rawTicker
+            : (rawTicker || ('BOND_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4)));
+        const isIsraeli = h.currency === 'ILS' || h.currency === 'ILA'
+            || rawTicker.endsWith('.TA') || /^\d{7,9}$/.test(rawTicker);
+        const currency = isIsraeli ? 'ILS' : (h.currency || (isStock ? 'USD' : 'ILS'));
 
         // Check in-memory cache only (instant, no network)
         const cached = (typeof priceCache !== 'undefined') ? priceCache[ticker] : null;
@@ -207,7 +210,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         const costBasis = h.price * h.quantity;
         totalHoldingsCost += costBasis;
 
-        if (isStock && aggregated.has(ticker)) {
+        if (aggregated.has(ticker)) {
             const existing = aggregated.get(ticker);
             existing.shares += h.quantity;
             existing.cost_basis += costBasis;
@@ -219,7 +222,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
                 name: isStock ? (h.stockName || ticker) : ((h.bondName || '').trim()),
                 type,
                 type_label: TYPE_LABELS[type] || type,
-                sector: (type === 'stock') ? (SECTOR_MAP[ticker] || 'Other') : null,
+                sector: (type === 'stock') ? (SECTOR_MAP[ticker] || SECTOR_MAP[ticker.replace('.TA', '')] || 'Other') : null,
                 allocation_pct: 0,
                 value: currentPrice * h.quantity,
                 cost_basis: costBasis,
@@ -351,21 +354,29 @@ async function supaAddHolding(clientId, holdingData) {
 
     const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות' };
 
+    // --- Detect Israeli security (7-9 digit numeric, .TA suffix, or ILS currency) ---
+    const tickerUpper = (rawTicker || '').toUpperCase().trim();
+    const isIsraeliNumeric = /^\d{7,9}$/.test(tickerUpper);
+    const isIsraeli = holdingData.currency === 'ILS' || holdingData.currency === 'ILA'
+        || tickerUpper.endsWith('.TA') || tickerUpper.endsWith('.TASE')
+        || isIsraeliNumeric;
+
     if (type === 'stock' || type === 'fund') {
-        holdingTicker = (rawTicker || '').toUpperCase().trim();
+        holdingTicker = tickerUpper;
         name = holdingData.stockName || holdingTicker;
-        sector = type === 'stock' ? (SECTOR_MAP[holdingTicker] || 'Other') : null;
-        currency = holdingData.currency || 'USD';
+        sector = type === 'stock' ? (SECTOR_MAP[holdingTicker] || (SECTOR_MAP[holdingTicker.replace('.TA', '')] || 'Other')) : null;
+        currency = isIsraeli ? 'ILS' : (holdingData.currency || 'USD');
 
         // Use real market price from priceCache if available, otherwise fetch live
         let cached = (typeof priceCache !== 'undefined') ? priceCache[holdingTicker] : null;
 
         // If priceCache is empty for this ticker (e.g. brand-new user), fetch live
+        // Pass currency so fetchSingleTickerPrice can detect Israeli assets correctly
         if ((!cached || !cached.price) && typeof fetchSingleTickerPrice === 'function') {
             try {
-                cached = await fetchSingleTickerPrice(holdingTicker);
+                cached = await fetchSingleTickerPrice(holdingTicker, currency);
             } catch (e) {
-                console.warn('Live price fetch failed for', holdingTicker, e.message);
+                console.warn('[supaAddHolding] Live price fetch failed for', holdingTicker, e.message);
             }
         }
 
@@ -373,20 +384,34 @@ async function supaAddHolding(clientId, holdingData) {
             currentPrice = cached.price;
             previousClose = cached.previousClose || cached.price;
         } else {
-            // No live price available — store purchase price as placeholder.
-            // Mark with _livePriceResolved = false so the lock mechanism
-            // knows this is NOT a confirmed market price and allows future updates.
             currentPrice = price;
             previousClose = price;
             console.warn(`[supaAddHolding] No live price for ${holdingTicker} — using purchase price as placeholder`);
         }
     } else {
-        name = (bondName || '').trim();
-        holdingTicker = 'BOND_' + Date.now();
+        // --- BOND: use the actual rawTicker (not BOND_timestamp) so we can match for aggregation ---
+        holdingTicker = tickerUpper || ('BOND_' + Date.now());
+        name = (bondName || '').trim() || holdingData.stockName || holdingTicker;
         sector = null;
-        currency = 'ILS';
-        currentPrice = price;
-        previousClose = price;
+        currency = isIsraeli ? 'ILS' : (holdingData.currency || 'ILS');
+
+        // Try to fetch a live bond price via Yahoo Finance
+        let cached = (typeof priceCache !== 'undefined') ? priceCache[holdingTicker] : null;
+        if ((!cached || !cached.price) && typeof fetchSingleTickerPrice === 'function') {
+            try {
+                cached = await fetchSingleTickerPrice(holdingTicker, currency, price);
+            } catch (e) {
+                console.warn('[supaAddHolding] Bond price fetch failed for', holdingTicker, e.message);
+            }
+        }
+
+        if (cached && cached.price && !cached.unavailable) {
+            currentPrice = cached.price;
+            previousClose = cached.previousClose || cached.price;
+        } else {
+            currentPrice = price;
+            previousClose = price;
+        }
     }
 
     // Bond sub-type (government / corporate) — auto-detected by classifyAsset
@@ -394,46 +419,42 @@ async function supaAddHolding(clientId, holdingData) {
 
     const costBasis = price * quantity;
 
-    // Check if same ticker already exists in portfolio — aggregate if so
-    if (type === 'stock' || type === 'fund') {
-        const { data: existing } = await supabaseClient
+    // --- Aggregation: check if same ticker already exists in portfolio ---
+    const { data: existing } = await supabaseClient
+        .from('holdings')
+        .select('*')
+        .eq('portfolio_id', clientId)
+        .eq('ticker', holdingTicker)
+        .single();
+
+    if (existing) {
+        const newShares = existing.shares + quantity;
+        const newCostBasis = existing.cost_basis + costBasis;
+        const newValue = currentPrice * newShares;
+
+        const { error } = await supabaseClient
             .from('holdings')
-            .select('*')
-            .eq('portfolio_id', clientId)
-            .eq('ticker', holdingTicker)
-            .single();
+            .update({
+                shares: newShares,
+                cost_basis: newCostBasis,
+                price: currentPrice,
+                previous_close: previousClose,
+                value: newValue
+            })
+            .eq('id', existing.id);
 
-        if (existing) {
-            // Weighted average cost basis
-            const newShares = existing.shares + quantity;
-            const newCostBasis = existing.cost_basis + costBasis;
-            const newValue = currentPrice * newShares;
+        if (error) { console.error('supaAddHolding (aggregate):', error.message); return null; }
 
-            const { error } = await supabaseClient
-                .from('holdings')
-                .update({
-                    shares: newShares,
-                    cost_basis: newCostBasis,
-                    price: currentPrice,
-                    previous_close: previousClose,
-                    value: newValue
-                })
-                .eq('id', existing.id);
+        await supaLogTransaction(clientId, {
+            type: 'buy', ticker: holdingTicker, name, asset_type: type,
+            shares: quantity, price, total: costBasis
+        });
 
-            if (error) { console.error('supaAddHolding (aggregate):', error.message); return null; }
-
-            // Log buy transaction
-            await supaLogTransaction(clientId, {
-                type: 'buy', ticker: holdingTicker, name, asset_type: type,
-                shares: quantity, price, total: costBasis
-            });
-
-            await supaRecalcClient(clientId);
-            return await supaFetchClient(clientId);
-        }
+        await supaRecalcClient(clientId);
+        return await supaFetchClient(clientId);
     }
 
-    // New holding — insert fresh row
+    // --- New holding — insert fresh row ---
     const value = currentPrice * quantity;
 
     const assetClass = holdingData.assetClass || _inferAssetClass(type);
@@ -460,13 +481,11 @@ async function supaAddHolding(clientId, holdingData) {
 
     if (error) { console.error('supaAddHolding:', error.message); return null; }
 
-    // Log buy transaction
     await supaLogTransaction(clientId, {
         type: 'buy', ticker: holdingTicker, name, asset_type: type,
         shares: quantity, price, total: costBasis
     });
 
-    // Recalculate and return updated client
     await supaRecalcClient(clientId);
     return await supaFetchClient(clientId);
 }
