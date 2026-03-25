@@ -1400,7 +1400,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //      confusing mismatch where the chart shows 27% but the card shows 33%.
     //      The difference was caused by idle cash diluting the denominator.
     //
-    const totalCostBasis = client.holdings.reduce((s, h) => s + (h.costBasis || 0), 0);
+    const totalCostBasis = calcPortfolioReturn(client).totalCost;
     const cashBal = client.cashBalance || 0;
 
     // 1D data already has returnPct relative to previous close — use it directly.

@@ -113,6 +113,10 @@ async function fetchFxRates() {
 // Get the conversion rate between two currencies.
 // Returns 1 if same currency. Uses live rate or hardcoded fallback.
 function getFxRate(fromCurrency, toCurrency) {
+    // Normalize ILA (Israeli Agorot) → ILS before any lookup
+    if (fromCurrency === 'ILA') fromCurrency = 'ILS';
+    if (toCurrency === 'ILA') toCurrency = 'ILS';
+
     if (!fromCurrency || !toCurrency || fromCurrency === toCurrency) return 1;
     if (fromCurrency === 'USD' && toCurrency === 'ILS') return _fxRates.USDILS || FX_HARDCODED_USDILS;
     if (fromCurrency === 'ILS' && toCurrency === 'USD') return _fxRates.ILSUSD || (1 / FX_HARDCODED_USDILS);

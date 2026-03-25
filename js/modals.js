@@ -37,13 +37,10 @@ async function openModal(clientId) {
     const totalStockValue = stockHoldings.reduce((s, h) => s + h.value, 0);
     const totalBondValue = bondHoldings.reduce((s, h) => s + h.value, 0);
     const totalProfit = client.portfolioValue - client.initialInvestment;
-    // Weighted return on invested capital (holdings only, excludes idle cash)
-    // FX-convert both value and costBasis to USD so ILS+USD holdings don't mix raw currencies
+    // Unified FX-aware return calculation (same function used by dashboard cards)
     const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-    const investedCostBasis = client.holdings.reduce((s, h) => s + h.costBasis * _fxR(h.currency), 0);
-    const investedCurrentValue = client.holdings.reduce((s, h) => s + h.value * _fxR(h.currency), 0);
-    const investedProfit = investedCurrentValue - investedCostBasis;
-    const totalReturnPct = investedCostBasis > 0 ? (investedProfit / investedCostBasis * 100) : 0;
+    const _pReturn = calcPortfolioReturn(client);
+    const totalReturnPct = _pReturn.returnPct;
     const totalProfitClass = totalProfit >= 0 ? 'positive' : 'negative';
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
 
@@ -96,8 +93,7 @@ async function openModal(clientId) {
     // Summary footer row
     const totalPnLClass = totalHoldingsPnL >= 0 ? 'positive' : 'negative';
     const totalPnLSign = totalHoldingsPnL >= 0 ? '+' : '';
-    const totalCostBasis = client.holdings.reduce((s, h) => s + h.costBasis * _fxR(h.currency), 0);
-    const totalReturnPctHoldings = totalCostBasis > 0 ? (totalHoldingsPnL / totalCostBasis * 100) : 0;
+    const totalReturnPctHoldings = _pReturn.totalCost > 0 ? (totalHoldingsPnL / _pReturn.totalCost * 100) : 0;
     const holdingsFooter = `<tr class="holdings-footer-row">
         <td style="font-weight:700;color:var(--text-primary)">סה"כ</td>
         <td></td>

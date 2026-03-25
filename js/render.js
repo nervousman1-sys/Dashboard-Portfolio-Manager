@@ -239,11 +239,9 @@ function renderSummaryBar() {
     const totalAUM = clients.reduce((sum, c) => sum + c.portfolioValue, 0);
     const totalInvested = clients.reduce((sum, c) => sum + c.initialInvestment, 0);
     const totalProfit = totalAUM - totalInvested;
-    // Weighted return on invested capital (all portfolios, excludes idle cash)
-    // FX-convert both value and costBasis to USD so ILS+USD holdings don't mix raw currencies
-    const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-    const allCostBasis = clients.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.costBasis * _fxR(h.currency), 0), 0);
-    const allCurrentValue = clients.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.value * _fxR(h.currency), 0), 0);
+    // Weighted return on invested capital — uses unified calcPortfolioReturn (clients.js)
+    const allCostBasis = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
+    const allCurrentValue = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
     const totalReturn = allCostBasis > 0 ? ((allCurrentValue - allCostBasis) / allCostBasis * 100) : 0;
 
     // Global stale detection — if ALL stock holdings have unresolved prices
@@ -259,17 +257,15 @@ function renderSummaryBar() {
 
     // Weighted average return across portfolios (based on invested capital)
     const avgReturn = allCostBasis > 0 ? clients.reduce((s, c) => {
-        const cb = c.holdings.reduce((s2, h) => s2 + h.costBasis * _fxR(h.currency), 0);
-        const cv = c.holdings.reduce((s2, h) => s2 + h.value * _fxR(h.currency), 0);
-        const r = cb > 0 ? ((cv - cb) / cb * 100) : 0;
-        return s + r * (cb / allCostBasis);
+        const r = calcPortfolioReturn(c);
+        return s + r.returnPct * (r.totalCost / allCostBasis);
     }, 0) : 0;
     const avgClass = globalAllStale ? 'neutral' : (avgReturn >= 0 ? 'positive' : 'negative');
     const avgSign = globalAllStale ? '' : (avgReturn >= 0 ? '+' : '');
 
     function groupReturn(group) {
-        const cb = group.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.costBasis * _fxR(h.currency), 0), 0);
-        const cv = group.reduce((s, c) => s + c.holdings.reduce((s2, h) => s2 + h.value * _fxR(h.currency), 0), 0);
+        const cb = group.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
+        const cv = group.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
         const ret = cb > 0 ? ((cv - cb) / cb * 100) : 0;
         const cls = ret >= 0 ? 'positive' : 'negative';
         const sgn = ret >= 0 ? '+' : '';
@@ -487,13 +483,9 @@ function renderClientCards() {
         const totalBondPct = bondHoldings.reduce((s, h) => s + h.allocationPct, 0);
 
         const profit = client.portfolioValue - client.initialInvestment;
-        // Weighted return on invested capital (holdings only, excludes idle cash)
-        // FX-convert both value and costBasis to USD so ILS+USD holdings don't mix raw currencies
-        const _fxRate = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-        const investedCostBasis = client.holdings.reduce((s, h) => s + h.costBasis * _fxRate(h.currency), 0);
-        const investedCurrentValue = client.holdings.reduce((s, h) => s + h.value * _fxRate(h.currency), 0);
-        const investedProfit = investedCurrentValue - investedCostBasis;
-        const returnPct = investedCostBasis > 0 ? (investedProfit / investedCostBasis * 100) : 0;
+        // Unified FX-aware return calculation
+        const _pr = calcPortfolioReturn(client);
+        const returnPct = _pr.returnPct;
 
         // Detect "price not yet resolved" — use _livePriceResolved flag set by mapHolding / price-service
         const stockHoldingsWithCost = stockHoldings.filter(h => h.shares > 0 && h.costBasis > 0);

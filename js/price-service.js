@@ -91,6 +91,33 @@ function _resolveBondYahooSymbol(sym) {
     return null;
 }
 
+// ========== CENTRALIZED PRICE NORMALIZATION ==========
+// Ensures all prices are in the correct base currency (NIS, not Agorot).
+// TASE/.TA prices from many providers come in Agorot (1/100 of NIS).
+// This function normalizes to NIS and returns the correct currency code.
+
+function normalizePrice(price, symbol, apiCurrency) {
+    if (!price || price <= 0) return { price: 0, currency: apiCurrency || 'USD' };
+
+    const sym = (symbol || '').toUpperCase();
+    const cur = (apiCurrency || '').toUpperCase();
+
+    // Detect Agorot: .TA suffix, :TASE suffix, or ILA currency code
+    const isTASE = sym.endsWith('.TA') || sym.endsWith(':TASE') || sym.includes(':TASE');
+    const isAgurot = cur === 'ILA' || (isTASE && cur !== 'ILS');
+
+    if (isAgurot) {
+        return { price: Math.round((price / 100) * 100) / 100, currency: 'ILS' };
+    }
+
+    // ILA → ILS normalization (even if price seems already divided)
+    if (cur === 'ILA') {
+        return { price: Math.round(price * 100) / 100, currency: 'ILS' };
+    }
+
+    return { price: Math.round(price * 100) / 100, currency: isTASE ? 'ILS' : (apiCurrency || 'USD') };
+}
+
 // ========== TWELVE DATA: single chunk fetch (up to 8 symbols batched in one HTTP call) ==========
 
 async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
@@ -122,29 +149,39 @@ async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
 
     const results = {};
 
+    // Helper: normalize a single quote result (handles Agorot → NIS conversion)
+    function _normalizeTDQuote(sym, ticker, q) {
+        let price = parseFloat(q.close);
+        let prevClose = parseFloat(q.previous_close);
+        const rawCurrency = q.currency || 'USD';
+
+        // Normalize Agorot (ILA) to NIS for TASE stocks
+        const norm = normalizePrice(price, sym, rawCurrency);
+        if (norm.currency === 'ILS' && rawCurrency !== 'ILS') {
+            // Price was in Agorot — also normalize previous close
+            prevClose = Math.round((prevClose / 100) * 100) / 100;
+        }
+
+        return {
+            price: norm.price,
+            previousClose: prevClose,
+            change: +(norm.price - prevClose).toFixed(2),
+            changePct: prevClose ? +((norm.price - prevClose) / prevClose * 100).toFixed(2) : 0,
+            currency: norm.currency
+        };
+    }
+
     if (symbols.length === 1) {
         const ticker = originalTickers[0];
         if (data.status !== 'error' && data.close) {
-            results[ticker] = {
-                price: parseFloat(data.close),
-                previousClose: parseFloat(data.previous_close),
-                change: parseFloat(data.change),
-                changePct: parseFloat(data.percent_change),
-                currency: data.currency || 'USD'
-            };
+            results[ticker] = _normalizeTDQuote(symbols[0], ticker, data);
         }
     } else {
         symbols.forEach((sym, idx) => {
             const ticker = originalTickers[idx];
             const q = data[sym];
             if (!q || q.status === 'error') return;
-            results[ticker] = {
-                price: parseFloat(q.close),
-                previousClose: parseFloat(q.previous_close),
-                change: parseFloat(q.change),
-                changePct: parseFloat(q.percent_change),
-                currency: q.currency || 'USD'
-            };
+            results[ticker] = _normalizeTDQuote(sym, ticker, q);
         });
     }
 

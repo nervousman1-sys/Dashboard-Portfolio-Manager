@@ -1,10 +1,27 @@
 // ========== CLIENTS - Frontend Chart Helpers & Portfolio Calculations ==========
 
-// ========== PORTFOLIO VALUE CALCULATION ==========
+// ========== UNIFIED PORTFOLIO CALCULATIONS (FX-AWARE) ==========
+// These functions are the SINGLE SOURCE OF TRUTH for portfolio totals.
+// Used by: render.js (dashboard cards, summary bar), modals.js (client detail),
+//          charts.js (performance normalization).
+// All amounts are converted to USD (display currency) at the asset level before summing.
 
 function calcPortfolioValue(client) {
-    const holdingsValue = client.holdings.reduce((sum, h) => sum + (h.shares * h.price), 0);
-    return holdingsValue + (client.cashBalance || 0);
+    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const holdingsValue = client.holdings.reduce((sum, h) => sum + (h.shares * h.price) * fx(h.currency), 0);
+    const cashUsd = (client.cash_usd || 0) + (client.cash_ils || 0) * fx('ILS');
+    return holdingsValue + (cashUsd || client.cashBalance || 0);
+}
+
+// Unified return calculator — returns { totalValue, totalCost, profit, returnPct }
+// All values are in USD (display currency). FX conversion happens per-holding.
+function calcPortfolioReturn(client) {
+    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const totalCost = client.holdings.reduce((s, h) => s + (h.costBasis || 0) * fx(h.currency), 0);
+    const totalValue = client.holdings.reduce((s, h) => s + (h.value || 0) * fx(h.currency), 0);
+    const profit = totalValue - totalCost;
+    const returnPct = totalCost > 0 ? (profit / totalCost * 100) : 0;
+    return { totalValue, totalCost, profit, returnPct };
 }
 
 // ========== SMART LABELS (zoom-aware) ==========
