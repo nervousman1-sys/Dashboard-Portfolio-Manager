@@ -124,6 +124,7 @@ async function portfolioDepositCash(clientId, amount, currency = 'USD') {
         ticker: 'CASH',
         name: currency === 'ILS' ? 'הפקדת מזומן (ILS)' : 'הפקדת מזומן (USD)',
         asset_type: 'cash',
+        currency,
         shares: 1,
         price: amount,
         total: amount
@@ -177,6 +178,7 @@ async function portfolioWithdrawCash(clientId, amount, currency = 'USD') {
         ticker: 'CASH',
         name: currency === 'ILS' ? 'משיכת מזומן (ILS)' : 'משיכת מזומן (USD)',
         asset_type: 'cash',
+        currency,
         shares: 1,
         price: amount,
         total: amount

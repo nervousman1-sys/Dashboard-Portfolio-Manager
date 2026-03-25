@@ -9,6 +9,7 @@ const RISK_BOND_PCT_MAP = { high: 20, medium: 50, low: 85 };
 
 function _inferAssetClass(type) {
     if (type === 'bond') return 'Gov Bond';
+    if (type === 'fund') return 'Money Market';
     return 'Stock';
 }
 
@@ -174,7 +175,7 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
 // Live prices are fetched AFTER creation by the normal updatePricesFromAPI cycle.
 // Total: 1 portfolio insert + 1 bulk holdings insert + 1 recalc + 1 fetch = ~5 Supabase calls
 async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onProgress) {
-    const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות' };
+    const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות', mmf: 'כספית' };
 
     // --- Step 1: Create the empty portfolio shell (1 Supabase call) ---
     if (onProgress) onProgress('יוצר תיק...');
@@ -266,6 +267,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         ticker: row.ticker,
         name: row.name,
         asset_type: row.type,
+        currency: row.currency || 'USD',
         shares: row.shares,
         price: row.cost_basis / row.shares,
         total: row.cost_basis
@@ -361,7 +363,7 @@ async function supaAddHolding(clientId, holdingData) {
 
     let holdingTicker, name, sector, currency, currentPrice, previousClose;
 
-    const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות' };
+    const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות', mmf: 'כספית' };
 
     // --- Detect Israeli security (7-9 digit numeric, .TA suffix, or ILS currency) ---
     const tickerUpper = (rawTicker || '').toUpperCase().trim();
@@ -456,7 +458,7 @@ async function supaAddHolding(clientId, holdingData) {
 
         await supaLogTransaction(clientId, {
             type: 'buy', ticker: holdingTicker, name, asset_type: type,
-            shares: quantity, price, total: costBasis
+            currency, shares: quantity, price, total: costBasis
         });
 
         await supaRecalcClient(clientId);
@@ -503,7 +505,7 @@ async function supaAddHolding(clientId, holdingData) {
 
     await supaLogTransaction(clientId, {
         type: 'buy', ticker: holdingTicker, name, asset_type: type,
-        shares: quantity, price, total: costBasis
+        currency, shares: quantity, price, total: costBasis
     });
 
     await supaRecalcClient(clientId);
@@ -575,6 +577,7 @@ async function supaEditHolding(clientId, holdingId, data) {
             ticker: h.ticker,
             name: h.name,
             asset_type: h.type,
+            currency: h.currency || 'USD',
             shares: newQty,
             price: newPrice,
             total: newPrice * newQty,
@@ -621,6 +624,7 @@ async function supaRemoveHolding(clientId, holdingId) {
         ticker: holding.ticker,
         name: holding.name,
         asset_type: holding.type,
+        currency: holding.currency || 'USD',
         shares: holding.shares,
         price: holding.price,
         total: saleProceeds
@@ -923,6 +927,7 @@ async function supaLogTransaction(portfolioId, txData) {
         ticker: txData.ticker || '-',
         name: txData.name || '',
         asset_type: txData.asset_type || 'stock',
+        currency: txData.currency || 'USD',
         shares: txData.shares ?? 0,
         price: txData.price ?? 0,
         total: txData.total ?? 0,
@@ -936,20 +941,29 @@ async function supaLogTransaction(portfolioId, txData) {
     // Persist to Supabase (primary persistent storage)
     if (_supaTransactionsAvailable) {
         try {
-            const { error } = await supabaseClient
+            const supaRecord = {
+                portfolio_id: portfolioId,
+                type: txData.type,
+                ticker: txData.ticker || '-',
+                name: txData.name || '',
+                asset_type: txData.asset_type || 'stock',
+                currency: txData.currency || 'USD',
+                shares: txData.shares ?? 0,
+                price: txData.price ?? 0,
+                total: txData.total ?? 0,
+                realized_pnl: txData.realized_pnl ?? null,
+                description: txData.description || null
+            };
+            let { error } = await supabaseClient
                 .from('transactions')
-                .insert({
-                    portfolio_id: portfolioId,
-                    type: txData.type,
-                    ticker: txData.ticker || '-',
-                    name: txData.name || '',
-                    asset_type: txData.asset_type || 'stock',
-                    shares: txData.shares ?? 0,
-                    price: txData.price ?? 0,
-                    total: txData.total ?? 0,
-                    realized_pnl: txData.realized_pnl ?? null,
-                    description: txData.description || null
-                });
+                .insert(supaRecord);
+
+            // Retry without currency if column doesn't exist yet
+            if (error && error.message && error.message.includes('currency')) {
+                delete supaRecord.currency;
+                const retry = await supabaseClient.from('transactions').insert(supaRecord);
+                error = retry.error;
+            }
 
             if (error) {
                 if (error.message && (error.message.includes('relation') || error.message.includes('transactions'))) {
@@ -1067,6 +1081,7 @@ async function supaSellHolding(clientId, holdingId, sellQty, sellPrice) {
     // Log sell transaction (includes realized P&L)
     await supaLogTransaction(clientId, {
         type: 'sell', ticker: h.ticker, name: h.name, asset_type: h.type,
+        currency: h.currency || 'USD',
         shares: sellQty, price: actualSellPrice, total: saleProceeds,
         realized_pnl: realizedPnL
     });

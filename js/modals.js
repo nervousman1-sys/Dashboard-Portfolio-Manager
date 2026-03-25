@@ -38,8 +38,10 @@ async function openModal(clientId) {
     const totalBondValue = bondHoldings.reduce((s, h) => s + h.value, 0);
     const totalProfit = client.portfolioValue - client.initialInvestment;
     // Weighted return on invested capital (holdings only, excludes idle cash)
-    const investedCostBasis = client.holdings.reduce((s, h) => s + h.costBasis, 0);
-    const investedCurrentValue = client.holdings.reduce((s, h) => s + h.value, 0);
+    // FX-convert both value and costBasis to USD so ILS+USD holdings don't mix raw currencies
+    const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const investedCostBasis = client.holdings.reduce((s, h) => s + h.costBasis * _fxR(h.currency), 0);
+    const investedCurrentValue = client.holdings.reduce((s, h) => s + h.value * _fxR(h.currency), 0);
     const investedProfit = investedCurrentValue - investedCostBasis;
     const totalReturnPct = investedCostBasis > 0 ? (investedProfit / investedCostBasis * 100) : 0;
     const totalProfitClass = totalProfit >= 0 ? 'positive' : 'negative';
@@ -47,8 +49,8 @@ async function openModal(clientId) {
 
     // Holdings table — columns: נכס, מחיר קנייה, מחיר נוכחי, כמות, שווי כולל, שינוי יומי %, רווח $, תשואה %, פעולות
     let holdingsRows = '';
-    let totalHoldingsValue = 0;
-    let totalHoldingsPnL = 0;
+    let totalHoldingsValue = 0;   // FX-converted to USD for correct cross-currency totals
+    let totalHoldingsPnL = 0;     // FX-converted to USD
     client.holdings.forEach((h, hIdx) => {
         const isStale = h.type === 'stock' && !h._livePriceResolved;
         const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
@@ -65,8 +67,9 @@ async function openModal(clientId) {
         const primaryName = heName || (h.type === 'stock' ? h.ticker : h.name);
         const secondaryName = heName ? (h.type === 'stock' ? h.ticker : '') : '';
         const subName = secondaryName ? `<span style="font-size:10px;color:var(--text-muted)">${secondaryName}</span>` : '';
-        totalHoldingsValue += h.value;
-        totalHoldingsPnL += isStale ? 0 : holdingProfit;
+        const _hFx = _fxR(h.currency);
+        totalHoldingsValue += h.value * _hFx;
+        totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
@@ -77,7 +80,7 @@ async function openModal(clientId) {
             </td>
             <td>${purchasePrice.toFixed(2)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
-            <td>${h.shares}</td>
+            <td>${h.shares.toLocaleString()}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
@@ -93,7 +96,7 @@ async function openModal(clientId) {
     // Summary footer row
     const totalPnLClass = totalHoldingsPnL >= 0 ? 'positive' : 'negative';
     const totalPnLSign = totalHoldingsPnL >= 0 ? '+' : '';
-    const totalCostBasis = client.holdings.reduce((s, h) => s + h.costBasis, 0);
+    const totalCostBasis = client.holdings.reduce((s, h) => s + h.costBasis * _fxR(h.currency), 0);
     const totalReturnPctHoldings = totalCostBasis > 0 ? (totalHoldingsPnL / totalCostBasis * 100) : 0;
     const holdingsFooter = `<tr class="holdings-footer-row">
         <td style="font-weight:700;color:var(--text-primary)">סה"כ</td>
@@ -659,21 +662,21 @@ function onAssetTypeChange() {
 //   2. Israeli numeric symbol (7-9 digits): prefix "11" = Gov Bond, "95" = Makam/T-Bill, name keywords → bond
 //   3. Name contains bond keywords (Hebrew or English) → bond
 //   4. Default → stock
+// Helper: classify bond sub-type (government vs corporate)
+function _classifyBondType(nameStr) {
+    const n = (nameStr || '').toLowerCase();
+    const govKeywords = ['ממשלתי', 'ממשל', 'גליל', 'שחר', 'כפיר', 'מלווה',
+        'gov bond', 'gov', 'il gov', 'cpi-linked', 'treasury', 'fixed rate', 'variable rate'];
+    const corpKeywords = ['קונצרני', 'נאמנות', 'corp bond', 'corp', 'corporate'];
+    if (corpKeywords.some(kw => n.includes(kw))) return { bondType: 'corporate', assetClass: 'Corp Bond' };
+    if (govKeywords.some(kw => n.includes(kw))) return { bondType: 'government', assetClass: 'Gov Bond' };
+    return { bondType: 'government', assetClass: 'Gov Bond' };
+}
+
 function detectAssetType(symbol, name, apiType) {
     const sym = (symbol || '').toUpperCase().trim();
     const nm = (name || '').toLowerCase();
     const api = (apiType || '').toLowerCase();
-
-    // Helper: classify bond sub-type (government vs corporate)
-    function _classifyBondType(nameStr) {
-        const n = (nameStr || '').toLowerCase();
-        const govKeywords = ['ממשלתי', 'ממשל', 'גליל', 'שחר', 'כפיר', 'מלווה',
-            'gov bond', 'gov', 'il gov', 'cpi-linked', 'treasury', 'fixed rate', 'variable rate'];
-        const corpKeywords = ['קונצרני', 'נאמנות', 'corp bond', 'corp', 'corporate'];
-        if (corpKeywords.some(kw => n.includes(kw))) return { bondType: 'corporate', assetClass: 'Corp Bond' };
-        if (govKeywords.some(kw => n.includes(kw))) return { bondType: 'government', assetClass: 'Gov Bond' };
-        return { bondType: 'government', assetClass: 'Gov Bond' };
-    }
 
     // Rule 1: API explicitly says Bond
     if (api.includes('bond')) {
@@ -724,6 +727,43 @@ function detectAssetType(symbol, name, apiType) {
 
     // Default: stock
     return { type: 'stock', assetClass: null, bondType: null };
+}
+
+// ========== CENTRALIZED ASSET CLASSIFIER ==========
+// Single entry point for classifying assets — used by both addClient (initial portfolio)
+// and buyAsset flows. Detects bonds, money market funds, and stocks.
+// Returns { type, assetClass, bondType, risk } for consistent tagging across all paths.
+
+function classifyAsset(ticker, name) {
+    const sym = (ticker || '').toUpperCase().trim();
+    const nm = (name || '').toLowerCase();
+
+    // Money Market Funds: low risk, type = 'fund'
+    const mmfKeywords = ['כספית', 'money market', 'mmf', 'כספי', 'שקלית', 'דולרית'];
+    if (mmfKeywords.some(kw => nm.includes(kw))) {
+        return { type: 'fund', assetClass: 'Money Market', bondType: null, risk: 'low' };
+    }
+
+    // ISIN-format bonds (IL00...)
+    if (/^IL\d{10,12}(\.TA)?$/i.test(sym)) {
+        const cls = _classifyBondType(name);
+        return { ...cls, type: 'bond', risk: 'low' };
+    }
+
+    // Delegate to detectAssetType for all other cases
+    const detected = detectAssetType(sym, name, '');
+
+    // Assign risk level based on type
+    let risk = 'high'; // stocks default to high
+    if (detected.type === 'bond') risk = 'low';
+    if (detected.type === 'fund') risk = 'low';
+
+    return {
+        type: detected.type,
+        assetClass: detected.assetClass,
+        bondType: detected.bondType,
+        risk
+    };
 }
 
 // Live buy cost calculation
@@ -1542,14 +1582,24 @@ function _collectHoldingRows() {
             return;
         }
 
-        holdings.push({
-            type: 'stock',
+        // Classify asset using centralized logic (bonds, MMF, stocks)
+        const rowName = row.querySelector('.row-ticker-name')?.value || ticker;
+        const classified = classifyAsset(ticker, rowName);
+
+        const holding = {
+            type: classified.type,
             ticker,
-            stockName: ticker,
+            stockName: rowName || ticker,
             price,
             quantity: shares,
             currency
-        });
+        };
+        // Pass bond/fund metadata for correct Supabase insert
+        if (classified.assetClass) holding.assetClass = classified.assetClass;
+        if (classified.bondType) holding.bondType = classified.bondType;
+        if (classified.type === 'bond') holding.bondName = rowName || ticker;
+
+        holdings.push(holding);
     });
 
     // If cash rows were found, add to the USD cash input field
@@ -1570,15 +1620,25 @@ function updateAddClientRisk() {
     const tbody = document.getElementById('mgmt-holdings-tbody');
 
     let totalStockValue = 0;
+    let totalBondValue = 0;
     if (tbody) {
         tbody.querySelectorAll('tr').forEach(row => {
             const shares = parseInt(row.querySelector('.row-shares')?.value) || 0;
             const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
-            totalStockValue += shares * price;
+            const rowValue = shares * price;
+            // Classify to correctly separate stocks from bonds/funds
+            const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase() || '';
+            const rowName = row.querySelector('.row-ticker-name')?.value || ticker;
+            const classified = classifyAsset(ticker, rowName);
+            if (classified.type === 'bond' || classified.type === 'fund') {
+                totalBondValue += rowValue;
+            } else {
+                totalStockValue += rowValue;
+            }
         });
     }
 
-    const total = totalStockValue + cash;
+    const total = totalStockValue + totalBondValue + cash;
     const stockPct = total > 0 ? (totalStockValue / total) * 100 : 0;
 
     let risk, riskLabel, riskColor;
