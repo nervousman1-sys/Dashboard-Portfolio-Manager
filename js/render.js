@@ -2,40 +2,44 @@
 
 // ========== QUANTITY FORMATTING ==========
 
-function formatAssetQuantity(qty) {
-    if (qty == null || isNaN(qty)) return '0';
-    const num = Number(qty);
-    // Format with commas: 1,000,000
-    const decimals = num % 1 !== 0 ? (num < 1 ? 6 : 2) : 0;
-    const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals });
-    // K/M suffix for large numbers
+// Short notation: 1.5M, 250K, etc. One decimal only when needed.
+function _formatShort(num) {
     if (num >= 1000000) {
-        const mVal = num / 1000000;
-        const mStr = mVal % 1 === 0 ? mVal.toFixed(0) : mVal.toFixed(1);
-        return `${formatted}<span class="qty-suffix">(${mStr}M)</span>`;
+        const m = num / 1000000;
+        return (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + 'M';
     }
-    if (num >= 10000) {
-        const kVal = num / 1000;
-        const kStr = kVal % 1 === 0 ? kVal.toFixed(0) : kVal.toFixed(1);
-        return `${formatted}<span class="qty-suffix">(${kStr}K)</span>`;
+    if (num >= 1000) {
+        const k = num / 1000;
+        return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + 'K';
     }
-    return formatted;
+    return num.toString();
 }
 
-// Describe a quantity in Hebrew for live preview (e.g., "1,500,000 → 1.5 מיליון יחידות")
+// Display-only: returns HTML with vertical qty-container > qty-main + qty-suffix
+function formatAssetQuantity(qty) {
+    if (qty == null || isNaN(qty)) return '<div class="qty-container"><span class="qty-main">0</span></div>';
+    const num = Number(qty);
+    // Decimals: show only when non-zero; sub-1 values get up to 6 (crypto), others 2
+    const decimals = num % 1 !== 0 ? (num < 1 ? 6 : 2) : 0;
+    const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals });
+    const suffix = num >= 1000 ? `<span class="qty-suffix">(${_formatShort(num)})</span>` : '';
+    return `<div class="qty-container"><span class="qty-main">${formatted}</span>${suffix}</div>`;
+}
+
+// Hebrew description for live input preview: "כמות: 1,500,000 → 1.5 מיליון יחידות"
 function describeQuantity(qty) {
     if (!qty || isNaN(qty) || qty <= 0) return '';
     const num = Number(qty);
     const formatted = num.toLocaleString('en-US');
     if (num >= 1000000) {
-        const m = (num / 1000000);
-        return `${formatted} → ${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)} מיליון יחידות`;
+        const m = num / 1000000;
+        return `כמות: ${formatted} → ${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)} מיליון יחידות`;
     }
     if (num >= 1000) {
-        const k = (num / 1000);
-        return `${formatted} → ${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)} אלף יחידות`;
+        const k = num / 1000;
+        return `כמות: ${formatted} → ${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)} אלף יחידות`;
     }
-    return `${formatted} יחידות`;
+    return `כמות: ${formatted} יחידות`;
 }
 
 // ========== EXPOSURE ==========

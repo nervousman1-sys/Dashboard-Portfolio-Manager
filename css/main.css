@@ -2270,18 +2270,30 @@ body {
 }
 
 /* ========== QUANTITY DISPLAY ========== */
-.qty-cell {
-    white-space: nowrap;
-    min-width: 80px;
-    direction: ltr;
-    text-align: left;
+.qty-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.2;
+}
+.qty-main {
+    font-weight: 500;
+    color: var(--text-bright);
 }
 .qty-suffix {
-    margin-right: 4px;
-    font-size: 11px;
+    font-size: 0.75rem;
     color: var(--accent-blue);
-    opacity: 0.7;
-    font-weight: 400;
+    opacity: 0.8;
+}
+td[data-label="כמות"] {
+    min-width: 100px;
+    white-space: nowrap;
+}
+.qty-cell {
+    white-space: nowrap;
+    min-width: 100px;
+    direction: ltr;
+    text-align: left;
 }
 .qty-live-preview {
     font-size: 11px;
