@@ -4,6 +4,41 @@
 let priceCacheTimestamp = 0;
 const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// ========== CORS PROXY FOR YAHOO FINANCE ==========
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+// ========== ISRAELI NUMERIC ID → YAHOO SYMBOL MAPPING ==========
+// Common Israeli security IDs (TASE numeric identifiers) mapped to Yahoo Finance .TA symbols.
+const ISRAELI_ID_TO_YAHOO = {
+    '1081820': 'LUMI.TA',   // Bank Leumi
+    '1082808': 'DSCT.TA',   // Bank Discount
+    '1090878': 'POLI.TA',   // Bank Hapoalim
+    '1081838': 'MZTF.TA',   // Mizrahi Tefahot
+    '1082816': 'FIBI.TA',   // First International
+    '1081861': 'TEVA.TA',   // Teva
+    '1082600': 'NICE.TA',   // Nice Systems
+    '1081879': 'ICL.TA',    // ICL Group
+    '1082642': 'ESLT.TA',   // Elbit Systems
+    '1082634': 'BEZQ.TA',   // Bezeq
+    '1083038': 'CEL.TA',    // Cellcom
+    '1082667': 'PTNR.TA',   // Partner
+    '1090811': 'HARL.TA',   // Harel
+    '1090829': 'PHOE.TA',   // Phoenix
+    '1082659': 'MGDL.TA',   // Migdal
+    '1090845': 'AZRG.TA',   // Azrieli
+    '1090852': 'AMOT.TA',   // Amot
+    '1082691': 'SHPG.TA',   // Shufersal
+    '1090860': 'DLEKG.TA',  // Delek Group
+    '1090837': 'ENLT.TA',   // Enlight Energy
+    '1082683': 'OPC.TA',    // OPC Energy
+    '1101534': 'FTAL.TA',   // Fattal Hotels
+    '1090894': 'TASE.TA',   // Tel Aviv Stock Exchange
+    '1090886': 'SPEN.TA',   // Shapir Engineering
+    '1082675': 'GZIT.TA',   // Gazit Globe
+    '1082717': 'ALHE.TA',   // Alon Blue Square
+    '1082709': 'ELCO.TA',   // Elco
+};
+
 // ========== TWELVE DATA: single chunk fetch (up to 8 symbols batched in one HTTP call) ==========
 
 async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
@@ -131,9 +166,71 @@ async function searchTwelveDataSymbols(query) {
     }
 }
 
+// ========== YAHOO FINANCE VIA CORS PROXY ==========
+// Fetches a single ticker from Yahoo Finance chart API through the CORS proxy.
+// For Israeli (.TA) stocks, Yahoo returns prices in Agurot — ALWAYS divide by 100.
+// Returns { price, previousClose, change, changePct, currency } or null.
+
+async function _fetchYahooPrice(yahooSymbol) {
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1d`;
+    const proxyUrl = CORS_PROXY + encodeURIComponent(yahooUrl);
+
+    const res = await fetch(proxyUrl);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || !meta.regularMarketPrice || meta.regularMarketPrice <= 0) return null;
+
+    let rawPrice = parseFloat(meta.regularMarketPrice);
+    let rawPrevClose = parseFloat(meta.chartPreviousClose || meta.previousClose || rawPrice);
+
+    // TASE stocks on Yahoo are ALWAYS quoted in Agurot (Israeli cents).
+    // Divide by 100 to get NIS. Detect via .TA suffix or ILA currency.
+    const isTASE = yahooSymbol.toUpperCase().endsWith('.TA');
+    const isAgurot = isTASE || meta.currency === 'ILA';
+
+    if (isAgurot) {
+        rawPrice = rawPrice / 100;
+        rawPrevClose = rawPrevClose / 100;
+    }
+
+    return {
+        price: Math.round(rawPrice * 100) / 100,
+        previousClose: Math.round(rawPrevClose * 100) / 100,
+        change: +((rawPrice - rawPrevClose).toFixed(2)),
+        changePct: rawPrevClose ? +((rawPrice - rawPrevClose) / rawPrevClose * 100).toFixed(2) : 0,
+        currency: isTASE ? 'ILS' : (meta.currency || 'USD')
+    };
+}
+
+// ========== RESOLVE YAHOO SYMBOL ==========
+// Converts various Israeli ticker formats to Yahoo Finance symbol:
+//   - Numeric ID (e.g. "1101534") → lookup in ISRAELI_ID_TO_YAHOO → "FTAL.TA"
+//   - Bare ticker (e.g. "LUMI") with Israeli context → "LUMI.TA"
+//   - Already .TA suffixed → pass through
+
+function _resolveYahooSymbol(sym, isIsraeli) {
+    // Check numeric ID mapping first
+    if (ISRAELI_ID_TO_YAHOO[sym]) return ISRAELI_ID_TO_YAHOO[sym];
+
+    // Already has .TA suffix
+    if (sym.endsWith('.TA')) return sym;
+
+    // Israeli asset without .TA — add it
+    if (isIsraeli) {
+        const base = sym.replace('.TASE', '').replace(/:TASE$/i, '');
+        return base + '.TA';
+    }
+
+    // Non-Israeli — Yahoo uses bare symbol (AAPL, MSFT, etc.)
+    return sym;
+}
+
 // ========== SINGLE-TICKER LIVE PRICE FETCH ==========
 // Used by supaAddHolding when priceCache is empty (e.g. brand-new user).
-// Tries Twelve Data → FMP → Finnhub in sequence. Returns {price, previousClose} or null.
+// Israeli stocks: Yahoo Finance (via CORS proxy) → Twelve Data → FMP (fallback chain)
+// US stocks: Twelve Data → FMP → Finnhub (fallback chain)
 
 async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null) {
     if (!ticker) return null;
@@ -141,10 +238,11 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
     // --- Israeli asset detection ---
     const isIsraeli = currency === 'ILS' || currency === 'ILA'
-        || sym.endsWith('.TA') || sym.endsWith('.TASE');
-    const isBond = /^\d{7,9}$/.test(sym);
+        || sym.endsWith('.TA') || sym.endsWith('.TASE')
+        || !!ISRAELI_ID_TO_YAHOO[sym];
+    const isBond = /^\d{7,9}$/.test(sym) && !ISRAELI_ID_TO_YAHOO[sym];
 
-    // Bonds (7-9 digit numeric): no API can fetch these, use simulation
+    // Bonds (7-9 digit numeric that are NOT in the ID map): use simulation
     if (isBond) {
         const bp = basePrice || 100;
         const variation = (Math.random() - 0.5) * 0.006;
@@ -154,23 +252,11 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         return result;
     }
 
-    // Build .TA symbol for Israeli assets (used by FMP, Yahoo)
-    // Build :TASE symbol for Twelve Data
+    // Build symbol variants
     const baseTicker = sym.replace('.TA', '').replace('.TASE', '').replace(/:TASE$/i, '');
-    const taSym = baseTicker + '.TA';             // FMP / Yahoo format
     const tdSymbol = isIsraeli ? baseTicker + ':TASE' : sym;  // Twelve Data format
 
-    // Helper: convert Agurot → Shekels. TASE APIs often return prices in Agurot (1/100 ₪).
-    // Signal 1: API reports currency as 'ILA' (Israeli Agurot) → always divide.
-    // Signal 2: Israeli asset and raw price > 500 → very likely Agurot.
-    function _agurotToShekel(rawPrice, apiCurrency) {
-        if (!isIsraeli) return rawPrice;
-        if (apiCurrency === 'ILA') return rawPrice / 100;
-        if (rawPrice > 500) return rawPrice / 100;
-        return rawPrice;
-    }
-
-    // Helper: bail immediately on 429 rate-limit
+    // Helper: bail on 429
     function _parseResult(res, data, provider) {
         if (!res.ok) {
             if (res.status === 429) console.warn(`[fetchSingleTickerPrice] ${provider} rate-limited (429) for ${sym}`);
@@ -179,65 +265,38 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         return data;
     }
 
-    // --- Provider 1: Twelve Data (uses :TASE format) ---
-    try {
-        if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
-            const res = await fetch(`https://api.twelvedata.com/quote?symbol=${tdSymbol}&apikey=${TWELVE_DATA_API_KEY}`);
-            const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
-            if (data && data.status !== 'error' && data.close) {
-                const rawPrice = parseFloat(data.close);
-                const rawPrev = parseFloat(data.previous_close);
-                const price = _agurotToShekel(rawPrice, data.currency);
-                const prevClose = _agurotToShekel(rawPrev, data.currency);
-                const result = {
-                    price,
-                    previousClose: prevClose,
-                    change: +(price - prevClose).toFixed(2),
-                    changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
-                    currency: isIsraeli ? 'ILS' : (data.currency || 'USD')
-                };
-                if (typeof priceCache !== 'undefined') priceCache[sym] = result;
-                return result;
-            }
-        }
-    } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', tdSymbol, e.message); }
-
-    // --- Provider 2: FMP (uses .TA suffix for Israeli) ---
-    try {
-        if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
-            const fmpTicker = isIsraeli ? taSym : sym;
-            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpTicker}&apikey=${FMP_API_KEY}`);
-            const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
-            if (Array.isArray(data) && data.length > 0 && data[0].price) {
-                const q = data[0];
-                const price = _agurotToShekel(q.price, q.currency);
-                const prevClose = _agurotToShekel(q.previousClose || q.price, q.currency);
-                const result = {
-                    price,
-                    previousClose: prevClose,
-                    change: +(price - prevClose).toFixed(2),
-                    changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
-                    currency: isIsraeli ? 'ILS' : 'USD'
-                };
-                if (typeof priceCache !== 'undefined') priceCache[sym] = result;
-                return result;
-            }
-        }
-    } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
-
-    // --- Provider 3: Yahoo Finance (uses .TA suffix natively for TASE) ---
+    // =====================================================================
+    // ISRAELI STOCKS: Yahoo Finance (CORS proxy) is PRIMARY — most reliable
+    // for TASE data, free, no API key needed.
+    // =====================================================================
     if (isIsraeli) {
+        const yahooSym = _resolveYahooSymbol(sym, true);
+        console.log(`[fetchSingleTickerPrice] Israeli asset ${sym} → Yahoo: ${yahooSym}`);
+
+        // --- Provider 1 (Israeli): Yahoo Finance via CORS proxy ---
         try {
-            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${taSym}?range=1d&interval=1d`);
-            if (res.ok) {
-                const data = await res.json();
-                const meta = data?.chart?.result?.[0]?.meta;
-                if (meta && meta.regularMarketPrice > 0) {
-                    const price = _agurotToShekel(meta.regularMarketPrice, meta.currency);
-                    const prevClose = _agurotToShekel(meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, meta.currency);
+            const yahooResult = await _fetchYahooPrice(yahooSym);
+            if (yahooResult && yahooResult.price > 0) {
+                console.log(`[fetchSingleTickerPrice] Yahoo returned ₪${yahooResult.price} for ${yahooSym}`);
+                if (typeof priceCache !== 'undefined') priceCache[sym] = yahooResult;
+                return yahooResult;
+            }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', yahooSym, e.message); }
+
+        // --- Provider 2 (Israeli): Twelve Data fallback ---
+        try {
+            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+                const res = await fetch(`https://api.twelvedata.com/quote?symbol=${tdSymbol}&apikey=${TWELVE_DATA_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
+                if (data && data.status !== 'error' && data.close) {
+                    let price = parseFloat(data.close);
+                    let prevClose = parseFloat(data.previous_close);
+                    // Twelve Data for TASE may return Agurot
+                    if (data.currency === 'ILA') { price /= 100; prevClose /= 100; }
+                    else if (price > 500) { price /= 100; prevClose /= 100; }
                     const result = {
-                        price,
-                        previousClose: prevClose,
+                        price: Math.round(price * 100) / 100,
+                        previousClose: Math.round(prevClose * 100) / 100,
                         change: +(price - prevClose).toFixed(2),
                         changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
                         currency: 'ILS'
@@ -246,11 +305,78 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                     return result;
                 }
             }
-        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', taSym, e.message); }
-    }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', tdSymbol, e.message); }
 
-    // --- Provider 4: Finnhub (US assets only — Finnhub doesn't support TASE) ---
-    if (!isIsraeli) {
+        // --- Provider 3 (Israeli): FMP fallback ---
+        try {
+            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+                const fmpTicker = baseTicker + '.TA';
+                const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpTicker}&apikey=${FMP_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
+                if (Array.isArray(data) && data.length > 0 && data[0].price) {
+                    const q = data[0];
+                    let price = q.price;
+                    let prevClose = q.previousClose || q.price;
+                    if (q.currency === 'ILA') { price /= 100; prevClose /= 100; }
+                    else if (price > 500) { price /= 100; prevClose /= 100; }
+                    const result = {
+                        price: Math.round(price * 100) / 100,
+                        previousClose: Math.round(prevClose * 100) / 100,
+                        change: +(price - prevClose).toFixed(2),
+                        changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
+                        currency: 'ILS'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for Israeli', sym, e.message); }
+
+    } else {
+        // =====================================================================
+        // US / INTERNATIONAL STOCKS: Twelve Data → FMP → Finnhub
+        // =====================================================================
+
+        // --- Provider 1 (US): Twelve Data ---
+        try {
+            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+                const res = await fetch(`https://api.twelvedata.com/quote?symbol=${sym}&apikey=${TWELVE_DATA_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
+                if (data && data.status !== 'error' && data.close) {
+                    const result = {
+                        price: parseFloat(data.close),
+                        previousClose: parseFloat(data.previous_close),
+                        change: +(parseFloat(data.close) - parseFloat(data.previous_close)).toFixed(2),
+                        changePct: parseFloat(data.previous_close) ? +((parseFloat(data.close) - parseFloat(data.previous_close)) / parseFloat(data.previous_close) * 100).toFixed(2) : 0,
+                        currency: data.currency || 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', sym, e.message); }
+
+        // --- Provider 2 (US): FMP ---
+        try {
+            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+                const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
+                const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
+                if (Array.isArray(data) && data.length > 0 && data[0].price) {
+                    const q = data[0];
+                    const result = {
+                        price: q.price,
+                        previousClose: q.previousClose || q.price,
+                        change: +(q.price - (q.previousClose || q.price)).toFixed(2),
+                        changePct: (q.previousClose || q.price) ? +((q.price - (q.previousClose || q.price)) / (q.previousClose || q.price) * 100).toFixed(2) : 0,
+                        currency: 'USD'
+                    };
+                    if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+                    return result;
+                }
+            }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
+
+        // --- Provider 3 (US): Finnhub ---
         try {
             if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
                 const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_API_KEY}`);
@@ -268,6 +394,15 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                 }
             }
         } catch (e) { console.warn('[fetchSingleTickerPrice] Finnhub failed for', sym, e.message); }
+
+        // --- Provider 4 (US): Yahoo Finance fallback (no CORS issues for US tickers) ---
+        try {
+            const yahooResult = await _fetchYahooPrice(sym);
+            if (yahooResult && yahooResult.price > 0) {
+                if (typeof priceCache !== 'undefined') priceCache[sym] = yahooResult;
+                return yahooResult;
+            }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', sym, e.message); }
     }
 
     // --- Final fallback: use basePrice (buy_price from Supabase) if all APIs failed ---
@@ -571,40 +706,100 @@ async function _backgroundPriceCompletion(allTickers, allSymbols, holdingsMap, c
         const missingTickers = allTickers.filter(t => !collectedPrices[t]);
 
         if (missingTickers.length > 0) {
-            console.log(`[PriceService] ${missingTickers.length} tickers missing, trying FMP + Finnhub in parallel...`);
+            console.log(`[PriceService] ${missingTickers.length} tickers missing after Twelve Data...`);
 
-            // Fire BOTH fallback APIs simultaneously
-            const [fmpResult, finnhubResult] = await Promise.allSettled([
-                fetchFMPPrices(missingTickers),
-                fetchFinnhubPrices(missingTickers)
-            ]);
+            // Split missing tickers into Israeli and non-Israeli
+            const missingIsraeli = missingTickers.filter(t => {
+                const h = holdingsMap[t];
+                return (h && h.currency === 'ILS') || t.endsWith('.TA') || !!ISRAELI_ID_TO_YAHOO[t];
+            });
+            const missingOther = missingTickers.filter(t => !missingIsraeli.includes(t));
 
-            const fmpPrices = fmpResult.status === 'fulfilled' ? fmpResult.value : null;
-            const finnhubPrices = finnhubResult.status === 'fulfilled' ? finnhubResult.value : null;
+            // 4a. Israeli tickers: Yahoo Finance via CORS proxy (parallel, up to 5 at a time)
+            if (missingIsraeli.length > 0) {
+                console.log(`[PriceService] Fetching ${missingIsraeli.length} Israeli tickers via Yahoo Finance...`);
+                const yahooResults = await Promise.allSettled(
+                    missingIsraeli.map(t => {
+                        const yahooSym = _resolveYahooSymbol(t.toUpperCase(), true);
+                        return _fetchYahooPrice(yahooSym).then(result => result ? { ticker: t, ...result } : null);
+                    })
+                );
 
-            const fallbackPrices = {};
-
-            if (fmpPrices) {
-                Object.assign(fallbackPrices, fmpPrices);
-                sources.push('FMP');
-            }
-            if (finnhubPrices) {
-                // Finnhub fills gaps FMP didn't cover
-                Object.keys(finnhubPrices).forEach(t => {
-                    if (!fallbackPrices[t]) fallbackPrices[t] = finnhubPrices[t];
+                const yahooPrices = {};
+                yahooResults.forEach(r => {
+                    if (r.status === 'fulfilled' && r.value && r.value.price > 0) {
+                        const { ticker, ...priceData } = r.value;
+                        yahooPrices[ticker] = priceData;
+                    }
                 });
-                if (Object.keys(finnhubPrices).some(t => !fmpPrices || !fmpPrices[t])) {
-                    sources.push('Finnhub');
+
+                if (Object.keys(yahooPrices).length > 0) {
+                    Object.assign(collectedPrices, yahooPrices);
+                    Object.assign(priceCache, yahooPrices);
+                    sources.push('Yahoo Finance');
+                    if (_applyPricesToClientsInMemory(yahooPrices) && onUpdate) {
+                        onUpdate();
+                    }
+                    console.log(`[PriceService] Yahoo Finance: got ${Object.keys(yahooPrices).length}/${missingIsraeli.length} Israeli prices`);
                 }
             }
 
-            if (Object.keys(fallbackPrices).length > 0) {
-                Object.assign(collectedPrices, fallbackPrices);
-                Object.assign(priceCache, fallbackPrices);
+            // 4b. Non-Israeli tickers: FMP + Finnhub in parallel
+            if (missingOther.length > 0) {
+                console.log(`[PriceService] ${missingOther.length} non-Israeli tickers, trying FMP + Finnhub...`);
+                const [fmpResult, finnhubResult] = await Promise.allSettled([
+                    fetchFMPPrices(missingOther),
+                    fetchFinnhubPrices(missingOther)
+                ]);
 
-                // Incremental UI update with fallback data
-                if (_applyPricesToClientsInMemory(fallbackPrices) && onUpdate) {
-                    onUpdate();
+                const fmpPrices = fmpResult.status === 'fulfilled' ? fmpResult.value : null;
+                const finnhubPrices = finnhubResult.status === 'fulfilled' ? finnhubResult.value : null;
+
+                const fallbackPrices = {};
+
+                if (fmpPrices) {
+                    Object.assign(fallbackPrices, fmpPrices);
+                    sources.push('FMP');
+                }
+                if (finnhubPrices) {
+                    Object.keys(finnhubPrices).forEach(t => {
+                        if (!fallbackPrices[t]) fallbackPrices[t] = finnhubPrices[t];
+                    });
+                    if (Object.keys(finnhubPrices).some(t => !fmpPrices || !fmpPrices[t])) {
+                        sources.push('Finnhub');
+                    }
+                }
+
+                if (Object.keys(fallbackPrices).length > 0) {
+                    Object.assign(collectedPrices, fallbackPrices);
+                    Object.assign(priceCache, fallbackPrices);
+                    if (_applyPricesToClientsInMemory(fallbackPrices) && onUpdate) {
+                        onUpdate();
+                    }
+                }
+            }
+
+            // 4c. Any STILL missing tickers (Israeli or not) — last-resort Yahoo for non-Israeli
+            const stillMissing = allTickers.filter(t => !collectedPrices[t] && !missingIsraeli.includes(t));
+            if (stillMissing.length > 0) {
+                console.log(`[PriceService] ${stillMissing.length} tickers still missing, trying Yahoo Finance fallback...`);
+                const lastResort = await Promise.allSettled(
+                    stillMissing.map(t => _fetchYahooPrice(t).then(result => result ? { ticker: t, ...result } : null))
+                );
+                const lastPrices = {};
+                lastResort.forEach(r => {
+                    if (r.status === 'fulfilled' && r.value && r.value.price > 0) {
+                        const { ticker, ...priceData } = r.value;
+                        lastPrices[ticker] = priceData;
+                    }
+                });
+                if (Object.keys(lastPrices).length > 0) {
+                    Object.assign(collectedPrices, lastPrices);
+                    Object.assign(priceCache, lastPrices);
+                    if (!sources.includes('Yahoo Finance')) sources.push('Yahoo Finance');
+                    if (_applyPricesToClientsInMemory(lastPrices) && onUpdate) {
+                        onUpdate();
+                    }
                 }
             }
         }
