@@ -154,13 +154,23 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         return result;
     }
 
-    // Build Twelve Data symbol: strip .TA suffix and append :TASE for Israeli assets
-    let tdSymbol = sym;
-    if (isIsraeli) {
-        tdSymbol = sym.replace('.TA', '').replace('.TASE', '') + ':TASE';
+    // Build .TA symbol for Israeli assets (used by FMP, Yahoo)
+    // Build :TASE symbol for Twelve Data
+    const baseTicker = sym.replace('.TA', '').replace('.TASE', '').replace(/:TASE$/i, '');
+    const taSym = baseTicker + '.TA';             // FMP / Yahoo format
+    const tdSymbol = isIsraeli ? baseTicker + ':TASE' : sym;  // Twelve Data format
+
+    // Helper: convert Agurot → Shekels. TASE APIs often return prices in Agurot (1/100 ₪).
+    // Signal 1: API reports currency as 'ILA' (Israeli Agurot) → always divide.
+    // Signal 2: Israeli asset and raw price > 100 → very likely Agurot (most TASE stocks < ₪1000).
+    function _agurotToShekel(rawPrice, apiCurrency) {
+        if (!isIsraeli) return rawPrice;
+        if (apiCurrency === 'ILA') return rawPrice / 100;
+        if (rawPrice > 100) return rawPrice / 100;
+        return rawPrice;
     }
 
-    // Helper: bail immediately on 429 rate-limit (don't cascade to next provider)
+    // Helper: bail immediately on 429 rate-limit
     function _parseResult(res, data, provider) {
         if (!res.ok) {
             if (res.status === 429) console.warn(`[fetchSingleTickerPrice] ${provider} rate-limited (429) for ${sym}`);
@@ -169,26 +179,22 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         return data;
     }
 
-    // Try Twelve Data first (with correct :TASE format for Israeli assets)
+    // --- Provider 1: Twelve Data (uses :TASE format) ---
     try {
         if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
             const res = await fetch(`https://api.twelvedata.com/quote?symbol=${tdSymbol}&apikey=${TWELVE_DATA_API_KEY}`);
             const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
             if (data && data.status !== 'error' && data.close) {
-                let price = parseFloat(data.close);
-                let prevClose = parseFloat(data.previous_close);
-                // TASE prices sometimes returned in Agurot (×100) — detect & convert
-                // If basePrice known: compare. If unknown: any Israeli price > 500 is likely Agurot.
-                if (isIsraeli && price > 500 && (!basePrice || basePrice < 500)) {
-                    price /= 100;
-                    prevClose /= 100;
-                }
+                const rawPrice = parseFloat(data.close);
+                const rawPrev = parseFloat(data.previous_close);
+                const price = _agurotToShekel(rawPrice, data.currency);
+                const prevClose = _agurotToShekel(rawPrev, data.currency);
                 const result = {
                     price,
                     previousClose: prevClose,
-                    change: parseFloat(data.change) || +(price - prevClose).toFixed(2),
-                    changePct: parseFloat(data.percent_change) || +((price - prevClose) / prevClose * 100).toFixed(2),
-                    currency: data.currency === 'ILA' ? 'ILS' : (data.currency || (isIsraeli ? 'ILS' : 'USD'))
+                    change: +(price - prevClose).toFixed(2),
+                    changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
+                    currency: isIsraeli ? 'ILS' : (data.currency || 'USD')
                 };
                 if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                 return result;
@@ -196,32 +202,21 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         }
     } catch (e) { console.warn('[fetchSingleTickerPrice] Twelve Data failed for', tdSymbol, e.message); }
 
-    // --- FMP fallback ---
-    // FMP supports both US tickers and TASE with .TA suffix (e.g. LUMI.TA)
+    // --- Provider 2: FMP (uses .TA suffix for Israeli) ---
     try {
         if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
-            // For Israeli assets, FMP uses .TA suffix format
-            const fmpSymbol = isIsraeli
-                ? sym.replace('.TASE', '.TA').replace(/:TASE$/i, '.TA') + (sym.includes('.TA') ? '' : '.TA')
-                : sym;
-            // Dedupe: avoid "LUMI.TA.TA"
-            const fmpClean = fmpSymbol.replace(/\.TA\.TA/g, '.TA');
-            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpClean}&apikey=${FMP_API_KEY}`);
+            const fmpTicker = isIsraeli ? taSym : sym;
+            const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpTicker}&apikey=${FMP_API_KEY}`);
             const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
             if (Array.isArray(data) && data.length > 0 && data[0].price) {
                 const q = data[0];
-                let fmpPrice = q.price;
-                let fmpPrev = q.previousClose || q.price;
-                // Agurot detection: Israeli stock prices > 500 → likely in Agurot
-                if (isIsraeli && fmpPrice > 500 && (!basePrice || basePrice < 500)) {
-                    fmpPrice /= 100;
-                    fmpPrev /= 100;
-                }
+                const price = _agurotToShekel(q.price, q.currency);
+                const prevClose = _agurotToShekel(q.previousClose || q.price, q.currency);
                 const result = {
-                    price: fmpPrice,
-                    previousClose: fmpPrev,
-                    change: q.change || +(fmpPrice - fmpPrev).toFixed(2),
-                    changePct: q.changePercentage || +((fmpPrice - fmpPrev) / fmpPrev * 100).toFixed(2),
+                    price,
+                    previousClose: prevClose,
+                    change: +(price - prevClose).toFixed(2),
+                    changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
                     currency: isIsraeli ? 'ILS' : 'USD'
                 };
                 if (typeof priceCache !== 'undefined') priceCache[sym] = result;
@@ -230,38 +225,31 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
         }
     } catch (e) { console.warn('[fetchSingleTickerPrice] FMP failed for', sym, e.message); }
 
-    // --- Yahoo Finance fallback (Israeli assets use .TA suffix natively) ---
+    // --- Provider 3: Yahoo Finance (uses .TA suffix natively for TASE) ---
     if (isIsraeli) {
         try {
-            const yahooSym = sym.replace('.TASE', '.TA').replace(/:TASE$/i, '.TA') + (sym.includes('.TA') ? '' : '.TA');
-            const yahooClean = yahooSym.replace(/\.TA\.TA/g, '.TA');
-            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooClean}?range=1d&interval=1d`);
+            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${taSym}?range=1d&interval=1d`);
             if (res.ok) {
                 const data = await res.json();
                 const meta = data?.chart?.result?.[0]?.meta;
                 if (meta && meta.regularMarketPrice > 0) {
-                    let yPrice = meta.regularMarketPrice;
-                    let yPrev = meta.chartPreviousClose || meta.previousClose || yPrice;
-                    // Agurot detection
-                    if (isIsraeli && yPrice > 500 && (!basePrice || basePrice < 500)) {
-                        yPrice /= 100;
-                        yPrev /= 100;
-                    }
+                    const price = _agurotToShekel(meta.regularMarketPrice, meta.currency);
+                    const prevClose = _agurotToShekel(meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, meta.currency);
                     const result = {
-                        price: yPrice,
-                        previousClose: yPrev,
-                        change: +(yPrice - yPrev).toFixed(2),
-                        changePct: +((yPrice - yPrev) / yPrev * 100).toFixed(2),
-                        currency: meta.currency === 'ILA' ? 'ILS' : (meta.currency || 'ILS')
+                        price,
+                        previousClose: prevClose,
+                        change: +(price - prevClose).toFixed(2),
+                        changePct: prevClose ? +((price - prevClose) / prevClose * 100).toFixed(2) : 0,
+                        currency: 'ILS'
                     };
                     if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                     return result;
                 }
             }
-        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', sym, e.message); }
+        } catch (e) { console.warn('[fetchSingleTickerPrice] Yahoo Finance failed for', taSym, e.message); }
     }
 
-    // --- Finnhub fallback (US assets only — Finnhub doesn't support TASE) ---
+    // --- Provider 4: Finnhub (US assets only — Finnhub doesn't support TASE) ---
     if (!isIsraeli) {
         try {
             if (FINNHUB_API_KEY && FINNHUB_API_KEY !== 'YOUR_FINNHUB_API_KEY') {
@@ -280,6 +268,20 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                 }
             }
         } catch (e) { console.warn('[fetchSingleTickerPrice] Finnhub failed for', sym, e.message); }
+    }
+
+    // --- Final fallback: use basePrice (buy_price from Supabase) if all APIs failed ---
+    if (basePrice && basePrice > 0) {
+        console.warn(`[fetchSingleTickerPrice] All APIs failed for ${sym}, using basePrice fallback: ${basePrice}`);
+        const result = {
+            price: basePrice,
+            previousClose: basePrice,
+            change: 0,
+            changePct: 0,
+            currency: isIsraeli ? 'ILS' : 'USD'
+        };
+        if (typeof priceCache !== 'undefined') priceCache[sym] = result;
+        return result;
     }
 
     return null;
