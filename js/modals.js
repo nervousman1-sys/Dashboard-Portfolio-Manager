@@ -493,15 +493,9 @@ function openMgmtModal(action, data) {
                 </div>
                 <input type="hidden" id="mgmt-available-cash-usd" value="${cashUsd}" />
                 <input type="hidden" id="mgmt-available-cash-ils" value="${cashIls}" />
-                <div class="mgmt-field"><label>סוג נכס</label>
-                    <select id="mgmt-asset-type" onchange="onAssetTypeChange()">
-                        <option value="stock">מניה</option>
-                        <option value="bond">אג"ח</option>
-                        <option value="fund">קרן נאמנות</option>
-                    </select>
-                </div>
+                <input type="hidden" id="mgmt-asset-type" value="stock" />
                 <div class="mgmt-field" id="mgmt-ticker-field">
-                    <label>חיפוש מניה</label>
+                    <label>חיפוש נייר ערך</label>
                     <div class="ticker-search-wrapper">
                         <input type="hidden" id="mgmt-ticker-symbol" />
                         <input type="hidden" id="mgmt-ticker-currency" />
@@ -511,11 +505,11 @@ function openMgmtModal(action, data) {
                         <div id="mgmt-ticker-dropdown" class="ticker-search-dropdown"></div>
                     </div>
                 </div>
-                <div class="mgmt-field" id="mgmt-bondname-field" style="display:none"><label>שם האג"ח</label><input type="text" id="mgmt-bondname" placeholder='לדוגמה: אג"ח ממשלתי צמוד' /></div>
-                <div class="mgmt-field" id="mgmt-asset-class-field" style="display:none"><label>סיווג אג"ח</label>
+                <div class="mgmt-field" id="mgmt-bondname-field" style="display:none"><label>Bond Name</label><input type="text" id="mgmt-bondname" placeholder='e.g. IL Gov Bond CPI-Linked' /></div>
+                <div class="mgmt-field" id="mgmt-asset-class-field" style="display:none"><label>Bond Classification</label>
                     <select id="mgmt-asset-class">
-                        <option value="Gov Bond">אג"ח ממשלתי</option>
-                        <option value="Corp Bond">אג"ח קונצרני</option>
+                        <option value="Gov Bond">Gov Bond</option>
+                        <option value="Corp Bond">Corp Bond</option>
                     </select>
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
@@ -635,19 +629,15 @@ function closeMgmtModal(event) {
     document.getElementById('mgmtOverlay').classList.remove('active');
 }
 
+// Called internally when asset type changes (now auto-detected, not user-driven)
 function onAssetTypeChange() {
     const type = document.getElementById('mgmt-asset-type').value;
-    // Stock and fund use ticker search; bond uses free-text name
-    document.getElementById('mgmt-ticker-field').style.display = (type === 'stock' || type === 'fund') ? '' : 'none';
+    // Ticker search is always visible (unified search for all security types)
+    document.getElementById('mgmt-ticker-field').style.display = '';
+    // Bond-specific fields shown only when type is bond
     document.getElementById('mgmt-bondname-field').style.display = type === 'bond' ? '' : 'none';
-    // Show asset_class selector only for bonds
     const assetClassField = document.getElementById('mgmt-asset-class-field');
     if (assetClassField) assetClassField.style.display = type === 'bond' ? '' : 'none';
-    // Update search label
-    const searchLabel = document.querySelector('#mgmt-ticker-field label');
-    if (searchLabel) {
-        searchLabel.textContent = type === 'fund' ? 'חיפוש קרן נאמנות' : 'חיפוש מניה';
-    }
     // Update price label currency — bonds default to ₪, stocks/funds reset to $
     const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabel) priceCurrLabel.textContent = type === 'bond' ? '₪' : '$';
@@ -659,10 +649,54 @@ function onAssetTypeChange() {
     // Hide live price preview when switching types
     const preview = document.getElementById('mgmt-live-price-preview');
     if (preview) { preview.textContent = ''; preview.style.display = 'none'; }
-    // Clear previous selection when switching type
-    clearTickerSelection();
     // Update buy cost display for currency switch
     updateBuyCost();
+}
+
+// ========== AUTO ASSET TYPE DETECTION ==========
+// Determines if a security is a stock, bond, or fund based on symbol, name, and API type.
+// Rules:
+//   1. API type contains "Bond" → bond
+//   2. Israeli numeric symbol (7-9 digits): prefix "11" = Gov Bond, "95" = Makam/T-Bill, name keywords → bond
+//   3. Name contains bond keywords (Hebrew or English) → bond
+//   4. Default → stock
+function detectAssetType(symbol, name, apiType) {
+    const sym = (symbol || '').toUpperCase().trim();
+    const nm = (name || '').toLowerCase();
+    const api = (apiType || '').toLowerCase();
+
+    // Rule 1: API explicitly says Bond
+    if (api.includes('bond')) return { type: 'bond', assetClass: nm.includes('gov') || nm.includes('ממשלתי') ? 'Gov Bond' : 'Corp Bond' };
+
+    // Rule 2: Israeli numeric security (7-9 digits)
+    if (/^\d{7,9}$/.test(sym)) {
+        // Government bond prefixes
+        if (sym.startsWith('11') || sym.startsWith('95')) {
+            return { type: 'bond', assetClass: 'Gov Bond' };
+        }
+        // Hebrew bond name keywords
+        const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'שקלי', 'גליל', 'מלווה', 'bond', 'gov bond', 'cpi-linked', 'treasury'];
+        if (bondKeywords.some(kw => nm.includes(kw))) {
+            return { type: 'bond', assetClass: nm.includes('קונצרני') || nm.includes('corp') ? 'Corp Bond' : 'Gov Bond' };
+        }
+        // Default numeric Israeli = bond (most 7-9 digit TASE IDs are bonds)
+        return { type: 'bond', assetClass: 'Gov Bond' };
+    }
+
+    // Rule 3: Name-based bond detection (for non-numeric symbols)
+    const bondNameKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'שקלי', 'גליל', 'מלווה',
+        'gov bond', 'cpi-linked', 'treasury', 'corp bond', 'il gov bond'];
+    if (bondNameKeywords.some(kw => nm.includes(kw))) {
+        return { type: 'bond', assetClass: nm.includes('קונצרני') || nm.includes('corp') ? 'Corp Bond' : 'Gov Bond' };
+    }
+
+    // Rule 4: Check if mapped in ISRAELI_BOND_TO_YAHOO (price-service.js)
+    if (typeof ISRAELI_BOND_TO_YAHOO !== 'undefined' && ISRAELI_BOND_TO_YAHOO[sym]) {
+        return { type: 'bond', assetClass: 'Gov Bond' };
+    }
+
+    // Default: stock
+    return { type: 'stock', assetClass: null };
 }
 
 // Live buy cost calculation
@@ -828,24 +862,26 @@ function selectSearchResult(symbol, name, currency, exchange) {
     const isIsraeli = _isIsraeliAsset(symbol, currency);
     const effectiveCurrency = isIsraeli ? 'ILS' : (currency || 'USD');
 
-    // Detect bond: 7-9 digit numeric, or selected from BONDS array (type=Bond in search result)
-    const isBondNumeric = /^\d{7,9}$/.test(symbol);
-    const isBondFromSearch = _lastSearchResultType === 'Bond';
-    const isBondId = typeof BONDS !== 'undefined' && BONDS.some(b => b.id === symbol || b.ticker === symbol);
-    const isBond = isBondNumeric || isBondFromSearch || isBondId;
+    // Auto-detect asset type using the unified detector
+    const apiType = _lastSearchResultType || '';
+    const detected = detectAssetType(symbol, name, apiType);
+    const isBond = detected.type === 'bond';
+
+    // Set the hidden asset type field
+    document.getElementById('mgmt-asset-type').value = detected.type;
 
     document.getElementById('mgmt-ticker-symbol').value = symbol;
     document.getElementById('mgmt-ticker-currency').value = isBond && isIsraeli ? 'ILS' : effectiveCurrency;
     document.getElementById('mgmt-ticker-name').value = name;
 
-    // Hebrew name priority — show Hebrew name if available
+    // Display name priority — show English name from HEBREW_NAMES if available
     const heName = (typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(symbol || '').replace('.TA', '').toUpperCase()] : '';
     const displayLabel = heName ? `${symbol} — ${heName}` : `${symbol} — ${name}`;
     const currLabel = (isBond && isIsraeli) ? '₪' : (effectiveCurrency === 'ILS' ? '₪' : '$');
 
     // Show selected badge, hide search input
     const badge = document.getElementById('mgmt-ticker-selected');
-    const bondTag = isBond ? ' <span style="color:var(--accent-purple,#a855f7);font-size:10px">[אג"ח]</span>' : '';
+    const bondTag = isBond ? ' <span style="color:var(--accent-purple,#a855f7);font-size:10px">[Bond]</span>' : '';
     badge.innerHTML = `<span>${displayLabel} (${exchange}, ${currLabel})${bondTag}</span><button class="ticker-clear-btn" onclick="clearTickerSelection()">&times;</button>`;
     badge.style.display = 'flex';
 
@@ -856,21 +892,25 @@ function selectSearchResult(symbol, name, currency, exchange) {
     const priceCurrLabelEl = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabelEl) priceCurrLabelEl.textContent = currLabel;
 
-    // If bond detected, auto-switch to bond type
-    // NOTE: Do NOT call onAssetTypeChange() here — it calls clearTickerSelection()
-    // which would wipe the values we just set. Instead, toggle UI fields directly.
+    // If bond detected, show bond-specific fields and auto-fill
     if (isBond) {
-        const typeSelect = document.getElementById('mgmt-asset-type');
-        if (typeSelect) typeSelect.value = 'bond';
         const bondNameField = document.getElementById('mgmt-bondname-field');
         if (bondNameField) bondNameField.style.display = '';
         const assetClassField = document.getElementById('mgmt-asset-class-field');
         if (assetClassField) assetClassField.style.display = '';
         const bondNameInput = document.getElementById('mgmt-bondname');
         if (bondNameInput) bondNameInput.value = name || symbol;
-        if (isIsraeli || isBondNumeric) {
+        const assetClassSelect = document.getElementById('mgmt-asset-class');
+        if (assetClassSelect && detected.assetClass) assetClassSelect.value = detected.assetClass;
+        if (isIsraeli) {
             document.getElementById('mgmt-ticker-currency').value = 'ILS';
         }
+    } else {
+        // Stock selected — hide bond fields
+        const bondNameField = document.getElementById('mgmt-bondname-field');
+        if (bondNameField) bondNameField.style.display = 'none';
+        const assetClassField = document.getElementById('mgmt-asset-class-field');
+        if (assetClassField) assetClassField.style.display = 'none';
     }
 
     updateBuyCost();
@@ -920,6 +960,9 @@ function clearTickerSelection() {
     document.getElementById('mgmt-ticker-currency').value = '';
     document.getElementById('mgmt-ticker-name').value = '';
 
+    // Reset auto-detected type back to stock
+    document.getElementById('mgmt-asset-type').value = 'stock';
+
     const badge = document.getElementById('mgmt-ticker-selected');
     badge.style.display = 'none';
 
@@ -933,6 +976,12 @@ function clearTickerSelection() {
     // Reset price currency label to default ($)
     const priceCurrLabel = document.getElementById('mgmt-price-currency-label');
     if (priceCurrLabel) priceCurrLabel.textContent = '$';
+
+    // Hide bond-specific fields
+    const bondNameField = document.getElementById('mgmt-bondname-field');
+    if (bondNameField) bondNameField.style.display = 'none';
+    const assetClassField = document.getElementById('mgmt-asset-class-field');
+    if (assetClassField) assetClassField.style.display = 'none';
 
     // Hide live price preview
     const preview = document.getElementById('mgmt-live-price-preview');
@@ -1067,25 +1116,26 @@ async function deleteClient(clientId) {
 // --- Holding CRUD (routes to Supabase when connected, fallback to backend API) ---
 
 async function addHolding(clientId) {
-    const type = document.getElementById('mgmt-asset-type').value;
     const price = parseFloat(document.getElementById('mgmt-price').value);
     const quantity = parseInt(document.getElementById('mgmt-qty').value);
 
     if (!price || price <= 0) { alert('נא להזין מחיר קנייה תקין'); return; }
     if (!quantity || quantity <= 0) { alert('נא להזין כמות תקינה'); return; }
 
-    let holdingData = { type, price, quantity };
+    // Ticker is always from the unified search (stocks, bonds, funds all go through it)
+    const ticker = (document.getElementById('mgmt-ticker-symbol')?.value || '').toUpperCase().trim();
+    if (!ticker) { alert('נא לבחור נכס מתוך תוצאות החיפוש'); return; }
 
-    if (type === 'stock' || type === 'fund') {
-        const ticker = (document.getElementById('mgmt-ticker-symbol')?.value || '').toUpperCase().trim();
-        if (!ticker) { alert('נא לבחור נכס מתוך תוצאות החיפוש'); return; }
-        holdingData.ticker = ticker;
-        holdingData.currency = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
-        holdingData.stockName = document.getElementById('mgmt-ticker-name')?.value || ticker;
-    } else {
-        const bondName = (document.getElementById('mgmt-bondname').value || '').trim();
-        if (!bondName) { alert('נא להזין שם אג"ח'); return; }
-        holdingData.bondName = bondName;
+    // Auto-detected type from selectSearchResult (stored in hidden field)
+    const type = document.getElementById('mgmt-asset-type').value || 'stock';
+    const currency = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
+    const stockName = document.getElementById('mgmt-ticker-name')?.value || ticker;
+
+    let holdingData = { type, price, quantity, ticker, currency, stockName };
+
+    // For bonds: also pass bond-specific fields
+    if (type === 'bond') {
+        holdingData.bondName = document.getElementById('mgmt-bondname')?.value?.trim() || stockName;
         holdingData.assetClass = document.getElementById('mgmt-asset-class')?.value || 'Gov Bond';
     }
 
