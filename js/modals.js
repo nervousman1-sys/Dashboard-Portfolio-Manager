@@ -711,13 +711,13 @@ function updateDepositPreview() {
 let _lastSearchResultType = null;
 
 // Shared renderer for both main and row dropdowns
-// RTL 3-column grid: [Name (1fr)] [Ticker 80px] [Exchange 100px]
-function _renderSearchDropdown(results, dropdown) {
+// RTL 4-column grid: [Name (1fr)] [Ticker 70px] [Exchange 65px] [Price 70px]
+function _renderSearchDropdown(results, dropdown, fetchPrices) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
         return;
     }
-    dropdown.innerHTML = results.map(r => {
+    dropdown.innerHTML = results.map((r, i) => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const safeName = (r.name || '').replace(/'/g, "\\'");
         const exchangeLabel = r.exchange || '';
@@ -735,9 +735,11 @@ function _renderSearchDropdown(results, dropdown) {
                 </div>
                 <div class="search-col-ticker">${displayTicker}</div>
                 <div class="search-col-exchange">${exchangeLabel}</div>
+                <div class="search-col-price" id="slp_main_${i}"><span class="price-loading">···</span></div>
             </div>
         </div>`;
     }).join('');
+    if (fetchPrices) _fetchSearchResultPrices(results, 'main');
 }
 
 function _mergeLocalAndApiResults(localResults, apiResults) {
@@ -752,6 +754,35 @@ function _mergeLocalAndApiResults(localResults, apiResults) {
         if (!seen.has(key)) { seen.add(key); merged.push(r); }
     });
     return merged;
+}
+
+// Abort counter to cancel stale price fetches when user types again
+let _searchPriceAbortId = 0;
+
+async function _fetchSearchResultPrices(results, prefix) {
+    const batchId = ++_searchPriceAbortId;
+    const limit = Math.min(results.length, 5);
+    for (let i = 0; i < limit; i++) {
+        if (_searchPriceAbortId !== batchId) return; // cancelled
+        const r = results[i];
+        const el = document.getElementById(`slp_${prefix}_${i}`);
+        if (!el) continue;
+        try {
+            const currency = r.currency || 'USD';
+            const priceData = (typeof fetchSingleTickerPrice === 'function')
+                ? await fetchSingleTickerPrice(r.symbol, currency)
+                : null;
+            if (_searchPriceAbortId !== batchId) return; // cancelled
+            if (priceData && priceData.price > 0) {
+                const sym = (currency === 'ILS' || currency === 'ILA') ? '₪' : '$';
+                el.textContent = sym + priceData.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else {
+                el.textContent = '—';
+            }
+        } catch (e) {
+            if (el) el.textContent = '—';
+        }
+    }
 }
 
 function onTickerSearch() {
@@ -772,7 +803,7 @@ function onTickerSearch() {
     const localResults = [...localStocks, ...localBonds];
     dropdown.style.display = 'block';
     if (localResults.length > 0) {
-        _renderSearchDropdown(localResults, dropdown);
+        _renderSearchDropdown(localResults, dropdown, true);
     } else {
         dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
     }
@@ -780,7 +811,7 @@ function onTickerSearch() {
     tickerSearchTimeout = setTimeout(async () => {
         const apiResults = await searchTwelveDataSymbols(query);
         const merged = _mergeLocalAndApiResults(localResults, apiResults);
-        _renderSearchDropdown(merged, dropdown);
+        _renderSearchDropdown(merged, dropdown, true);
     }, 300);
 }
 
@@ -1250,12 +1281,12 @@ function clearRowTicker(rowId) {
     updateAddClientRisk();
 }
 
-function _renderRowSearchDropdown(results, dropdown, rowId) {
+function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices) {
     if (results.length === 0) {
         dropdown.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>';
         return;
     }
-    dropdown.innerHTML = results.map(r => {
+    dropdown.innerHTML = results.map((r, i) => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const exchangeLabel = r.exchange || '';
         const primaryLabel = heName || r.name || r.symbol;
@@ -1270,9 +1301,11 @@ function _renderRowSearchDropdown(results, dropdown, rowId) {
                 </div>
                 <div class="search-col-ticker">${displayTicker}</div>
                 <div class="search-col-exchange">${exchangeLabel}</div>
+                <div class="search-col-price" id="slp_row_${i}"><span class="price-loading">···</span></div>
             </div>
         </div>`;
     }).join('');
+    if (fetchPrices) _fetchSearchResultPrices(results, 'row');
 }
 
 function onRowTickerSearch(rowId) {
@@ -1296,7 +1329,7 @@ function onRowTickerSearch(rowId) {
     if (dropdown) {
         dropdown.style.display = 'block';
         if (localResults.length > 0) {
-            _renderRowSearchDropdown(localResults, dropdown, rowId);
+            _renderRowSearchDropdown(localResults, dropdown, rowId, true);
         } else {
             dropdown.innerHTML = '<div class="ticker-search-loading">מחפש...</div>';
         }
@@ -1306,7 +1339,7 @@ function onRowTickerSearch(rowId) {
         const apiResults = await searchTwelveDataSymbols(query);
         if (!dropdown) return;
         const merged = _mergeLocalAndApiResults(localResults, apiResults);
-        _renderRowSearchDropdown(merged, dropdown, rowId);
+        _renderRowSearchDropdown(merged, dropdown, rowId, true);
     }, 300);
 }
 
