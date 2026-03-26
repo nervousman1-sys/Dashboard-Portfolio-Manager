@@ -1439,9 +1439,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         return { x, y: p.value };
     });
 
-    const firstVal = usePercentMode ? portfolioPoints[0].y : (portfolioPoints[0].y || 1);
-    const lastVal = portfolioPoints[portfolioPoints.length - 1].y || 0;
-    const isPositive = lastVal >= firstVal;
+    // Chart color based on actual portfolio return, not history endpoints
+    const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const mainColor = isPositive ? COLORS.profit : COLORS.loss;
     const fillColor = isPositive ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
 

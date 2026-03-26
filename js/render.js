@@ -228,15 +228,19 @@ async function _renderCardSparkline(client, renderKey) {
         return;
     }
 
+    // Anchor last point to actual current portfolio value (not stale API close)
+    if (hist.length >= 2 && client.portfolioValue > 0) {
+        hist[hist.length - 1].value = client.portfolioValue;
+    }
+
     // Destroy any existing chart on this canvas
     _safeDestroyChart(`perf-${client.id}`);
     _destroyChartOnCanvas(perfCtx);
     _clearCanvas(perfCtx);
     perfCtx.style.display = '';
 
-    const firstVal = hist[0]?.value || 0;
-    const lastVal = hist[hist.length - 1]?.value || 0;
-    const isPositive = lastVal >= firstVal;
+    // Chart color based on actual portfolio return, not history endpoints
+    const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const lineColor = isPositive ? '#22c55e' : '#ef4444';
     const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
 

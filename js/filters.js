@@ -197,6 +197,11 @@ async function setCardTimeRange(clientId, range, btn) {
 
     if (!hist || hist.length < 2) return;
 
+    // Anchor last point to actual current portfolio value
+    if (hist.length >= 2 && client.portfolioValue > 0) {
+        hist[hist.length - 1].value = client.portfolioValue;
+    }
+
     _safeDestroyChart(`perf-${clientId}`);
 
     const perfCtx = document.getElementById(`perf-${clientId}`);
@@ -205,9 +210,8 @@ async function setCardTimeRange(clientId, range, btn) {
     _destroyChartOnCanvas(perfCtx);
     _clearCanvas(perfCtx);
 
-    const firstVal = hist[0]?.value || 0;
-    const lastVal = hist[hist.length - 1]?.value || 0;
-    const isPositive = lastVal >= firstVal;
+    // Chart color based on actual portfolio return, not history endpoints
+    const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const lineColor = isPositive ? COLORS.profit : COLORS.loss;
     const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
 
