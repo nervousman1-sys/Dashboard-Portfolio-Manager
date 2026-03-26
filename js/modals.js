@@ -504,11 +504,11 @@ function openMgmtModal(action, data) {
                     <table class="mgmt-holdings-table" id="mgmt-holdings-table">
                         <thead>
                             <tr>
-                                <th style="width:32%">סימול</th>
-                                <th style="width:15%">כמות</th>
-                                <th style="width:20%" id="addPortfolio-price-header">מחיר קנייה ($)</th>
-                                <th style="width:22%">מחיר נוכחי</th>
-                                <th style="width:11%"></th>
+                                <th style="width:30%">סימול</th>
+                                <th style="width:20%">כמות</th>
+                                <th style="width:18%" id="addPortfolio-price-header">מחיר קנייה ($)</th>
+                                <th style="width:20%">מחיר נוכחי</th>
+                                <th style="width:12%"></th>
                             </tr>
                         </thead>
                         <tbody id="mgmt-holdings-tbody"></tbody>

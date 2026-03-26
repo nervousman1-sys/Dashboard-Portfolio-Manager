@@ -2140,7 +2140,8 @@ body {
 }
 .mgmt-holdings-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 12px;
     margin-bottom: 8px;
 }
@@ -2177,6 +2178,15 @@ body {
 .mgmt-holdings-table input:focus {
     outline: none;
     border-color: var(--accent-blue);
+}
+.mgmt-holdings-table .row-shares {
+    min-width: 110px;
+    direction: ltr;
+    text-align: left;
+}
+.mgmt-holdings-table td:has(.row-shares) {
+    overflow: visible;
+    white-space: nowrap;
 }
 
 /* Row ticker search */
