@@ -39,6 +39,7 @@ function updateRiskMiniSummary(filteredClients) {
         return;
     }
 
+    const total = filteredClients.length;
     let high = 0, medium = 0, low = 0;
     filteredClients.forEach(c => {
         if (c.risk === 'high') high++;
@@ -46,12 +47,13 @@ function updateRiskMiniSummary(filteredClients) {
         else if (c.risk === 'low') low++;
     });
 
-    const items = [];
-    if (high > 0)   items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#ef4444"></span>סיכון גבוה: <strong>${high}</strong> תיקים</span>`);
-    if (medium > 0)  items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#f59e0b"></span>סיכון בינוני: <strong>${medium}</strong> תיקים</span>`);
-    if (low > 0)    items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#10b981"></span>סיכון נמוך: <strong>${low}</strong> תיקים</span>`);
+    const pct = (n) => total > 0 ? (n / total * 100).toFixed(0) : '0';
 
-    el.innerHTML = items.join('');
+    el.innerHTML = `
+        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-high"></span>סיכון גבוה: <strong>${high}</strong> תיקים (${pct(high)}%)</span>
+        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-medium"></span>סיכון בינוני: <strong>${medium}</strong> תיקים (${pct(medium)}%)</span>
+        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-low"></span>סיכון נמוך: <strong>${low}</strong> תיקים (${pct(low)}%)</span>
+    `;
 }
 
 // ========== EXPOSURE ==========
@@ -284,7 +286,7 @@ function renderSummaryBar() {
             <div class="summary-main">
                 <div class="summary-card-large"><div class="label">סך נכסים מנוהלים</div><div class="value" style="color: var(--color-neutral)">$0</div><div class="sub">0 תיקים פעילים</div></div>
                 <div class="summary-card-large"><div class="label">רווח / הפסד כולל</div><div class="value price-change">$0</div><div class="sub">תשואה: 0.00%</div></div>
-                <div class="summary-card-large"><div class="label">תיקים פעילים</div><div class="value" style="color: var(--text-primary)">0</div><div class="sub">גבוה: 0 | בינוני: 0 | נמוך: 0</div></div>
+                <div class="summary-card-large"><div class="label">תיקים פעילים</div><div class="value" style="color: var(--text-primary)">0</div></div>
                 <div class="summary-card-large"><div class="label">תשואה ממוצעת</div><div class="value price-change">0.00%</div><div class="sub">ממוצע משוקלל</div></div>
             </div>
         `;
@@ -340,7 +342,6 @@ function renderSummaryBar() {
             <div class="summary-card-large">
                 <div class="label">תיקים פעילים</div>
                 <div class="value" style="color: var(--text-primary)">${clients.length}</div>
-                <div class="sub">גבוה: ${highClients.length} | בינוני: ${medClients.length} | נמוך: ${lowClients.length}</div>
             </div>
             <div class="summary-card-large">
                 <div class="label">תשואה ממוצעת</div>
