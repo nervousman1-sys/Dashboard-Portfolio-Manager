@@ -339,7 +339,7 @@ async function _loadTransactionHistory(portfolioId) {
             rows += `<tr>
                 <td>${dateStr}</td>
                 <td><span class="transaction-badge ${t.type}">${typeLabel}</span></td>
-                <td style="font-weight:600;color:var(--text-primary)">${t.ticker !== '-' ? t.ticker : ''}</td>
+                <td style="font-weight:600;color:var(--text-primary)">${t.name || (t.ticker !== '-' ? t.ticker : '')}</td>
                 <td>${sharesDisplay}</td>
                 <td>${priceDisplay}</td>
                 <td style="font-weight:600">${totalDisplay}</td>
@@ -910,9 +910,18 @@ function _renderSearchDropdown(results, dropdown, fetchPrices) {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const safeName = (r.name || '').replace(/'/g, "\\'");
         const exchangeLabel = r.exchange || '';
-        const primaryLabel = heName || r.name || r.symbol;
-        const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
-        const bondTag = r.type === 'Bond' ? '<span class="search-bond-tag">אג"ח</span>' : '';
+        const isBond = r.type === 'Bond';
+        // Bonds: English name is primary ("Galil 0523"), Hebrew is secondary ("גליל (צמוד מדד)")
+        // Stocks: Hebrew name is primary ("Bank Leumi"), English/ticker is secondary
+        let primaryLabel, secondaryLabel;
+        if (isBond) {
+            primaryLabel = r.name || r.symbol;
+            secondaryLabel = heName && heName !== r.name ? heName : '';
+        } else {
+            primaryLabel = heName || r.name || r.symbol;
+            secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
+        }
+        const bondTag = isBond ? '<span class="search-bond-tag">אג"ח</span>' : '';
         const rType = r.type || 'Common Stock';
         // Show .TA suffix for TASE stocks in the display ticker
         const displayTicker = (exchangeLabel === 'TASE' && !r.symbol.includes('.TA')) ? r.symbol + '.TA' : r.symbol;
@@ -943,6 +952,28 @@ function _mergeLocalAndApiResults(localResults, apiResults) {
         if (!seen.has(key)) { seen.add(key); merged.push(r); }
     });
     return merged;
+}
+
+// Sort search results by relevance: name starts with query > name contains query > rest.
+// Within each tier, local matches (bonds/Hebrew) appear before API results.
+function _sortSearchResults(results, query) {
+    if (!query || results.length <= 1) return results;
+    const q = query.trim().toLowerCase();
+    return results.slice().sort((a, b) => {
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
+        const aStarts = aName.startsWith(q) ? 0 : 1;
+        const bStarts = bName.startsWith(q) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        // Within same tier, local matches first
+        const aLocal = a._localMatch ? 0 : 1;
+        const bLocal = b._localMatch ? 0 : 1;
+        if (aLocal !== bLocal) return aLocal - bLocal;
+        // Then by name contains query
+        const aContains = aName.includes(q) ? 0 : 1;
+        const bContains = bName.includes(q) ? 0 : 1;
+        return aContains - bContains;
+    });
 }
 
 // Abort counter to cancel stale price fetches when user types again
@@ -989,7 +1020,7 @@ function onTickerSearch() {
     // Instantly show local Hebrew + bond matches while API loads
     const localStocks = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
     const localBonds = (typeof searchLocalBonds === 'function') ? searchLocalBonds(query) : [];
-    const localResults = [...localStocks, ...localBonds];
+    const localResults = _sortSearchResults([...localStocks, ...localBonds], query);
     dropdown.style.display = 'block';
     if (localResults.length > 0) {
         _renderSearchDropdown(localResults, dropdown, true);
@@ -999,7 +1030,7 @@ function onTickerSearch() {
 
     tickerSearchTimeout = setTimeout(async () => {
         const apiResults = await searchTwelveDataSymbols(query);
-        const merged = _mergeLocalAndApiResults(localResults, apiResults);
+        const merged = _sortSearchResults(_mergeLocalAndApiResults(localResults, apiResults), query);
         _renderSearchDropdown(merged, dropdown, true);
     }, 300);
 }
@@ -1509,9 +1540,16 @@ function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices) {
     dropdown.innerHTML = results.map((r, i) => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
         const exchangeLabel = r.exchange || '';
-        const primaryLabel = heName || r.name || r.symbol;
-        const secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
-        const bondTag = r.type === 'Bond' ? '<span class="search-bond-tag">אג"ח</span>' : '';
+        const isBond = r.type === 'Bond';
+        let primaryLabel, secondaryLabel;
+        if (isBond) {
+            primaryLabel = r.name || r.symbol;
+            secondaryLabel = heName && heName !== r.name ? heName : '';
+        } else {
+            primaryLabel = heName || r.name || r.symbol;
+            secondaryLabel = heName && r.name && heName !== r.name ? r.name : '';
+        }
+        const bondTag = isBond ? '<span class="search-bond-tag">אג"ח</span>' : '';
         const displayTicker = (exchangeLabel === 'TASE' && !r.symbol.includes('.TA')) ? r.symbol + '.TA' : r.symbol;
         return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
             <div class="search-row-grid">
@@ -1545,7 +1583,7 @@ function onRowTickerSearch(rowId) {
     // Instantly show local Hebrew + bond matches
     const localStocks = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
     const localBonds = (typeof searchLocalBonds === 'function') ? searchLocalBonds(query) : [];
-    const localResults = [...localStocks, ...localBonds];
+    const localResults = _sortSearchResults([...localStocks, ...localBonds], query);
     if (dropdown) {
         dropdown.style.display = 'block';
         if (localResults.length > 0) {
@@ -1558,7 +1596,7 @@ function onRowTickerSearch(rowId) {
     _rowSearchTimeouts[rowId] = setTimeout(async () => {
         const apiResults = await searchTwelveDataSymbols(query);
         if (!dropdown) return;
-        const merged = _mergeLocalAndApiResults(localResults, apiResults);
+        const merged = _sortSearchResults(_mergeLocalAndApiResults(localResults, apiResults), query);
         _renderRowSearchDropdown(merged, dropdown, rowId, true);
     }, 300);
 }
