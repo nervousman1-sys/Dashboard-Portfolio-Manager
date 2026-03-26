@@ -1168,7 +1168,8 @@ body {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 750px; /* prevent column crush inside narrow modals */
+    min-width: 820px; /* prevent column crush inside narrow modals */
+    table-layout: fixed; /* CRITICAL: forces browser to respect colgroup widths */
 }
 
 .holdings-table th {
@@ -2277,24 +2278,25 @@ body {
 
 /* ========== QUANTITY DISPLAY ========== */
 
-/* LTR number rendering inside RTL document.
-   direction:ltr prevents the bidi algorithm from reordering/truncating
-   trailing zeros (e.g. "100,000" → "1,000") in a dir=rtl context. */
-.qty-display {
+/* Bulletproof LTR number rendering inside RTL (dir=rtl) document.
+   Without direction:ltr, the bidi algorithm reorders digits so that
+   trailing zeros in "100,000" get pushed out of the visible cell,
+   making it appear as "1,000". */
+.force-qty {
     direction: ltr !important;
-    unicode-bidi: bidi-override;
-    white-space: nowrap !important;
-    display: block;
+    display: inline-block;
+    width: 100%;
     text-align: right;
+    white-space: nowrap !important;
     font-variant-numeric: tabular-nums;
-    overflow: visible !important;
+    letter-spacing: -0.2px;
 }
 
-/* Parent cell — ensure it never clips its contents */
+/* Parent cell — overflow visible + generous min-width */
 td[data-label="כמות"], .col-quantity {
     overflow: visible !important;
     text-overflow: clip !important;
-    min-width: 100px !important;
+    min-width: 120px !important;
     white-space: nowrap !important;
 }
 
