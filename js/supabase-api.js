@@ -802,11 +802,47 @@ async function supaRecordPerformanceSnapshot(clientId) {
 // Optimistic: assume table exists. _probeTransactionsTable() will disable if not found.
 let _supaTransactionsAvailable = true;
 let _supaTransactionsProbed = false;
+let _lastProbeTime = 0;
 
-// Probe the transactions table once per session. If it doesn't exist, fall back to localStorage.
-async function _probeTransactionsTable() {
-    if (_supaTransactionsProbed) return _supaTransactionsAvailable;
+const _TRANSACTIONS_CREATE_SQL =
+    'CREATE TABLE IF NOT EXISTS transactions (\n' +
+    '  id BIGSERIAL PRIMARY KEY,\n' +
+    '  portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,\n' +
+    '  created_at TIMESTAMPTZ DEFAULT NOW(),\n' +
+    '  type TEXT NOT NULL,\n' +
+    '  ticker TEXT DEFAULT \'-\',\n' +
+    '  name TEXT DEFAULT \'\',\n' +
+    '  asset_type TEXT DEFAULT \'stock\',\n' +
+    '  currency TEXT DEFAULT \'USD\',\n' +
+    '  shares NUMERIC DEFAULT 0,\n' +
+    '  price NUMERIC DEFAULT 0,\n' +
+    '  total NUMERIC DEFAULT 0,\n' +
+    '  realized_pnl NUMERIC DEFAULT NULL,\n' +
+    '  description TEXT DEFAULT NULL\n' +
+    ');\n\n' +
+    'ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;\n\n' +
+    'CREATE POLICY "Users can manage their portfolio transactions"\n' +
+    '  ON transactions FOR ALL\n' +
+    '  USING (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()))\n' +
+    '  WITH CHECK (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()));';
+
+// Probe the transactions table. Can be called multiple times — re-probes if table was unavailable
+// and at least 10 seconds have passed since the last probe attempt.
+async function _probeTransactionsTable(forceReprobe = false) {
+    const now = Date.now();
+
+    // Skip re-probe if already available and probed
+    if (_supaTransactionsProbed && _supaTransactionsAvailable && !forceReprobe) {
+        return true;
+    }
+
+    // Throttle re-probes to every 10 seconds to avoid hammering the DB
+    if (_supaTransactionsProbed && !forceReprobe && (now - _lastProbeTime) < 10000) {
+        return _supaTransactionsAvailable;
+    }
+
     _supaTransactionsProbed = true;
+    _lastProbeTime = now;
 
     try {
         const { error } = await supabaseClient
@@ -817,31 +853,7 @@ async function _probeTransactionsTable() {
         if (error) {
             _supaTransactionsAvailable = false;
             console.warn('[Transactions] Supabase table not available:', error.message);
-            console.info(
-                '[Transactions] To create the table, run this SQL in Supabase SQL Editor:\n\n' +
-                'CREATE TABLE IF NOT EXISTS transactions (\n' +
-                '  id BIGSERIAL PRIMARY KEY,\n' +
-                '  portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,\n' +
-                '  created_at TIMESTAMPTZ DEFAULT NOW(),\n' +
-                '  type TEXT NOT NULL,\n' +
-                '  ticker TEXT DEFAULT \'-\',\n' +
-                '  name TEXT DEFAULT \'\',\n' +
-                '  asset_type TEXT DEFAULT \'stock\',\n' +
-                '  currency TEXT DEFAULT \'USD\',\n' +
-                '  shares NUMERIC DEFAULT 0,\n' +
-                '  price NUMERIC DEFAULT 0,\n' +
-                '  total NUMERIC DEFAULT 0,\n' +
-                '  realized_pnl NUMERIC DEFAULT NULL,\n' +
-                '  description TEXT DEFAULT NULL\n' +
-                ');\n\n' +
-                '-- If table already exists, add currency column:\n' +
-                '-- ALTER TABLE transactions ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT \'USD\';\n\n' +
-                'ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;\n\n' +
-                'CREATE POLICY "Users can manage their portfolio transactions"\n' +
-                '  ON transactions FOR ALL\n' +
-                '  USING (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()))\n' +
-                '  WITH CHECK (portfolio_id IN (SELECT id FROM portfolios WHERE user_id = auth.uid()));'
-            );
+            console.info('[Transactions] To create the table, run this SQL in Supabase SQL Editor:\n\n' + _TRANSACTIONS_CREATE_SQL);
         } else {
             _supaTransactionsAvailable = true;
             console.log('[Transactions] Supabase table available — persistent history enabled');
@@ -974,8 +986,12 @@ function _clearLocalTransactions(portfolioId) {
 // The caller MUST check the result — if persisted is false, the UI should roll back.
 
 async function supaLogTransaction(portfolioId, txData) {
+    // Re-probe if table was previously unavailable — it may have been created since
     if (!_supaTransactionsAvailable) {
-        if (typeof _showSyncToast === 'function') _showSyncToast('טבלת פעולות לא זמינה', 'error');
+        await _probeTransactionsTable(true);
+    }
+    if (!_supaTransactionsAvailable) {
+        if (typeof _showSyncToast === 'function') _showSyncToast('טבלת פעולות לא זמינה — ראה קונסול להוראות יצירה', 'error');
         return { persisted: false, error: 'table_unavailable' };
     }
 
@@ -1032,7 +1048,15 @@ async function supaLogTransaction(portfolioId, txData) {
 // ── DATABASE-FIRST: Fetch transactions from Supabase (single source of truth) ──
 
 async function supaFetchTransactions(portfolioId) {
-    if (!_supaTransactionsAvailable) return [];
+    // Re-probe if table was previously unavailable
+    if (!_supaTransactionsAvailable) {
+        await _probeTransactionsTable(true);
+    }
+    if (!_supaTransactionsAvailable) {
+        const empty = [];
+        empty.unavailable = true;
+        return empty;
+    }
 
     try {
         const { data, error } = await supabaseClient

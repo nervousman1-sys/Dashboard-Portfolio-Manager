@@ -298,6 +298,22 @@ async function _loadTransactionHistory(portfolioId) {
     try {
         const transactions = supabaseConnected ? await supaFetchTransactions(portfolioId) : [];
 
+        // Table doesn't exist in Supabase — show setup instructions with retry
+        if (transactions.unavailable) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px">
+                <div style="color:var(--accent-red);font-weight:600;margin-bottom:8px">טבלת פעולות אינה זמינה</div>
+                <div style="color:var(--text-muted);font-size:13px;margin-bottom:12px;line-height:1.6">
+                    יש ליצור את הטבלה ב-Supabase SQL Editor.<br>
+                    פתח את הקונסול (F12) להוראות מלאות.
+                </div>
+                <button onclick="_retryTransactionLoad(${portfolioId})" style="
+                    background:var(--accent-blue);color:#fff;border:none;border-radius:8px;
+                    padding:8px 20px;cursor:pointer;font-size:13px;font-weight:600;
+                ">נסה שוב</button>
+            </td></tr>`;
+            return;
+        }
+
         if (transactions.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">אין היסטוריית פעולות</td></tr>';
             return;
@@ -333,8 +349,28 @@ async function _loadTransactionHistory(portfolioId) {
         tbody.innerHTML = rows;
     } catch (e) {
         console.warn('[Modal] Transaction fetch failed:', e.message);
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--accent-red);padding:24px">שגיאה בטעינת היסטוריית פעולות</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px">
+            <div style="color:var(--accent-red);margin-bottom:8px">שגיאה בטעינת היסטוריית פעולות</div>
+            <button onclick="_retryTransactionLoad(${portfolioId})" style="
+                background:var(--accent-blue);color:#fff;border:none;border-radius:8px;
+                padding:8px 16px;cursor:pointer;font-size:13px;
+            ">נסה שוב</button>
+        </td></tr>`;
     }
+}
+
+// Retry handler for the "try again" button in the transactions tab
+async function _retryTransactionLoad(portfolioId) {
+    const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px">
+            <div class="trans-skeleton"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:8px">מנסה להתחבר מחדש...</div>
+        </td></tr>`;
+    }
+    // Force re-probe then reload
+    await _probeTransactionsTable(true);
+    await _loadTransactionHistory(portfolioId);
 }
 
 function closeModal(event) {
