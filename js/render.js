@@ -2,14 +2,14 @@
 
 // ========== QUANTITY FORMATTING ==========
 
-// Display-only: returns an LTR span that prevents RTL digit reordering/truncation.
+// Display-only: returns an LTR block span that prevents RTL digit reordering/truncation.
 // Uses toLocaleString for full comma-separated display — never truncates the number.
 function formatAssetQuantity(qty) {
-    if (qty == null || isNaN(qty)) return '<span class="qty-fix" title="0">0</span>';
+    if (qty == null || isNaN(qty)) return '<span class="qty-display" title="0">0</span>';
     const num = Number(qty);
     const decimals = num % 1 !== 0 ? (num < 1 ? 6 : 2) : 0;
     const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals, useGrouping: true });
-    return `<span class="qty-fix" title="${num}">${formatted}</span>`;
+    return `<span class="qty-display" title="${num}">${formatted}</span>`;
 }
 
 // Hebrew description for live input preview: "כמות: 1,500,000 → 1.5 מיליון יחידות"

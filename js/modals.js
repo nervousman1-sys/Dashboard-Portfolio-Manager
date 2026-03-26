@@ -221,6 +221,17 @@ async function openModal(clientId) {
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
                 <div class="holdings-table-wrapper">
                 <table class="holdings-table">
+                    <colgroup>
+                        <col style="width:18%"><!-- נכס  (Asset) — untouched -->
+                        <col style="width:10%"><!-- מחיר קנייה -->
+                        <col style="width:10%"><!-- מחיר נוכחי — reduced -->
+                        <col style="width:12%"><!-- כמות — increased -->
+                        <col style="width:12%"><!-- שווי כולל -->
+                        <col style="width:9%"><!-- שינוי יומי -->
+                        <col style="width:10%"><!-- רווח/הפסד -->
+                        <col style="width:8%"><!-- תשואה -->
+                        <col style="width:11%"><!-- פעולות -->
+                    </colgroup>
                     <thead><tr><th>נכס</th><th>מחיר קנייה</th><th>מחיר נוכחי</th><th>כמות</th><th>שווי כולל</th><th>שינוי יומי</th><th>רווח/הפסד</th><th>תשואה</th><th>פעולות</th></tr></thead>
                     <tbody>${holdingsRows}${holdingsFooter}</tbody>
                 </table>

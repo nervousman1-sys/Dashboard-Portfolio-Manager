@@ -2277,24 +2277,25 @@ body {
 
 /* ========== QUANTITY DISPLAY ========== */
 
-/* Bulletproof LTR number rendering inside RTL document.
-   Forces digits to render left-to-right so trailing zeros
-   are never pushed out of bounds by the RTL bidi algorithm. */
-.qty-fix {
+/* LTR number rendering inside RTL document.
+   direction:ltr prevents the bidi algorithm from reordering/truncating
+   trailing zeros (e.g. "100,000" → "1,000") in a dir=rtl context. */
+.qty-display {
     direction: ltr !important;
-    text-align: right !important;
+    unicode-bidi: bidi-override;
     white-space: nowrap !important;
-    display: inline-block !important;
-    min-width: fit-content !important;
-    overflow: visible !important;
+    display: block;
+    text-align: right;
     font-variant-numeric: tabular-nums;
+    overflow: visible !important;
 }
 
-/* Parent cell: ensure it doesn't clip the qty-fix span */
+/* Parent cell — ensure it never clips its contents */
 td[data-label="כמות"], .col-quantity {
     overflow: visible !important;
     text-overflow: clip !important;
-    min-width: 85px !important;
+    min-width: 100px !important;
+    white-space: nowrap !important;
 }
 
 .qty-live-preview {
