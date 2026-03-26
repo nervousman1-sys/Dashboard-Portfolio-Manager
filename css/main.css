@@ -2330,3 +2330,25 @@ body {
     direction: rtl;
     text-align: right;
 }
+
+/* ========== TRANSACTION LOADING SKELETON ========== */
+.trans-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+.skeleton-row {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg-primary) 25%, rgba(100, 116, 139, 0.15) 50%, var(--bg-primary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-row:nth-child(1) { width: 85%; }
+.skeleton-row:nth-child(2) { width: 70%; }
+.skeleton-row:nth-child(3) { width: 55%; }
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}

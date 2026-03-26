@@ -827,12 +827,15 @@ async function _probeTransactionsTable() {
                 '  ticker TEXT DEFAULT \'-\',\n' +
                 '  name TEXT DEFAULT \'\',\n' +
                 '  asset_type TEXT DEFAULT \'stock\',\n' +
+                '  currency TEXT DEFAULT \'USD\',\n' +
                 '  shares NUMERIC DEFAULT 0,\n' +
                 '  price NUMERIC DEFAULT 0,\n' +
                 '  total NUMERIC DEFAULT 0,\n' +
                 '  realized_pnl NUMERIC DEFAULT NULL,\n' +
                 '  description TEXT DEFAULT NULL\n' +
                 ');\n\n' +
+                '-- If table already exists, add currency column:\n' +
+                '-- ALTER TABLE transactions ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT \'USD\';\n\n' +
                 'ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;\n\n' +
                 'CREATE POLICY "Users can manage their portfolio transactions"\n' +
                 '  ON transactions FOR ALL\n' +
@@ -893,6 +896,7 @@ async function _migrateLocalTransactions() {
                 ticker: t.ticker || '-',
                 name: t.name || '',
                 asset_type: t.asset_type || 'stock',
+                currency: t.currency || 'USD',
                 shares: t.shares ?? 0,
                 price: t.price ?? 0,
                 total: t.total ?? 0,
@@ -1098,6 +1102,7 @@ function mapTransaction(t) {
         ticker: t.ticker || '-',
         name: t.name || '',
         assetType: t.asset_type || '',
+        currency: t.currency || 'USD',
         shares: t.shares || 0,
         price: t.price || 0,
         total: t.total || 0,

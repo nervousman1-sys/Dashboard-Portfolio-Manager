@@ -117,37 +117,14 @@ async function openModal(clientId) {
         sectorRows += `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-left:6px"></span>${sector}</td><td>${formatCurrency(value)}</td><td>${pct}%</td></tr>`;
     });
 
-    // Transaction history — fetch from Supabase
-    const transactions = supabaseConnected ? await supaFetchTransactions(client.id) : [];
-    let transRows = '';
-    if (transactions.length === 0) {
-        transRows = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">אין היסטוריית פעולות</td></tr>';
-    }
-    transactions.forEach(t => {
-        const dateStr = t.date.toLocaleDateString('he-IL');
-        const TYPE_LABEL_MAP = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
-        const typeLabel = TYPE_LABEL_MAP[t.type] || t.type;
-        let pnlCell = '-';
-        if (t.type === 'sell' && t.realizedPnl !== null && t.realizedPnl !== undefined) {
-            const pnlClass = t.realizedPnl >= 0 ? 'positive' : 'negative';
-            const pnlSign = t.realizedPnl >= 0 ? '+' : '';
-            pnlCell = `<span class="price-change ${pnlClass}">${pnlSign}${formatCurrency(Math.abs(t.realizedPnl))}</span>`;
-        } else if (t.description) {
-            pnlCell = `<span style="color:var(--text-muted);font-size:12px">${t.description}</span>`;
-        }
-        const sharesDisplay = t.shares > 0 ? Number(t.shares).toLocaleString('en-US') : '-';
-        const priceDisplay = t.price > 0 ? `${t.price.toFixed(2)} $` : '-';
-        const totalDisplay = t.total > 0 ? formatCurrency(t.total) : '-';
-        transRows += `<tr>
-            <td>${dateStr}</td>
-            <td><span class="transaction-badge ${t.type}">${typeLabel}</span></td>
-            <td style="font-weight:600;color:var(--text-primary)">${t.ticker !== '-' ? t.ticker : ''}</td>
-            <td>${sharesDisplay}</td>
-            <td>${priceDisplay}</td>
-            <td style="font-weight:600">${totalDisplay}</td>
-            <td>${pnlCell}</td>
-        </tr>`;
-    });
+    // Transaction history — rendered asynchronously (does NOT block modal open)
+    // Skeleton placeholder is shown immediately; real data injected after fetch.
+    const transRows = `<tr id="trans-loading-row"><td colspan="7" style="text-align:center;padding:32px">
+        <div class="trans-skeleton">
+            <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
+        </div>
+        <div style="color:var(--text-muted);font-size:12px;margin-top:8px">טוען היסטוריית פעולות...</div>
+    </td></tr>`;
 
     document.getElementById('modalContent').innerHTML = `
         <div class="modal-header">
@@ -296,6 +273,56 @@ async function openModal(clientId) {
             _modalPerfChartInstance = inst;
         });
     }, 100);
+
+    // ── Async: Fetch transaction history from Supabase (non-blocking) ──
+    _loadTransactionHistory(client.id);
+}
+
+// Fetches transactions and injects rows into the already-rendered modal
+async function _loadTransactionHistory(portfolioId) {
+    const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
+    if (!tbody) return;
+
+    try {
+        const transactions = supabaseConnected ? await supaFetchTransactions(portfolioId) : [];
+
+        if (transactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">אין היסטוריית פעולות</td></tr>';
+            return;
+        }
+
+        let rows = '';
+        transactions.forEach(t => {
+            const dateStr = t.date.toLocaleDateString('he-IL');
+            const TYPE_LABEL_MAP = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
+            const typeLabel = TYPE_LABEL_MAP[t.type] || t.type;
+            let pnlCell = '-';
+            if (t.type === 'sell' && t.realizedPnl !== null && t.realizedPnl !== undefined) {
+                const pnlClass = t.realizedPnl >= 0 ? 'positive' : 'negative';
+                const pnlSign = t.realizedPnl >= 0 ? '+' : '';
+                pnlCell = `<span class="price-change ${pnlClass}">${pnlSign}${formatCurrency(Math.abs(t.realizedPnl))}</span>`;
+            } else if (t.description) {
+                pnlCell = `<span style="color:var(--text-muted);font-size:12px">${t.description}</span>`;
+            }
+            const currSym = t.currency === 'ILS' ? '₪' : '$';
+            const sharesDisplay = t.shares > 0 ? Number(t.shares).toLocaleString('en-US') : '-';
+            const priceDisplay = t.price > 0 ? `${t.price.toFixed(2)} ${currSym}` : '-';
+            const totalDisplay = t.total > 0 ? formatCurrency(t.total, t.currency) : '-';
+            rows += `<tr>
+                <td>${dateStr}</td>
+                <td><span class="transaction-badge ${t.type}">${typeLabel}</span></td>
+                <td style="font-weight:600;color:var(--text-primary)">${t.ticker !== '-' ? t.ticker : ''}</td>
+                <td>${sharesDisplay}</td>
+                <td>${priceDisplay}</td>
+                <td style="font-weight:600">${totalDisplay}</td>
+                <td>${pnlCell}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = rows;
+    } catch (e) {
+        console.warn('[Modal] Transaction fetch failed:', e.message);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--accent-red);padding:24px">שגיאה בטעינת היסטוריית פעולות</td></tr>';
+    }
 }
 
 function closeModal(event) {
