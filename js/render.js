@@ -16,14 +16,15 @@ function _formatShort(num) {
 }
 
 // Display-only: returns HTML with vertical qty-container > qty-main + qty-suffix
+// Uses toLocaleString for full comma-separated display — never truncates the number.
 function formatAssetQuantity(qty) {
-    if (qty == null || isNaN(qty)) return '<div class="qty-container"><span class="qty-main">0</span></div>';
+    if (qty == null || isNaN(qty)) return '<div class="qty-container" title="0"><span class="qty-main"><span class="qty-display">0</span></span></div>';
     const num = Number(qty);
     // Decimals: show only when non-zero; sub-1 values get up to 6 (crypto), others 2
     const decimals = num % 1 !== 0 ? (num < 1 ? 6 : 2) : 0;
-    const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals });
+    const formatted = num.toLocaleString('en-US', { maximumFractionDigits: decimals, useGrouping: true });
     const suffix = num >= 1000 ? `<span class="qty-suffix">(${_formatShort(num)})</span>` : '';
-    return `<div class="qty-container"><span class="qty-main">${formatted}</span>${suffix}</div>`;
+    return `<div class="qty-container" title="${num}"><span class="qty-main"><span class="qty-display">${formatted}</span></span>${suffix}</div>`;
 }
 
 // Hebrew description for live input preview: "כמות: 1,500,000 → 1.5 מיליון יחידות"

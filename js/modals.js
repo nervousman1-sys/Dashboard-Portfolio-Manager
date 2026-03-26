@@ -77,7 +77,7 @@ async function openModal(clientId) {
             </td>
             <td>${purchasePrice.toFixed(2)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
-            <td class="qty-cell">${formatAssetQuantity(h.shares)}</td>
+            <td class="qty-cell" data-label="כמות" title="${h.shares}">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
@@ -536,7 +536,7 @@ function openMgmtModal(action, data) {
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>${isStock ? 'סימול (Ticker)' : 'שם האג"ח'}</label><input type="text" id="mgmt-edit-name" value="${isStock ? h.ticker : h.name}" ${isStock ? 'style="direction:ltr;text-align:left"' : ''} /></div>
                 <div class="mgmt-field"><label>מחיר קנייה (${editCurrSymbol})</label><input type="number" id="mgmt-edit-price" step="0.01" min="0" value="${h.shares > 0 ? (h.costBasis / h.shares).toFixed(2) : h.price.toFixed(2)}" style="direction:ltr;text-align:left" /></div>
-                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" value="${h.shares}" style="direction:ltr;text-align:left" oninput="_updateQtyPreview('mgmt-edit-qty','mgmt-edit-qty-preview')" /><div class="qty-live-preview" id="mgmt-edit-qty-preview">${describeQuantity(h.shares)}</div></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" step="any" value="${h.shares}" style="direction:ltr;text-align:left" oninput="_updateQtyPreview('mgmt-edit-qty','mgmt-edit-qty-preview')" /><div class="qty-live-preview" id="mgmt-edit-qty-preview">${describeQuantity(h.shares)}</div></div>
             </div>
             <div class="mgmt-footer">
                 <button class="mgmt-btn primary" onclick="editHolding(${c.id}, ${holdingId})">שמור שינויים</button>
@@ -568,11 +568,11 @@ function openMgmtModal(action, data) {
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>מחיר שוק נוכחי</label><div class="mgmt-readonly">${h.price.toFixed(2)} ${currSymbol}</div></div>
                 <div class="mgmt-field"><label>עלות ממוצעת למניה</label><div class="mgmt-readonly">${avgCost.toFixed(2)} ${currSymbol}</div></div>
-                <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly qty-cell">${formatAssetQuantity(h.shares)}</div></div>
+                <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly qty-cell" title="${h.shares}">${formatAssetQuantity(h.shares)}</div></div>
                 <input type="hidden" id="mgmt-sell-avg-cost" value="${avgCost}" />
                 <input type="hidden" id="mgmt-sell-currency" value="${h.currency || 'USD'}" />
                 <div class="mgmt-field"><label>מחיר מכירה (${currSymbol})</label><input type="number" id="mgmt-sell-price" step="0.01" min="0.01" value="${h.price.toFixed(2)}" style="direction:ltr;text-align:left" oninput="updateSellSummary()" /></div>
-                <div class="mgmt-field"><label>כמות למכירה</label><input type="number" id="mgmt-sell-qty" min="1" max="${h.shares}" value="${h.shares}" style="direction:ltr;text-align:left" oninput="updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
+                <div class="mgmt-field"><label>כמות למכירה</label><input type="number" id="mgmt-sell-qty" min="1" step="any" max="${h.shares}" value="${h.shares}" style="direction:ltr;text-align:left" oninput="updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ תמורה:</span><span id="mgmt-sell-total" style="color:var(--accent-green);font-weight:700">${formatCurrency(h.price * h.shares, h.currency)}</span></div>
                     <div class="buy-cost-row"><span>רווח/הפסד ממומש:</span><span id="mgmt-sell-pnl" style="font-weight:700"></span></div>
@@ -1371,7 +1371,7 @@ function addHoldingRow(prefill = null) {
                 <div class="row-ticker-dropdown" id="dropdown_${rowId}"></div>
             </div>
         </td>
-        <td><input type="number" class="row-shares" min="1" value="${prefill?.shares || ''}" placeholder="0"
+        <td><input type="number" class="row-shares" min="1" step="any" value="${prefill?.shares || ''}" placeholder="0"
                    style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
         <td><input type="number" class="row-price" min="0" step="0.01" value="${prefill?.avgPrice || ''}" placeholder="0.00"
                    style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>

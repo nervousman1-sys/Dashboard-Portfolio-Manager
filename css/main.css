@@ -2270,6 +2270,13 @@ body {
 }
 
 /* ========== QUANTITY DISPLAY ========== */
+td[data-label="כמות"], .col-quantity, .qty-cell {
+    white-space: nowrap !important;
+    min-width: fit-content !important;
+    padding-left: 15px !important;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 .qty-container {
     display: flex;
     flex-direction: column;
@@ -2279,21 +2286,18 @@ body {
 .qty-main {
     font-weight: 500;
     color: var(--text-bright);
+    white-space: nowrap;
 }
 .qty-suffix {
     font-size: 0.75rem;
     color: var(--accent-blue);
     opacity: 0.8;
-}
-td[data-label="כמות"] {
-    min-width: 100px;
     white-space: nowrap;
 }
-.qty-cell {
+.qty-display {
+    display: inline-block;
     white-space: nowrap;
-    min-width: 100px;
-    direction: ltr;
-    text-align: left;
+    font-variant-numeric: tabular-nums;
 }
 .qty-live-preview {
     font-size: 11px;
