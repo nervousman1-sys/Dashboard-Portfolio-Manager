@@ -1168,8 +1168,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 820px; /* prevent column crush inside narrow modals */
-    table-layout: fixed; /* CRITICAL: forces browser to respect colgroup widths */
+    min-width: 820px;
 }
 
 .holdings-table th {
@@ -1183,11 +1182,39 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
+/* Column width hints — drive auto-layout via min-width on headers */
+.holdings-table .col-price {
+    min-width: 70px;
+    max-width: 90px;
+    padding: 10px 6px; /* tighter padding to free space */
+}
+.holdings-table .col-qty-header {
+    min-width: 110px;
+}
+.holdings-table .col-pct {
+    min-width: 60px;
+    max-width: 85px;
+    padding: 10px 6px;
+}
+
 .holdings-table td {
     padding: 10px 12px;
     border-bottom: 1px solid rgba(51, 65, 85, 0.3);
     color: var(--text-secondary);
     white-space: nowrap;
+}
+
+/* Price cells — tighter padding to match headers */
+.holdings-table td:nth-child(2),
+.holdings-table td:nth-child(3) {
+    padding: 10px 6px;
+    font-size: 12px;
+}
+
+/* Percentage cells — tighter */
+.holdings-table td:nth-child(6),
+.holdings-table td:nth-child(8) {
+    padding: 10px 6px;
 }
 
 .holdings-table tr:hover td {
@@ -2278,25 +2305,26 @@ body {
 
 /* ========== QUANTITY DISPLAY ========== */
 
-/* Bulletproof LTR number rendering inside RTL (dir=rtl) document.
-   Without direction:ltr, the bidi algorithm reorders digits so that
-   trailing zeros in "100,000" get pushed out of the visible cell,
-   making it appear as "1,000". */
-.force-qty {
+/* Nuclear fix for LTR numbers inside RTL (dir=rtl) document.
+   direction:ltr + unicode-bidi:bidi-override forces every character
+   to render strictly left-to-right, preventing the bidi algorithm
+   from reordering digits and clipping trailing zeros. */
+.qty-display-fixed {
     direction: ltr !important;
-    display: inline-block;
-    width: 100%;
+    unicode-bidi: bidi-override;
+    display: block;
+    width: 100% !important;
     text-align: right;
     white-space: nowrap !important;
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.2px;
+    overflow: visible !important;
+    padding-left: 5px;
 }
 
-/* Parent cell — overflow visible + generous min-width */
-td[data-label="כמות"], .col-quantity {
+/* Parent cell — ensure it never clips the number span */
+.col-quantity {
     overflow: visible !important;
-    text-overflow: clip !important;
-    min-width: 120px !important;
+    min-width: 110px !important;
     white-space: nowrap !important;
 }
 
