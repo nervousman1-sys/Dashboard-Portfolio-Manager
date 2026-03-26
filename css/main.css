@@ -1590,6 +1590,193 @@ body {
 .macro-card-time {
     font-size: 12px;
     color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Tabs */
+.macro-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+}
+
+.macro-tab {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.macro-tab:hover {
+    color: var(--text-primary);
+}
+
+.macro-tab.active {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+}
+
+.macro-tab-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    padding: 1px 7px;
+    border-radius: 8px;
+}
+
+.macro-tab-badge {
+    font-size: 10px;
+    color: white;
+    background: var(--accent-red);
+    padding: 1px 7px;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.macro-source-info {
+    margin-bottom: 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* Live badge */
+.macro-live-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+/* Beat/Miss sentiment */
+.macro-sentiment {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.macro-beat {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.macro-miss {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* News grid */
+.macro-news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 20px;
+}
+
+.macro-news-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+}
+
+.macro-news-image {
+    height: 160px;
+    background-size: cover;
+    background-position: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.macro-news-body {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.macro-news-headline {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.macro-news-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 12px;
+    flex: 1;
+}
+
+.macro-news-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.macro-news-link {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: 600;
+    margin-inline-start: auto;
+}
+
+.macro-news-link:hover {
+    text-decoration: underline;
+}
+
+/* Empty state */
+.macro-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.macro-empty-icon {
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.macro-empty-text {
+    font-size: 18px;
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.macro-empty-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* Loading state */
+.macro-loading {
+    padding: 40px 0;
 }
 
 .alert-count {
@@ -1685,6 +1872,31 @@ body {
 
     .modal-stats {
         grid-template-columns: 1fr;
+    }
+
+    .macro-page-header {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .macro-content {
+        padding: 16px;
+    }
+
+    .macro-grid,
+    .macro-news-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .macro-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .macro-news-image {
+        height: 120px;
     }
 }
 

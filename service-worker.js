@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v117';
+const CACHE_NAME = 'portfolio-dashboard-v118';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -72,7 +72,8 @@ const NETWORK_FIRST_FILES = [
     'render.js',
     'synthetic-history.js',
     'filters.js',
-    'modals.js'
+    'modals.js',
+    'macro.js'
 ];
 
 // Check if a URL matches a network-first file
