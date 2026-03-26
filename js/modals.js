@@ -482,8 +482,8 @@ function openMgmtModal(action, data) {
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
                 <div class="mgmt-field"><label>שם הלקוח</label><input type="text" id="mgmt-name" placeholder="הזן שם לקוח..." /></div>
-                <div class="mgmt-field"><label>מזומן (USD)</label><input type="number" id="mgmt-cash-usd" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
-                <div class="mgmt-field"><label>מזומן (ILS)</label><input type="number" id="mgmt-cash-ils" min="0" step="100" value="0" placeholder="0" oninput="updateAddClientRisk()" /></div>
+                <div class="mgmt-field"><label>מזומן (USD)</label><input type="text" inputmode="decimal" id="mgmt-cash-usd" value="0" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></div>
+                <div class="mgmt-field"><label>מזומן (ILS)</label><input type="text" inputmode="decimal" id="mgmt-cash-ils" value="0" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></div>
 
                 <div class="mgmt-section-divider">הוספת אחזקות</div>
 
@@ -591,8 +591,8 @@ function openMgmtModal(action, data) {
                     <div class="auto-class-badge" id="mgmt-bond-class-badge">Gov Bond</div>
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
-                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="number" id="mgmt-price" step="0.01" min="0" placeholder="0.00" style="direction:ltr;text-align:left" oninput="updateBuyCost()" /></div>
-                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-qty" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
+                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" placeholder="0.00" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-qty" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
                     <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
@@ -614,8 +614,8 @@ function openMgmtModal(action, data) {
             <div class="mgmt-header"><h3>עריכת נכס - ${editDisplayName}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
                 <div class="mgmt-field"><label>${isStock ? 'סימול (Ticker)' : 'שם האג"ח'}</label><input type="text" id="mgmt-edit-name" value="${isStock ? h.ticker : h.name}" ${isStock ? 'style="direction:ltr;text-align:left"' : ''} /></div>
-                <div class="mgmt-field"><label>מחיר קנייה (${editCurrSymbol})</label><input type="number" id="mgmt-edit-price" step="0.01" min="0" value="${h.shares > 0 ? (h.costBasis / h.shares).toFixed(2) : h.price.toFixed(2)}" style="direction:ltr;text-align:left" /></div>
-                <div class="mgmt-field"><label>כמות יחידות</label><input type="number" id="mgmt-edit-qty" min="1" step="any" value="${h.shares}" style="direction:ltr;text-align:left" oninput="_updateQtyPreview('mgmt-edit-qty','mgmt-edit-qty-preview')" /><div class="qty-live-preview" id="mgmt-edit-qty-preview">${describeQuantity(h.shares)}</div></div>
+                <div class="mgmt-field"><label>מחיר קנייה (${editCurrSymbol})</label><input type="text" inputmode="decimal" id="mgmt-edit-price" value="${formatPrice(h.shares > 0 ? (h.costBasis / h.shares) : h.price)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-edit-qty" value="${Number(h.shares).toLocaleString('en-US')}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); _updateQtyPreview('mgmt-edit-qty','mgmt-edit-qty-preview')" /><div class="qty-live-preview" id="mgmt-edit-qty-preview">${describeQuantity(h.shares)}</div></div>
             </div>
             <div class="mgmt-footer">
                 <button class="mgmt-btn primary" onclick="editHolding(${c.id}, ${holdingId})">שמור שינויים</button>
@@ -650,8 +650,8 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly col-quantity">${formatAssetQuantity(h.shares)}</div></div>
                 <input type="hidden" id="mgmt-sell-avg-cost" value="${avgCost}" />
                 <input type="hidden" id="mgmt-sell-currency" value="${h.currency || 'USD'}" />
-                <div class="mgmt-field"><label>מחיר מכירה (${currSymbol})</label><input type="number" id="mgmt-sell-price" step="0.01" min="0.01" value="${h.price.toFixed(2)}" style="direction:ltr;text-align:left" oninput="updateSellSummary()" /></div>
-                <div class="mgmt-field"><label>כמות למכירה</label><input type="number" id="mgmt-sell-qty" min="1" step="any" max="${h.shares}" value="${h.shares}" style="direction:ltr;text-align:left" oninput="updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
+                <div class="mgmt-field"><label>מחיר מכירה (${currSymbol})</label><input type="text" inputmode="decimal" id="mgmt-sell-price" value="${formatPrice(h.price)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateSellSummary()" /></div>
+                <div class="mgmt-field"><label>כמות למכירה</label><input type="text" inputmode="decimal" id="mgmt-sell-qty" value="${Number(h.shares).toLocaleString('en-US')}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ תמורה:</span><span id="mgmt-sell-total" style="color:var(--accent-green);font-weight:700">${formatCurrency(h.price * h.shares, h.currency)}</span></div>
                     <div class="buy-cost-row"><span>רווח/הפסד ממומש:</span><span id="mgmt-sell-pnl" style="font-weight:700"></span></div>
@@ -687,7 +687,7 @@ function openMgmtModal(action, data) {
                 </div>
                 <input type="hidden" id="mgmt-deposit-cash-usd" value="${cashUsd}" />
                 <input type="hidden" id="mgmt-deposit-cash-ils" value="${cashIls}" />
-                <div class="mgmt-field"><label>סכום להפקדה</label><input type="number" id="mgmt-deposit-amount" step="100" min="1" placeholder="0" style="direction:ltr;text-align:left" oninput="updateDepositPreview()" /></div>
+                <div class="mgmt-field"><label>סכום להפקדה</label><input type="text" inputmode="decimal" id="mgmt-deposit-amount" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateDepositPreview()" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>יתרה לאחר הפקדה:</span><span id="mgmt-deposit-new-balance">${formatCurrency(cashUsd, 'USD')}</span></div>
                 </div>
@@ -848,13 +848,13 @@ function _updateQtyPreview(inputId, previewId) {
     const input = document.getElementById(inputId);
     const preview = document.getElementById(previewId);
     if (!input || !preview) return;
-    const val = parseFloat(input.value) || 0;
+    const val = parseInputNumber(input.value);
     preview.textContent = val > 0 ? describeQuantity(val) : '';
 }
 
 function updateBuyCost() {
-    const price = parseFloat(document.getElementById('mgmt-price')?.value) || 0;
-    const qty = parseInt(document.getElementById('mgmt-qty')?.value) || 0;
+    const price = parseInputNumber(document.getElementById('mgmt-price')?.value);
+    const qty = parseInputNumber(document.getElementById('mgmt-qty')?.value);
     const total = price * qty;
 
     // Determine which currency bucket to check based on selected ticker's currency
@@ -882,11 +882,11 @@ function updateBuyCost() {
 
 // Live deposit preview
 function updateDepositPreview() {
-    const amount = parseFloat(document.getElementById('mgmt-deposit-amount')?.value) || 0;
+    const amount = parseInputNumber(document.getElementById('mgmt-deposit-amount')?.value);
     const currency = document.getElementById('mgmt-deposit-currency')?.value || 'USD';
     const currentCash = (currency === 'ILS')
-        ? (parseFloat(document.getElementById('mgmt-deposit-cash-ils')?.value) || 0)
-        : (parseFloat(document.getElementById('mgmt-deposit-cash-usd')?.value) || 0);
+        ? parseInputNumber(document.getElementById('mgmt-deposit-cash-ils')?.value)
+        : parseInputNumber(document.getElementById('mgmt-deposit-cash-usd')?.value);
     const newBalanceEl = document.getElementById('mgmt-deposit-new-balance');
     if (newBalanceEl) newBalanceEl.textContent = formatCurrency(currentCash + amount, currency);
 }
@@ -1166,8 +1166,8 @@ async function addClient() {
     const name = (document.getElementById('mgmt-name')?.value || '').trim();
     const rawUsd = document.getElementById('mgmt-cash-usd')?.value;
     const rawIls = document.getElementById('mgmt-cash-ils')?.value;
-    const cashUsd = parseFloat(rawUsd) || 0;
-    const cashIls = parseFloat(rawIls) || 0;
+    const cashUsd = parseInputNumber(rawUsd);
+    const cashIls = parseInputNumber(rawIls);
 
     if (!name) {
         console.warn('addClient validation: name is empty');
@@ -1276,8 +1276,8 @@ async function deleteClient(clientId) {
 // --- Holding CRUD (routes to Supabase when connected, fallback to backend API) ---
 
 async function addHolding(clientId) {
-    const price = parseFloat(document.getElementById('mgmt-price').value);
-    const quantity = parseInt(document.getElementById('mgmt-qty').value);
+    const price = parseInputNumber(document.getElementById('mgmt-price').value);
+    const quantity = parseInputNumber(document.getElementById('mgmt-qty').value);
 
     if (!price || price <= 0) { alert('נא להזין מחיר קנייה תקין'); return; }
     if (!quantity || quantity <= 0) { alert('נא להזין כמות תקינה'); return; }
@@ -1335,7 +1335,7 @@ async function addHolding(clientId) {
 // --- Deposit Cash ---
 
 async function depositCash(clientId) {
-    const amount = parseFloat(document.getElementById('mgmt-deposit-amount')?.value);
+    const amount = parseInputNumber(document.getElementById('mgmt-deposit-amount')?.value);
     const currency = document.getElementById('mgmt-deposit-currency')?.value || 'USD';
     if (!amount || amount <= 0) { alert('נא להזין סכום תקין'); return; }
 
@@ -1351,8 +1351,8 @@ async function depositCash(clientId) {
 
 async function editHolding(clientId, holdingId) {
     const newName = document.getElementById('mgmt-edit-name').value.trim();
-    const newPrice = parseFloat(document.getElementById('mgmt-edit-price').value);
-    const newQty = parseInt(document.getElementById('mgmt-edit-qty').value);
+    const newPrice = parseInputNumber(document.getElementById('mgmt-edit-price').value);
+    const newQty = parseInputNumber(document.getElementById('mgmt-edit-qty').value);
 
     if (!newName) { alert('נא להזין שם/סימול'); return; }
     if (!newPrice || newPrice <= 0) { alert('נא להזין מחיר תקין'); return; }
@@ -1386,8 +1386,8 @@ async function removeHolding(clientId, holdingId) {
 // --- Sell Holding ---
 
 function updateSellSummary() {
-    const sellPrice = parseFloat(document.getElementById('mgmt-sell-price')?.value) || 0;
-    const qty = parseInt(document.getElementById('mgmt-sell-qty')?.value) || 0;
+    const sellPrice = parseInputNumber(document.getElementById('mgmt-sell-price')?.value);
+    const qty = parseInputNumber(document.getElementById('mgmt-sell-qty')?.value);
     const avgCost = parseFloat(document.getElementById('mgmt-sell-avg-cost')?.value) || 0;
     const currency = document.getElementById('mgmt-sell-currency')?.value || 'USD';
 
@@ -1406,8 +1406,8 @@ function updateSellSummary() {
 }
 
 async function sellHolding(clientId, holdingId) {
-    const sellQty = parseInt(document.getElementById('mgmt-sell-qty').value);
-    const sellPrice = parseFloat(document.getElementById('mgmt-sell-price').value);
+    const sellQty = parseInputNumber(document.getElementById('mgmt-sell-qty').value);
+    const sellPrice = parseInputNumber(document.getElementById('mgmt-sell-price').value);
     if (!sellQty || sellQty <= 0) { alert('נא להזין כמות למכירה'); return; }
     if (!sellPrice || sellPrice <= 0) { alert('נא להזין מחיר מכירה תקין'); return; }
 
@@ -1450,10 +1450,10 @@ function addHoldingRow(prefill = null) {
                 <div class="row-ticker-dropdown" id="dropdown_${rowId}"></div>
             </div>
         </td>
-        <td><input type="number" class="row-shares" min="1" step="any" value="${prefill?.shares || ''}" placeholder="0"
-                   style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
-        <td><input type="number" class="row-price" min="0" step="0.01" value="${prefill?.avgPrice || ''}" placeholder="0.00"
-                   style="direction:ltr;text-align:left" oninput="updateAddClientRisk()" /></td>
+        <td><input type="text" inputmode="decimal" class="row-shares" value="${prefill?.shares ? Number(prefill.shares).toLocaleString('en-US') : ''}" placeholder="0"
+                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></td>
+        <td><input type="text" inputmode="decimal" class="row-price" value="${prefill?.avgPrice ? formatPrice(prefill.avgPrice) : ''}" placeholder="0.00"
+                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></td>
         <td class="row-live-price" style="font-size:12px;color:var(--text-muted);text-align:center">—</td>
         <td><button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button></td>
     `;
@@ -1655,8 +1655,8 @@ function _collectHoldingRows() {
 
     rows.forEach(row => {
         const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase();
-        const shares = parseInt(row.querySelector('.row-shares')?.value) || 0;
-        const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
+        const shares = parseInputNumber(row.querySelector('.row-shares')?.value);
+        const price = parseInputNumber(row.querySelector('.row-price')?.value);
         const currency = row.dataset?.currency || 'USD';
 
         if (!ticker || shares <= 0 || price <= 0) return;
@@ -1691,8 +1691,8 @@ function _collectHoldingRows() {
     if (extraCash > 0) {
         const cashInput = document.getElementById('mgmt-cash-usd');
         if (cashInput) {
-            const existing = parseFloat(cashInput.value) || 0;
-            cashInput.value = (existing + extraCash).toFixed(2);
+            const existing = parseInputNumber(cashInput.value);
+            cashInput.value = formatPrice(existing + extraCash);
         }
     }
 
@@ -1701,15 +1701,15 @@ function _collectHoldingRows() {
 
 // Real-time risk calculation
 function updateAddClientRisk() {
-    const cash = (parseFloat(document.getElementById('mgmt-cash-usd')?.value) || 0) + (parseFloat(document.getElementById('mgmt-cash-ils')?.value) || 0);
+    const cash = parseInputNumber(document.getElementById('mgmt-cash-usd')?.value) + parseInputNumber(document.getElementById('mgmt-cash-ils')?.value);
     const tbody = document.getElementById('mgmt-holdings-tbody');
 
     let totalStockValue = 0;
     let totalBondValue = 0;
     if (tbody) {
         tbody.querySelectorAll('tr').forEach(row => {
-            const shares = parseInt(row.querySelector('.row-shares')?.value) || 0;
-            const price = parseFloat(row.querySelector('.row-price')?.value) || 0;
+            const shares = parseInputNumber(row.querySelector('.row-shares')?.value);
+            const price = parseInputNumber(row.querySelector('.row-price')?.value);
             const rowValue = shares * price;
             // Classify to correctly separate stocks from bonds/funds
             const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase() || '';
@@ -1773,8 +1773,8 @@ async function handleDropzoneFile(file) {
             if (cashFromFile > 0) {
                 const cashInput = document.getElementById('mgmt-cash-usd');
                 if (cashInput) {
-                    const existing = parseFloat(cashInput.value) || 0;
-                    cashInput.value = (existing + cashFromFile).toFixed(2);
+                    const existing = parseInputNumber(cashInput.value);
+                    cashInput.value = formatPrice(existing + cashFromFile);
                 }
             }
 

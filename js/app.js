@@ -42,3 +42,40 @@ function formatNumber(val) {
 function formatPrice(val) {
     return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// Strip commas from a formatted input string and return a number: "1,500,000" → 1500000
+function parseInputNumber(val) {
+    if (val == null) return 0;
+    const stripped = String(val).replace(/,/g, '');
+    const num = parseFloat(stripped);
+    return isNaN(num) ? 0 : num;
+}
+
+// Format an input field's value with commas while preserving cursor position and decimal typing.
+// Attach via oninput: formatInputWithCommas(this)
+function formatInputWithCommas(input) {
+    const raw = input.value;
+    // Allow empty, lone minus, or value ending with "." (user is typing a decimal)
+    if (raw === '' || raw === '-' || raw.endsWith('.')) return;
+
+    const cursorPos = input.selectionStart;
+    const commasBefore = (raw.slice(0, cursorPos).match(/,/g) || []).length;
+
+    const stripped = raw.replace(/,/g, '');
+    const num = parseFloat(stripped);
+    if (isNaN(num)) return;
+
+    // Split on decimal — only format the integer part
+    const parts = stripped.split('.');
+    const intPart = parseInt(parts[0], 10);
+    const formatted = isNaN(intPart) ? '0' : intPart.toLocaleString('en-US');
+    const newValue = parts.length > 1 ? formatted + '.' + parts[1] : formatted;
+
+    if (newValue !== raw) {
+        input.value = newValue;
+        // Restore cursor accounting for added/removed commas
+        const commasAfter = (newValue.slice(0, cursorPos + 1).match(/,/g) || []).length;
+        const newPos = cursorPos + (commasAfter - commasBefore);
+        input.setSelectionRange(newPos, newPos);
+    }
+}
