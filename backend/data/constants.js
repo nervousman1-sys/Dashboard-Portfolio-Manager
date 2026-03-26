@@ -53,11 +53,23 @@ const SECTOR_MAP = {
 };
 
 const BONDS = [
-    { id: 'IL_CPI_1', name: 'אג"ח ממשלתי צמוד 0523', type: 'il_cpi', basePrice: 112.5 },
-    { id: 'IL_CPI_2', name: 'אג"ח ממשלתי צמוד 0825', type: 'il_cpi', basePrice: 105.8 },
-    { id: 'IL_CPI_3', name: 'אג"ח ממשלתי צמוד 1127', type: 'il_cpi', basePrice: 98.3 },
-    { id: 'IL_CPI_4', name: 'גליל צמוד 0530', type: 'il_cpi', basePrice: 101.2 },
-    { id: 'US_30Y', name: 'US Treasury 30Y (TLT)', type: 'us_30y', ticker: 'TLT', basePrice: 92.0 },
+    // Galil (CPI-Linked)
+    { id: 'IL_CPI_1',  name: 'Galil 0523',  type: 'il_cpi',   basePrice: 112.5 },
+    { id: 'IL_CPI_2',  name: 'Galil 0825',  type: 'il_cpi',   basePrice: 105.8 },
+    { id: 'IL_CPI_3',  name: 'Galil 1127',  type: 'il_cpi',   basePrice: 98.3 },
+    { id: 'IL_CPI_4',  name: 'Galil 0530',  type: 'il_cpi',   basePrice: 101.2 },
+    // Shahar (Fixed Rate)
+    { id: 'IL_SHAHAR_1', name: 'Shahar 0125', type: 'il_fixed', basePrice: 99.2 },
+    { id: 'IL_SHAHAR_2', name: 'Shahar 0327', type: 'il_fixed', basePrice: 97.5 },
+    { id: 'IL_SHAHAR_3', name: 'Shahar 0130', type: 'il_fixed', basePrice: 95.0 },
+    // Gilon (Variable Rate)
+    { id: 'IL_GILON_1', name: 'Gilon 0225',  type: 'il_var',   basePrice: 100.1 },
+    { id: 'IL_GILON_2', name: 'Gilon 0326',  type: 'il_var',   basePrice: 100.3 },
+    // Makam (Short-Term)
+    { id: 'IL_MAKAM_1', name: 'Makam 0125',  type: 'il_makam', basePrice: 99.8 },
+    { id: 'IL_MAKAM_2', name: 'Makam 0425',  type: 'il_makam', basePrice: 99.5 },
+    // US Treasury
+    { id: 'US_30Y',   name: 'US Treasury 30Y (TLT)',       type: 'us_30y', ticker: 'TLT',  basePrice: 92.0 },
     { id: 'US_30Y_2', name: 'US Treasury Bond ETF (VGLT)', type: 'us_30y', ticker: 'VGLT', basePrice: 58.0 },
 ];
 

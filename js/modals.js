@@ -741,7 +741,8 @@ function onAssetTypeChange() {
 // Helper: classify bond sub-type (government vs corporate)
 function _classifyBondType(nameStr) {
     const n = (nameStr || '').toLowerCase();
-    const govKeywords = ['ממשלתי', 'ממשל', 'גליל', 'שחר', 'כפיר', 'מלווה',
+    const govKeywords = ['ממשלתי', 'ממשל', 'גליל', 'שחר', 'כפיר', 'מלווה', 'גילון', 'מק"מ', 'מקמ',
+        'galil', 'shahar', 'gilon', 'makam',
         'gov bond', 'gov', 'il gov', 'cpi-linked', 'treasury', 'fixed rate', 'variable rate'];
     const corpKeywords = ['קונצרני', 'נאמנות', 'corp bond', 'corp', 'corporate'];
     if (corpKeywords.some(kw => n.includes(kw))) return { bondType: 'corporate', assetClass: 'Corp Bond' };
@@ -771,8 +772,9 @@ function detectAssetType(symbol, name, apiType) {
             return { type: 'bond', bondType: 'government', assetClass: 'Gov Bond' };
         }
         // 2c: Bond keywords in name
-        const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה',
-            'קונצרני', 'נאמנות', 'bond', 'gov bond', 'cpi-linked', 'treasury', 'corp bond'];
+        const bondKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה', 'גילון', 'מק"מ', 'מקמ',
+            'קונצרני', 'נאמנות', 'bond', 'gov bond', 'cpi-linked', 'treasury', 'corp bond',
+            'galil', 'shahar', 'gilon', 'makam'];
         if (bondKeywords.some(kw => nm.includes(kw))) {
             const cls = _classifyBondType(name);
             return { type: 'bond', ...cls };
@@ -788,8 +790,9 @@ function detectAssetType(symbol, name, apiType) {
     }
 
     // Rule 3: Name-based bond detection (for non-numeric symbols)
-    const bondNameKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה',
-        'קונצרני', 'נאמנות', 'gov bond', 'cpi-linked', 'treasury', 'corp bond', 'il gov bond', 'corporate bond'];
+    const bondNameKeywords = ['אגח', 'אג"ח', 'ממשלתי', 'ממשל', 'שקלי', 'גליל', 'שחר', 'כפיר', 'מלווה', 'גילון', 'מק"מ', 'מקמ',
+        'קונצרני', 'נאמנות', 'gov bond', 'cpi-linked', 'treasury', 'corp bond', 'il gov bond', 'corporate bond',
+        'galil', 'shahar', 'gilon', 'makam'];
     if (bondNameKeywords.some(kw => nm.includes(kw))) {
         const cls = _classifyBondType(name);
         return { type: 'bond', ...cls };

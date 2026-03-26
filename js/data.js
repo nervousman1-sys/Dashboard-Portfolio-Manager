@@ -86,17 +86,23 @@ function searchLocalBonds(query) {
     if (!query || query.length < 1 || typeof BONDS === 'undefined') return [];
     const q = query.trim().toLowerCase();
     // Match generic bond search terms (Hebrew and English)
-    const isBondQuery = q.includes('אג') || q.includes('גליל') || q.includes('bond') || q.includes('treasury')
-        || q.includes('gov') || q.includes('cpi') || q.includes('fixed') || q.includes('variable');
+    const bondSearchTerms = ['אג', 'גליל', 'שחר', 'גילון', 'מק"מ', 'מקמ',
+        'bond', 'treasury', 'gov', 'cpi', 'fixed', 'variable',
+        'galil', 'shahar', 'gilon', 'makam'];
+    const isBondQuery = bondSearchTerms.some(term => q.includes(term));
     const results = [];
     for (const b of BONDS) {
-        const matchesName = b.name.toLowerCase().includes(q) || b.name.includes(q);
+        const matchesName = b.name.toLowerCase().includes(q);
         const matchesId = b.id.toLowerCase().includes(q);
-        if (matchesName || matchesId || isBondQuery) {
+        const matchesCategory = b.category && b.category.includes(q);
+        // Also match Hebrew category name
+        const catInfo = b.category && typeof BOND_CATEGORIES !== 'undefined' ? BOND_CATEGORIES[b.category] : null;
+        const matchesHebrewCat = catInfo && catInfo.he && catInfo.he.includes(q);
+        if (matchesName || matchesId || matchesCategory || matchesHebrewCat || isBondQuery) {
             results.push({
                 symbol: b.ticker || b.id,
                 name: b.name,
-                hebrewName: b.name,
+                hebrewName: catInfo ? `${catInfo.he}` : b.name,
                 currency: b.type.startsWith('il') ? 'ILS' : 'USD',
                 exchange: b.type.startsWith('il') ? 'TASE' : 'NYSE',
                 type: 'Bond',
@@ -189,10 +195,42 @@ const MACRO_CATEGORY_MAP = {
 };
 
 const BONDS = [
-    { id: 'IL_CPI_1', name: 'IL Gov Bond CPI-Linked 0523', type: 'il_cpi', basePrice: 112.5 },
-    { id: 'IL_CPI_2', name: 'IL Gov Bond CPI-Linked 0825', type: 'il_cpi', basePrice: 105.8 },
-    { id: 'IL_CPI_3', name: 'IL Gov Bond CPI-Linked 1127', type: 'il_cpi', basePrice: 98.3 },
-    { id: 'IL_CPI_4', name: 'IL Gov Bond CPI-Linked 0530', type: 'il_cpi', basePrice: 101.2 },
-    { id: 'US_30Y', name: 'US Treasury 30Y (TLT)', type: 'us_30y', ticker: 'TLT', basePrice: 92.0 },
+    // --- Galil (CPI-Linked / צמוד מדד) ---
+    { id: 'IL_CPI_1',  name: 'Galil 0523',  type: 'il_cpi',    category: 'galil',  basePrice: 112.5 },
+    { id: 'IL_CPI_2',  name: 'Galil 0825',  type: 'il_cpi',    category: 'galil',  basePrice: 105.8 },
+    { id: 'IL_CPI_3',  name: 'Galil 1127',  type: 'il_cpi',    category: 'galil',  basePrice: 98.3 },
+    { id: 'IL_CPI_4',  name: 'Galil 0530',  type: 'il_cpi',    category: 'galil',  basePrice: 101.2 },
+    { id: 'IL_CPI_5',  name: 'Galil 0835',  type: 'il_cpi',    category: 'galil',  basePrice: 96.7 },
+    { id: 'IL_CPI_6',  name: 'Galil 1140',  type: 'il_cpi',    category: 'galil',  basePrice: 94.1 },
+    { id: 'IL_CPI_7',  name: 'Galil 0545',  type: 'il_cpi',    category: 'galil',  basePrice: 91.8 },
+    // --- Shahar (Fixed Rate / שקלית קבועה) ---
+    { id: 'IL_SHAHAR_1', name: 'Shahar 0125', type: 'il_fixed', category: 'shahar', basePrice: 99.2 },
+    { id: 'IL_SHAHAR_2', name: 'Shahar 0327', type: 'il_fixed', category: 'shahar', basePrice: 97.5 },
+    { id: 'IL_SHAHAR_3', name: 'Shahar 0130', type: 'il_fixed', category: 'shahar', basePrice: 95.0 },
+    { id: 'IL_SHAHAR_4', name: 'Shahar 0732', type: 'il_fixed', category: 'shahar', basePrice: 93.3 },
+    { id: 'IL_SHAHAR_5', name: 'Shahar 0135', type: 'il_fixed', category: 'shahar', basePrice: 90.8 },
+    { id: 'IL_SHAHAR_6', name: 'Shahar 0140', type: 'il_fixed', category: 'shahar', basePrice: 87.2 },
+    { id: 'IL_SHAHAR_7', name: 'Shahar 0345', type: 'il_fixed', category: 'shahar', basePrice: 84.5 },
+    // --- Gilon (Variable Rate / ריבית משתנה) ---
+    { id: 'IL_GILON_1', name: 'Gilon 0225',  type: 'il_var',   category: 'gilon',  basePrice: 100.1 },
+    { id: 'IL_GILON_2', name: 'Gilon 0326',  type: 'il_var',   category: 'gilon',  basePrice: 100.3 },
+    { id: 'IL_GILON_3', name: 'Gilon 0627',  type: 'il_var',   category: 'gilon',  basePrice: 100.2 },
+    { id: 'IL_GILON_4', name: 'Gilon 0928',  type: 'il_var',   category: 'gilon',  basePrice: 100.0 },
+    // --- Makam (Short-Term / קצר מאוד, בלי ריבית) ---
+    { id: 'IL_MAKAM_1', name: 'Makam 0125',  type: 'il_makam',  category: 'makam', basePrice: 99.8 },
+    { id: 'IL_MAKAM_2', name: 'Makam 0425',  type: 'il_makam',  category: 'makam', basePrice: 99.5 },
+    { id: 'IL_MAKAM_3', name: 'Makam 0725',  type: 'il_makam',  category: 'makam', basePrice: 99.1 },
+    { id: 'IL_MAKAM_4', name: 'Makam 1025',  type: 'il_makam',  category: 'makam', basePrice: 98.9 },
+    { id: 'IL_MAKAM_5', name: 'Makam 0126',  type: 'il_makam',  category: 'makam', basePrice: 98.5 },
+    // --- US Treasury ---
+    { id: 'US_30Y',   name: 'US Treasury 30Y (TLT)',       type: 'us_30y', ticker: 'TLT',  basePrice: 92.0 },
     { id: 'US_30Y_2', name: 'US Treasury Bond ETF (VGLT)', type: 'us_30y', ticker: 'VGLT', basePrice: 58.0 },
 ];
+
+// Bond category display names — used for search and display
+const BOND_CATEGORIES = {
+    galil:  { en: 'Galil',  he: 'גליל (צמוד מדד)',       desc: 'CPI-Linked' },
+    shahar: { en: 'Shahar', he: 'שחר (שקלית קבועה)',      desc: 'Fixed Rate' },
+    gilon:  { en: 'Gilon',  he: 'גילון (ריבית משתנה)',     desc: 'Variable Rate' },
+    makam:  { en: 'Makam',  he: 'מק"מ (קצר מועד)',         desc: 'Short-Term' },
+};

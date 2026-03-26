@@ -44,26 +44,41 @@ const ISRAELI_ID_TO_YAHOO = {
 // Maps internal bond IDs (from BONDS array), common TASE numeric IDs, and short names
 // to their Yahoo Finance ISIN-based symbols.
 const ISRAELI_BOND_TO_YAHOO = {
-    // --- IL Gov Bond CPI-Linked ---
-    'IL_CPI_1':    'IL0011501681.TA',  // IL Gov Bond CPI-Linked 0523
-    'IL_CPI_2':    'IL0011502887.TA',  // IL Gov Bond CPI-Linked 0825
-    'IL_CPI_3':    'IL0011503695.TA',  // IL Gov Bond CPI-Linked 1127
-    'IL_CPI_4':    'IL0011504503.TA',  // IL Gov Bond CPI-Linked 0530
-    // --- IL Gov Bond Fixed ---
-    'IL_SHAHAR_1': 'IL0060401148.TA',  // IL Gov Bond Fixed 0125
-    'IL_SHAHAR_2': 'IL0060402146.TA',  // IL Gov Bond Fixed 0327
-    'IL_SHAHAR_3': 'IL0060403144.TA',  // IL Gov Bond Fixed 0130
-    // --- IL Gov Bond Variable ---
-    'IL_GILON_1':  'IL0072401148.TA',  // IL Gov Bond Variable 0225
-    'IL_GILON_2':  'IL0072402146.TA',  // IL Gov Bond Variable 0326
+    // --- Galil (CPI-Linked / צמוד מדד) ---
+    'IL_CPI_1':    'IL0011501681.TA',  // Galil 0523
+    'IL_CPI_2':    'IL0011502887.TA',  // Galil 0825
+    'IL_CPI_3':    'IL0011503695.TA',  // Galil 1127
+    'IL_CPI_4':    'IL0011504503.TA',  // Galil 0530
+    'IL_CPI_5':    'IL0011505310.TA',  // Galil 0835
+    'IL_CPI_6':    'IL0011506128.TA',  // Galil 1140
+    'IL_CPI_7':    'IL0011506936.TA',  // Galil 0545
+    // --- Shahar (Fixed Rate / שקלית קבועה) ---
+    'IL_SHAHAR_1': 'IL0060401148.TA',  // Shahar 0125
+    'IL_SHAHAR_2': 'IL0060402146.TA',  // Shahar 0327
+    'IL_SHAHAR_3': 'IL0060403144.TA',  // Shahar 0130
+    'IL_SHAHAR_4': 'IL0060404142.TA',  // Shahar 0732
+    'IL_SHAHAR_5': 'IL0060405149.TA',  // Shahar 0135
+    'IL_SHAHAR_6': 'IL0060406147.TA',  // Shahar 0140
+    'IL_SHAHAR_7': 'IL0060407145.TA',  // Shahar 0345
+    // --- Gilon (Variable Rate / ריבית משתנה) ---
+    'IL_GILON_1':  'IL0072401148.TA',  // Gilon 0225
+    'IL_GILON_2':  'IL0072402146.TA',  // Gilon 0326
+    'IL_GILON_3':  'IL0072403144.TA',  // Gilon 0627
+    'IL_GILON_4':  'IL0072404142.TA',  // Gilon 0928
+    // --- Makam (Short-Term / מק"מ) ---
+    'IL_MAKAM_1':  'IL0090401148.TA',  // Makam 0125
+    'IL_MAKAM_2':  'IL0090402146.TA',  // Makam 0425
+    'IL_MAKAM_3':  'IL0090403144.TA',  // Makam 0725
+    'IL_MAKAM_4':  'IL0090404142.TA',  // Makam 1025
+    'IL_MAKAM_5':  'IL0090405149.TA',  // Makam 0126
     // --- Common numeric TASE IDs for government bonds ---
-    '1150168':     'IL0011501681.TA',
-    '1150288':     'IL0011502887.TA',
-    '1150369':     'IL0011503695.TA',
-    '1150450':     'IL0011504503.TA',
-    '6040114':     'IL0060401148.TA',
-    '6040214':     'IL0060402146.TA',
-    '6040314':     'IL0060403144.TA',
+    '1150168':     'IL0011501681.TA',  // Galil 0523
+    '1150288':     'IL0011502887.TA',  // Galil 0825
+    '1150369':     'IL0011503695.TA',  // Galil 1127
+    '1150450':     'IL0011504503.TA',  // Galil 0530
+    '6040114':     'IL0060401148.TA',  // Shahar 0125
+    '6040214':     'IL0060402146.TA',  // Shahar 0327
+    '6040314':     'IL0060403144.TA',  // Shahar 0130
     // --- Corporate Bonds - common issuers ---
     'LEUMI_BOND':  'IL0010501682.TA',  // Leumi Bond
     'DSCT_BOND':   'IL0010502888.TA',  // Discount Bond
