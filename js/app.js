@@ -35,5 +35,10 @@ function formatCurrency(val, currency = 'USD') {
 }
 
 function formatNumber(val) {
-    return val.toLocaleString('he-IL', { maximumFractionDigits: 2 });
+    return Number(val).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+// Format a price with thousands separators and 2 decimal places: 1250.5 → "1,250.50"
+function formatPrice(val) {
+    return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

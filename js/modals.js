@@ -87,8 +87,8 @@ async function openModal(clientId) {
                     <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                 </div>
             </td>
-            <td>${purchasePrice.toFixed(2)} ${currSymbol}</td>
-            <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${h.price.toFixed(2)} ${currSymbol}</span>` : `${h.price.toFixed(2)} ${currSymbol}`}</td>
+            <td>${formatPrice(purchasePrice)} ${currSymbol}</td>
+            <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${formatPrice(h.price)} ${currSymbol}</span>` : `${formatPrice(h.price)} ${currSymbol}`}</td>
             <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
@@ -334,7 +334,7 @@ async function _loadTransactionHistory(portfolioId) {
             }
             const currSym = t.currency === 'ILS' ? '₪' : '$';
             const sharesDisplay = t.shares > 0 ? Number(t.shares).toLocaleString('en-US') : '-';
-            const priceDisplay = t.price > 0 ? `${t.price.toFixed(2)} ${currSym}` : '-';
+            const priceDisplay = t.price > 0 ? `${formatPrice(t.price)} ${currSym}` : '-';
             const totalDisplay = t.total > 0 ? formatCurrency(t.total, t.currency) : '-';
             rows += `<tr>
                 <td>${dateStr}</td>
@@ -645,7 +645,7 @@ function openMgmtModal(action, data) {
         html = `
             <div class="mgmt-header"><h3>מכירת נכס - ${displayName}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
-                <div class="mgmt-field"><label>מחיר שוק נוכחי</label><div class="mgmt-readonly">${h.price.toFixed(2)} ${currSymbol}</div></div>
+                <div class="mgmt-field"><label>מחיר שוק נוכחי</label><div class="mgmt-readonly">${formatPrice(h.price)} ${currSymbol}</div></div>
                 <div class="mgmt-field"><label>עלות ממוצעת למניה</label><div class="mgmt-readonly">${avgCost.toFixed(2)} ${currSymbol}</div></div>
                 <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly col-quantity">${formatAssetQuantity(h.shares)}</div></div>
                 <input type="hidden" id="mgmt-sell-avg-cost" value="${avgCost}" />
