@@ -7,6 +7,7 @@ function setFilter(type, value, btn) {
     document.querySelectorAll(`[data-filter="${type}"]`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    _updateDrawerBadge();
     renderExposureSection();
     renderClientCards();
 }
@@ -24,6 +25,7 @@ function setSizeFilter(size, btn) {
     else if (size === 'small') { activeFilters.sizeMin = null; activeFilters.sizeMax = 250000; }
     else if (size === 'medium') { activeFilters.sizeMin = 250000; activeFilters.sizeMax = 500000; }
     else if (size === 'large') { activeFilters.sizeMin = 500000; activeFilters.sizeMax = null; }
+    _updateDrawerBadge();
     renderExposureSection();
     renderClientCards();
 }
@@ -32,6 +34,55 @@ function setSort(value) {
     activeFilters.sort = value;
     renderClientCards();
 }
+
+// ========== FILTER DRAWER ==========
+
+function toggleFilterDrawer(forceState) {
+    const drawer = document.getElementById('filterDrawer');
+    const backdrop = document.getElementById('filterDrawerBackdrop');
+    if (!drawer || !backdrop) return;
+
+    const isOpen = drawer.classList.contains('open');
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : !isOpen;
+
+    if (shouldOpen) {
+        drawer.classList.add('open');
+        backdrop.classList.add('active');
+    } else {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('active');
+    }
+}
+
+function _updateDrawerBadge() {
+    const badge = document.getElementById('drawerBadge');
+    const toggle = document.getElementById('filterDrawerToggle');
+    if (!badge || !toggle) return;
+
+    let count = 0;
+    if (activeFilters.asset && activeFilters.asset !== 'all') count++;
+    if (activeFilters.sector && activeFilters.sector !== 'all') count++;
+    if (activeFilters.sizeMin !== null || activeFilters.sizeMax !== null) count++;
+
+    if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = '';
+        toggle.classList.add('has-active');
+    } else {
+        badge.style.display = 'none';
+        toggle.classList.remove('has-active');
+    }
+}
+
+// Close drawer on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const drawer = document.getElementById('filterDrawer');
+        if (drawer && drawer.classList.contains('open')) {
+            toggleFilterDrawer(false);
+        }
+    }
+});
 
 // ========== TIME RANGE ==========
 
