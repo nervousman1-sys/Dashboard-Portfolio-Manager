@@ -28,6 +28,32 @@ function describeQuantity(qty) {
     return `כמות: ${formatted} יחידות`;
 }
 
+// ========== RISK MINI-SUMMARY ==========
+
+function updateRiskMiniSummary(filteredClients) {
+    const el = document.getElementById('riskMiniSummary');
+    if (!el) return;
+
+    if (!filteredClients || filteredClients.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+
+    let high = 0, medium = 0, low = 0;
+    filteredClients.forEach(c => {
+        if (c.risk === 'high') high++;
+        else if (c.risk === 'medium') medium++;
+        else if (c.risk === 'low') low++;
+    });
+
+    const items = [];
+    if (high > 0)   items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#ef4444"></span>סיכון גבוה: <strong>${high}</strong> תיקים</span>`);
+    if (medium > 0)  items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#f59e0b"></span>סיכון בינוני: <strong>${medium}</strong> תיקים</span>`);
+    if (low > 0)    items.push(`<span class="risk-mini-item"><span class="risk-mini-dot" style="background:#10b981"></span>סיכון נמוך: <strong>${low}</strong> תיקים</span>`);
+
+    el.innerHTML = items.join('');
+}
+
 // ========== EXPOSURE ==========
 
 // Version counter — prevents stale setTimeout callbacks from creating orphaned charts
@@ -368,6 +394,7 @@ function renderClientCards() {
                 <p>לחץ על <strong>"+ הוסף תיק"</strong> כדי להתחיל</p>
             </div>
         `;
+        updateRiskMiniSummary([]);
         return;
     }
 
@@ -390,6 +417,9 @@ function renderClientCards() {
         if (activeFilters.returnMax !== null && returnPct > activeFilters.returnMax) return false;
         return true;
     });
+
+    // Update risk mini-summary with filtered results
+    updateRiskMiniSummary(filtered);
 
     // Sorting
     if (activeFilters.sort === 'return-high') {

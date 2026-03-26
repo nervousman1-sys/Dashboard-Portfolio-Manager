@@ -8,12 +8,14 @@ function setFilter(type, value, btn) {
     btn.classList.add('active');
 
     _updateDrawerBadge();
+    _updateClearFiltersVisibility();
     renderExposureSection();
     renderClientCards();
 }
 
 function searchClients(query) {
     activeFilters.search = query;
+    _updateClearFiltersVisibility();
     renderExposureSection();
     renderClientCards();
 }
@@ -26,6 +28,7 @@ function setSizeFilter(size, btn) {
     else if (size === 'medium') { activeFilters.sizeMin = 250000; activeFilters.sizeMax = 500000; }
     else if (size === 'large') { activeFilters.sizeMin = 500000; activeFilters.sizeMax = null; }
     _updateDrawerBadge();
+    _updateClearFiltersVisibility();
     renderExposureSection();
     renderClientCards();
 }
@@ -72,6 +75,60 @@ function _updateDrawerBadge() {
         badge.style.display = 'none';
         toggle.classList.remove('has-active');
     }
+}
+
+// ========== CLEAR ALL FILTERS ==========
+
+function clearAllFilters() {
+    // Reset search
+    activeFilters.search = '';
+    const searchInput = document.querySelector('.filters .search-input');
+    if (searchInput) searchInput.value = '';
+
+    // Reset risk
+    activeFilters.risk = 'all';
+    document.querySelectorAll('[data-filter="risk"]').forEach(b => b.classList.remove('active'));
+    const riskAll = document.querySelector('[data-filter="risk"][data-value="all"]');
+    if (riskAll) riskAll.classList.add('active');
+
+    // Reset asset
+    activeFilters.asset = 'all';
+    document.querySelectorAll('[data-filter="asset"]').forEach(b => b.classList.remove('active'));
+    const assetAll = document.querySelector('[data-filter="asset"][data-value="all"]');
+    if (assetAll) assetAll.classList.add('active');
+
+    // Reset sector
+    activeFilters.sector = 'all';
+    document.querySelectorAll('[data-filter="sector"]').forEach(b => b.classList.remove('active'));
+    const sectorAll = document.querySelector('[data-filter="sector"][data-value="all"]');
+    if (sectorAll) sectorAll.classList.add('active');
+
+    // Reset size
+    activeFilters.sizeMin = null;
+    activeFilters.sizeMax = null;
+    document.querySelectorAll('[data-filter="size"]').forEach(b => b.classList.remove('active'));
+    const sizeAll = document.querySelector('[data-filter="size"][data-value="all"]');
+    if (sizeAll) sizeAll.classList.add('active');
+
+    _updateDrawerBadge();
+    _updateClearFiltersVisibility();
+    renderExposureSection();
+    renderClientCards();
+}
+
+function _hasAnyActiveFilter() {
+    if (activeFilters.search) return true;
+    if (activeFilters.risk && activeFilters.risk !== 'all') return true;
+    if (activeFilters.asset && activeFilters.asset !== 'all') return true;
+    if (activeFilters.sector && activeFilters.sector !== 'all') return true;
+    if (activeFilters.sizeMin !== null || activeFilters.sizeMax !== null) return true;
+    return false;
+}
+
+function _updateClearFiltersVisibility() {
+    const btn = document.getElementById('clearFiltersBtn');
+    if (!btn) return;
+    btn.style.display = _hasAnyActiveFilter() ? '' : 'none';
 }
 
 // Close drawer on Escape key
