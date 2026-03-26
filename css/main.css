@@ -426,7 +426,7 @@ body {
     margin: 0;
 }
 
-/* Client Card */
+/* Client Card — strict vertical flex layout for uniform height */
 .client-card {
     background: var(--bg-card);
     border-radius: 12px;
@@ -488,6 +488,8 @@ body {
     padding: 14px 16px;
     display: flex;
     gap: 16px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .chart-container {
@@ -499,12 +501,14 @@ body {
 .card-performance {
     padding: 0 16px 8px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
 
 .time-range-toggle {
     display: flex;
     gap: 4px;
     padding: 6px 16px 0;
+    flex-shrink: 0;
 }
 
 .time-range-btn {
@@ -541,6 +545,21 @@ body {
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.holdings-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.cash-section {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+    padding-top: 4px;
 }
 
 .allocation-row {

@@ -425,7 +425,8 @@ function renderClientCards() {
         const showStocks = activeFilters.asset === 'all' || activeFilters.asset === 'stocks';
         const showBonds = activeFilters.asset === 'all' || activeFilters.asset === 'bonds';
 
-        let holdingsHTML = '';
+        // === Asset rows (stocks + bonds) ===
+        let assetsHTML = '';
         if (showStocks) {
             stockHoldings.slice(0, 3).forEach(h => {
                 const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
@@ -434,7 +435,7 @@ function renderClientCards() {
                 const heName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
                 const cardStockName = heName || h.ticker;
                 const currSym = h.currency === 'ILS' ? '₪' : '$';
-                holdingsHTML += `
+                assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-blue)"></span>
@@ -448,13 +449,13 @@ function renderClientCards() {
                     </div>`;
             });
             if (stockHoldings.length > 3) {
-                holdingsHTML += `<div class="allocation-row" style="color:var(--text-muted);font-size:11px">+${stockHoldings.length - 3} מניות נוספות</div>`;
+                assetsHTML += `<div class="allocation-row" style="color:var(--text-muted);font-size:11px">+${stockHoldings.length - 3} מניות נוספות</div>`;
             }
         }
         if (showBonds) {
             bondHoldings.slice(0, 2).forEach(h => {
                 const bondCurrSym = h.currency === 'ILS' ? '₪' : '$';
-                holdingsHTML += `
+                assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-purple)"></span>
@@ -464,39 +465,32 @@ function renderClientCards() {
                     </div>`;
             });
             if (bondHoldings.length > 2) {
-                holdingsHTML += `<div class="allocation-row" style="color:var(--text-muted);font-size:11px">+${bondHoldings.length - 2} אג"ח נוספות</div>`;
+                assetsHTML += `<div class="allocation-row" style="color:var(--text-muted);font-size:11px">+${bondHoldings.length - 2} אג"ח נוספות</div>`;
             }
         }
 
-        // Cash balance rows (per currency, with legacy fallback)
+        // === Cash rows — ALWAYS show both USD and ILS ===
         let _cashUsd = client.cash?.usd || 0;
         let _cashIls = client.cash?.ils || 0;
         // Legacy fallback: if both buckets are 0 but cashBalance exists, show as USD
         if (_cashUsd === 0 && _cashIls === 0 && (client.cashBalance || 0) > 0) {
             _cashUsd = client.cashBalance;
         }
-        let _cashBorderAdded = false;
-        if (_cashUsd > 0) {
-            holdingsHTML += `
-                <div class="allocation-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
-                    <span class="allocation-label">
-                        <span class="allocation-dot" style="background:var(--accent-green)"></span>
-                        מזומן (USD)
-                    </span>
-                    <span class="allocation-value">${formatCurrency(_cashUsd, 'USD')}</span>
-                </div>`;
-            _cashBorderAdded = true;
-        }
-        if (_cashIls > 0) {
-            holdingsHTML += `
-                <div class="allocation-row" style="${!_cashBorderAdded ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:4px' : ''}">
-                    <span class="allocation-label">
-                        <span class="allocation-dot" style="background:var(--accent-green)"></span>
-                        מזומן (ILS)
-                    </span>
-                    <span class="allocation-value">${formatCurrency(_cashIls, 'ILS')}</span>
-                </div>`;
-        }
+        const cashHTML = `
+            <div class="allocation-row">
+                <span class="allocation-label">
+                    <span class="allocation-dot" style="background:var(--accent-green)"></span>
+                    מזומן (USD)
+                </span>
+                <span class="allocation-value">${formatCurrency(_cashUsd, 'USD')}</span>
+            </div>
+            <div class="allocation-row">
+                <span class="allocation-label">
+                    <span class="allocation-dot" style="background:var(--accent-green)"></span>
+                    מזומן (ILS)
+                </span>
+                <span class="allocation-value">${formatCurrency(_cashIls, 'ILS')}</span>
+            </div>`;
 
         const totalStockPct = stockHoldings.reduce((s, h) => s + h.allocationPct, 0);
         const totalBondPct = bondHoldings.reduce((s, h) => s + h.allocationPct, 0);
@@ -530,7 +524,8 @@ function renderClientCards() {
                         <canvas id="chart-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
                     </div>
                     <div class="holdings-summary">
-                        ${holdingsHTML}
+                        <div class="holdings-list">${assetsHTML}</div>
+                        <div class="cash-section">${cashHTML}</div>
                     </div>
                 </div>
                 <div class="time-range-toggle">
