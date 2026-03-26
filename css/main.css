@@ -1817,6 +1817,59 @@ body {
     padding: 40px 0;
 }
 
+/* Country section dividers */
+.macro-country-section {
+    margin-bottom: 36px;
+}
+
+.macro-country-section:last-child {
+    margin-bottom: 0;
+}
+
+.macro-country-header {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.macro-country-flag {
+    font-size: 22px;
+    line-height: 1;
+}
+
+/* Full-width news list (no grid — stacked cards) */
+.macro-news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.macro-news-card-full {
+    padding: 20px 24px;
+}
+
+.macro-news-card-full .macro-news-headline {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.macro-news-summary-full {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 12px;
+    white-space: pre-line;
+}
+
 .alert-count {
     display: inline-flex;
     align-items: center;

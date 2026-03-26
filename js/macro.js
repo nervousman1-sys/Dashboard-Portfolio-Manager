@@ -1,460 +1,409 @@
-// ========== MACRO - Live Economic Indicators & Market News ==========
+// ========== MACRO - Live Economic Indicators (US + Israel) & Macro News ==========
 //
-// Data Sources:
-//   1. FMP Economic Calendar API — real economic indicator releases (CPI, PPI, GDP, etc.)
-//   2. Finnhub Market News API — rolling daily general market news feed
+// Architecture:
+//   Section 1: אינדיקטורים כלכליים ארה"ב  — FMP Economic Calendar (last 30 days, US)
+//   Section 2: אינדיקטורים כלכליים ישראל  — FMP Economic Calendar (last 30 days, IL)
+//   Section 3: חדשות מאקרו — 5 US + 5 Israel news via Finnhub (headline + Hebrew summary, NO links)
 //
-// Caching: localStorage with 1-hour TTL for indicators, 30-min for news
-//          Cache is invalidated if it contains stale/simulated data.
-// Alerts:  Smart — only counts events newer than the last time the user opened the page,
-//          and never alerts for data older than 24 hours.
+// Alert logic:
+//   Badge only fires when latestDataTimestamp > lastSeenMacroTimestamp.
+//   Never alerts for stale refreshes where the underlying data hasn't changed.
+//
+// Zero simulated data — "נתונים לא זמינים" shown per-section on failure.
 
-const _MACRO_CACHE_KEY_INDICATORS = 'macro_indicators_cache';
-const _MACRO_CACHE_KEY_NEWS = 'macro_news_cache';
-const _MACRO_CACHE_KEY_LAST_SEEN = 'macro_last_seen_event';  // {date, event} of newest seen
-const _MACRO_CACHE_TTL_INDICATORS = 60 * 60 * 1000;   // 1 hour
-const _MACRO_CACHE_TTL_NEWS = 30 * 60 * 1000;          // 30 minutes
+// ── Cache keys & TTLs ──
+const _MACRO_CACHE = {
+    US_IND:   'macro_us_indicators',
+    IL_IND:   'macro_il_indicators',
+    US_NEWS:  'macro_us_news',
+    IL_NEWS:  'macro_il_news',
+    LAST_TS:  'macro_lastSeenTimestamp'   // ISO string — the latest data timestamp the user has seen
+};
+const _MACRO_TTL_INDICATORS = 60 * 60 * 1000;  // 1 hour
+const _MACRO_TTL_NEWS       = 30 * 60 * 1000;  // 30 minutes
 
-// Active tab state
+// Tab state: 'indicators' | 'news'
 let _macroActiveTab = 'indicators';
 
-// API health status — set during fetch, displayed in UI
-let _macroApiStatus = { fmp: null, finnhub: null }; // null = unknown, true = ok, false = failed, string = error msg
+// API health status (displayed in UI)
+let _macroApiStatus = { fmpUS: null, fmpIL: null, finnhub: null };
 
-// ── HTML entity escaping (prevent XSS from external API data) ──
+// ========== UTILITIES ==========
+
 function _macroEscape(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// ── Fetch with timeout (local utility) ──
-function _macroFetchWithTimeout(url, ms = 8000) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ms);
-    return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeout));
+function _macroFetch(url, ms = 10000) {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), ms);
+    return fetch(url, { signal: c.signal }).finally(() => clearTimeout(t));
 }
 
-// ── localStorage cache helpers ──
-function _macroGetCache(key, ttl) {
+// ── localStorage cache ──
+function _cacheGet(key, ttl) {
     try {
         const raw = localStorage.getItem(key);
         if (!raw) return null;
-        const cached = JSON.parse(raw);
-        if (Date.now() - cached.timestamp > ttl) return null;
-        // Invalidate cache that contains stale/simulated data from old code
-        if (cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-            const first = cached.data[0];
-            if (first.source === 'Simulated' || (first.id && String(first.id).startsWith('fallback-'))) {
-                console.log('[Macro] Purging stale simulated cache');
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.ts > ttl) return null;
+        // Purge old simulated data from previous code versions
+        if (Array.isArray(obj.d) && obj.d.length > 0) {
+            const f = obj.d[0];
+            if (f.source === 'Simulated' || (f.id && String(f.id).startsWith('fallback-'))) {
                 localStorage.removeItem(key);
                 return null;
             }
         }
-        return cached.data;
+        return obj.d;
     } catch { return null; }
 }
 
-function _macroSetCache(key, data) {
-    try {
-        localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-    } catch { /* quota exceeded — ignore */ }
+function _cacheSet(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ d: data, ts: Date.now() })); }
+    catch { /* quota */ }
 }
 
-function _macroGetCacheTime(key) {
+function _cacheTime(key) {
     try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const cached = JSON.parse(raw);
-        const dt = new Date(cached.timestamp);
-        return dt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        const obj = JSON.parse(localStorage.getItem(key));
+        return new Date(obj.ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     } catch { return null; }
 }
 
 // ========== CATEGORY MATCHING ==========
-// FMP event names often include suffixes like "YoY", "MoM", "QoQ", "Adv", "Final", "Prel"
-// and may not match MACRO_CATEGORY_MAP keys exactly. We use a two-pass strategy:
-//   1. Direct substring match:  event.includes(key)
-//   2. Keyword extraction:      match individual words from the map key
 
 function _matchCategory(eventName) {
     if (!eventName) return 'כלכלה';
-
-    // Pass 1: direct — check if any map key is a substring of the event name
-    // Sort keys longest-first so "Core Inflation Rate" matches before "Inflation Rate"
     const sortedKeys = Object.keys(MACRO_CATEGORY_MAP).sort((a, b) => b.length - a.length);
     for (const key of sortedKeys) {
         if (eventName.includes(key)) return MACRO_CATEGORY_MAP[key];
     }
-
-    // Pass 2: keyword — normalize and check for primary keyword matches
-    const lower = eventName.toLowerCase();
-    if (lower.includes('cpi') || lower.includes('inflation') || lower.includes('pce') || lower.includes('ppi') || lower.includes('producer price')) return 'אינפלציה';
-    if (lower.includes('gdp') || lower.includes('growth rate')) return 'צמיחה';
-    if (lower.includes('payroll') || lower.includes('employment') || lower.includes('jobless') || lower.includes('unemployment')) return 'תעסוקה';
-    if (lower.includes('interest rate') || lower.includes('fed') || lower.includes('fomc')) return 'מדיניות מוניטרית';
-    if (lower.includes('pmi') || lower.includes('manufacturing') || lower.includes('industrial') || lower.includes('durable')) return 'ייצור';
-    if (lower.includes('retail') || lower.includes('spending') || lower.includes('personal income') || lower.includes('consumer credit')) return 'צריכה';
-    if (lower.includes('housing') || lower.includes('building') || lower.includes('home sale')) return 'נדל"ן';
-    if (lower.includes('confidence') || lower.includes('sentiment')) return 'סנטימנט';
-    if (lower.includes('trade balance') || lower.includes('export') || lower.includes('import')) return 'סחר';
-
+    const l = eventName.toLowerCase();
+    if (l.includes('cpi') || l.includes('inflation') || l.includes('pce') || l.includes('ppi') || l.includes('producer price')) return 'אינפלציה';
+    if (l.includes('gdp') || l.includes('growth')) return 'צמיחה';
+    if (l.includes('payroll') || l.includes('employment') || l.includes('jobless') || l.includes('unemployment')) return 'תעסוקה';
+    if (l.includes('interest rate') || l.includes('fed') || l.includes('fomc') || l.includes('ריבית')) return 'מדיניות מוניטרית';
+    if (l.includes('pmi') || l.includes('manufacturing') || l.includes('industrial') || l.includes('durable')) return 'ייצור';
+    if (l.includes('retail') || l.includes('spending') || l.includes('personal income') || l.includes('consumer credit')) return 'צריכה';
+    if (l.includes('housing') || l.includes('building') || l.includes('home sale')) return 'נדל"ן';
+    if (l.includes('confidence') || l.includes('sentiment')) return 'סנטימנט';
+    if (l.includes('trade balance') || l.includes('export') || l.includes('import')) return 'סחר';
     return 'כלכלה';
 }
 
-// ========== 1. ECONOMIC INDICATORS (FMP) ==========
+// ========== 1. ECONOMIC INDICATORS — FMP ==========
 
-async function _fetchEconomicIndicators(forceRefresh = false) {
-    // Check cache first (unless forcing)
+async function _fetchIndicators(country, cacheKey, statusKey, forceRefresh) {
     if (!forceRefresh) {
-        const cached = _macroGetCache(_MACRO_CACHE_KEY_INDICATORS, _MACRO_CACHE_TTL_INDICATORS);
+        const cached = _cacheGet(cacheKey, _MACRO_TTL_INDICATORS);
         if (cached && cached.length > 0) {
-            console.log(`[Macro] Using cached economic indicators (${cached.length} items)`);
-            _macroApiStatus.fmp = true;
+            _macroApiStatus[statusKey] = true;
             return cached;
         }
     }
 
-    // Validate API key
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY' || FMP_API_KEY === '') {
-        const msg = 'FMP_API_KEY not configured';
-        console.warn(`[Macro] ${msg}`);
-        _macroApiStatus.fmp = msg;
+        _macroApiStatus[statusKey] = 'API key missing';
         return null;
     }
 
     try {
-        // Fetch last 30 days of economic calendar data (focused window = faster + more relevant)
         const now = new Date();
-        const from = new Date(now);
-        from.setDate(from.getDate() - 30);
+        const from = new Date(now); from.setDate(from.getDate() - 30);
         const toStr = now.toISOString().split('T')[0];
         const fromStr = from.toISOString().split('T')[0];
 
         const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${fromStr}&to=${toStr}&apikey=${FMP_API_KEY}`;
-        console.log(`[Macro] Fetching FMP economic calendar: ${fromStr} → ${toStr}`);
+        console.log(`[Macro] FMP ${country}: ${fromStr} → ${toStr}`);
+        const res = await _macroFetch(url);
 
-        const res = await _macroFetchWithTimeout(url, 10000);
-
-        if (!res.ok) {
-            const msg = `FMP HTTP ${res.status}`;
-            console.warn(`[Macro] ${msg}`);
-            _macroApiStatus.fmp = msg;
-            throw new Error(msg);
-        }
-
+        if (!res.ok) { _macroApiStatus[statusKey] = `HTTP ${res.status}`; throw new Error(`HTTP ${res.status}`); }
         const data = await res.json();
-        console.log(`[Macro] FMP raw response: ${Array.isArray(data) ? data.length : 'non-array'} items`);
+        if (!Array.isArray(data)) { _macroApiStatus[statusKey] = 'Bad response'; throw new Error('Bad response'); }
 
-        if (!Array.isArray(data) || data.length === 0) {
-            _macroApiStatus.fmp = 'Empty response';
-            throw new Error('Empty response from FMP');
-        }
-
-        // Filter: US events with actual values
-        const usEvents = data
-            .filter(item =>
-                item.country === 'US' &&
-                item.actual !== null &&
-                item.actual !== '' &&
-                item.event
-            )
-            .map(item => {
-                const eventDate = new Date(item.date);
-                const eventName = item.event || '';
-                const category = _matchCategory(eventName);
-
-                const actual = item.actual !== null && item.actual !== '' ? String(item.actual) : 'N/A';
-                const estimate = item.estimate !== null && item.estimate !== '' ? String(item.estimate) : 'N/A';
-                const previous = item.previous !== null && item.previous !== '' ? String(item.previous) : 'N/A';
-
-                // Determine beat/miss
+        const items = data
+            .filter(i => i.country === country && i.actual !== null && i.actual !== '' && i.event)
+            .map(i => {
+                const d = new Date(i.date);
+                const actual = i.actual != null && i.actual !== '' ? String(i.actual) : 'N/A';
+                const estimate = i.estimate != null && i.estimate !== '' ? String(i.estimate) : 'N/A';
+                const previous = i.previous != null && i.previous !== '' ? String(i.previous) : 'N/A';
                 let sentiment = 'neutral';
                 if (actual !== 'N/A' && estimate !== 'N/A') {
-                    const a = parseFloat(actual);
-                    const e = parseFloat(estimate);
-                    if (!isNaN(a) && !isNaN(e)) {
-                        if (a > e) sentiment = 'beat';
-                        else if (a < e) sentiment = 'miss';
-                    }
+                    const a = parseFloat(actual), e = parseFloat(estimate);
+                    if (!isNaN(a) && !isNaN(e)) sentiment = a > e ? 'beat' : (a < e ? 'miss' : 'neutral');
                 }
-
-                const alertId = `fmp-${eventName}-${item.date}`;
                 return {
-                    id: alertId,
-                    title: eventName,
-                    category,
-                    actual,
-                    estimate,
-                    previous,
-                    change: item.change !== null && item.change !== undefined ? String(item.change) : null,
-                    changePercent: item.changePercentage !== null && item.changePercentage !== undefined ? String(item.changePercentage) : null,
-                    sentiment,
-                    date: eventDate.toLocaleDateString('he-IL'),
-                    time: eventDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
-                    rawDate: eventDate.toISOString(),
-                    isRead: false   // will be resolved in checkAlerts()
+                    id: `fmp-${country}-${i.event}-${i.date}`,
+                    title: i.event,
+                    category: _matchCategory(i.event),
+                    actual, estimate, previous, sentiment,
+                    date: d.toLocaleDateString('he-IL'),
+                    time: d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+                    rawDate: d.toISOString(),
+                    country,
+                    isRead: false
                 };
             })
             .sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate))
-            .slice(0, 50);
+            .slice(0, 40);
 
-        _macroSetCache(_MACRO_CACHE_KEY_INDICATORS, usEvents);
-        _macroApiStatus.fmp = true;
-        console.log(`[Macro] ✓ Fetched ${usEvents.length} economic indicators from FMP (${data.length} raw → ${usEvents.length} filtered)`);
-        return usEvents;
-
+        _cacheSet(cacheKey, items);
+        _macroApiStatus[statusKey] = true;
+        console.log(`[Macro] ✓ ${country} indicators: ${items.length} items`);
+        return items;
     } catch (e) {
-        console.warn('[Macro] FMP economic calendar failed:', e.message);
-        if (_macroApiStatus.fmp === null) _macroApiStatus.fmp = e.message;
+        console.warn(`[Macro] ${country} indicators failed:`, e.message);
+        if (!_macroApiStatus[statusKey] || _macroApiStatus[statusKey] === null) _macroApiStatus[statusKey] = e.message;
         return null;
     }
 }
 
-// ========== 2. MARKET NEWS (Finnhub) ==========
+// ========== 2. MACRO NEWS — Finnhub ==========
+// Fetch general market news, split into US and Israel buckets (5 each).
+// Summaries are the API's summary field, truncated to ~5-8 lines.
+// NO links rendered in the UI.
 
-async function _fetchMarketNews(forceRefresh = false) {
+// Israeli keyword filter — match headlines mentioning Israel/shekel/TASE/BoI
+const _IL_KEYWORDS = /israel|israeli|tel.?aviv|shekel|ils|bank of israel|boi|tase|הבנק|ישראל|תל.?אביב|שקל/i;
+
+async function _fetchMacroNews(forceRefresh) {
+    // Check both caches
     if (!forceRefresh) {
-        const cached = _macroGetCache(_MACRO_CACHE_KEY_NEWS, _MACRO_CACHE_TTL_NEWS);
-        if (cached && cached.length > 0) {
-            console.log(`[Macro] Using cached market news (${cached.length} items)`);
+        const cachedUS = _cacheGet(_MACRO_CACHE.US_NEWS, _MACRO_TTL_NEWS);
+        const cachedIL = _cacheGet(_MACRO_CACHE.IL_NEWS, _MACRO_TTL_NEWS);
+        if (cachedUS && cachedIL) {
             _macroApiStatus.finnhub = true;
-            return cached;
+            return { us: cachedUS, il: cachedIL };
         }
     }
 
     if (!FINNHUB_API_KEY || FINNHUB_API_KEY === 'YOUR_FINNHUB_API_KEY' || FINNHUB_API_KEY === '') {
-        const msg = 'FINNHUB_API_KEY not configured';
-        console.warn(`[Macro] ${msg}`);
-        _macroApiStatus.finnhub = msg;
-        return null;
+        _macroApiStatus.finnhub = 'API key missing';
+        return { us: null, il: null };
     }
 
     try {
-        console.log('[Macro] Fetching Finnhub market news...');
-        const res = await _macroFetchWithTimeout(
-            `https://finnhub.io/api/v1/news?category=general&token=${FINNHUB_API_KEY}`,
-            10000
-        );
-
-        if (!res.ok) {
-            const msg = `Finnhub HTTP ${res.status}`;
-            console.warn(`[Macro] ${msg}`);
-            _macroApiStatus.finnhub = msg;
-            throw new Error(msg);
-        }
-
+        console.log('[Macro] Fetching Finnhub news...');
+        const res = await _macroFetch(`https://finnhub.io/api/v1/news?category=general&token=${FINNHUB_API_KEY}`);
+        if (!res.ok) { _macroApiStatus.finnhub = `HTTP ${res.status}`; throw new Error(`HTTP ${res.status}`); }
         const data = await res.json();
-        console.log(`[Macro] Finnhub raw response: ${Array.isArray(data) ? data.length : 'non-array'} items`);
+        if (!Array.isArray(data)) { _macroApiStatus.finnhub = 'Bad response'; throw new Error('Bad response'); }
 
-        if (!Array.isArray(data) || data.length === 0) {
-            _macroApiStatus.finnhub = 'Empty response';
-            throw new Error('Empty response from Finnhub');
-        }
-
-        const news = data.slice(0, 30).map(item => {
+        const mapItem = (item, region) => {
             const dt = new Date(item.datetime * 1000);
             return {
-                id: `news-${item.id}`,
+                id: `news-${region}-${item.id}`,
                 headline: item.headline || '',
                 summary: item.summary || '',
                 source: item.source || '',
-                url: item.url || '',
-                image: item.image || '',
-                category: item.category || 'general',
+                region,
                 date: dt.toLocaleDateString('he-IL'),
                 time: dt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
                 rawDate: dt.toISOString(),
-                isRead: false   // resolved in checkAlerts()
+                isRead: false
             };
-        });
+        };
 
-        _macroSetCache(_MACRO_CACHE_KEY_NEWS, news);
+        // Split: Israel-relevant vs US/general
+        const ilItems = [];
+        const usItems = [];
+        for (const item of data) {
+            if (!item.headline) continue;
+            if (_IL_KEYWORDS.test(item.headline) || _IL_KEYWORDS.test(item.summary || '')) {
+                if (ilItems.length < 5) ilItems.push(mapItem(item, 'IL'));
+            } else {
+                if (usItems.length < 5) usItems.push(mapItem(item, 'US'));
+            }
+            if (usItems.length >= 5 && ilItems.length >= 5) break;
+        }
+
+        // If we don't have 5 Israel items (likely), fill remaining slots from general pool
+        // labelled as US since they're global/US-centric
+        if (usItems.length < 5) {
+            for (const item of data) {
+                if (!item.headline) continue;
+                const id = `news-US-${item.id}`;
+                if (usItems.some(n => n.id === id) || ilItems.some(n => n.id === `news-IL-${item.id}`)) continue;
+                usItems.push(mapItem(item, 'US'));
+                if (usItems.length >= 5) break;
+            }
+        }
+
+        _cacheSet(_MACRO_CACHE.US_NEWS, usItems);
+        _cacheSet(_MACRO_CACHE.IL_NEWS, ilItems);
         _macroApiStatus.finnhub = true;
-        console.log(`[Macro] ✓ Fetched ${news.length} news items from Finnhub`);
-        return news;
-
+        console.log(`[Macro] ✓ News: ${usItems.length} US, ${ilItems.length} IL`);
+        return { us: usItems, il: ilItems };
     } catch (e) {
         console.warn('[Macro] Finnhub news failed:', e.message);
-        if (_macroApiStatus.finnhub === null) _macroApiStatus.finnhub = e.message;
-        return null;
+        if (!_macroApiStatus.finnhub) _macroApiStatus.finnhub = e.message;
+        return { us: null, il: null };
     }
 }
 
-// ========== SMART ALERT LOGIC ==========
-// Only mark as "unread" if:
-//   1. The event is newer than the last time the user opened the macro page
-//   2. The event is less than 24 hours old
-// This prevents the badge from showing stale data every time the page loads.
+// ========== STRICT ALERT LOGIC ==========
+// Uses a single lastSeenMacroTimestamp in localStorage.
+// Badge count = number of items whose rawDate > lastSeenMacroTimestamp.
+// Items older than lastSeen are always "read" regardless of readAlertIds.
+// On data refresh, if the newest item timestamp is unchanged, badge stays 0.
+
+function _getLastSeenTs() {
+    try { return localStorage.getItem(_MACRO_CACHE.LAST_TS) || null; }
+    catch { return null; }
+}
+
+function _setLastSeenTs(isoStr) {
+    try { localStorage.setItem(_MACRO_CACHE.LAST_TS, isoStr); }
+    catch { /* ignore */ }
+}
 
 function _resolveReadState(items) {
     if (!items || items.length === 0) return;
-
-    const now = Date.now();
-    const cutoff24h = now - 24 * 60 * 60 * 1000;
-
-    // Load last-seen marker: the newest event date+name seen when user last opened macro page
-    let lastSeen = null;
-    try {
-        const raw = localStorage.getItem(_MACRO_CACHE_KEY_LAST_SEEN);
-        if (raw) lastSeen = JSON.parse(raw);
-    } catch { /* ignore */ }
-
-    const lastSeenDate = lastSeen ? new Date(lastSeen.date).getTime() : 0;
+    const lastSeen = _getLastSeenTs();
+    const lastSeenMs = lastSeen ? new Date(lastSeen).getTime() : 0;
 
     items.forEach(item => {
-        const itemDate = new Date(item.rawDate).getTime();
-
-        // Already explicitly read by user → always read
-        if (readAlertIds.includes(item.id)) {
-            item.isRead = true;
-            return;
-        }
-
-        // Older than 24h → auto-read (stale)
-        if (itemDate < cutoff24h) {
-            item.isRead = true;
-            return;
-        }
-
-        // Older than or equal to last seen event → read
-        if (lastSeenDate > 0 && itemDate <= lastSeenDate) {
-            item.isRead = true;
-            return;
-        }
-
-        // Truly new event
+        // Explicitly read by user click → always read
+        if (readAlertIds.includes(item.id)) { item.isRead = true; return; }
+        // Older than or equal to last-seen timestamp → read
+        const itemMs = new Date(item.rawDate).getTime();
+        if (lastSeenMs > 0 && itemMs <= lastSeenMs) { item.isRead = true; return; }
+        // Truly new
         item.isRead = false;
     });
 }
 
-// Called when user opens macro page — marks current newest event as "seen"
-function _updateLastSeenEvent() {
-    const allItems = [...alerts, ...(window._macroNews || [])];
-    if (allItems.length === 0) return;
-
-    // Find the newest event
-    let newest = allItems[0];
-    for (const item of allItems) {
-        if (new Date(item.rawDate) > new Date(newest.rawDate)) newest = item;
+// Called when user opens or closes macro page — advances the watermark
+function _advanceLastSeen() {
+    const all = [
+        ...alerts,
+        ...(window._macroNewsUS || []),
+        ...(window._macroNewsIL || [])
+    ];
+    if (all.length === 0) return;
+    let newest = all[0].rawDate;
+    for (const item of all) {
+        if (item.rawDate > newest) newest = item.rawDate;
     }
-
-    try {
-        localStorage.setItem(_MACRO_CACHE_KEY_LAST_SEEN, JSON.stringify({
-            date: newest.rawDate,
-            event: newest.id
-        }));
-    } catch { /* ignore */ }
+    _setLastSeenTs(newest);
 }
 
 // ========== MAIN DATA LOADER ==========
 
 async function checkAlerts(forceRefresh = false) {
-    const [indicators, news] = await Promise.all([
-        _fetchEconomicIndicators(forceRefresh),
-        _fetchMarketNews(forceRefresh)
+    const [usInd, ilInd, newsResult] = await Promise.all([
+        _fetchIndicators('US', _MACRO_CACHE.US_IND, 'fmpUS', forceRefresh),
+        _fetchIndicators('IL', _MACRO_CACHE.IL_IND, 'fmpIL', forceRefresh),
+        _fetchMacroNews(forceRefresh)
     ]);
 
-    // alerts = economic indicators (used for badge count)
-    alerts = indicators || [];
-    window._macroNews = news || [];
+    // Global alerts = combined indicators (for badge count)
+    const us = usInd || [];
+    const il = ilInd || [];
+    alerts = [...us, ...il];
 
-    // Resolve read/unread state using smart logic
+    window._macroIndUS = us;
+    window._macroIndIL = il;
+    window._macroNewsUS = newsResult.us || [];
+    window._macroNewsIL = newsResult.il || [];
+
+    // Resolve read/unread using strict timestamp comparison
     _resolveReadState(alerts);
-    _resolveReadState(window._macroNews);
+    _resolveReadState(window._macroNewsUS);
+    _resolveReadState(window._macroNewsIL);
 
-    // If macro page is currently open, re-render it
-    const macroPage = document.getElementById('macroPage');
-    if (macroPage && macroPage.classList.contains('active')) {
-        _renderMacroPageContent();
-    }
+    // Re-render if macro page is open
+    const mp = document.getElementById('macroPage');
+    if (mp && mp.classList.contains('active')) _renderMacroPage();
 }
 
 // ========== RENDERING ==========
 
 function renderAlerts() {
-    const countEl = document.getElementById('alertCount');
-    if (!countEl) return;
-    // Count unread across both indicators AND news
-    const unreadIndicators = alerts.filter(a => !a.isRead).length;
-    const unreadNews = (window._macroNews || []).filter(a => !a.isRead).length;
-    const unreadCount = unreadIndicators + unreadNews;
-    countEl.textContent = unreadCount;
-    countEl.style.display = unreadCount > 0 ? 'inline-flex' : 'none';
+    const el = document.getElementById('alertCount');
+    if (!el) return;
+    const allItems = [
+        ...alerts,
+        ...(window._macroNewsUS || []),
+        ...(window._macroNewsIL || [])
+    ];
+    const unread = allItems.filter(a => !a.isRead).length;
+    el.textContent = unread;
+    el.style.display = unread > 0 ? 'inline-flex' : 'none';
 }
 
 function markAlertRead(alertId) {
-    const alert = alerts.find(a => a.id === alertId)
-        || (window._macroNews || []).find(a => a.id === alertId);
-    if (alert && !alert.isRead) {
-        alert.isRead = true;
+    const allItems = [
+        ...alerts,
+        ...(window._macroNewsUS || []),
+        ...(window._macroNewsIL || [])
+    ];
+    const item = allItems.find(a => a.id === alertId);
+    if (item && !item.isRead) {
+        item.isRead = true;
         if (!readAlertIds.includes(alertId)) {
             readAlertIds.push(alertId);
             localStorage.setItem('readMacroAlerts', JSON.stringify(readAlertIds));
         }
         const cardEl = document.querySelector(`[data-alert-id="${CSS.escape(alertId)}"]`);
-        if (cardEl) {
-            cardEl.classList.remove('macro-unread');
-            cardEl.classList.add('macro-read');
-        }
+        if (cardEl) { cardEl.classList.remove('macro-unread'); cardEl.classList.add('macro-read'); }
         renderAlerts();
     }
 }
 
 function toggleAlerts() {
-    const macroPage = document.getElementById('macroPage');
-
-    // Hide main dashboard
+    // Hide dashboard
     document.querySelector('.header').style.display = 'none';
     document.querySelector('.summary-bar').style.display = 'none';
     document.querySelector('.filters').style.display = 'none';
-    const riskSummary = document.getElementById('riskMiniSummary');
-    if (riskSummary) riskSummary.style.display = 'none';
+    const rs = document.getElementById('riskMiniSummary'); if (rs) rs.style.display = 'none';
     document.getElementById('exposureSection').style.display = 'none';
     document.getElementById('clientsGrid').style.display = 'none';
 
-    // Mark current newest event as "seen" — future alerts only for newer events
-    _updateLastSeenEvent();
+    // Advance watermark — all current items become "seen"
+    _advanceLastSeen();
+    // Re-resolve so badge zeroes out immediately
+    _resolveReadState(alerts);
+    _resolveReadState(window._macroNewsUS || []);
+    _resolveReadState(window._macroNewsIL || []);
+    renderAlerts();
 
-    _renderMacroPageContent();
-    macroPage.classList.add('active');
-
-    if (typeof updateURLState === 'function') {
-        updateURLState({ view: 'macro' });
-    }
+    _renderMacroPage();
+    document.getElementById('macroPage').classList.add('active');
+    if (typeof updateURLState === 'function') updateURLState({ view: 'macro' });
 }
 
-// ── API Status Indicator ──
+// ── API Status Bar ──
 function _renderApiStatus() {
-    const fmpOk = _macroApiStatus.fmp === true;
-    const finnhubOk = _macroApiStatus.finnhub === true;
-    const fmpMsg = fmpOk ? 'מחובר' : (_macroApiStatus.fmp || 'לא מחובר');
-    const finnhubMsg = finnhubOk ? 'מחובר' : (_macroApiStatus.finnhub || 'לא מחובר');
-
+    const s = _macroApiStatus;
+    const dot = (ok) => `<span class="macro-api-dot ${ok === true ? 'ok' : 'err'}"></span>`;
+    const msg = (v) => v === true ? 'מחובר' : _macroEscape(String(v || 'ממתין'));
     return `<div class="macro-api-status">
-        <span class="macro-api-dot ${fmpOk ? 'ok' : 'err'}"></span>
-        <span>FMP: ${_macroEscape(String(fmpMsg))}</span>
+        ${dot(s.fmpUS)} <span>FMP US: ${msg(s.fmpUS)}</span>
         <span class="macro-api-sep">|</span>
-        <span class="macro-api-dot ${finnhubOk ? 'ok' : 'err'}"></span>
-        <span>Finnhub: ${_macroEscape(String(finnhubMsg))}</span>
+        ${dot(s.fmpIL)} <span>FMP IL: ${msg(s.fmpIL)}</span>
+        <span class="macro-api-sep">|</span>
+        ${dot(s.finnhub)} <span>Finnhub: ${msg(s.finnhub)}</span>
     </div>`;
 }
 
-function _renderMacroPageContent() {
-    const macroPage = document.getElementById('macroPage');
+function _renderMacroPage() {
+    const mp = document.getElementById('macroPage');
+    const usInd = window._macroIndUS || [];
+    const ilInd = window._macroIndIL || [];
+    const usNews = window._macroNewsUS || [];
+    const ilNews = window._macroNewsIL || [];
+    const indTime = _cacheTime(_MACRO_CACHE.US_IND);
+    const newsTime = _cacheTime(_MACRO_CACHE.US_NEWS);
 
-    const indicatorCount = alerts.length;
-    const newsCount = (window._macroNews || []).length;
-    const unreadIndicators = alerts.filter(a => !a.isRead).length;
-    const unreadNews = (window._macroNews || []).filter(a => !a.isRead).length;
-
-    const indicatorsCacheTime = _macroGetCacheTime(_MACRO_CACHE_KEY_INDICATORS);
-    const newsCacheTime = _macroGetCacheTime(_MACRO_CACHE_KEY_NEWS);
-
-    macroPage.innerHTML = `
+    mp.innerHTML = `
         <div class="macro-page-header">
-            <h1>חדשות מאקרו כלכלה</h1>
+            <h1>מאקרו כלכלה — ארה"ב וישראל</h1>
             <div style="display:flex;gap:8px;align-items:center">
-                <button class="macro-back-btn" onclick="_refreshMacroData()" title="רענן נתונים">
+                <button class="macro-back-btn" onclick="_refreshMacroData()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
                         <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -470,23 +419,21 @@ function _renderMacroPageContent() {
             <div class="macro-tabs">
                 <button class="macro-tab ${_macroActiveTab === 'indicators' ? 'active' : ''}" onclick="_switchMacroTab('indicators')">
                     אינדיקטורים כלכליים
-                    <span class="macro-tab-count">${indicatorCount}</span>
-                    ${unreadIndicators > 0 ? `<span class="macro-tab-badge">${unreadIndicators} חדשים</span>` : ''}
+                    <span class="macro-tab-count">${usInd.length + ilInd.length}</span>
                 </button>
                 <button class="macro-tab ${_macroActiveTab === 'news' ? 'active' : ''}" onclick="_switchMacroTab('news')">
-                    חדשות שוק
-                    <span class="macro-tab-count">${newsCount}</span>
-                    ${unreadNews > 0 ? `<span class="macro-tab-badge">${unreadNews} חדשים</span>` : ''}
+                    חדשות מאקרו
+                    <span class="macro-tab-count">${usNews.length + ilNews.length}</span>
                 </button>
             </div>
             <div class="macro-source-info">
                 ${_macroActiveTab === 'indicators'
-                    ? `מקור: Financial Modeling Prep | ${indicatorCount} אינדיקטורים${indicatorsCacheTime ? ` | עדכון אחרון: ${indicatorsCacheTime}` : ''}`
-                    : `מקור: Finnhub | ${newsCount} כתבות${newsCacheTime ? ` | עדכון אחרון: ${newsCacheTime}` : ''}`
+                    ? `מקור: Financial Modeling Prep — נתונים מ-30 ימים אחרונים${indTime ? ` | עדכון: ${indTime}` : ''}`
+                    : `מקור: Finnhub — חדשות מאקרו יומיות${newsTime ? ` | עדכון: ${newsTime}` : ''}`
                 }
             </div>
             <div id="macroTabContent">
-                ${_macroActiveTab === 'indicators' ? _renderIndicatorsTab() : _renderNewsTab()}
+                ${_macroActiveTab === 'indicators' ? _renderIndicatorsTab(usInd, ilInd) : _renderNewsTab(usNews, ilNews)}
             </div>
         </div>
     `;
@@ -494,113 +441,153 @@ function _renderMacroPageContent() {
 
 function _switchMacroTab(tab) {
     _macroActiveTab = tab;
-    _renderMacroPageContent();
+    _renderMacroPage();
 }
 
-// ── Indicators Tab ──
-function _renderIndicatorsTab() {
-    if (!alerts || alerts.length === 0) {
-        return `<div class="macro-empty-state">
-            <div class="macro-empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            </div>
-            <div class="macro-empty-text">עדכון בתהליך</div>
-            <div class="macro-empty-sub">לחץ "רענן נתונים" לטעון אינדיקטורים כלכליים</div>
-        </div>`;
+// ── Indicators Tab (US + Israel sections) ──
+function _renderIndicatorsTab(usInd, ilInd) {
+    let html = '';
+
+    // US Section
+    html += `<div class="macro-country-section">
+        <h2 class="macro-country-header">
+            <span class="macro-country-flag">🇺🇸</span>
+            אינדיקטורים כלכליים ארה"ב
+        </h2>`;
+    if (usInd.length === 0) {
+        html += _renderEmptySection('נתונים לא זמינים — ארה"ב');
+    } else {
+        html += '<div class="macro-grid">';
+        usInd.forEach(a => { html += _renderIndicatorCard(a); });
+        html += '</div>';
     }
-
-    let html = '<div class="macro-grid">';
-    alerts.forEach(a => {
-        const readClass = a.isRead ? 'macro-read' : 'macro-unread';
-        const newBadge = a.isRead ? '' : '<span class="macro-new-badge">חדש</span>';
-
-        // Beat/miss indicator
-        let sentimentHTML = '';
-        if (a.sentiment === 'beat') {
-            sentimentHTML = '<span class="macro-sentiment macro-beat">עלה על התחזית</span>';
-        } else if (a.sentiment === 'miss') {
-            sentimentHTML = '<span class="macro-sentiment macro-miss">מתחת לתחזית</span>';
-        }
-
-        let actualColor = 'var(--text-primary)';
-        if (a.sentiment === 'beat') actualColor = 'var(--accent-green, #22c55e)';
-        else if (a.sentiment === 'miss') actualColor = 'var(--accent-red, #ef4444)';
-
-        html += `
-            <div class="macro-card ${readClass}" data-alert-id="${_macroEscape(a.id)}" onclick="markAlertRead('${_macroEscape(a.id)}')">
-                <div class="macro-card-header">
-                    <div class="macro-card-title">${_macroEscape(a.title)} ${newBadge}</div>
-                    <div class="macro-card-category">${_macroEscape(a.category)}</div>
-                </div>
-                ${sentimentHTML}
-                <div class="macro-card-data">
-                    <div class="macro-data-item">
-                        <div class="data-label">בפועל</div>
-                        <div class="data-value" style="color:${actualColor}">${_macroEscape(a.actual)}</div>
-                    </div>
-                    <div class="macro-data-item">
-                        <div class="data-label">תחזית</div>
-                        <div class="data-value" style="color:var(--accent-blue)">${_macroEscape(a.estimate)}</div>
-                    </div>
-                    <div class="macro-data-item">
-                        <div class="data-label">קודם</div>
-                        <div class="data-value" style="color:var(--text-muted)">${_macroEscape(a.previous)}</div>
-                    </div>
-                </div>
-                <div class="macro-card-time">
-                    <span class="macro-live-badge">LIVE</span>
-                    ${a.date} | ${a.time}
-                </div>
-            </div>`;
-    });
     html += '</div>';
+
+    // Israel Section
+    html += `<div class="macro-country-section">
+        <h2 class="macro-country-header">
+            <span class="macro-country-flag">🇮🇱</span>
+            אינדיקטורים כלכליים ישראל
+        </h2>`;
+    if (ilInd.length === 0) {
+        html += _renderEmptySection('נתונים לא זמינים — ישראל');
+    } else {
+        html += '<div class="macro-grid">';
+        ilInd.forEach(a => { html += _renderIndicatorCard(a); });
+        html += '</div>';
+    }
+    html += '</div>';
+
     return html;
 }
 
-// ── News Tab ──
-function _renderNewsTab() {
-    const news = window._macroNews || [];
+function _renderIndicatorCard(a) {
+    const readClass = a.isRead ? 'macro-read' : 'macro-unread';
+    const newBadge = a.isRead ? '' : '<span class="macro-new-badge">חדש</span>';
+    let sentimentHTML = '';
+    if (a.sentiment === 'beat') sentimentHTML = '<span class="macro-sentiment macro-beat">עלה על התחזית</span>';
+    else if (a.sentiment === 'miss') sentimentHTML = '<span class="macro-sentiment macro-miss">מתחת לתחזית</span>';
+    let actualColor = 'var(--text-primary)';
+    if (a.sentiment === 'beat') actualColor = '#22c55e';
+    else if (a.sentiment === 'miss') actualColor = '#ef4444';
 
-    if (news.length === 0) {
-        return `<div class="macro-empty-state">
-            <div class="macro-empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1m2 13a2 2 0 0 1-2-2V7m2 13a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/></svg>
+    return `
+        <div class="macro-card ${readClass}" data-alert-id="${_macroEscape(a.id)}" onclick="markAlertRead('${_macroEscape(a.id)}')">
+            <div class="macro-card-header">
+                <div class="macro-card-title">${_macroEscape(a.title)} ${newBadge}</div>
+                <div class="macro-card-category">${_macroEscape(a.category)}</div>
             </div>
-            <div class="macro-empty-text">עדכון בתהליך</div>
-            <div class="macro-empty-sub">לחץ "רענן נתונים" לטעון חדשות שוק</div>
-        </div>`;
-    }
-
-    let html = '<div class="macro-news-grid">';
-    news.forEach(n => {
-        const readClass = n.isRead ? 'macro-read' : 'macro-unread';
-        const summaryText = n.summary.length > 180
-            ? n.summary.substring(0, 180) + '...'
-            : n.summary;
-
-        html += `
-            <div class="macro-card macro-news-card ${readClass}" data-alert-id="${_macroEscape(n.id)}" onclick="markAlertRead('${_macroEscape(n.id)}')">
-                ${n.image ? `<div class="macro-news-image" style="background-image:url('${_macroEscape(n.image)}')"></div>` : ''}
-                <div class="macro-news-body">
-                    <div class="macro-news-headline">${_macroEscape(n.headline)}</div>
-                    ${summaryText ? `<div class="macro-news-summary">${_macroEscape(summaryText)}</div>` : ''}
-                    <div class="macro-news-meta">
-                        <span class="macro-live-badge">LIVE</span>
-                        <span>${_macroEscape(n.source)}</span>
-                        <span>${n.date} | ${n.time}</span>
-                        ${n.url ? `<a href="${_macroEscape(n.url)}" target="_blank" rel="noopener" class="macro-news-link" onclick="event.stopPropagation()">קרא עוד →</a>` : ''}
-                    </div>
+            ${sentimentHTML}
+            <div class="macro-card-data">
+                <div class="macro-data-item">
+                    <div class="data-label">בפועל</div>
+                    <div class="data-value" style="color:${actualColor}">${_macroEscape(a.actual)}</div>
                 </div>
-            </div>`;
-    });
+                <div class="macro-data-item">
+                    <div class="data-label">תחזית</div>
+                    <div class="data-value" style="color:var(--accent-blue)">${_macroEscape(a.estimate)}</div>
+                </div>
+                <div class="macro-data-item">
+                    <div class="data-label">קודם</div>
+                    <div class="data-value" style="color:var(--text-muted)">${_macroEscape(a.previous)}</div>
+                </div>
+            </div>
+            <div class="macro-card-time">
+                <span class="macro-live-badge">LIVE</span>
+                ${a.date} | ${a.time}
+            </div>
+        </div>`;
+}
+
+// ── News Tab (5 US + 5 Israel, Hebrew summaries, NO links) ──
+function _renderNewsTab(usNews, ilNews) {
+    let html = '';
+
+    // US News
+    html += `<div class="macro-country-section">
+        <h2 class="macro-country-header">
+            <span class="macro-country-flag">🇺🇸</span>
+            חדשות מאקרו — ארה"ב
+        </h2>`;
+    if (usNews.length === 0) {
+        html += _renderEmptySection('חדשות לא זמינות — ארה"ב');
+    } else {
+        html += '<div class="macro-news-list">';
+        usNews.forEach(n => { html += _renderNewsCard(n); });
+        html += '</div>';
+    }
     html += '</div>';
+
+    // Israel News
+    html += `<div class="macro-country-section">
+        <h2 class="macro-country-header">
+            <span class="macro-country-flag">🇮🇱</span>
+            חדשות מאקרו — ישראל
+        </h2>`;
+    if (ilNews.length === 0) {
+        html += _renderEmptySection('חדשות לא זמינות — ישראל');
+    } else {
+        html += '<div class="macro-news-list">';
+        ilNews.forEach(n => { html += _renderNewsCard(n); });
+        html += '</div>';
+    }
+    html += '</div>';
+
     return html;
+}
+
+function _renderNewsCard(n) {
+    const readClass = n.isRead ? 'macro-read' : 'macro-unread';
+    // Summary: show up to ~600 chars (roughly 5-8 lines in the card).
+    const summary = n.summary
+        ? (n.summary.length > 600 ? n.summary.substring(0, 600) + '...' : n.summary)
+        : '';
+
+    return `
+        <div class="macro-card macro-news-card-full ${readClass}" data-alert-id="${_macroEscape(n.id)}" onclick="markAlertRead('${_macroEscape(n.id)}')">
+            <div class="macro-news-headline">${_macroEscape(n.headline)}</div>
+            ${summary ? `<div class="macro-news-summary-full">${_macroEscape(summary)}</div>` : ''}
+            <div class="macro-news-meta">
+                <span class="macro-live-badge">LIVE</span>
+                <span>${_macroEscape(n.source)}</span>
+                <span>${n.date} | ${n.time}</span>
+            </div>
+        </div>`;
+}
+
+function _renderEmptySection(text) {
+    return `<div class="macro-empty-state" style="padding:30px 20px">
+        <div class="macro-empty-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="macro-empty-text">${_macroEscape(text)}</div>
+        <div class="macro-empty-sub">לחץ "רענן נתונים" לנסות שוב</div>
+    </div>`;
 }
 
 // ========== REFRESH ==========
 
 async function _refreshMacroData() {
-    const macroPage = document.getElementById('macroPage');
     const content = document.getElementById('macroTabContent');
     if (content) {
         content.innerHTML = `<div class="macro-loading">
@@ -608,47 +595,41 @@ async function _refreshMacroData() {
             <div style="text-align:center;color:var(--text-muted);margin-top:12px">טוען נתונים עדכניים...</div>
         </div>`;
     }
-
-    // Reset API status before refetch
-    _macroApiStatus = { fmp: null, finnhub: null };
-
+    _macroApiStatus = { fmpUS: null, fmpIL: null, finnhub: null };
     await checkAlerts(true);
     renderAlerts();
-
-    if (macroPage && macroPage.classList.contains('active')) {
-        _renderMacroPageContent();
-    }
+    const mp = document.getElementById('macroPage');
+    if (mp && mp.classList.contains('active')) _renderMacroPage();
 }
 
 // ========== MARK ALL / CLOSE ==========
 
 function markAllRead() {
-    const allItems = [...alerts, ...(window._macroNews || [])];
-    allItems.forEach(a => {
+    const all = [
+        ...alerts,
+        ...(window._macroNewsUS || []),
+        ...(window._macroNewsIL || [])
+    ];
+    all.forEach(a => {
         if (!a.isRead) {
             a.isRead = true;
             if (!readAlertIds.includes(a.id)) readAlertIds.push(a.id);
         }
     });
     localStorage.setItem('readMacroAlerts', JSON.stringify(readAlertIds));
-    _updateLastSeenEvent();
+    _advanceLastSeen();
     renderAlerts();
-    if (document.getElementById('macroPage')?.classList.contains('active')) {
-        _renderMacroPageContent();
-    }
+    if (document.getElementById('macroPage')?.classList.contains('active')) _renderMacroPage();
 }
 
 function closeMacroPage() {
-    // Update last-seen so these events don't trigger alerts again
-    _updateLastSeenEvent();
-
+    _advanceLastSeen();
     document.getElementById('macroPage').classList.remove('active');
     document.getElementById('macroPage').innerHTML = '';
     document.querySelector('.header').style.display = '';
     document.querySelector('.summary-bar').style.display = '';
     document.querySelector('.filters').style.display = '';
-    const riskSummary = document.getElementById('riskMiniSummary');
-    if (riskSummary) riskSummary.style.display = '';
+    const rs = document.getElementById('riskMiniSummary'); if (rs) rs.style.display = '';
     document.getElementById('exposureSection').style.display = '';
     document.getElementById('clientsGrid').style.display = '';
     if (typeof clearURLState === 'function') clearURLState();
