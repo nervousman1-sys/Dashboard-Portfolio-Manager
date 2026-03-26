@@ -304,75 +304,58 @@ body {
     line-height: 1;
 }
 
-/* ========== FILTER DRAWER (RTL — slides from right) ========== */
-.filter-drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 900;
+/* ========== INLINE EXPANDABLE FILTERS ========== */
+.additional-filters-inline {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    overflow: hidden;
+    max-width: 0;
     opacity: 0;
-    pointer-events: none;
+    transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.3s ease,
+                margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    margin-right: 0;
+}
+.additional-filters-inline.open {
+    max-width: 1200px;
+    opacity: 1;
+    margin-right: 8px;
+}
+/* Glow separator between main filters and inline expansion */
+.inline-filters-glow {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 4px;
+    opacity: 0;
     transition: opacity 0.3s ease;
 }
-.filter-drawer-backdrop.active {
+.additional-filters-inline.open ~ .inline-filters-glow,
+.inline-filters-glow.visible {
     opacity: 1;
-    pointer-events: auto;
 }
-.filter-drawer {
-    position: fixed;
-    top: 0;
-    right: -400px;
-    width: 400px;
-    max-width: 85vw;
-    height: 100vh;
-    z-index: 910;
-    transition: right 0.3s ease;
-    /* Glassmorphism */
-    background: rgba(30, 41, 59, 0.85);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-left: 1px solid rgba(59, 130, 246, 0.15);
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
-    display: flex;
-    flex-direction: column;
+/* Reverse sibling: glow sits BEFORE the inline container in DOM */
+.filters:has(.additional-filters-inline.open) .inline-filters-glow {
+    opacity: 1;
+    background: linear-gradient(180deg, transparent, var(--accent-blue), transparent);
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
 }
-.filter-drawer.open {
-    right: 0;
+/* Toggle text switches when open */
+.filter-drawer-toggle.is-open {
+    border-color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.08);
+    color: var(--accent-blue);
 }
-.filter-drawer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 18px 24px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-}
-.filter-drawer-header h3 {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-.filter-drawer-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px 24px;
-}
-.drawer-filter-section {
-    margin-bottom: 24px;
-}
-.drawer-filter-section label {
-    display: block;
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 10px;
-}
-.drawer-filter-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+@media (max-width: 768px) {
+    .additional-filters-inline.open {
+        max-width: none;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+    }
 }
 
 /* ========== CLEAR FILTERS BUTTON ========== */

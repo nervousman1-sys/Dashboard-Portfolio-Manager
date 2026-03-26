@@ -70,11 +70,11 @@
                 onclick="setFilter('risk', 'low', this)">נמוך</button>
         </div>
         <div class="filter-separator"></div>
-        <button class="filter-drawer-toggle" id="filterDrawerToggle" onclick="toggleFilterDrawer()">
+        <button class="filter-drawer-toggle" id="filterDrawerToggle" onclick="toggleInlineFilters()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
             </svg>
-            סינונים נוספים
+            <span id="toggleFilterLabel">סינונים נוספים</span>
             <span class="drawer-badge" id="drawerBadge" style="display:none">0</span>
         </button>
         <button class="clear-filters-btn" id="clearFiltersBtn" onclick="clearAllFilters()" style="display:none">
@@ -83,59 +83,52 @@
             </svg>
             נקה סינונים
         </button>
+        <!-- Inline expandable filters -->
+        <div class="inline-filters-glow"></div>
+        <div class="additional-filters-inline" id="additionalFiltersInline">
+            <div class="filter-group">
+                <label>נכס:</label>
+                <button class="filter-btn active" data-filter="asset" data-value="all"
+                    onclick="setFilter('asset', 'all', this)">הכל</button>
+                <button class="filter-btn" data-filter="asset" data-value="stocks"
+                    onclick="setFilter('asset', 'stocks', this)">מניות</button>
+                <button class="filter-btn" data-filter="asset" data-value="bonds"
+                    onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
+            </div>
+            <div class="filter-separator"></div>
+            <div class="filter-group">
+                <label>סקטור:</label>
+                <button class="filter-btn active" data-filter="sector" data-value="all"
+                    onclick="setFilter('sector', 'all', this)">הכל</button>
+                <button class="filter-btn" data-filter="sector" data-value="Technology"
+                    onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
+                <button class="filter-btn" data-filter="sector" data-value="Healthcare"
+                    onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
+                <button class="filter-btn" data-filter="sector" data-value="Financials"
+                    onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
+                <button class="filter-btn" data-filter="sector" data-value="Energy"
+                    onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
+                <button class="filter-btn" data-filter="sector" data-value="Crypto"
+                    onclick="setFilter('sector', 'Crypto', this)">קריפטו</button>
+                <button class="filter-btn" data-filter="sector" data-value="Retail"
+                    onclick="setFilter('sector', 'Retail', this)">קמעונאות</button>
+            </div>
+            <div class="filter-separator"></div>
+            <div class="filter-group">
+                <label>גודל תיק:</label>
+                <button class="filter-btn active" data-filter="size" data-value="all"
+                    onclick="setSizeFilter('all', this)">הכל</button>
+                <button class="filter-btn" data-filter="size" data-value="small"
+                    onclick="setSizeFilter('small', this)">קטן מ-250K</button>
+                <button class="filter-btn" data-filter="size" data-value="medium"
+                    onclick="setSizeFilter('medium', this)">250K-500K</button>
+                <button class="filter-btn" data-filter="size" data-value="large"
+                    onclick="setSizeFilter('large', this)">500K+</button>
+            </div>
+        </div>
     </div>
 
     <div class="risk-mini-summary" id="riskMiniSummary"></div>
-
-    <!-- Filter Drawer (slide-in from right for RTL) -->
-    <div class="filter-drawer-backdrop" id="filterDrawerBackdrop" onclick="toggleFilterDrawer(false)"></div>
-    <div class="filter-drawer" id="filterDrawer">
-        <div class="filter-drawer-header">
-            <h3>סינונים נוספים</h3>
-            <button class="modal-close" onclick="toggleFilterDrawer(false)" title="סגור">&times;</button>
-        </div>
-        <div class="filter-drawer-body">
-            <div class="drawer-filter-section">
-                <label>סוג נכס</label>
-                <div class="drawer-filter-buttons">
-                    <button class="filter-btn active" data-filter="asset" data-value="all"
-                        onclick="setFilter('asset', 'all', this)">הכל</button>
-                    <button class="filter-btn" data-filter="asset" data-value="stocks"
-                        onclick="setFilter('asset', 'stocks', this)">מניות</button>
-                    <button class="filter-btn" data-filter="asset" data-value="bonds"
-                        onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
-                </div>
-            </div>
-            <div class="drawer-filter-section">
-                <label>סקטור</label>
-                <div class="drawer-filter-buttons">
-                    <button class="filter-btn active" data-filter="sector" data-value="all"
-                        onclick="setFilter('sector', 'all', this)">הכל</button>
-                    <button class="filter-btn" data-filter="sector" data-value="Technology"
-                        onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
-                    <button class="filter-btn" data-filter="sector" data-value="Healthcare"
-                        onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
-                    <button class="filter-btn" data-filter="sector" data-value="Financials"
-                        onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
-                    <button class="filter-btn" data-filter="sector" data-value="Energy"
-                        onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
-                </div>
-            </div>
-            <div class="drawer-filter-section">
-                <label>גודל תיק</label>
-                <div class="drawer-filter-buttons">
-                    <button class="filter-btn active" data-filter="size" data-value="all"
-                        onclick="setSizeFilter('all', this)">הכל</button>
-                    <button class="filter-btn" data-filter="size" data-value="small"
-                        onclick="setSizeFilter('small', this)">קטן מ-250K</button>
-                    <button class="filter-btn" data-filter="size" data-value="medium"
-                        onclick="setSizeFilter('medium', this)">250K-500K</button>
-                    <button class="filter-btn" data-filter="size" data-value="large"
-                        onclick="setSizeFilter('large', this)">500K+</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="exposure-section" id="exposureSection"></div>
 

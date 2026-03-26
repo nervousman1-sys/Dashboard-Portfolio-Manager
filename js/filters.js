@@ -38,22 +38,25 @@ function setSort(value) {
     renderClientCards();
 }
 
-// ========== FILTER DRAWER ==========
+// ========== INLINE FILTERS TOGGLE ==========
 
-function toggleFilterDrawer(forceState) {
-    const drawer = document.getElementById('filterDrawer');
-    const backdrop = document.getElementById('filterDrawerBackdrop');
-    if (!drawer || !backdrop) return;
+function toggleInlineFilters(forceState) {
+    const container = document.getElementById('additionalFiltersInline');
+    const toggle = document.getElementById('filterDrawerToggle');
+    const label = document.getElementById('toggleFilterLabel');
+    if (!container) return;
 
-    const isOpen = drawer.classList.contains('open');
+    const isOpen = container.classList.contains('open');
     const shouldOpen = typeof forceState === 'boolean' ? forceState : !isOpen;
 
     if (shouldOpen) {
-        drawer.classList.add('open');
-        backdrop.classList.add('active');
+        container.classList.add('open');
+        if (toggle) toggle.classList.add('is-open');
+        if (label) label.textContent = 'סגור סינונים';
     } else {
-        drawer.classList.remove('open');
-        backdrop.classList.remove('active');
+        container.classList.remove('open');
+        if (toggle) toggle.classList.remove('is-open');
+        if (label) label.textContent = 'סינונים נוספים';
     }
 }
 
@@ -110,6 +113,9 @@ function clearAllFilters() {
     const sizeAll = document.querySelector('[data-filter="size"][data-value="all"]');
     if (sizeAll) sizeAll.classList.add('active');
 
+    // Collapse inline filters
+    toggleInlineFilters(false);
+
     _updateDrawerBadge();
     _updateClearFiltersVisibility();
     renderExposureSection();
@@ -131,12 +137,12 @@ function _updateClearFiltersVisibility() {
     btn.style.display = _hasAnyActiveFilter() ? '' : 'none';
 }
 
-// Close drawer on Escape key
+// Close inline filters on Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        const drawer = document.getElementById('filterDrawer');
-        if (drawer && drawer.classList.contains('open')) {
-            toggleFilterDrawer(false);
+        const container = document.getElementById('additionalFiltersInline');
+        if (container && container.classList.contains('open')) {
+            toggleInlineFilters(false);
         }
     }
 });
