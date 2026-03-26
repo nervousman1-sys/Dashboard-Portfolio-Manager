@@ -1024,7 +1024,6 @@ async function supaLogTransaction(portfolioId, txData) {
 
             if (!error) {
                 console.log(`[supaLogTransaction] ✓ ${txData.type} ${txData.ticker} persisted`);
-                if (typeof _showSyncToast === 'function') _showSyncToast('נשמר בענן ✓', 'success');
                 return { persisted: true };
             }
 
