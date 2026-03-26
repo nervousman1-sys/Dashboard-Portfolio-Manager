@@ -20,6 +20,18 @@ function switchModalTab(tabName) {
     if (tabName === 'sectors') {
         setTimeout(() => renderModalSectorChart(client), 50);
     }
+
+    // Fresh-fetch transactions from Supabase every time the tab is opened
+    if (tabName === 'transactions') {
+        const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px">
+                <div class="trans-skeleton"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+                <div style="color:var(--text-muted);font-size:12px;margin-top:8px">טוען היסטוריית פעולות...</div>
+            </td></tr>`;
+        }
+        _loadTransactionHistory(client.id);
+    }
 }
 
 async function openModal(clientId) {

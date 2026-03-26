@@ -855,10 +855,10 @@ async function _probeTransactionsTable() {
     return _supaTransactionsAvailable;
 }
 
-// Migrate localStorage transactions to Supabase (one-time, best-effort)
+// Migrate localStorage transactions to Supabase, then DELETE from localStorage.
+// Called once per session when the transactions table is confirmed available.
 async function _migrateLocalTransactions() {
     try {
-        // Find all localStorage keys matching portfolio_transactions_*
         const keysToMigrate = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
@@ -871,25 +871,32 @@ async function _migrateLocalTransactions() {
 
         for (const key of keysToMigrate) {
             const portfolioId = parseInt(key.replace('portfolio_transactions_', ''));
-            if (!portfolioId || isNaN(portfolioId)) continue;
+            if (!portfolioId || isNaN(portfolioId)) {
+                localStorage.removeItem(key); // corrupt key — delete
+                continue;
+            }
 
             const localTx = JSON.parse(localStorage.getItem(key) || '[]');
-            if (localTx.length === 0) continue;
+            if (localTx.length === 0) {
+                localStorage.removeItem(key);
+                continue;
+            }
 
-            // Check how many Supabase transactions exist for this portfolio
+            // Check if Supabase already has transactions for this portfolio
             const { count } = await supabaseClient
                 .from('transactions')
                 .select('id', { count: 'exact', head: true })
                 .eq('portfolio_id', portfolioId);
 
-            // If Supabase already has transactions, skip migration (avoid duplicates)
             if (count && count > 0) {
-                console.log(`[Transactions] Portfolio ${portfolioId}: ${count} Supabase records exist, skipping localStorage migration`);
+                // DB already has data — localStorage is stale, delete it
+                console.log(`[Migration] Portfolio ${portfolioId}: DB has ${count} records — deleting localStorage copy`);
+                localStorage.removeItem(key);
                 continue;
             }
 
-            // Insert local transactions into Supabase (batch, oldest first)
-            const rows = localTx.reverse().map(t => ({
+            // DB is empty — push local data, then delete
+            const rows = [...localTx].reverse().map(t => ({
                 portfolio_id: portfolioId,
                 created_at: t.created_at || new Date().toISOString(),
                 type: t.type,
@@ -909,15 +916,16 @@ async function _migrateLocalTransactions() {
                 .insert(rows);
 
             if (!error) {
-                console.log(`[Transactions] Migrated ${rows.length} localStorage transactions for portfolio ${portfolioId}`);
-                // Clear localStorage after successful migration
-                localStorage.removeItem(key);
+                console.log(`[Migration] ✓ Pushed ${rows.length} transactions for portfolio ${portfolioId} to Supabase`);
             } else {
-                console.warn(`[Transactions] Migration failed for portfolio ${portfolioId}:`, error.message);
+                console.warn(`[Migration] Insert failed for portfolio ${portfolioId}:`, error.message);
             }
+
+            // Always delete localStorage — DB is now the single source of truth
+            localStorage.removeItem(key);
         }
     } catch (e) {
-        console.warn('[Transactions] Migration error:', e.message);
+        console.warn('[Migration] Error:', e.message);
     }
 }
 
@@ -943,53 +951,33 @@ function _showSyncToast(message, type = 'success') {
     }, 2500);
 }
 
+// ── localStorage helpers (kept ONLY for one-time migration to Supabase) ──
+
 function _localTxKey(portfolioId) {
     return `portfolio_transactions_${portfolioId}`;
 }
 
-function _saveTransactionLocal(portfolioId, txRecord) {
-    try {
-        const key = _localTxKey(portfolioId);
-        const existing = JSON.parse(localStorage.getItem(key) || '[]');
-        existing.unshift(txRecord);
-        if (existing.length > 500) existing.length = 500;
-        localStorage.setItem(key, JSON.stringify(existing));
-    } catch (e) {
-        console.warn('_saveTransactionLocal error:', e);
-    }
-}
-
 function _getLocalTransactions(portfolioId) {
     try {
-        const key = _localTxKey(portfolioId);
-        return JSON.parse(localStorage.getItem(key) || '[]');
+        return JSON.parse(localStorage.getItem(_localTxKey(portfolioId)) || '[]');
     } catch (e) {
         return [];
     }
 }
 
+function _clearLocalTransactions(portfolioId) {
+    try { localStorage.removeItem(_localTxKey(portfolioId)); } catch (e) { /* ignore */ }
+}
+
+// ── DATABASE-FIRST: Log transaction to Supabase ──
+// Returns { persisted: true } on success, { persisted: false, error } on failure.
+// The caller MUST check the result — if persisted is false, the UI should roll back.
+
 async function supaLogTransaction(portfolioId, txData) {
-    const record = {
-        id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        portfolio_id: portfolioId,
-        created_at: new Date().toISOString(),
-        type: txData.type,
-        ticker: txData.ticker || '-',
-        name: txData.name || '',
-        asset_type: txData.asset_type || 'stock',
-        currency: txData.currency || 'USD',
-        shares: txData.shares ?? 0,
-        price: txData.price ?? 0,
-        total: txData.total ?? 0,
-        realized_pnl: txData.realized_pnl ?? null,
-        description: txData.description || null
-    };
-
-    // Always save to localStorage as instant backup
-    _saveTransactionLocal(portfolioId, record);
-
-    // Persist to Supabase (primary persistent storage)
-    if (!_supaTransactionsAvailable) return { persisted: false, local: true };
+    if (!_supaTransactionsAvailable) {
+        if (typeof _showSyncToast === 'function') _showSyncToast('טבלת פעולות לא זמינה', 'error');
+        return { persisted: false, error: 'table_unavailable' };
+    }
 
     const supaRecord = {
         portfolio_id: portfolioId,
@@ -1005,8 +993,6 @@ async function supaLogTransaction(portfolioId, txData) {
         description: txData.description || null
     };
 
-    // Attempt 1
-    let persisted = false;
     for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             let { error } = await supabaseClient
@@ -1021,14 +1007,13 @@ async function supaLogTransaction(portfolioId, txData) {
             }
 
             if (!error) {
-                persisted = true;
-                console.log(`[supaLogTransaction] ✓ ${txData.type} ${txData.ticker} persisted to Supabase`);
-                break;
+                console.log(`[supaLogTransaction] ✓ ${txData.type} ${txData.ticker} persisted`);
+                if (typeof _showSyncToast === 'function') _showSyncToast('נשמר בענן ✓', 'success');
+                return { persisted: true };
             }
 
             if (error.message && (error.message.includes('relation') || error.message.includes('transactions'))) {
                 _supaTransactionsAvailable = false;
-                console.error('[supaLogTransaction] Table unavailable — falling back to localStorage only');
                 break;
             }
 
@@ -1040,57 +1025,35 @@ async function supaLogTransaction(portfolioId, txData) {
         }
     }
 
-    // Show sync toast
-    if (persisted && typeof _showSyncToast === 'function') {
-        _showSyncToast('נשמר בענן ✓', 'success');
-    } else if (!persisted && typeof _showSyncToast === 'function') {
-        _showSyncToast('שגיאת שמירה — נשמר מקומית', 'error');
-    }
-
-    return { persisted, local: true };
+    if (typeof _showSyncToast === 'function') _showSyncToast('שגיאה בשמירת פעולה', 'error');
+    return { persisted: false, error: 'insert_failed' };
 }
 
+// ── DATABASE-FIRST: Fetch transactions from Supabase (single source of truth) ──
+
 async function supaFetchTransactions(portfolioId) {
-    // Primary: localStorage (always available, always has data)
-    const localTx = _getLocalTransactions(portfolioId).map(mapTransaction);
+    if (!_supaTransactionsAvailable) return [];
 
-    // If Supabase transactions table is available, try to merge
-    if (_supaTransactionsAvailable) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('transactions')
-                .select('*')
-                .eq('portfolio_id', portfolioId)
-                .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await supabaseClient
+            .from('transactions')
+            .select('*')
+            .eq('portfolio_id', portfolioId)
+            .order('created_at', { ascending: false });
 
-            if (error) {
-                if (error.message && error.message.includes('transactions')) {
-                    _supaTransactionsAvailable = false;
-                }
-                return localTx;
+        if (error) {
+            if (error.message && error.message.includes('transactions')) {
+                _supaTransactionsAvailable = false;
             }
-
-            if (data && data.length > 0) {
-                const supaTx = data.map(mapTransaction);
-                // Merge: Supabase + local-only (deduplicate by type+ticker+time proximity)
-                const merged = [...supaTx];
-                for (const lt of localTx) {
-                    const isDuplicate = supaTx.some(st =>
-                        st.type === lt.type &&
-                        st.ticker === lt.ticker &&
-                        Math.abs(st.date.getTime() - lt.date.getTime()) < 5000
-                    );
-                    if (!isDuplicate) merged.push(lt);
-                }
-                merged.sort((a, b) => b.date.getTime() - a.date.getTime());
-                return merged;
-            }
-        } catch (e) {
-            // Silent fallback to localStorage
+            console.error('[supaFetchTransactions] Error:', error.message);
+            return [];
         }
-    }
 
-    return localTx;
+        return (data || []).map(mapTransaction);
+    } catch (e) {
+        console.error('[supaFetchTransactions] Exception:', e.message);
+        return [];
+    }
 }
 
 function mapTransaction(t) {
