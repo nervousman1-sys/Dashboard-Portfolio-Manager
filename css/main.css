@@ -1870,6 +1870,98 @@ body {
     white-space: pre-line;
 }
 
+/* Headline indicator widgets */
+.macro-headline-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+.macro-headline-widget {
+    flex: 1 1 180px;
+    max-width: 240px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    backdrop-filter: blur(8px);
+    transition: border-color 0.2s;
+}
+
+.macro-headline-widget:hover {
+    border-color: var(--accent-blue);
+}
+
+.macro-headline-widget.macro-headline-unavail {
+    opacity: 0.55;
+}
+
+.macro-hw-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.macro-hw-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: 'Courier New', monospace;
+    line-height: 1.1;
+}
+
+.macro-hw-trend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.macro-hw-arrow {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.trend-up .macro-hw-arrow { color: #22c55e; }
+.trend-down .macro-hw-arrow { color: #ef4444; }
+.trend-flat .macro-hw-arrow { color: var(--text-muted); }
+
+.macro-hw-date {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.macro-sub-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 8px 0 12px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+    .macro-headline-row {
+        gap: 10px;
+    }
+    .macro-headline-widget {
+        flex: 1 1 140px;
+        max-width: none;
+        padding: 12px 14px;
+    }
+    .macro-hw-value {
+        font-size: 20px;
+    }
+}
+
 .alert-count {
     display: inline-flex;
     align-items: center;
