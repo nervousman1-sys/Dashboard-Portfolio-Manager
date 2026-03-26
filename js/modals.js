@@ -219,10 +219,12 @@ async function openModal(clientId) {
             <!-- Tab: Holdings -->
             <div class="modal-tab-content" id="tab-holdings">
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
+                <div class="holdings-table-wrapper">
                 <table class="holdings-table">
                     <thead><tr><th>נכס</th><th>מחיר קנייה</th><th>מחיר נוכחי</th><th>כמות</th><th>שווי כולל</th><th>שינוי יומי</th><th>רווח/הפסד</th><th>תשואה</th><th>פעולות</th></tr></thead>
                     <tbody>${holdingsRows}${holdingsFooter}</tbody>
                 </table>
+                </div>
             </div>
             <!-- Tab: Sectors -->
             <div class="modal-tab-content" id="tab-sectors">
@@ -233,10 +235,12 @@ async function openModal(clientId) {
             </div>
             <!-- Tab: Transactions -->
             <div class="modal-tab-content" id="tab-transactions">
+                <div class="holdings-table-wrapper">
                 <table class="holdings-table">
                     <thead><tr><th>תאריך</th><th>פעולה</th><th>נכס</th><th>כמות</th><th>מחיר</th><th>סה"כ</th><th>רווח ממומש</th></tr></thead>
                     <tbody>${transRows}</tbody>
                 </table>
+                </div>
             </div>
         </div>
     `;
