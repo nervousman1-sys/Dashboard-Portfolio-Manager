@@ -16,6 +16,10 @@ const TWELVE_DATA_API_KEY = _env.TWELVE_DATA_API_KEY || '02940d45b4584a37a9e1c45
 // Finnhub API key (free: https://finnhub.io/register — 60 calls/min, all US stocks)
 const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01qkvh5q0aag';
 
+// FRED API key — free registration at https://fred.stlouisfed.org/docs/api/api_key.html
+// Used for US macro indicators: CPI, Core CPI, Fed Funds Rate, GDP, Unemployment
+const FRED_API_KEY = _env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
+
 // Initialize Supabase client (uses the CDN global: supabase)
 let supabaseClient;
 try {

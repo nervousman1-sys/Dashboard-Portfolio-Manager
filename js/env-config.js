@@ -5,5 +5,6 @@ const __ENV = {
     SUPABASE_ANON_KEY: '',
     FMP_API_KEY: '',
     TWELVE_DATA_API_KEY: '',
-    FINNHUB_API_KEY: ''
+    FINNHUB_API_KEY: '',
+    FRED_API_KEY: ''
 };

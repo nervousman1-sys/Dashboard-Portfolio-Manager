@@ -1817,13 +1817,37 @@ body {
     padding: 40px 0;
 }
 
-/* Country section dividers */
+/* Country section dividers with neon region accents */
 .macro-country-section {
     margin-bottom: 36px;
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    border: 1px solid var(--border);
+    background: rgba(30, 41, 59, 0.4);
 }
 
 .macro-country-section:last-child {
     margin-bottom: 0;
+}
+
+/* US section — cyan neon */
+.macro-section-us {
+    border-color: rgba(6, 182, 212, 0.25);
+    box-shadow: inset 0 0 30px rgba(6, 182, 212, 0.04);
+}
+.macro-section-us .macro-country-header {
+    border-bottom-color: rgba(6, 182, 212, 0.35);
+    color: #e0f7fa;
+}
+
+/* IL section — emerald neon */
+.macro-section-il {
+    border-color: rgba(16, 185, 129, 0.25);
+    box-shadow: inset 0 0 30px rgba(16, 185, 129, 0.04);
+}
+.macro-section-il .macro-country-header {
+    border-bottom-color: rgba(16, 185, 129, 0.35);
+    color: #d1fae5;
 }
 
 .macro-country-header {
@@ -1851,15 +1875,90 @@ body {
 }
 
 .macro-news-card-full {
-    padding: 20px 24px;
+    padding: 18px 22px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Accordion card layout */
+.macro-accordion-card {
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.macro-accordion-card.macro-accordion-open {
+    border-color: rgba(59, 130, 246, 0.5) !important;
+    background: rgba(59, 130, 246, 0.06) !important;
+}
+
+/* Headline row — flex with toggle arrow */
+.macro-news-headline-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
 }
 
 .macro-news-card-full .macro-news-headline {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 10px;
     line-height: 1.5;
+    flex: 1;
+}
+
+/* Accordion toggle arrow */
+.macro-accordion-toggle {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-top: 4px;
+    transition: transform 0.2s;
+}
+
+/* Accordion body (summary) */
+.macro-accordion-body {
+    padding: 14px 0 8px 0;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 8px;
+}
+
+.macro-accordion-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.75;
+    direction: rtl;
+    text-align: right;
+}
+
+.macro-accordion-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Loading spinner inside accordion */
+.macro-accordion-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.macro-acc-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: macro-spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes macro-spin {
+    to { transform: rotate(360deg); }
 }
 
 .macro-news-summary-full {
@@ -1922,6 +2021,7 @@ body {
     gap: 6px;
     font-size: 12px;
     color: var(--text-secondary);
+    flex-wrap: wrap;
 }
 
 .macro-hw-arrow {
@@ -1929,9 +2029,23 @@ body {
     font-weight: 700;
 }
 
-.trend-up .macro-hw-arrow { color: #22c55e; }
-.trend-down .macro-hw-arrow { color: #ef4444; }
-.trend-flat .macro-hw-arrow { color: var(--text-muted); }
+.macro-hw-change {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+.macro-hw-prev {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.trend-up .macro-hw-arrow  { color: #22c55e; }
+.trend-up .macro-hw-change { color: #22c55e; }
+.trend-down .macro-hw-arrow  { color: #ef4444; }
+.trend-down .macro-hw-change { color: #ef4444; }
+.trend-flat .macro-hw-arrow  { color: var(--text-muted); }
+.trend-flat .macro-hw-change { color: var(--text-muted); }
 
 .macro-hw-date {
     font-size: 10px;
