@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v122';
+const CACHE_NAME = 'portfolio-dashboard-v124';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -31,7 +31,7 @@ const STATIC_ASSETS = [
 ];
 
 // Hosts that should never be cached (APIs, auth, realtime)
-const API_HOSTS = ['supabase.co', 'supabase.io', 'twelvedata.com', 'financialmodelingprep.com', 'finnhub.io', 'yahoo', 'tradingeconomics'];
+const API_HOSTS = ['supabase.co', 'supabase.io', 'twelvedata.com', 'financialmodelingprep.com', 'finnhub.io', 'yahoo', 'tradingeconomics', 'stlouisfed.org', 'boi.gov.il', 'allorigins.win'];
 
 // Install - pre-cache static assets
 self.addEventListener('install', (event) => {
@@ -123,13 +123,21 @@ self.addEventListener('fetch', (event) => {
     if (_isNetworkFirst(url.pathname)) {
         event.respondWith(
             fetch(event.request).then((response) => {
-                if (response.ok) {
+                if (response && response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
                 }
                 return response;
             }).catch(() => {
-                return caches.match(event.request);
+                return caches.match(event.request).then((cached) => {
+                    // If cache miss, return a basic HTML response instead of undefined
+                    if (!cached) {
+                        return new Response('<!DOCTYPE html><html><body><h1>Offline</h1></body></html>', {
+                            headers: { 'Content-Type': 'text/html' }
+                        });
+                    }
+                    return cached;
+                });
             })
         );
         return;

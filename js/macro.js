@@ -15,16 +15,16 @@
 
 // ── Cache Keys & TTLs ──
 const _MACRO_CACHE = {
-    US_HEAD:  'macro_us_headline_v3',
-    IL_HEAD:  'macro_il_headline_v3',
-    US_CAL:   'macro_us_calendar_v2',
-    IL_CAL:   'macro_il_calendar_v2',
-    US_NEWS:  'macro_us_news_v2',
-    IL_NEWS:  'macro_il_news_v2',
+    US_HEAD:  'macro_us_headline_v4',
+    IL_HEAD:  'macro_il_headline_v4',
+    US_CAL:   'macro_us_calendar_v3',
+    IL_CAL:   'macro_il_calendar_v3',
+    US_NEWS:  'macro_us_news_v3',
+    IL_NEWS:  'macro_il_news_v3',
     LAST_TS:  'macro_lastSeenTimestamp'
 };
-const _MACRO_TTL_IND  = 2 * 60 * 60 * 1000;  // 2 hours
-const _MACRO_TTL_NEWS = 30 * 60 * 1000;       // 30 minutes
+const _MACRO_TTL_IND  = 6 * 60 * 60 * 1000;  // 6 hours (aggressive caching to avoid rate limits)
+const _MACRO_TTL_NEWS = 2 * 60 * 60 * 1000;  // 2 hours
 
 let _macroActiveTab = 'indicators';
 let _macroApiStatus = { fred: null, fmpUS: null, fmpIL: null, boiIL: null, news: null };
@@ -39,10 +39,24 @@ function _macroEscape(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function _macroFetch(url, ms = 12000) {
+async function _macroFetch(url, ms = 12000, retries = 2) {
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), ms);
-    return fetch(url, { signal: c.signal }).finally(() => clearTimeout(t));
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const response = await fetch(url, { signal: c.signal });
+            clearTimeout(t);
+            return response;
+        } catch (error) {
+            if (attempt === retries) {
+                clearTimeout(t);
+                throw error;
+            }
+            // Wait before retry (exponential backoff: 500ms, 1000ms, 2000ms...)
+            await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt)));
+        }
+    }
 }
 
 function _cacheGet(key, ttl) {
@@ -103,11 +117,21 @@ const _FRED_SERIES = [
 
 async function _fetchFREDIndicators(forceRefresh) {
     const key = (typeof FRED_API_KEY !== 'undefined') ? FRED_API_KEY : '';
-    if (!key || key === '') { _macroApiStatus.fred = 'No FRED key'; return null; }
+    if (!key || key === '') {
+        console.warn('[FRED] No API key found - FRED_API_KEY is undefined or empty');
+        _macroApiStatus.fred = 'No FRED key';
+        return null;
+    }
+
+    console.log('[FRED] API key found, fetching indicators...');
 
     if (!forceRefresh) {
         const cached = _cacheGet(_MACRO_CACHE.US_HEAD, _MACRO_TTL_IND);
-        if (cached) { _macroApiStatus.fred = true; return cached; }
+        if (cached) {
+            console.log('[FRED] Using cached data');
+            _macroApiStatus.fred = true;
+            return cached;
+        }
     }
 
     const results = {};
@@ -115,27 +139,39 @@ async function _fetchFREDIndicators(forceRefresh) {
         try {
             const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${s.id}&api_key=${key}&file_type=json&sort_order=desc&limit=2&units=${s.units}`;
             const res = await _macroFetch(url);
-            if (!res.ok) { console.warn(`[FRED] ${s.key} HTTP ${res.status}`); return; }
+            if (!res.ok) {
+                console.warn(`[FRED] ${s.key} HTTP ${res.status}`);
+                return;
+            }
             const data = await res.json();
             const obs = (data?.observations || []).filter(o => o.value !== '.' && o.value !== '');
-            if (obs.length === 0) return;
+            if (obs.length === 0) {
+                console.warn(`[FRED] ${s.key} - no valid observations found`);
+                return;
+            }
 
             const latest = obs[0];
             const prev   = obs.length > 1 ? obs[1] : null;
             const val    = parseFloat(latest.value);
             const prevVal = prev ? parseFloat(prev.value) : null;
-            if (isNaN(val)) return;
+            if (isNaN(val)) {
+                console.warn(`[FRED] ${s.key} - invalid value: ${latest.value}`);
+                return;
+            }
 
             let trend = 'flat';
             if (prevVal !== null && !isNaN(prevVal)) trend = val > prevVal ? 'up' : val < prevVal ? 'down' : 'flat';
 
             results[s.key] = { value: val, previous: prevVal, trend, date: latest.date, prevDate: prev?.date || null, label: s.label, unit: s.unit };
-        } catch (e) { console.warn(`[FRED] ${s.key} failed:`, e.message); }
+            console.log(`[FRED] ✓ ${s.key}: ${val}${s.unit} (${latest.date})`);
+        } catch (e) {
+            console.warn(`[FRED] ${s.key} failed:`, e.message);
+        }
     }));
 
     const count = Object.keys(results).length;
     _macroApiStatus.fred = count > 0 ? true : 'No data';
-    console.log(`[Macro] ✓ FRED US: ${count}/${_FRED_SERIES.length} indicators`);
+    console.log(`[Macro] FRED US: ${count}/${_FRED_SERIES.length} indicators fetched`);
     if (count > 0) _cacheSet(_MACRO_CACHE.US_HEAD, results);
     return count > 0 ? results : null;
 }
@@ -186,12 +222,25 @@ async function _fetchFMPUSIndicators(forceRefresh) {
     return count > 0 ? results : null;
 }
 
-// Master US headline loader — FRED first, FMP fallback
+// Master US headline loader — FMP PRIMARY (CORS-friendly), FRED fallback
 async function _fetchUSHeadlines(forceRefresh) {
+    // Try FMP first (no CORS issues)
+    const fmpResult = await _fetchFMPUSIndicators(forceRefresh);
+    if (fmpResult) {
+        console.log('[Macro] ✓ Using FMP for US indicators (primary)');
+        return fmpResult;
+    }
+
+    // Fallback to FRED only if FMP fails
+    console.log('[Macro] FMP failed, trying FRED as fallback...');
     const fredResult = await _fetchFREDIndicators(forceRefresh);
-    if (fredResult) return fredResult;
-    console.log('[Macro] FRED unavailable, falling back to FMP for US indicators');
-    return _fetchFMPUSIndicators(forceRefresh);
+    if (fredResult) {
+        console.log('[Macro] ✓ Using FRED for US indicators (fallback)');
+        return fredResult;
+    }
+
+    console.warn('[Macro] ⚠ Both FMP and FRED failed for US indicators');
+    return null;
 }
 
 // ========== 3. ISRAEL HEADLINE INDICATORS ==========
@@ -199,20 +248,39 @@ async function _fetchUSHeadlines(forceRefresh) {
 async function _fetchILHeadlines(forceRefresh) {
     if (!forceRefresh) {
         const cached = _cacheGet(_MACRO_CACHE.IL_HEAD, _MACRO_TTL_IND);
-        if (cached) { _macroApiStatus.fmpIL = true; _macroApiStatus.boiIL = true; return cached; }
+        if (cached) {
+            console.log('[IL] Using cached data');
+            _macroApiStatus.fmpIL = true;
+            _macroApiStatus.boiIL = true;
+            return cached;
+        }
     }
 
+    console.log('[IL] Fetching Israel economic indicators...');
     const results = {};
 
     // ── BOI Interest Rate (Bank of Israel SDMX API — public, no key) ──
+    // Try with CORS proxy to avoid CORS blocks
     try {
         const now = new Date();
-        const startMonth = new Date(now); startMonth.setMonth(startMonth.getMonth() - 6);
+        const startMonth = new Date(now); startMonth.setMonth(startMonth.getMonth() - 12);
         const startStr = `${startMonth.getFullYear()}-${String(startMonth.getMonth() + 1).padStart(2, '0')}`;
         const boiUrl = `https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STAT/ERI_RES_130/1.0?startperiod=${startStr}&format=csv`;
-        const res = await _macroFetch(boiUrl);
 
-        if (res.ok) {
+        console.log('[BOI] Fetching interest rate...');
+
+        // Try direct fetch first
+        let res;
+        try {
+            res = await _macroFetch(boiUrl, 8000, 1); // Shorter timeout, only 1 retry
+        } catch (directError) {
+            // If direct fails (CORS or network), try with allorigins proxy
+            console.log('[BOI] Direct fetch failed, trying CORS proxy...');
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(boiUrl)}`;
+            res = await _macroFetch(proxyUrl, 10000, 1);
+        }
+
+        if (res && res.ok) {
             const csv = await res.text();
             const lines = csv.trim().split('\n').filter(l => l.trim());
             if (lines.length > 1) {
@@ -236,11 +304,20 @@ async function _fetchILHeadlines(forceRefresh) {
                     else if (prevEntry && latest.value < prevEntry.value) trend = 'down';
                     results.boi_rate = { value: latest.value, previous: prevEntry?.value || null, trend, date: latest.date, prevDate: prevEntry?.date || null, label: 'ריבית בנק ישראל', unit: '%' };
                     _macroApiStatus.boiIL = true;
-                    console.log(`[Macro] ✓ BOI rate: ${latest.value}% (${latest.date})`);
+                    console.log(`[BOI] ✓ Interest rate: ${latest.value}% (${latest.date})`);
+                } else {
+                    console.warn('[BOI] No valid data found in CSV');
+                    _macroApiStatus.boiIL = 'No data';
                 }
             }
-        } else { _macroApiStatus.boiIL = `HTTP ${res.status}`; }
-    } catch (e) { console.warn('[Macro] BOI rate failed:', e.message); _macroApiStatus.boiIL = e.message; }
+        } else {
+            console.warn(`[BOI] HTTP ${res ? res.status : 'failed'}`);
+            _macroApiStatus.boiIL = res ? `HTTP ${res.status}` : 'Failed';
+        }
+    } catch (e) {
+        console.warn('[BOI] Rate fetch failed (all methods):', e.message);
+        _macroApiStatus.boiIL = e.message;
+    }
 
     // ── IL CPI + GDP via FMP Economic Calendar ──
     if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
@@ -565,6 +642,10 @@ function _advanceLastSeen() {
 // ========== MAIN DATA LOADER ==========
 
 async function checkAlerts(forceRefresh = false) {
+    // Track if we're using cached data
+    window._macroUsingCache = { us: false, il: false };
+
+    // Try to fetch fresh data
     const [usHead, ilHead, usCal, ilCal, newsResult] = await Promise.all([
         _fetchUSHeadlines(forceRefresh),
         _fetchILHeadlines(forceRefresh),
@@ -573,8 +654,35 @@ async function checkAlerts(forceRefresh = false) {
         _fetchMacroNews(forceRefresh)
     ]);
 
-    window._macroHeadUS  = usHead;
-    window._macroHeadIL  = ilHead;
+    // If fresh fetch failed, try to load from cache regardless of TTL (stale data is better than no data)
+    if (!usHead && !forceRefresh) {
+        const staleUS = _cacheGet(_MACRO_CACHE.US_HEAD, Infinity);
+        if (staleUS) {
+            console.log('[Macro] ⚠ Using stale cached US data (all API calls failed)');
+            window._macroHeadUS = staleUS;
+            window._macroUsingCache.us = true;
+        } else {
+            window._macroHeadUS = null;
+        }
+    } else {
+        window._macroHeadUS = usHead;
+        window._macroUsingCache.us = false;
+    }
+
+    if (!ilHead && !forceRefresh) {
+        const staleIL = _cacheGet(_MACRO_CACHE.IL_HEAD, Infinity);
+        if (staleIL) {
+            console.log('[Macro] ⚠ Using stale cached IL data (all API calls failed)');
+            window._macroHeadIL = staleIL;
+            window._macroUsingCache.il = true;
+        } else {
+            window._macroHeadIL = null;
+        }
+    } else {
+        window._macroHeadIL = ilHead;
+        window._macroUsingCache.il = false;
+    }
+
     window._macroCalUS   = usCal  || [];
     window._macroCalIL   = ilCal  || [];
     window._macroNewsUS  = newsResult.us  || [];
@@ -584,6 +692,15 @@ async function checkAlerts(forceRefresh = false) {
     _resolveReadState(alerts);
     _resolveReadState(window._macroNewsUS);
     _resolveReadState(window._macroNewsIL);
+
+    // Update lastUpdate timestamp in header
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    if (lastUpdateEl) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        const cacheNote = (window._macroUsingCache.us || window._macroUsingCache.il) ? ' (מטמון)' : '';
+        lastUpdateEl.textContent = `עודכן: ${timeStr}${cacheNote}`;
+    }
 
     const mp = document.getElementById('macroPage');
     if (mp && mp.classList.contains('active')) _renderMacroPage();
@@ -693,7 +810,7 @@ function _renderMacroPage() {
 function _switchMacroTab(tab) { _macroActiveTab = tab; _renderMacroPage(); }
 
 // ── HEADLINE WIDGET ──
-function _renderHeadlineWidget(data, label, unit) {
+function _renderHeadlineWidget(data, label, unit, isCached = false) {
     if (!data) {
         return `<div class="macro-headline-widget macro-headline-unavail">
             <div class="macro-hw-label">${_macroEscape(label)}</div>
@@ -704,22 +821,37 @@ function _renderHeadlineWidget(data, label, unit) {
     const prevVal = data.previous !== null ? (unit === '%' ? _fmtPct(data.previous) : _fmtNum(data.previous)) : null;
     const arrow   = data.trend === 'up' ? '▲' : data.trend === 'down' ? '▼' : '●';
     const trendClass = data.trend === 'up' ? 'trend-up' : data.trend === 'down' ? 'trend-down' : 'trend-flat';
-    const dateStr = data.date ? new Date(data.date).toLocaleDateString('he-IL') : '';
+
+    // Format date as [DD.MM.YY]
+    let dateStr = '';
+    if (data.date) {
+        const d = new Date(data.date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).slice(-2);
+        dateStr = `${day}.${month}.${year}`;
+    }
+
     const change  = (prevVal && data.previous !== null) ? (() => {
         const delta = data.value - data.previous;
         const sign  = delta >= 0 ? '+' : '';
         return `${sign}${delta.toFixed(2)}${unit}`;
     })() : null;
 
-    return `<div class="macro-headline-widget">
-        <div class="macro-hw-label">${_macroEscape(data.label || label)}</div>
+    // Include date in label format: [Metric Name] [DD.MM.YY]
+    const labelWithDate = dateStr ? `${_macroEscape(data.label || label)} [${dateStr}]` : _macroEscape(data.label || label);
+
+    // Add cached badge if data is from cache
+    const cachedBadge = isCached ? '<span class="macro-cached-badge" title="נתונים מהמטמון">📦 מטמון</span>' : '';
+
+    return `<div class="macro-headline-widget ${isCached ? 'macro-cached' : ''}">
+        <div class="macro-hw-label">${labelWithDate} ${cachedBadge}</div>
         <div class="macro-hw-value">${_macroEscape(val)}</div>
         <div class="macro-hw-trend ${trendClass}">
             <span class="macro-hw-arrow">${arrow}</span>
             ${change ? `<span class="macro-hw-change">${_macroEscape(change)}</span>` : ''}
             ${prevVal ? `<span class="macro-hw-prev">קודם: ${_macroEscape(prevVal)}</span>` : ''}
         </div>
-        <div class="macro-hw-date">עודכן: ${_macroEscape(dateStr)}</div>
     </div>`;
 }
 
@@ -729,16 +861,18 @@ function _renderIndicatorsTab() {
     const ilHead = window._macroHeadIL || {};
     const usCal  = window._macroCalUS  || [];
     const ilCal  = window._macroCalIL  || [];
+    const usCached = window._macroUsingCache?.us || false;
+    const ilCached = window._macroUsingCache?.il || false;
     let html = '';
 
     html += `<div class="macro-country-section macro-section-us">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> אינדיקטורים כלכליים ארה"ב</h2>
         <div class="macro-headline-row">
-            ${_renderHeadlineWidget(usHead.cpi,          'CPI',      '%')}
-            ${_renderHeadlineWidget(usHead.core_cpi,     'Core CPI', '%')}
-            ${_renderHeadlineWidget(usHead.fed_rate,     'ריבית הפד','%')}
-            ${_renderHeadlineWidget(usHead.gdp,          'GDP',      '%')}
-            ${_renderHeadlineWidget(usHead.unemployment, 'אבטלה',    '%')}
+            ${_renderHeadlineWidget(usHead.cpi,          'CPI',      '%', usCached)}
+            ${_renderHeadlineWidget(usHead.core_cpi,     'Core CPI', '%', usCached)}
+            ${_renderHeadlineWidget(usHead.fed_rate,     'ריבית הפד','%', usCached)}
+            ${_renderHeadlineWidget(usHead.gdp,          'GDP',      '%', usCached)}
+            ${_renderHeadlineWidget(usHead.unemployment, 'אבטלה',    '%', usCached)}
         </div>`;
     if (usCal.length > 0) {
         html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';
@@ -750,9 +884,9 @@ function _renderIndicatorsTab() {
     html += `<div class="macro-country-section macro-section-il">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> אינדיקטורים כלכליים ישראל</h2>
         <div class="macro-headline-row">
-            ${_renderHeadlineWidget(ilHead.boi_rate, 'ריבית בנק ישראל', '%')}
-            ${_renderHeadlineWidget(ilHead.il_cpi,   'מדד המחירים לצרכן', '%')}
-            ${_renderHeadlineWidget(ilHead.il_gdp,   'צמיחת תוצר', '%')}
+            ${_renderHeadlineWidget(ilHead.boi_rate, 'ריבית בנק ישראל', '%', ilCached)}
+            ${_renderHeadlineWidget(ilHead.il_cpi,   'מדד המחירים לצרכן', '%', ilCached)}
+            ${_renderHeadlineWidget(ilHead.il_gdp,   'צמיחת תוצר', '%', ilCached)}
         </div>`;
     if (ilCal.length > 0) {
         html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';

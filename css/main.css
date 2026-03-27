@@ -1999,12 +1999,33 @@ body {
     opacity: 0.55;
 }
 
+.macro-headline-widget.macro-cached {
+    border-color: var(--accent-orange);
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(249, 115, 22, 0.05) 100%);
+}
+
+.macro-cached-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--accent-orange);
+    background: rgba(249, 115, 22, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+}
+
 .macro-hw-label {
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
     letter-spacing: 0.3px;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .macro-hw-value {
