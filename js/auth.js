@@ -128,7 +128,9 @@ async function handleGoogleLogin() {
         const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin + window.location.pathname
+                // Use only origin (no pathname) so localhost and prod both match
+                // the wildcard patterns registered in Supabase Dashboard → Auth → URL Configuration
+                redirectTo: window.location.origin
             }
         });
         if (error) {
