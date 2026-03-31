@@ -29,27 +29,46 @@ try {
 }
 
 // ========== AUTH STATE CHANGE LISTENER ==========
-// Keeps username/logout button visible across page loads, token refreshes, and OAuth redirects.
+// Handles session persistence across page loads, token refreshes, and OAuth redirects.
+//
+// CRITICAL — OAuth redirect flow:
+//   After Google OAuth, Supabase redirects back with tokens in the URL hash/query.
+//   The SDK processes these asynchronously (PKCE requires a network code-exchange call).
+//   When complete, it fires SIGNED_IN here. checkAuthAndInit() in init.js detects the
+//   OAuth callback and returns early, so this handler is the sole bootstrap path.
+//   The _dashboardInitialized flag prevents double-init with the email/password path.
 if (supabaseClient) {
     supabaseClient.auth.onAuthStateChange((event, session) => {
-        console.log('[Auth] State change:', event);
+        console.log('[Auth] onAuthStateChange:', event, '| user:', session?.user?.email || 'none');
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
             if (session && session.user) {
                 const username = session.user.user_metadata?.full_name
                     || session.user.user_metadata?.username
                     || session.user.email;
-                // Persist to localStorage so updateUserDisplay() can read it
+
+                // Persist to localStorage so the rest of the app can read the session
                 localStorage.setItem('authToken', session.access_token);
                 localStorage.setItem('authUser', JSON.stringify({
                     id: session.user.id,
                     username
                 }));
-                // Update UI if auth.js has loaded
-                if (typeof updateUserDisplay === 'function') {
+
+                // SIGNED_IN fires for both email/password AND OAuth redirect-back.
+                // For email/password, onAuthSuccess() already ran from handleLogin().
+                // For OAuth redirect-back, init() has NOT been called yet — do it now.
+                if (event === 'SIGNED_IN' && !window._dashboardInitialized) {
+                    window._dashboardInitialized = true;
+                    console.log('[Auth] SIGNED_IN via OAuth — bootstrapping dashboard');
+                    // Defer one tick so all scripts are guaranteed to be parsed
+                    setTimeout(() => {
+                        if (typeof onAuthSuccess === 'function') {
+                            onAuthSuccess();
+                        }
+                    }, 0);
+                } else if (typeof updateUserDisplay === 'function') {
                     updateUserDisplay();
                 } else {
-                    // auth.js not loaded yet — force #userArea visible directly
                     const ua = document.getElementById('userArea');
                     if (ua) ua.style.cssText = 'display: flex !important;';
                 }
@@ -57,7 +76,7 @@ if (supabaseClient) {
         } else if (event === 'SIGNED_OUT') {
             localStorage.removeItem('authToken');
             localStorage.removeItem('authUser');
-            // Security: clear all cached app data to prevent leakage to next user
+            window._dashboardInitialized = false;
             if (typeof clearAllAppData === 'function') {
                 clearAllAppData();
             }
