@@ -21,9 +21,26 @@ const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01q
 const FRED_API_KEY = _env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
 
 // Initialize Supabase client (uses the CDN global: supabase)
+//
+// IMPORTANT — flowType: 'implicit'
+//   Supabase JS SDK v2 defaults to PKCE, which requires a server-side code-exchange call.
+//   If the redirectTo URL doesn't pass Supabase's server-side allowlist validation,
+//   Supabase silently falls back to the project's Site URL (www.finextium.com).
+//   Switching to 'implicit' flow puts tokens directly in the URL hash (#access_token=...)
+//   and skips the server-side exchange entirely — redirect matching is simpler and
+//   works correctly with localhost during development.
 let supabaseClient;
 try {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+            flowType: 'implicit',               // Hash-based tokens — no server code-exchange
+            redirectTo: window.location.origin, // Default redirect for all auth operations
+            detectSessionInUrl: true,           // Auto-parse #access_token from URL on load
+            persistSession: true,               // Keep session in localStorage across refreshes
+            autoRefreshToken: true,             // Silently refresh tokens before expiry
+        }
+    });
+    console.log('[Supabase] Client initialized | origin:', window.location.origin, '| flow: implicit');
 } catch (e) {
     console.error('Failed to create Supabase client:', e.message, '| URL:', SUPABASE_URL);
 }
