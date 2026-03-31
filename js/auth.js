@@ -124,27 +124,19 @@ function hideAuthError() {
 // ========== GOOGLE LOGIN (Supabase OAuth) ==========
 
 async function handleGoogleLogin() {
-    // Reset init flag so the SIGNED_IN handler in supabase-config.js can bootstrap the app
-    window._dashboardInitialized = false;
-
-    const redirectTo = window.location.origin;
-    console.log('[Auth] Google OAuth — redirectTo:', redirectTo);
-
     try {
         const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                // Only the origin — no trailing slash, no path — must match an entry in
-                // Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
-                redirectTo
+                redirectTo: window.location.origin + window.location.pathname
             }
         });
         if (error) {
             showAuthError('שגיאה בהתחברות עם Google');
-            console.error('[Auth] Google OAuth error:', error.message);
+            console.error('Google OAuth error:', error.message);
         }
     } catch (e) {
-        console.error('[Auth] Google login error:', e);
+        console.error('Google login error:', e);
         showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
     }
 }
@@ -237,8 +229,6 @@ async function handleRegister() {
 // ========== AUTH SUCCESS ==========
 
 function onAuthSuccess() {
-    // Mark the dashboard as initializing so onAuthStateChange(SIGNED_IN) doesn't double-init
-    window._dashboardInitialized = true;
     // Security: clear any stale data from a previous user session before loading new data
     clearAllAppData();
     document.getElementById('authOverlay').classList.add('hidden');

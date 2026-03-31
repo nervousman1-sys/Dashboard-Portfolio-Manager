@@ -312,41 +312,9 @@ function restoreStateFromURL() {
 // ========== AUTH CHECK (streamlined — runs AFTER cache render) ==========
 
 async function checkAuthAndInit() {
-    // ── OAuth redirect-back detection ──
-    // After Google login, Supabase lands the user back here with tokens in the URL:
-    //   Implicit flow: #access_token=...&refresh_token=...
-    //   PKCE flow:     ?code=...
-    //   Error case:    #error=...&error_description=...
-    // The Supabase SDK processes these asynchronously (PKCE requires a network code-exchange).
-    // onAuthStateChange(SIGNED_IN) in supabase-config.js fires when the exchange completes
-    // and calls onAuthSuccess() → init(). We must NOT race it here with a 3s timeout.
-    const hash = window.location.hash;
-    const search = window.location.search;
-    const isOAuthCallback =
-        hash.includes('access_token=') ||
-        hash.includes('error=')        ||
-        new URLSearchParams(search).has('code');
-
-    if (isOAuthCallback) {
-        console.log('[Auth] OAuth callback detected — deferring to onAuthStateChange');
-        // Clean the URL immediately so a manual page refresh doesn't re-trigger OAuth
-        const cleanUrl = window.location.origin + window.location.pathname;
-        history.replaceState(null, '', cleanUrl);
-        // Belt-and-suspenders: if SIGNED_IN never fires (e.g. network error during PKCE),
-        // fall back to showLoginForm() after 15 seconds.
-        setTimeout(() => {
-            if (!window._dashboardInitialized) {
-                console.warn('[Auth] OAuth SIGNED_IN did not fire within 15s — showing login');
-                showLoginForm();
-            }
-        }, 15000);
-        return;
-    }
-
-    // ── Normal page load ──
     try {
-        // getSession() reads localStorage first; may do a token-refresh network call.
-        // Race with a short timeout so we don't block forever on offline/slow connections.
+        // getSession() — Supabase SDK reads local storage first, but may refresh token via network.
+        // Race with a short timeout so we don't block forever.
         const sessionPromise = supabaseClient.auth.getSession();
         const timeoutPromise = new Promise((resolve) =>
             setTimeout(() => resolve({ data: { session: null }, error: new Error('Session timeout') }), 3000)
@@ -357,29 +325,28 @@ async function checkAuthAndInit() {
         if (session && !error) {
             _cachedUserId = session.user.id;
             saveToken(session.access_token);
+
             const username = session.user.user_metadata?.full_name
                 || session.user.user_metadata?.username
                 || session.user.email;
             saveUser({ id: session.user.id, username });
-            window._dashboardInitialized = true;
-            console.log('[Auth] Existing session found for:', username);
+
             init();
             return;
         }
 
         // Session failed or timed out — check localStorage fallback
         if (isLoggedIn()) {
+            // We have a stored token — try init anyway, supaFetchClients will handle auth
             _cachedUserId = getCachedUserId();
-            window._dashboardInitialized = true;
             init();
         } else {
             showLoginForm();
         }
     } catch (e) {
-        console.warn('[Auth] checkAuthAndInit failed:', e.message);
+        console.warn('Auth check failed:', e.message);
         if (isLoggedIn()) {
             _cachedUserId = getCachedUserId();
-            window._dashboardInitialized = true;
             init();
         } else {
             showLoginForm();
