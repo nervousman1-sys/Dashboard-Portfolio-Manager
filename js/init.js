@@ -309,44 +309,62 @@ function restoreStateFromURL() {
     }
 }
 
-// ========== AUTH CHECK (streamlined — runs AFTER cache render) ==========
+// ========== AUTH CHECK (runs AFTER cache render) ==========
 
 async function checkAuthAndInit() {
-    try {
-        // getSession() — Supabase SDK reads local storage first, but may refresh token via network.
-        // Race with a short timeout so we don't block forever.
-        const sessionPromise = supabaseClient.auth.getSession();
-        const timeoutPromise = new Promise((resolve) =>
-            setTimeout(() => resolve({ data: { session: null }, error: new Error('Session timeout') }), 3000)
-        );
+    // ── Detect OAuth redirect-back ──
+    // With implicit flow, Supabase puts tokens in the URL hash: #access_token=...&...
+    // The SDK reads these automatically via detectSessionInUrl:true and fires
+    // onAuthStateChange(SIGNED_IN), which calls onAuthSuccess() → init().
+    // We must NOT race that with a short getSession() timeout here — just return early
+    // and let the listener do its job.
+    const hash = window.location.hash;
+    if (hash.includes('access_token=') || hash.includes('error_description=')) {
+        console.log('[Auth] OAuth hash detected — waiting for onAuthStateChange');
+        // Clear the hash so a manual refresh doesn't re-trigger the OAuth flow
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        // Safety net: if SIGNED_IN never fires within 10s, show login
+        setTimeout(() => {
+            if (!window._dashboardBooted) {
+                console.warn('[Auth] OAuth SIGNED_IN timeout — showing login form');
+                showLoginForm();
+            }
+        }, 10000);
+        return;
+    }
 
-        const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]);
+    // ── Normal page load: check for an existing session ──
+    try {
+        // getSession() reads localStorage first — fast on most loads.
+        // Only needs the network if a token refresh is required.
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
 
         if (session && !error) {
             _cachedUserId = session.user.id;
             saveToken(session.access_token);
-
             const username = session.user.user_metadata?.full_name
                 || session.user.user_metadata?.username
                 || session.user.email;
             saveUser({ id: session.user.id, username });
-
+            window._dashboardBooted = true;
+            console.log('[Auth] Existing session:', username);
             init();
             return;
         }
 
-        // Session failed or timed out — check localStorage fallback
+        // No valid session — check if we have a stored token as fallback
         if (isLoggedIn()) {
-            // We have a stored token — try init anyway, supaFetchClients will handle auth
             _cachedUserId = getCachedUserId();
+            window._dashboardBooted = true;
             init();
         } else {
             showLoginForm();
         }
     } catch (e) {
-        console.warn('Auth check failed:', e.message);
+        console.warn('[Auth] checkAuthAndInit error:', e.message);
         if (isLoggedIn()) {
             _cachedUserId = getCachedUserId();
+            window._dashboardBooted = true;
             init();
         } else {
             showLoginForm();

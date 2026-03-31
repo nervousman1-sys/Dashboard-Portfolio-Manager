@@ -21,49 +21,76 @@ const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01q
 const FRED_API_KEY = _env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
 
 // Initialize Supabase client (uses the CDN global: supabase)
+//
+// WHY implicit flow:
+//   The default PKCE flow requires a server-side code-exchange request back to Supabase
+//   after Google redirects the user to the app. If the redirectTo URL doesn't pass
+//   Supabase's server-side allowlist validation (exact-match, case-sensitive), Supabase
+//   silently falls back to the Site URL. With implicit flow, tokens are placed directly
+//   in the URL hash (#access_token=...) — no server round-trip, no allowlist validation
+//   for the final redirect step. The SDK reads the hash automatically on page load.
 let supabaseClient;
 try {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+            flowType:         'implicit',
+            detectSessionInUrl: true,
+            persistSession:   true,
+            autoRefreshToken: true,
+        }
+    });
+    console.log('[Supabase] init | origin:', window.location.origin, '| flow: implicit');
 } catch (e) {
-    console.error('Failed to create Supabase client:', e.message, '| URL:', SUPABASE_URL);
+    console.error('[Supabase] createClient failed:', e.message);
 }
 
 // ========== AUTH STATE CHANGE LISTENER ==========
-// Keeps username/logout button visible across page loads, token refreshes, and OAuth redirects.
+// Handles three cases:
+//   INITIAL_SESSION  — existing localStorage session on a normal page load
+//   SIGNED_IN        — OAuth return (implicit flow puts tokens in hash; SDK fires this
+//                      automatically when detectSessionInUrl:true reads #access_token)
+//   TOKEN_REFRESHED  — silent token refresh
+//   SIGNED_OUT       — explicit logout
+//
+// The _dashboardBooted flag prevents double-init when email/password login calls
+// onAuthSuccess() directly and the SDK also fires SIGNED_IN simultaneously.
 if (supabaseClient) {
     supabaseClient.auth.onAuthStateChange((event, session) => {
-        console.log('[Auth] State change:', event);
+        console.log('[Auth] onAuthStateChange:', event, '| user:', session?.user?.email ?? 'none');
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            if (session && session.user) {
-                const username = session.user.user_metadata?.full_name
-                    || session.user.user_metadata?.username
-                    || session.user.email;
-                // Persist to localStorage so updateUserDisplay() can read it
-                localStorage.setItem('authToken', session.access_token);
-                localStorage.setItem('authUser', JSON.stringify({
-                    id: session.user.id,
-                    username
-                }));
-                // Update UI if auth.js has loaded
-                if (typeof updateUserDisplay === 'function') {
-                    updateUserDisplay();
-                } else {
-                    // auth.js not loaded yet — force #userArea visible directly
-                    const ua = document.getElementById('userArea');
-                    if (ua) ua.style.cssText = 'display: flex !important;';
-                }
+            if (!session?.user) return;
+
+            const username = session.user.user_metadata?.full_name
+                || session.user.user_metadata?.username
+                || session.user.email;
+
+            localStorage.setItem('authToken', session.access_token);
+            localStorage.setItem('authUser', JSON.stringify({ id: session.user.id, username }));
+
+            // SIGNED_IN fires for OAuth return-from-Google AND for email/password login.
+            // Only bootstrap the dashboard here for the OAuth path (where _dashboardBooted
+            // is still false). Email/password calls onAuthSuccess() itself, which sets the flag.
+            if (event === 'SIGNED_IN' && !window._dashboardBooted) {
+                window._dashboardBooted = true;
+                console.log('[Auth] OAuth sign-in complete — bootstrapping dashboard');
+                setTimeout(() => {
+                    if (typeof onAuthSuccess === 'function') onAuthSuccess();
+                }, 0);
+            } else if (typeof updateUserDisplay === 'function') {
+                updateUserDisplay();
+            } else {
+                const ua = document.getElementById('userArea');
+                if (ua) ua.style.cssText = 'display: flex !important;';
             }
+
         } else if (event === 'SIGNED_OUT') {
             localStorage.removeItem('authToken');
             localStorage.removeItem('authUser');
-            // Security: clear all cached app data to prevent leakage to next user
-            if (typeof clearAllAppData === 'function') {
-                clearAllAppData();
-            }
-            if (typeof updateUserDisplay === 'function') {
-                updateUserDisplay();
-            } else {
+            window._dashboardBooted = false;
+            if (typeof clearAllAppData === 'function') clearAllAppData();
+            if (typeof updateUserDisplay === 'function') updateUserDisplay();
+            else {
                 const ua = document.getElementById('userArea');
                 if (ua) ua.style.cssText = 'display: none !important;';
             }

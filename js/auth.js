@@ -124,19 +124,24 @@ function hideAuthError() {
 // ========== GOOGLE LOGIN (Supabase OAuth) ==========
 
 async function handleGoogleLogin() {
+    // Reset boot flag so onAuthStateChange(SIGNED_IN) can bootstrap the dashboard
+    // after Google redirects the user back here with #access_token in the URL hash.
+    window._dashboardBooted = false;
+
+    const redirectTo = window.location.origin;
+    console.log('[Auth] Google OAuth start | redirectTo:', redirectTo);
+
     try {
         const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
-            options: {
-                redirectTo: window.location.origin
-            }
+            options: { redirectTo }
         });
         if (error) {
             showAuthError('שגיאה בהתחברות עם Google');
-            console.error('Google OAuth error:', error.message);
+            console.error('[Auth] OAuth error:', error.message);
         }
     } catch (e) {
-        console.error('Google login error:', e);
+        console.error('[Auth] Google login exception:', e);
         showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
     }
 }
@@ -229,6 +234,8 @@ async function handleRegister() {
 // ========== AUTH SUCCESS ==========
 
 function onAuthSuccess() {
+    // Mark booted so onAuthStateChange(SIGNED_IN) doesn't double-call init()
+    window._dashboardBooted = true;
     // Security: clear any stale data from a previous user session before loading new data
     clearAllAppData();
     document.getElementById('authOverlay').classList.add('hidden');
