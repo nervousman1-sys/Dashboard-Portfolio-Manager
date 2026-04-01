@@ -14,27 +14,50 @@
 // These serve as the authoritative floor. Live API data overlays on top when available.
 const MACRO_VERIFIED_BASELINE = {
     us: {
-        cpi:          { value: 2.4,   label: 'מדד המחירים לצרכן (CPI)',   unit: '%', date: '2026-02-01', previous: 2.4,  trend: 'flat' },
-        core_cpi:     { value: 2.5,   label: 'אינפלציית ליבה (Core CPI)', unit: '%', date: '2026-02-01', previous: 2.6,  trend: 'down' },
-        ppi:          { value: 3.4,   label: 'מדד המחירים ליצרן (PPI)',   unit: '%', date: '2026-02-01', previous: 3.0,  trend: 'up' },
-        core_ppi:     { value: 3.9,   label: 'PPI ליבה (Core PPI)',       unit: '%', date: '2026-02-01', previous: 3.6,  trend: 'up' },
-        fed_rate:     { value: 3.625, label: 'ריבית הפד',                 unit: '%', date: '2026-03-19', previous: 3.625, trend: 'flat' },
-        unemployment: { value: 4.4,   label: 'שיעור אבטלה',               unit: '%', date: '2026-02-01', previous: 4.3,  trend: 'up' },
-        nfp:          { value: -92,   label: 'משרות חדשות (NFP)',          unit: 'K', date: '2026-02-01', previous: 126,  trend: 'down' },
-        gdp:          { value: 3.2,   label: 'צמיחת תוצר (GDP)',          unit: '%', date: '2025-12-31', previous: 4.9,  trend: 'down' },
-        real_rate:    { value: 1.23,  label: 'ריבית ריאלית',               unit: '%', date: '2026-02-01', previous: null, trend: 'flat' },
+        cpi:          { value: 2.4,   previous: 3.1,   forecast: 2.3,  label: 'Inflation Rate YoY',       unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        core_cpi:     { value: 2.5,   previous: 2.6,   forecast: 2.5,  label: 'Core CPI MoM',             unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        ppi:          { value: 3.4,   previous: 3.0,   forecast: 3.2,  label: 'PPI MoM',                  unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        core_ppi:     { value: 3.9,   previous: 3.6,   forecast: 3.7,  label: 'Core PPI MoM',             unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        fed_rate:     { value: 3.625, previous: 3.625, forecast: 3.5,  label: 'Fed Interest Rate Decision', unit: '%', date: '2026-03-19', refLabel: 'Mar 2026' },
+        unemployment: { value: 4.4,   previous: 4.3,   forecast: 4.2,  label: 'Unemployment Rate',        unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        nfp:          { value: -92,   previous: 126,   forecast: 150,  label: 'Non Farm Payrolls',        unit: 'K', date: '2026-03-07', refLabel: 'Feb 2026' },
+        gdp:          { value: 3.2,   previous: 4.9,   forecast: 3.0,  label: 'GDP Growth Rate QoQ',      unit: '%', date: '2025-12-31', refLabel: 'Q4 2025' },
+        real_rate:    { value: 1.23,  previous: 1.25,  forecast: null, label: 'Real Interest Rate',       unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
     },
     il: {
-        il_cpi:          { value: 2.0,   label: 'מדד המחירים לצרכן',         unit: '%',   date: '2026-02-01', previous: 1.8,   trend: 'up' },
-        il_core_cpi:     { value: 2.27,  label: 'אינפלציית ליבה',             unit: '%',   date: '2026-02-01', previous: 1.97,  trend: 'up' },
-        boi_rate:        { value: 4.0,   label: 'ריבית בנק ישראל',           unit: '%',   date: '2026-01-05', previous: 4.25,  trend: 'down' },
-        il_unemployment: { value: 3.12,  label: 'שיעור אבטלה',               unit: '%',   date: '2026-01-01', previous: 3.07,  trend: 'up' },
-        il_ppi:          { value: 118.0, label: 'מדד מחירי תפוקה (PPI)',     unit: 'idx', date: '2026-02-01', previous: 117.7, trend: 'up' },
-        il_gdp:          { value: 2.0,   label: 'צמיחת תוצר (GDP)',          unit: '%',   date: '2025-12-31', previous: -0.4,  trend: 'up' },
-        il_real_rate:    { value: 2.0,   label: 'ריבית ריאלית',               unit: '%',   date: '2026-02-01', previous: null,  trend: 'flat' },
+        il_cpi:          { value: 2.0,   previous: 1.8,   forecast: 1.9,  label: 'Inflation Rate YoY',   unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
+        il_core_cpi:     { value: 2.27,  previous: 1.97,  forecast: 2.1,  label: 'Core CPI YoY',         unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
+        boi_rate:        { value: 4.0,   previous: 4.25,  forecast: 4.0,  label: 'BOI Interest Rate',     unit: '%',   date: '2026-03-24', refLabel: 'Mar 2026' },
+        il_unemployment: { value: 3.12,  previous: 3.07,  forecast: 3.1,  label: 'Unemployment Rate',     unit: '%',   date: '2026-01-28', refLabel: 'Jan 2026' },
+        il_ppi:          { value: 118.0, previous: 117.7, forecast: 118.2, label: 'Producer Prices',      unit: 'idx', date: '2026-02-20', refLabel: 'Feb 2026' },
+        il_gdp:          { value: 2.0,   previous: -0.4,  forecast: 1.5,  label: 'GDP Growth Rate QoQ',   unit: '%',   date: '2025-12-31', refLabel: 'Q4 2025' },
+        il_real_rate:    { value: 2.0,   previous: 2.45,  forecast: null, label: 'Real Interest Rate',    unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
     },
     _meta: { updatedAt: '2026-04-01', source: 'BLS/FRED/CBS/BOI — Finextium Decision Core' }
 };
+
+// ── Market Sentiment Color Logic (Equity Impact) ──
+// Determines whether Actual vs Previous is bullish or bearish for risk assets.
+//   Inflation (CPI/PPI): lower = bullish (green), higher = bearish (red)
+//   Growth/Labor (GDP/NFP): higher = bullish (green), lower = bearish (red)
+//   Unemployment: lower = bullish (green), higher = bearish (red)
+//   Rates: lower = bullish (green), higher = bearish (red)
+const _INVERSE_INDICATORS = new Set([
+    'cpi', 'core_cpi', 'ppi', 'core_ppi',
+    'il_cpi', 'il_core_cpi', 'il_ppi',
+    'unemployment', 'il_unemployment',
+    'fed_rate', 'boi_rate', 'real_rate', 'il_real_rate',
+]);
+
+function _sentimentColor(key, actual, previous) {
+    if (actual === null || actual === undefined || previous === null || previous === undefined) return '';
+    if (actual === previous) return '';
+    const isInverse = _INVERSE_INDICATORS.has(key);
+    // For inverse indicators: actual < previous = good (green)
+    // For normal indicators: actual > previous = good (green)
+    const isBullish = isInverse ? (actual < previous) : (actual > previous);
+    return isBullish ? 'macro-hw-bullish' : 'macro-hw-bearish';
+}
 
 // ── Cache Keys & TTLs ──
 const _MACRO_CACHE = {
@@ -823,20 +846,24 @@ function _renderHeadlineWidget(key, data, label, unit) {
         </div>`;
     }
 
-    const actualVal = _fmtUnit(data.value, unit);
-    const prevVal   = (data.previous !== null && data.previous !== undefined) ? _fmtUnit(data.previous, unit) : null;
+    const actualVal   = _fmtUnit(data.value, unit);
+    const prevVal     = (data.previous !== null && data.previous !== undefined) ? _fmtUnit(data.previous, unit) : null;
+    const forecastVal = (data.forecast !== null && data.forecast !== undefined) ? _fmtUnit(data.forecast, unit) : null;
 
-    // Timestamp: "HH:MM | D.M.YYYY" matching the screenshot format
+    // Sentiment color class for the actual value (equity-impact logic)
+    const sentimentCls = _sentimentColor(key, data.value, data.previous);
+
+    // Footer: "Simulated | refLabel" or fallback to date
     let tsStr = '';
-    if (data.date) {
+    if (data.refLabel) {
+        tsStr = `Simulated | ${_macroEscape(data.refLabel)}`;
+    } else if (data.date) {
         const d = new Date(data.date);
         if (!isNaN(d.getTime())) {
-            const hh = String(d.getHours()).padStart(2, '0');
-            const mm = String(d.getMinutes()).padStart(2, '0');
             const dd = d.getDate();
             const mo = d.getMonth() + 1;
             const yr = d.getFullYear();
-            tsStr = `${hh}:${mm} | ${dd}.${mo}.${yr}`;
+            tsStr = `Simulated | ${dd}.${mo}.${yr}`;
         }
     }
 
@@ -850,9 +877,13 @@ function _renderHeadlineWidget(key, data, label, unit) {
                 <span class="macro-hw-col-label">קודם</span>
                 <span class="macro-hw-col-value">${_macroEscape(prevVal)}</span>
             </div>` : ''}
+            ${forecastVal !== null ? `<div class="macro-hw-col">
+                <span class="macro-hw-col-label">תחזית</span>
+                <span class="macro-hw-col-value macro-hw-val-forecast">${_macroEscape(forecastVal)}</span>
+            </div>` : ''}
             <div class="macro-hw-col">
                 <span class="macro-hw-col-label">בפועל</span>
-                <span class="macro-hw-col-value macro-hw-val-actual">${_macroEscape(actualVal)}</span>
+                <span class="macro-hw-col-value macro-hw-val-actual ${sentimentCls}">${_macroEscape(actualVal)}</span>
             </div>
         </div>
         <div class="macro-hw-card-footer">${tsStr}</div>

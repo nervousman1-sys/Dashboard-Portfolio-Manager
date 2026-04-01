@@ -2076,6 +2076,14 @@ body {
     font-size: 20px;
 }
 
+/* Sentiment colors — equity-impact logic (green = bullish, red = bearish) */
+.macro-hw-bullish {
+    color: #22c55e !important;
+}
+.macro-hw-bearish {
+    color: #ef4444 !important;
+}
+
 /* Muted value for unavailable */
 .macro-hw-val-muted {
     color: var(--text-muted);
