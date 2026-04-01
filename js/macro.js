@@ -21,7 +21,7 @@ const MACRO_VERIFIED_BASELINE = {
         fed_rate:     { value: 3.625, label: 'ריבית הפד',                 unit: '%', date: '2026-03-19', previous: 3.625, trend: 'flat' },
         unemployment: { value: 4.4,   label: 'שיעור אבטלה',               unit: '%', date: '2026-02-01', previous: 4.3,  trend: 'up' },
         nfp:          { value: -92,   label: 'משרות חדשות (NFP)',          unit: 'K', date: '2026-02-01', previous: 126,  trend: 'down' },
-        gdp:          { value: null,  label: 'צמיחת תוצר (GDP)',          unit: '%', date: null,         previous: null, trend: 'flat' },
+        gdp:          { value: 3.2,   label: 'צמיחת תוצר (GDP)',          unit: '%', date: '2025-12-31', previous: 4.9,  trend: 'down' },
         real_rate:    { value: 1.23,  label: 'ריבית ריאלית',               unit: '%', date: '2026-02-01', previous: null, trend: 'flat' },
     },
     il: {
@@ -30,7 +30,7 @@ const MACRO_VERIFIED_BASELINE = {
         boi_rate:        { value: 4.0,   label: 'ריבית בנק ישראל',           unit: '%',   date: '2026-01-05', previous: 4.25,  trend: 'down' },
         il_unemployment: { value: 3.12,  label: 'שיעור אבטלה',               unit: '%',   date: '2026-01-01', previous: 3.07,  trend: 'up' },
         il_ppi:          { value: 118.0, label: 'מדד מחירי תפוקה (PPI)',     unit: 'idx', date: '2026-02-01', previous: 117.7, trend: 'up' },
-        il_gdp:          { value: null,  label: 'צמיחת תוצר (GDP)',          unit: '%',   date: null,         previous: null,  trend: 'flat' },
+        il_gdp:          { value: 2.0,   label: 'צמיחת תוצר (GDP)',          unit: '%',   date: '2025-12-31', previous: -0.4,  trend: 'up' },
         il_real_rate:    { value: 2.0,   label: 'ריבית ריאלית',               unit: '%',   date: '2026-02-01', previous: null,  trend: 'flat' },
     },
     _meta: { updatedAt: '2026-04-01', source: 'BLS/FRED/CBS/BOI — Finextium Decision Core' }
@@ -754,11 +754,19 @@ function _renderApiStatus() {
     </div>`;
 }
 
+// ── Indicator → Category mapping (for card tags) ──
+const _INDICATOR_CATEGORY = {
+    cpi: 'אינפלציה', core_cpi: 'אינפלציה', ppi: 'אינפלציה', core_ppi: 'אינפלציה',
+    fed_rate: 'מדיניות מוניטרית', boi_rate: 'מדיניות מוניטרית',
+    unemployment: 'תעסוקה', nfp: 'תעסוקה',
+    gdp: 'צמיחה', real_rate: 'מדיניות מוניטרית',
+    il_cpi: 'אינפלציה', il_core_cpi: 'אינפלציה', il_ppi: 'אינפלציה',
+    il_unemployment: 'תעסוקה', il_gdp: 'צמיחה', il_real_rate: 'מדיניות מוניטרית',
+};
+
 // ── Main Page Renderer ──
-// Renders indicators only (news tab removed).
 function _renderMacroPage() {
-    const mp      = document.getElementById('macroPage');
-    const indTime = _cacheTime(_MACRO_CACHE.US_HEAD);
+    const mp = document.getElementById('macroPage');
 
     mp.innerHTML = `
         <div class="macro-page-header">
@@ -778,11 +786,6 @@ function _renderMacroPage() {
             </div>
         </div>
         <div class="macro-content">
-            ${_renderApiStatus()}
-            <div class="macro-source-info">
-                מקורות: BLS, FRED, FMP, CBS Israel, Bank of Israel | בסיס: ${MACRO_VERIFIED_BASELINE._meta.updatedAt}
-                ${indTime ? ` | עדכון אחרון: ${indTime}` : ''}
-            </div>
             <div id="macroTabContent">
                 ${_renderIndicatorsTab()}
             </div>
@@ -790,56 +793,72 @@ function _renderMacroPage() {
     `;
 }
 
-// ── Headline Widget ──
-// Renders a single KPI tile. Shows "נתון לא זמין" if data is null (API failure).
-function _renderHeadlineWidget(data, label, unit, isCached = false) {
-    if (!data) {
-        return `<div class="macro-headline-widget macro-headline-unavail">
-            <div class="macro-hw-label">${_macroEscape(label)}</div>
-            <div class="macro-hw-value">נתון לא זמין</div>
+// ── Format helper for widget values ──
+function _fmtUnit(v, u) {
+    if (u === '%') return _fmtPct(v);
+    if (u === 'K') return (v >= 0 ? '+' : '') + v + 'K';
+    if (u === 'idx') return parseFloat(v).toFixed(1);
+    return _fmtNum(v);
+}
+
+// ── Headline Widget (Cyber-Noir Card) ──
+// Matches the executive dark glassmorphism card design.
+// Layout: category tag top-left, title top-right, columns for Previous/Actual, timestamp footer.
+function _renderHeadlineWidget(key, data, label, unit) {
+    const category = _INDICATOR_CATEGORY[key] || 'כלכלה';
+
+    if (!data || data.value === null || data.value === undefined) {
+        return `<div class="macro-hw-card macro-hw-unavail">
+            <div class="macro-hw-card-header">
+                <span class="macro-hw-tag">${_macroEscape(category)}</span>
+                <span class="macro-hw-title">${_macroEscape(label)}</span>
+            </div>
+            <div class="macro-hw-card-body">
+                <div class="macro-hw-col">
+                    <span class="macro-hw-col-label">בפועל</span>
+                    <span class="macro-hw-col-value" style="color:var(--text-muted)">—</span>
+                </div>
+            </div>
+            <div class="macro-hw-card-footer">נתון לא זמין</div>
         </div>`;
     }
 
-    const _fmtUnit = (v, u) => {
-        if (u === '%') return _fmtPct(v);
-        if (u === 'K') return (v >= 0 ? '+' : '') + v + 'K';
-        if (u === 'idx') return parseFloat(v).toFixed(1);
-        return _fmtNum(v);
-    };
-    const val     = _fmtUnit(data.value, unit);
-    const prevVal = data.previous !== null ? _fmtUnit(data.previous, unit) : null;
-    const arrow   = data.trend === 'up' ? '▲' : data.trend === 'down' ? '▼' : '●';
-    const trendCls = data.trend === 'up' ? 'trend-up' : data.trend === 'down' ? 'trend-down' : 'trend-flat';
+    const actualVal = _fmtUnit(data.value, unit);
+    const prevVal   = (data.previous !== null && data.previous !== undefined) ? _fmtUnit(data.previous, unit) : null;
 
-    // Format date as DD.MM.YY
-    let dateStr = '';
+    // Determine color for actual value based on trend
+    const actualColor = data.trend === 'up' ? '#22c55e' : data.trend === 'down' ? '#ef4444' : 'var(--text-primary)';
+
+    // Timestamp
+    let tsStr = '';
     if (data.date) {
-        const d     = new Date(data.date);
-        const day   = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year  = String(d.getFullYear()).slice(-2);
-        dateStr     = `${day}.${month}.${year}`;
+        const d = new Date(data.date);
+        if (!isNaN(d.getTime())) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const yr = d.getFullYear();
+            tsStr = `${hh}:${mm} | ${dd}.${mo}.${yr}`;
+        }
     }
 
-    const change = (prevVal && data.previous !== null) ? (() => {
-        const delta = data.value - data.previous;
-        const sign  = delta >= 0 ? '+' : '';
-        const suffix = unit === 'K' ? 'K' : unit === 'idx' ? '' : unit;
-        return `${sign}${delta.toFixed(2)}${suffix}`;
-    })() : null;
-
-    const labelWithDate  = dateStr ? `${_macroEscape(data.label || label)} [${dateStr}]` : _macroEscape(data.label || label);
-    // Cached badge shown only when serving stale data past TTL
-    const cachedBadge    = isCached ? '<span class="macro-cached-badge" title="נתונים מהמטמון">מטמון</span>' : '';
-
-    return `<div class="macro-headline-widget ${isCached ? 'macro-cached' : ''}">
-        <div class="macro-hw-label">${labelWithDate} ${cachedBadge}</div>
-        <div class="macro-hw-value">${_macroEscape(val)}</div>
-        <div class="macro-hw-trend ${trendCls}">
-            <span class="macro-hw-arrow">${arrow}</span>
-            ${change  ? `<span class="macro-hw-change">${_macroEscape(change)}</span>` : ''}
-            ${prevVal ? `<span class="macro-hw-prev">קודם: ${_macroEscape(prevVal)}</span>` : ''}
+    return `<div class="macro-hw-card">
+        <div class="macro-hw-card-header">
+            <span class="macro-hw-tag">${_macroEscape(category)}</span>
+            <span class="macro-hw-title">${_macroEscape(data.label || label)}</span>
         </div>
+        <div class="macro-hw-card-body">
+            ${prevVal !== null ? `<div class="macro-hw-col">
+                <span class="macro-hw-col-label">קודם</span>
+                <span class="macro-hw-col-value">${_macroEscape(prevVal)}</span>
+            </div>` : ''}
+            <div class="macro-hw-col macro-hw-col-actual">
+                <span class="macro-hw-col-label">בפועל</span>
+                <span class="macro-hw-col-value" style="color:${actualColor}">${_macroEscape(actualVal)}</span>
+            </div>
+        </div>
+        ${tsStr ? `<div class="macro-hw-card-footer">${tsStr}</div>` : ''}
     </div>`;
 }
 
@@ -849,53 +868,47 @@ function _renderIndicatorsTab() {
     const ilHead   = window._macroHeadIL || {};
     const usCal    = window._macroCalUS  || [];
     const ilCal    = window._macroCalIL  || [];
-    const usCached = window._macroUsingCache?.us || false;
-    const ilCached = window._macroUsingCache?.il || false;
     let html = '';
 
     // ── US Section ──
     html += `<div class="macro-country-section macro-section-us">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> אינדיקטורים כלכליים ארה"ב</h2>
-        <div class="macro-headline-row">
-            ${_renderHeadlineWidget(usHead.cpi,          'CPI',           '%', usCached)}
-            ${_renderHeadlineWidget(usHead.core_cpi,     'Core CPI',     '%', usCached)}
-            ${_renderHeadlineWidget(usHead.ppi,          'PPI',           '%', usCached)}
-            ${_renderHeadlineWidget(usHead.core_ppi,     'Core PPI',     '%', usCached)}
-            ${_renderHeadlineWidget(usHead.fed_rate,     'ריבית הפד',    '%', usCached)}
-            ${_renderHeadlineWidget(usHead.unemployment, 'אבטלה',        '%', usCached)}
-            ${_renderHeadlineWidget(usHead.nfp,          'NFP',           'K', usCached)}
-            ${_renderHeadlineWidget(usHead.gdp,          'GDP',           '%', usCached)}
-            ${_renderHeadlineWidget(usHead.real_rate,    'ריבית ריאלית',  '%', usCached)}
+        <div class="macro-indicator-grid">
+            ${_renderHeadlineWidget('cpi',          usHead.cpi,          'CPI',           '%')}
+            ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'Core CPI',     '%')}
+            ${_renderHeadlineWidget('ppi',          usHead.ppi,          'PPI',           '%')}
+            ${_renderHeadlineWidget('core_ppi',     usHead.core_ppi,     'Core PPI',     '%')}
+            ${_renderHeadlineWidget('unemployment', usHead.unemployment, 'Unemployment Rate',   '%')}
+            ${_renderHeadlineWidget('nfp',          usHead.nfp,          'Non Farm Payrolls',   'K')}
+            ${_renderHeadlineWidget('fed_rate',     usHead.fed_rate,     'Fed Interest Rate',   '%')}
+            ${_renderHeadlineWidget('gdp',          usHead.gdp,          'GDP Growth Rate QoQ', '%')}
+            ${_renderHeadlineWidget('real_rate',    usHead.real_rate,    'Real Interest Rate',  '%')}
         </div>`;
 
     if (usCal.length > 0) {
         html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';
         usCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
-    } else {
-        html += _renderEmpty('אין אירועי לוח שנה זמינים — ארה"ב');
     }
     html += '</div>';
 
     // ── Israel Section ──
     html += `<div class="macro-country-section macro-section-il">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> אינדיקטורים כלכליים ישראל</h2>
-        <div class="macro-headline-row">
-            ${_renderHeadlineWidget(ilHead.il_cpi,          'מדד המחירים לצרכן',   '%',   ilCached)}
-            ${_renderHeadlineWidget(ilHead.il_core_cpi,     'אינפלציית ליבה',       '%',   ilCached)}
-            ${_renderHeadlineWidget(ilHead.boi_rate,        'ריבית בנק ישראל',     '%',   ilCached)}
-            ${_renderHeadlineWidget(ilHead.il_unemployment, 'שיעור אבטלה',         '%',   ilCached)}
-            ${_renderHeadlineWidget(ilHead.il_ppi,          'מדד תפוקה (PPI)',     'idx', ilCached)}
-            ${_renderHeadlineWidget(ilHead.il_gdp,          'צמיחת תוצר (GDP)',    '%',   ilCached)}
-            ${_renderHeadlineWidget(ilHead.il_real_rate,    'ריבית ריאלית',         '%',   ilCached)}
+        <div class="macro-indicator-grid">
+            ${_renderHeadlineWidget('il_cpi',          ilHead.il_cpi,          'Inflation Rate YoY',   '%')}
+            ${_renderHeadlineWidget('il_core_cpi',     ilHead.il_core_cpi,     'Core CPI YoY',         '%')}
+            ${_renderHeadlineWidget('boi_rate',        ilHead.boi_rate,        'BOI Interest Rate',    '%')}
+            ${_renderHeadlineWidget('il_unemployment', ilHead.il_unemployment, 'Unemployment Rate',    '%')}
+            ${_renderHeadlineWidget('il_ppi',          ilHead.il_ppi,          'Producer Prices',      'idx')}
+            ${_renderHeadlineWidget('il_gdp',          ilHead.il_gdp,          'GDP Growth Rate QoQ',  '%')}
+            ${_renderHeadlineWidget('il_real_rate',    ilHead.il_real_rate,    'Real Interest Rate',   '%')}
         </div>`;
 
     if (ilCal.length > 0) {
         html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';
         ilCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
-    } else {
-        html += _renderEmpty('אין אירועי לוח שנה זמינים — ישראל');
     }
     html += '</div>';
 
