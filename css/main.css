@@ -1934,55 +1934,69 @@ body {
     white-space: pre-line;
 }
 
-/* ── Macro Indicator Cards (Cyber-Noir Executive) ── */
+/* ══════════════════════════════════════════════════════
+   Macro Indicator Cards — Cyber-Noir Executive Grid
+   ══════════════════════════════════════════════════════ */
 
 .macro-indicator-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 18px;
+    margin-bottom: 28px;
 }
 
+/* ── Card Shell ── */
 .macro-hw-card {
-    background: rgba(30, 41, 59, 0.65);
-    border: 1px solid rgba(71, 85, 105, 0.45);
+    background: rgba(22, 33, 52, 0.72);
+    border: 1px solid rgba(71, 85, 105, 0.40);
     border-radius: 14px;
-    padding: 20px 22px 16px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    padding: 18px 20px 14px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     display: flex;
     flex-direction: column;
     gap: 0;
-    transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s;
     position: relative;
     overflow: hidden;
 }
 
+/* Subtle top-left highlight sheen */
 .macro-hw-card::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: 14px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.025) 0%, transparent 50%);
     pointer-events: none;
 }
 
 .macro-hw-card:hover {
-    border-color: rgba(59, 130, 246, 0.5);
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.08), 0 0 0 1px rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 6px 28px rgba(59, 130, 246, 0.10),
+                0 0 0 1px rgba(59, 130, 246, 0.08);
     transform: translateY(-2px);
 }
 
 .macro-hw-card.macro-hw-unavail {
-    opacity: 0.45;
+    opacity: 0.40;
 }
 
-/* Card header: category tag (left) + title (right) */
+/* Calendar read/unread states on card */
+.macro-hw-card.macro-unread {
+    border-color: rgba(239, 68, 68, 0.45);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.10);
+}
+.macro-hw-card.macro-read {
+    border-color: rgba(59, 130, 246, 0.22);
+}
+
+/* ── Card Header: tag (start) + title (end) ── */
 .macro-hw-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
     gap: 10px;
 }
 
@@ -1992,8 +2006,8 @@ body {
     color: var(--text-muted);
     padding: 3px 12px;
     border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.50);
+    background: rgba(15, 23, 42, 0.55);
     white-space: nowrap;
     letter-spacing: 0.3px;
     flex-shrink: 0;
@@ -2006,26 +2020,27 @@ body {
     text-align: left;
     direction: ltr;
     line-height: 1.3;
+    min-width: 0;
 }
 
-/* Card body: Previous / Actual columns */
+/* ── Card Body: data columns ── */
 .macro-hw-card-body {
     display: flex;
-    align-items: flex-end;
-    gap: 0;
+    align-items: stretch;
+    gap: 10px;
     margin-bottom: 14px;
 }
 
 .macro-hw-col {
     flex: 1;
     text-align: center;
-    padding: 10px 8px;
-    background: rgba(15, 23, 42, 0.45);
+    padding: 10px 6px 10px;
+    background: rgba(10, 18, 32, 0.55);
     border-radius: 8px;
-}
-
-.macro-hw-col + .macro-hw-col {
-    margin-right: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
 }
 
 .macro-hw-col-label {
@@ -2033,47 +2048,65 @@ body {
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
     letter-spacing: 0.3px;
 }
 
 .macro-hw-col-value {
     display: block;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 800;
     color: var(--text-primary);
     font-family: 'Courier New', Consolas, monospace;
-    line-height: 1.1;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.macro-hw-col-actual .macro-hw-col-value {
-    font-size: 24px;
+/* Actual value — bright white, slightly larger */
+.macro-hw-val-actual {
+    color: #f1f5f9;
+    font-size: 22px;
 }
 
-/* Card footer: timestamp */
+/* Forecast value — neon cyan-blue */
+.macro-hw-val-forecast {
+    color: #38bdf8;
+    font-size: 20px;
+}
+
+/* Muted value for unavailable */
+.macro-hw-val-muted {
+    color: var(--text-muted);
+}
+
+/* ── Card Footer: timestamp ── */
 .macro-hw-card-footer {
     font-size: 11px;
     color: var(--text-muted);
     text-align: center;
     padding-top: 10px;
-    border-top: 1px solid rgba(71, 85, 105, 0.3);
-    letter-spacing: 0.2px;
+    border-top: 1px solid rgba(71, 85, 105, 0.25);
+    letter-spacing: 0.3px;
     direction: ltr;
 }
 
+/* ── Sub-headers (calendar section divider) ── */
 .macro-sub-header {
     font-size: 14px;
     font-weight: 600;
     color: var(--text-secondary);
-    margin: 8px 0 12px 0;
-    padding-bottom: 6px;
+    margin: 8px 0 14px 0;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
 }
 
-/* ── Responsive: Macro indicator grid ── */
+/* ── Responsive breakpoints ── */
 @media (max-width: 1100px) {
     .macro-indicator-grid {
         grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
     }
 }
 
@@ -2086,10 +2119,13 @@ body {
         font-size: 14px;
     }
     .macro-hw-col-value {
+        font-size: 17px;
+    }
+    .macro-hw-val-actual {
         font-size: 18px;
     }
-    .macro-hw-col-actual .macro-hw-col-value {
-        font-size: 20px;
+    .macro-hw-card {
+        padding: 14px 16px 12px;
     }
 }
 

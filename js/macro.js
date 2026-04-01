@@ -802,8 +802,8 @@ function _fmtUnit(v, u) {
 }
 
 // ── Headline Widget (Cyber-Noir Card) ──
-// Matches the executive dark glassmorphism card design.
-// Layout: category tag top-left, title top-right, columns for Previous/Actual, timestamp footer.
+// Pixel-matched to the executive glassmorphism card grid.
+// Layout: tag (top-left) | title (top-right) | columns: קודם / בפועל | footer timestamp.
 function _renderHeadlineWidget(key, data, label, unit) {
     const category = _INDICATOR_CATEGORY[key] || 'כלכלה';
 
@@ -816,7 +816,7 @@ function _renderHeadlineWidget(key, data, label, unit) {
             <div class="macro-hw-card-body">
                 <div class="macro-hw-col">
                     <span class="macro-hw-col-label">בפועל</span>
-                    <span class="macro-hw-col-value" style="color:var(--text-muted)">—</span>
+                    <span class="macro-hw-col-value macro-hw-val-muted">—</span>
                 </div>
             </div>
             <div class="macro-hw-card-footer">נתון לא זמין</div>
@@ -826,18 +826,15 @@ function _renderHeadlineWidget(key, data, label, unit) {
     const actualVal = _fmtUnit(data.value, unit);
     const prevVal   = (data.previous !== null && data.previous !== undefined) ? _fmtUnit(data.previous, unit) : null;
 
-    // Determine color for actual value based on trend
-    const actualColor = data.trend === 'up' ? '#22c55e' : data.trend === 'down' ? '#ef4444' : 'var(--text-primary)';
-
-    // Timestamp
+    // Timestamp: "HH:MM | D.M.YYYY" matching the screenshot format
     let tsStr = '';
     if (data.date) {
         const d = new Date(data.date);
         if (!isNaN(d.getTime())) {
             const hh = String(d.getHours()).padStart(2, '0');
             const mm = String(d.getMinutes()).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = d.getDate();
+            const mo = d.getMonth() + 1;
             const yr = d.getFullYear();
             tsStr = `${hh}:${mm} | ${dd}.${mo}.${yr}`;
         }
@@ -853,12 +850,12 @@ function _renderHeadlineWidget(key, data, label, unit) {
                 <span class="macro-hw-col-label">קודם</span>
                 <span class="macro-hw-col-value">${_macroEscape(prevVal)}</span>
             </div>` : ''}
-            <div class="macro-hw-col macro-hw-col-actual">
+            <div class="macro-hw-col">
                 <span class="macro-hw-col-label">בפועל</span>
-                <span class="macro-hw-col-value" style="color:${actualColor}">${_macroEscape(actualVal)}</span>
+                <span class="macro-hw-col-value macro-hw-val-actual">${_macroEscape(actualVal)}</span>
             </div>
         </div>
-        ${tsStr ? `<div class="macro-hw-card-footer">${tsStr}</div>` : ''}
+        <div class="macro-hw-card-footer">${tsStr}</div>
     </div>`;
 }
 
@@ -886,7 +883,7 @@ function _renderIndicatorsTab() {
         </div>`;
 
     if (usCal.length > 0) {
-        html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';
+        html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-indicator-grid">';
         usCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
     }
@@ -906,7 +903,7 @@ function _renderIndicatorsTab() {
         </div>`;
 
     if (ilCal.length > 0) {
-        html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-grid">';
+        html += '<h3 class="macro-sub-header">לוח שנה כלכלי — אירועים אחרונים</h3><div class="macro-indicator-grid">';
         ilCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
     }
@@ -915,40 +912,33 @@ function _renderIndicatorsTab() {
     return html;
 }
 
-// ── Calendar Event Card ──
+// ── Calendar Event Card (unified Cyber-Noir style) ──
 function _renderCalendarCard(a) {
     const readClass = a.isRead ? 'macro-read' : 'macro-unread';
     const newBadge  = a.isRead ? '' : '<span class="macro-new-badge">חדש</span>';
-    let sentimentHTML = '';
-    if (a.sentiment === 'beat') sentimentHTML = '<span class="macro-sentiment macro-beat">עלה על התחזית</span>';
-    else if (a.sentiment === 'miss') sentimentHTML = '<span class="macro-sentiment macro-miss">מתחת לתחזית</span>';
-    const actualColor = a.sentiment === 'beat' ? '#22c55e' : a.sentiment === 'miss' ? '#ef4444' : 'var(--text-primary)';
 
     return `
-        <div class="macro-card ${readClass}" data-alert-id="${_macroEscape(a.id)}"
-             onclick="markAlertRead('${_macroEscape(a.id)}')">
-            <div class="macro-card-header">
-                <div class="macro-card-title">${_macroEscape(a.title)} ${newBadge}</div>
-                <div class="macro-card-category">${_macroEscape(a.category)}</div>
+        <div class="macro-hw-card ${readClass}" data-alert-id="${_macroEscape(a.id)}"
+             onclick="markAlertRead('${_macroEscape(a.id)}')" style="cursor:pointer">
+            <div class="macro-hw-card-header">
+                <span class="macro-hw-tag">${_macroEscape(a.category)}</span>
+                <span class="macro-hw-title">${_macroEscape(a.title)} ${newBadge}</span>
             </div>
-            ${sentimentHTML}
-            <div class="macro-card-data">
-                <div class="macro-data-item">
-                    <div class="data-label">בפועל</div>
-                    <div class="data-value" style="color:${actualColor}">${_macroEscape(a.actual)}</div>
+            <div class="macro-hw-card-body">
+                <div class="macro-hw-col">
+                    <span class="macro-hw-col-label">קודם</span>
+                    <span class="macro-hw-col-value">${_macroEscape(a.previous)}</span>
                 </div>
-                <div class="macro-data-item">
-                    <div class="data-label">תחזית</div>
-                    <div class="data-value" style="color:var(--accent-blue)">${_macroEscape(a.estimate)}</div>
+                <div class="macro-hw-col">
+                    <span class="macro-hw-col-label">תחזית</span>
+                    <span class="macro-hw-col-value macro-hw-val-forecast">${_macroEscape(a.estimate)}</span>
                 </div>
-                <div class="macro-data-item">
-                    <div class="data-label">קודם</div>
-                    <div class="data-value" style="color:var(--text-muted)">${_macroEscape(a.previous)}</div>
+                <div class="macro-hw-col">
+                    <span class="macro-hw-col-label">בפועל</span>
+                    <span class="macro-hw-col-value macro-hw-val-actual">${_macroEscape(a.actual)}</span>
                 </div>
             </div>
-            <div class="macro-card-time">
-                <span class="macro-live-badge">LIVE</span> ${a.date} | ${a.time}
-            </div>
+            <div class="macro-hw-card-footer">${a.date} | ${a.time}</div>
         </div>`;
 }
 
