@@ -14,24 +14,26 @@
 // These serve as the authoritative floor. Live API data overlays on top when available.
 const MACRO_VERIFIED_BASELINE = {
     us: {
-        cpi:          { value: 2.4,   previous: 3.1,   forecast: 2.3,  label: 'Inflation Rate YoY',       unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
-        core_cpi:     { value: 2.5,   previous: 2.6,   forecast: 2.5,  label: 'Core CPI MoM',             unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
-        ppi:          { value: 3.4,   previous: 3.0,   forecast: 3.2,  label: 'PPI MoM',                  unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
-        core_ppi:     { value: 3.9,   previous: 3.6,   forecast: 3.7,  label: 'Core PPI MoM',             unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
-        fed_rate:     { value: 3.625, previous: 3.625, forecast: 3.5,  label: 'Fed Interest Rate Decision', unit: '%', date: '2026-03-19', refLabel: 'Mar 2026' },
-        unemployment: { value: 4.4,   previous: 4.3,   forecast: 4.2,  label: 'Unemployment Rate',        unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
-        nfp:          { value: -92,   previous: 126,   forecast: 150,  label: 'Non Farm Payrolls',        unit: 'K', date: '2026-03-07', refLabel: 'Feb 2026' },
-        gdp:          { value: 3.2,   previous: 4.9,   forecast: 3.0,  label: 'GDP Growth Rate QoQ',      unit: '%', date: '2025-12-31', refLabel: 'Q4 2025' },
-        real_rate:    { value: 1.23,  previous: 1.25,  forecast: null, label: 'Real Interest Rate',       unit: '%', date: '2026-02-01', refLabel: 'Feb 2026' },
+        cpi:          { value: 2.4,   previous: 2.7,   forecast: 2.5,  label: 'אינפלציה שנתית (CPI YoY)',    unit: '%', date: '2026-03-11', refLabel: 'Feb 2026' },
+        core_cpi:     { value: 0.2,   previous: 0.2,   forecast: 0.2,  label: 'אינפלציה ליבה (Core CPI)',     unit: '%', date: '2026-03-11', refLabel: 'Feb 2026' },
+        ppi:          { value: 0.7,   previous: 0.5,   forecast: 0.3,  label: 'מדד מחירי יצרן (PPI MoM)',     unit: '%', date: '2026-03-18', refLabel: 'Feb 2026' },
+        core_ppi:     { value: 0.5,   previous: 0.8,   forecast: 0.3,  label: 'מדד יצרן ליבה (Core PPI)',     unit: '%', date: '2026-03-18', refLabel: 'Feb 2026' },
+        fed_rate:     { value: 3.625, previous: 3.625, forecast: 3.5,  label: 'ריבית הפד (Fed Rate)',          unit: '%', date: '2026-03-18', refLabel: 'Mar 2026' },
+        unemployment: { value: 4.4,   previous: 4.4,   forecast: 4.3,  label: 'שיעור אבטלה (Unemployment)',    unit: '%', date: '2026-03-07', refLabel: 'Feb 2026' },
+        nfp:          { value: -92,   previous: 126,   forecast: 150,  label: 'משרות חדשות (NFP)',             unit: 'K', date: '2026-03-07', refLabel: 'Feb 2026' },
+        gdp:          { value: 0.7,   previous: 4.4,   forecast: 1.4,  label: 'צמיחת תמ״ג (GDP QoQ)',         unit: '%', date: '2026-03-13', refLabel: 'Q4 2025' },
+        real_rate:    { value: 1.23,  previous: 0.93,  forecast: null, label: 'ריבית ריאלית (Real Rate)',      unit: '%', date: '2026-03-11', refLabel: 'Feb 2026' },
     },
     il: {
-        il_cpi:          { value: 2.0,   previous: 1.8,   forecast: 1.9,  label: 'Inflation Rate YoY',   unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
-        il_core_cpi:     { value: 2.27,  previous: 1.97,  forecast: 2.1,  label: 'Core CPI YoY',         unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
-        boi_rate:        { value: 4.0,   previous: 4.25,  forecast: 4.0,  label: 'BOI Interest Rate',     unit: '%',   date: '2026-03-24', refLabel: 'Mar 2026' },
-        il_unemployment: { value: 3.12,  previous: 3.07,  forecast: 3.1,  label: 'Unemployment Rate',     unit: '%',   date: '2026-01-28', refLabel: 'Jan 2026' },
-        il_ppi:          { value: 118.0, previous: 117.7, forecast: 118.2, label: 'Producer Prices',      unit: 'idx', date: '2026-02-20', refLabel: 'Feb 2026' },
-        il_gdp:          { value: 2.0,   previous: -0.4,  forecast: 1.5,  label: 'GDP Growth Rate QoQ',   unit: '%',   date: '2025-12-31', refLabel: 'Q4 2025' },
-        il_real_rate:    { value: 2.0,   previous: 2.45,  forecast: null, label: 'Real Interest Rate',    unit: '%',   date: '2026-02-15', refLabel: 'Feb 2026' },
+        il_cpi:          { value: 2.0,    previous: 1.8,   forecast: 1.9,  label: 'אינפלציה שנתית (CPI YoY)',  unit: '%',   date: '2026-03-15', refLabel: 'Feb 2026' },
+        il_core_cpi:     { value: 2.27,   previous: 1.97,  forecast: 2.1,  label: 'אינפלציה ליבה (Core CPI)',   unit: '%',   date: '2026-03-15', refLabel: 'Feb 2026' },
+        boi_rate:        { value: 4.0,    previous: 4.25,  forecast: 4.0,  label: 'ריבית בנק ישראל (BOI Rate)', unit: '%',   date: '2026-03-24', refLabel: 'Mar 2026' },
+        il_unemployment: { value: 3.1,    previous: 2.9,   forecast: 3.3,  label: 'שיעור אבטלה (Unemployment)', unit: '%',   date: '2026-02-25', refLabel: 'Jan 2026' },
+        il_ppi:          { value: 118.0,  previous: 117.7, forecast: 118.2, label: 'מדד מחירי יצרן (PPI)',     unit: 'idx', date: '2026-02-20', refLabel: 'Feb 2026' },
+        il_gdp:          { value: 4.0,    previous: 12.7,  forecast: 3.8,  label: 'צמיחת תמ״ג (GDP QoQ)',      unit: '%',   date: '2026-02-16', refLabel: 'Q4 2025' },
+        il_real_rate:    { value: 2.0,    previous: 2.45,  forecast: null, label: 'ריבית ריאלית (Real Rate)',   unit: '%',   date: '2026-03-15', refLabel: 'Feb 2026' },
+        il_trade_bal:    { value: -4.4,   previous: -3.14, forecast: -3.5, label: 'מאזן סחר (Trade Balance)',   unit: 'B$',  date: '2026-03-20', refLabel: 'Feb 2026' },
+        il_consumer_conf:{ value: -17,    previous: -16,   forecast: -15,  label: 'אמון צרכנים (CCI)',          unit: '%',   date: '2026-03-18', refLabel: 'Feb 2026' },
     },
     _meta: { updatedAt: '2026-04-01', source: 'BLS/FRED/CBS/BOI — Finextium Decision Core' }
 };
@@ -47,6 +49,7 @@ const _INVERSE_INDICATORS = new Set([
     'il_cpi', 'il_core_cpi', 'il_ppi',
     'unemployment', 'il_unemployment',
     'fed_rate', 'boi_rate', 'real_rate', 'il_real_rate',
+    'il_trade_bal', 'il_consumer_conf',
 ]);
 
 function _sentimentColor(key, actual, previous) {
@@ -785,6 +788,7 @@ const _INDICATOR_CATEGORY = {
     gdp: 'צמיחה', real_rate: 'מדיניות מוניטרית',
     il_cpi: 'אינפלציה', il_core_cpi: 'אינפלציה', il_ppi: 'אינפלציה',
     il_unemployment: 'תעסוקה', il_gdp: 'צמיחה', il_real_rate: 'מדיניות מוניטרית',
+    il_trade_bal: 'סחר', il_consumer_conf: 'סנטימנט',
 };
 
 // ── Main Page Renderer ──
@@ -821,12 +825,13 @@ function _fmtUnit(v, u) {
     if (u === '%') return _fmtPct(v);
     if (u === 'K') return (v >= 0 ? '+' : '') + v + 'K';
     if (u === 'idx') return parseFloat(v).toFixed(1);
+    if (u === 'B$') return (v >= 0 ? '+' : '') + parseFloat(v).toFixed(1) + 'B$';
     return _fmtNum(v);
 }
 
 // ── Headline Widget (Cyber-Noir Card) ──
 // Pixel-matched to the executive glassmorphism card grid.
-// Layout: tag (top-left) | title (top-right) | columns: קודם / בפועל | footer timestamp.
+// Layout: tag (top-left) | title (top-right) | columns: קודם / תחזית / עכשיו | footer date.
 function _renderHeadlineWidget(key, data, label, unit) {
     const category = _INDICATOR_CATEGORY[key] || 'כלכלה';
 
@@ -838,7 +843,7 @@ function _renderHeadlineWidget(key, data, label, unit) {
             </div>
             <div class="macro-hw-card-body">
                 <div class="macro-hw-col">
-                    <span class="macro-hw-col-label">בפועל</span>
+                    <span class="macro-hw-col-label">עכשיו</span>
                     <span class="macro-hw-col-value macro-hw-val-muted">—</span>
                 </div>
             </div>
@@ -853,18 +858,19 @@ function _renderHeadlineWidget(key, data, label, unit) {
     // Sentiment color class for the actual value (equity-impact logic)
     const sentimentCls = _sentimentColor(key, data.value, data.previous);
 
-    // Footer: "Simulated | refLabel" or fallback to date
+    // Footer: actual publication date — "D.M.YYYY | refLabel"
     let tsStr = '';
-    if (data.refLabel) {
-        tsStr = `Simulated | ${_macroEscape(data.refLabel)}`;
-    } else if (data.date) {
+    if (data.date) {
         const d = new Date(data.date);
         if (!isNaN(d.getTime())) {
             const dd = d.getDate();
             const mo = d.getMonth() + 1;
             const yr = d.getFullYear();
-            tsStr = `Simulated | ${dd}.${mo}.${yr}`;
+            tsStr = `${dd}.${mo}.${yr}`;
+            if (data.refLabel) tsStr += ` | ${_macroEscape(data.refLabel)}`;
         }
+    } else if (data.refLabel) {
+        tsStr = _macroEscape(data.refLabel);
     }
 
     return `<div class="macro-hw-card">
@@ -882,7 +888,7 @@ function _renderHeadlineWidget(key, data, label, unit) {
                 <span class="macro-hw-col-value macro-hw-val-forecast">${_macroEscape(forecastVal)}</span>
             </div>` : ''}
             <div class="macro-hw-col">
-                <span class="macro-hw-col-label">בפועל</span>
+                <span class="macro-hw-col-label">עכשיו</span>
                 <span class="macro-hw-col-value macro-hw-val-actual ${sentimentCls}">${_macroEscape(actualVal)}</span>
             </div>
         </div>
@@ -902,15 +908,15 @@ function _renderIndicatorsTab() {
     html += `<div class="macro-country-section macro-section-us">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> אינדיקטורים כלכליים ארה"ב</h2>
         <div class="macro-indicator-grid">
-            ${_renderHeadlineWidget('cpi',          usHead.cpi,          'CPI',           '%')}
-            ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'Core CPI',     '%')}
-            ${_renderHeadlineWidget('ppi',          usHead.ppi,          'PPI',           '%')}
-            ${_renderHeadlineWidget('core_ppi',     usHead.core_ppi,     'Core PPI',     '%')}
-            ${_renderHeadlineWidget('unemployment', usHead.unemployment, 'Unemployment Rate',   '%')}
-            ${_renderHeadlineWidget('nfp',          usHead.nfp,          'Non Farm Payrolls',   'K')}
-            ${_renderHeadlineWidget('fed_rate',     usHead.fed_rate,     'Fed Interest Rate',   '%')}
-            ${_renderHeadlineWidget('gdp',          usHead.gdp,          'GDP Growth Rate QoQ', '%')}
-            ${_renderHeadlineWidget('real_rate',    usHead.real_rate,    'Real Interest Rate',  '%')}
+            ${_renderHeadlineWidget('cpi',          usHead.cpi,          'אינפלציה שנתית (CPI YoY)',    '%')}
+            ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'אינפלציה ליבה (Core CPI)',    '%')}
+            ${_renderHeadlineWidget('ppi',          usHead.ppi,          'מדד מחירי יצרן (PPI MoM)',    '%')}
+            ${_renderHeadlineWidget('core_ppi',     usHead.core_ppi,     'מדד יצרן ליבה (Core PPI)',    '%')}
+            ${_renderHeadlineWidget('unemployment', usHead.unemployment, 'שיעור אבטלה (Unemployment)',  '%')}
+            ${_renderHeadlineWidget('nfp',          usHead.nfp,          'משרות חדשות (NFP)',            'K')}
+            ${_renderHeadlineWidget('fed_rate',     usHead.fed_rate,     'ריבית הפד (Fed Rate)',         '%')}
+            ${_renderHeadlineWidget('gdp',          usHead.gdp,          'צמיחת תמ״ג (GDP QoQ)',        '%')}
+            ${_renderHeadlineWidget('real_rate',    usHead.real_rate,    'ריבית ריאלית (Real Rate)',     '%')}
         </div>`;
 
     if (usCal.length > 0) {
@@ -924,13 +930,15 @@ function _renderIndicatorsTab() {
     html += `<div class="macro-country-section macro-section-il">
         <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> אינדיקטורים כלכליים ישראל</h2>
         <div class="macro-indicator-grid">
-            ${_renderHeadlineWidget('il_cpi',          ilHead.il_cpi,          'Inflation Rate YoY',   '%')}
-            ${_renderHeadlineWidget('il_core_cpi',     ilHead.il_core_cpi,     'Core CPI YoY',         '%')}
-            ${_renderHeadlineWidget('boi_rate',        ilHead.boi_rate,        'BOI Interest Rate',    '%')}
-            ${_renderHeadlineWidget('il_unemployment', ilHead.il_unemployment, 'Unemployment Rate',    '%')}
-            ${_renderHeadlineWidget('il_ppi',          ilHead.il_ppi,          'Producer Prices',      'idx')}
-            ${_renderHeadlineWidget('il_gdp',          ilHead.il_gdp,          'GDP Growth Rate QoQ',  '%')}
-            ${_renderHeadlineWidget('il_real_rate',    ilHead.il_real_rate,    'Real Interest Rate',   '%')}
+            ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
+            ${_renderHeadlineWidget('il_core_cpi',      ilHead.il_core_cpi,      'אינפלציה ליבה (Core CPI)',  '%')}
+            ${_renderHeadlineWidget('boi_rate',         ilHead.boi_rate,         'ריבית בנק ישראל (BOI Rate)','%')}
+            ${_renderHeadlineWidget('il_unemployment',  ilHead.il_unemployment,  'שיעור אבטלה (Unemployment)','%')}
+            ${_renderHeadlineWidget('il_ppi',           ilHead.il_ppi,           'מדד מחירי יצרן (PPI)',     'idx')}
+            ${_renderHeadlineWidget('il_gdp',           ilHead.il_gdp,           'צמיחת תמ״ג (GDP QoQ)',     '%')}
+            ${_renderHeadlineWidget('il_real_rate',     ilHead.il_real_rate,     'ריבית ריאלית (Real Rate)',  '%')}
+            ${_renderHeadlineWidget('il_trade_bal',     ilHead.il_trade_bal,     'מאזן סחר (Trade Balance)',  'B$')}
+            ${_renderHeadlineWidget('il_consumer_conf', ilHead.il_consumer_conf, 'אמון צרכנים (CCI)',         '%')}
         </div>`;
 
     if (ilCal.length > 0) {
@@ -965,7 +973,7 @@ function _renderCalendarCard(a) {
                     <span class="macro-hw-col-value macro-hw-val-forecast">${_macroEscape(a.estimate)}</span>
                 </div>
                 <div class="macro-hw-col">
-                    <span class="macro-hw-col-label">בפועל</span>
+                    <span class="macro-hw-col-label">עכשיו</span>
                     <span class="macro-hw-col-value macro-hw-val-actual">${_macroEscape(a.actual)}</span>
                 </div>
             </div>
