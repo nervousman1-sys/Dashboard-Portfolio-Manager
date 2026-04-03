@@ -100,6 +100,32 @@ body {
     box-shadow: var(--shadow-glow);
 }
 
+/* ── Card Accent Line (top neon stripe) ── */
+.card-accent-line {
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent-blue), transparent);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+/* ── Section Title ── */
+.section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.section-title::before {
+    content: '';
+    width: 3px;
+    height: 18px;
+    background: var(--accent-blue);
+    border-radius: 2px;
+}
+
 /* ── Text Gradient Utility ── */
 .text-gradient {
     background: linear-gradient(135deg, #fff, rgba(255,255,255,0.5));
@@ -116,37 +142,84 @@ body {
 
 /* Header */
 .header {
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(2, 2, 2, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
-    padding: 14px 24px;
+    padding: 10px 24px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 12px;
     position: sticky;
     top: 0;
     z-index: 30;
 }
 
+.header-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
 .header h1 {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 800;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    background: linear-gradient(135deg, var(--accent-blue), #fff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    letter-spacing: -0.02em;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    letter-spacing: 0.08em;
+}
+
+.header-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
 }
 
 .header-info {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     font-size: 11px;
     color: var(--text-secondary);
+}
+
+/* Header action buttons — slim glass style */
+.header-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Assistant', sans-serif;
+}
+
+.header-action-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.header-action-btn.primary {
+    background: var(--accent-blue);
+    color: #000;
+    border-color: var(--accent-blue);
+    font-weight: 800;
+}
+
+.header-action-btn.primary:hover {
+    background: #33ecff;
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.25);
 }
 
 .refresh-indicator {
@@ -719,7 +792,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.06);
 }
 
 .client-name {
@@ -800,8 +873,9 @@ body {
 
 .time-range-btn.active {
     background: var(--accent-blue);
-    color: white;
+    color: #000;
     border-color: var(--accent-blue);
+    font-weight: 700;
 }
 
 .card-performance-chart {
@@ -863,8 +937,10 @@ body {
 }
 
 .card-footer {
-    padding: 10px 16px;
-    background: rgba(0, 0, 0, 0.3);
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2335,7 +2411,29 @@ body {
     }
 
     .header {
-        padding: 16px;
+        padding: 10px 16px;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .header-brand {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .header-info {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .header-action-btn span {
+        display: none;
+    }
+
+    .header-action-btn.primary span {
+        display: inline;
     }
 
     .summary-bar {

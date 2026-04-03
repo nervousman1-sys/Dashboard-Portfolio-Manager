@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=2.0">
-    <link rel="stylesheet" href="css/auth.css?v=2.0">
+    <link rel="stylesheet" href="css/main.css?v=3.0">
+    <link rel="stylesheet" href="css/auth.css?v=3.0">
 </head>
 
 <body>
@@ -152,17 +152,26 @@
         <!-- ── Main Content (ALL existing elements — IDs/classes UNCHANGED) ── -->
         <main class="main-content" id="mainContent">
 
-            <header class="header">
-                <h1>Dashboard Portfolio Manager</h1>
+            <header class="header glass-header">
+                <div class="header-brand">
+                    <h1>FINEXTIUM</h1>
+                    <span class="header-sub">Portfolio Intelligence</span>
+                </div>
                 <div class="header-info">
                     <div class="refresh-indicator">
                         <span class="dot"></span>
                         <span id="lastUpdate">מעדכן...</span>
                     </div>
-                    <button class="filter-btn" onclick="refreshAllPrices()" title="רענן מחירים">רענן נתונים</button>
-                    <button class="filter-btn" style="background:var(--accent-blue);color:#000;border-color:var(--accent-blue);font-weight:800" onclick="openMgmtModal('addClient')">+ הוסף תיק</button>
-                    <button class="filter-btn" onclick="toggleAlerts()" title="אינדיקטורים מאקרו כלכליים">אינדיקטורים מאקרו <span
-                            class="alert-count" id="alertCount" style="display:none">0</span></button>
+                    <button class="header-action-btn" onclick="refreshAllPrices()" title="רענן מחירים">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        <span>רענן</span>
+                    </button>
+                    <button class="header-action-btn primary" onclick="openMgmtModal('addClient')">+ הוסף תיק</button>
+                    <button class="header-action-btn" onclick="toggleAlerts()" title="אינדיקטורים מאקרו כלכליים">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        <span>מאקרו</span>
+                        <span class="alert-count" id="alertCount" style="display:none">0</span>
+                    </button>
                     <div id="userArea" style="display:none"></div>
                 </div>
             </header>
