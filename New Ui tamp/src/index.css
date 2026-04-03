@@ -1,0 +1,145 @@
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #020202;
+  --color-surface: #0a0a0a;
+  --color-primary: #00e5ff;
+  --color-secondary: #121212;
+  --color-accent: #00e5ff;
+  --color-neutral: #a3a3a3; /* Slightly lighter for better contrast */
+  --color-success: #00ff94;
+  --color-danger: #ff4d4d;
+  --color-warning: #f59e0b;
+  
+  --font-sans: "Assistant", ui-sans-serif, system-ui, sans-serif;
+  
+  --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 4px 10px -5px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 20px rgba(0, 229, 255, 0.15);
+}
+
+@layer base {
+  html {
+    font-size: 14px;
+    overflow-x: hidden;
+  }
+  @media (min-width: 768px) {
+    html {
+      font-size: 16px;
+    }
+  }
+  body {
+    @apply bg-background text-white font-sans antialiased selection:bg-primary/30 selection:text-primary;
+    direction: rtl;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.015em;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight font-black;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  h1 { @apply text-2xl sm:text-3xl lg:text-4xl; }
+  h2 { @apply text-lg sm:text-xl lg:text-2xl; }
+  h3 { @apply text-base sm:text-lg lg:text-xl; }
+
+  /* High-quality focus states */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/[0.03] backdrop-blur-md sm:backdrop-blur-xl border border-white/[0.08] shadow-premium rounded-2xl sm:rounded-3xl transition-all duration-500;
+  }
+  
+  .glass-card:hover {
+    @apply border-white/[0.12] bg-white/[0.05] shadow-glow;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-white via-white to-white/50;
+  }
+
+  /* Mobile Donut/Pie Chart Fix */
+  @media (max-width: 768px) {
+    .pie-container {
+      aspect-ratio: 1 / 1 !important;
+      width: 180px !important;
+      height: 180px !important;
+      max-width: 50vw !important;
+      border-radius: 50% !important;
+      flex-shrink: 0 !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      position: relative !important;
+      overflow: visible !important;
+      background: transparent !important;
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: none !important;
+      transform: none !important;
+      z-index: 1 !important;
+    }
+
+    /* Force border radius on SVG and Recharts wrappers */
+    .pie-container svg,
+    .pie-container .recharts-wrapper,
+    .pie-container .recharts-surface,
+    .pie-container .recharts-responsive-container {
+      border-radius: 50% !important;
+      overflow: hidden !important;
+    }
+    
+    /* Ensure the inner text remains centered */
+    .pie-center-text {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-align: center !important;
+      width: 100% !important;
+      height: 100% !important;
+      pointer-events: none !important;
+      z-index: 10 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      transform: none !important;
+    }
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full border-2 border-transparent bg-clip-content;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  @apply bg-white/20;
+}
