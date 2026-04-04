@@ -2209,14 +2209,14 @@ export default function App() {
                   <div className="flex justify-between items-center">
                     <h2 className="text-lg sm:text-xl font-black tracking-tight border-r-4 border-primary pr-3">סקירת חשיפה כוללת</h2>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
                     {/* Sector Allocation (Right in RTL) */}
-                    <div className="flex flex-col gap-1.5 sm:gap-2 bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                    <div className="flex flex-col gap-1.5 sm:gap-2 bg-white/[0.02] p-3 md:p-6 lg:p-8 xl:p-3 rounded-xl border border-white/5">
                       <div className="flex justify-between items-center">
                         <h3 className="text-[10px] sm:text-sm font-bold text-white uppercase tracking-wider">חלוקה לפי סקטורים</h3>
                       </div>
-                      <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 sm:gap-6">
-                      <div className="w-32 h-32 sm:w-40 sm:h-40 lg:w-48 lg:h-48 relative hidden sm:block pie-container">
+                      <div className="flex flex-col sm:flex-row md:flex-col lg:flex-col xl:flex-row items-center sm:items-start md:items-center lg:items-center xl:items-start justify-between md:justify-center lg:justify-center xl:justify-between gap-4 sm:gap-6 md:gap-8 lg:gap-10 xl:gap-6">
+                      <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 xl:w-48 xl:h-48 relative hidden sm:block pie-container">
                         <ResponsiveContainer width="100%" height="100%">
                           <RePieChart>
                               <Pie
@@ -2236,15 +2236,15 @@ export default function App() {
                             </RePieChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="flex flex-col gap-2 min-w-[140px] w-full sm:w-auto">
+                        <div className="flex flex-col gap-2 min-w-[140px] w-full sm:w-auto md:w-full lg:w-full xl:w-auto md:max-w-md lg:max-w-lg xl:max-w-none">
                           {SECTOR_ALLOCATION.map((s, idx) => (
                             <div key={idx} className="flex flex-col gap-1">
                               <div className="flex items-center justify-between px-1">
                                 <div className="flex items-center gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.2)]" style={{ backgroundColor: s.color }} />
-                                  <span className="text-[9px] sm:text-[10px] font-bold text-neutral/70 uppercase tracking-tight">{s.name}</span>
+                                  <span className="text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] xl:text-[10px] font-bold text-neutral/70 uppercase tracking-tight">{s.name}</span>
                                 </div>
-                                <span className="text-[10px] sm:text-[11px] font-black text-white">{s.value}%</span>
+                                <span className="text-[10px] sm:text-[11px] md:text-[12px] lg:text-[13px] xl:text-[11px] font-black text-white">{s.value}%</span>
                               </div>
                               {/* Mobile Progress Bar */}
                               <div className="sm:hidden h-1 w-full bg-white/5 rounded-full overflow-hidden">
@@ -2262,17 +2262,17 @@ export default function App() {
                     </div>
 
                     {/* Asset Allocation (Left in RTL) */}
-                    <div className="flex flex-col gap-1.5 sm:gap-2 bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                    <div className="flex flex-col gap-1.5 sm:gap-2 bg-white/[0.02] p-3 md:p-6 lg:p-8 xl:p-3 rounded-xl border border-white/5">
                       <div className="flex justify-between items-center">
                         <h3 className="text-[10px] sm:text-sm font-bold text-white uppercase tracking-wider">חלוקת נכסים</h3>
                       </div>
-                      <div className="flex flex-col gap-1.5 mt-1 sm:mt-2">
+                      <div className="flex flex-col gap-1.5 mt-1 sm:mt-2 md:mt-4 lg:mt-6 xl:mt-2">
                         <div className="flex flex-col gap-1">
                           <div className="flex justify-between items-end px-1">
-                            <span className="text-[9px] sm:text-[10px] font-bold text-neutral/60 uppercase tracking-tight">מניות</span>
+                            <span className="text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] xl:text-[10px] font-bold text-neutral/60 uppercase tracking-tight">מניות</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[9px] sm:text-[10px] font-black text-primary">75.0%</span>
-                              <span className="text-[10px] sm:text-[11px] font-medium text-white/90">{convertCurrency("₪2,815,626", currency, USD_RATE)}</span>
+                              <span className="text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] xl:text-[10px] font-black text-primary">75.0%</span>
+                              <span className="text-[10px] sm:text-[11px] md:text-[12px] lg:text-[13px] xl:text-[11px] font-medium text-white/90">{convertCurrency("₪2,815,626", currency, USD_RATE)}</span>
                             </div>
                           </div>
                           <div className="bg-white/[0.03] h-3 sm:h-5 rounded-full overflow-hidden border border-white/[0.05]">
