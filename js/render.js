@@ -50,9 +50,27 @@ function updateRiskMiniSummary(filteredClients) {
     const pct = (n) => total > 0 ? (n / total * 100).toFixed(0) : '0';
 
     el.innerHTML = `
-        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-high"></span>סיכון גבוה: <strong>${high}</strong> תיקים (${pct(high)}%)</span>
-        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-medium"></span>סיכון בינוני: <strong>${medium}</strong> תיקים (${pct(medium)}%)</span>
-        <span class="risk-mini-item"><span class="risk-mini-dot risk-dot-low"></span>סיכון נמוך: <strong>${low}</strong> תיקים (${pct(low)}%)</span>
+        <div class="risk-counter-card">
+            <div class="risk-counter-info">
+                <span class="risk-counter-label">סיכון גבוה</span>
+                <span class="risk-counter-value risk-val-high">${high}</span>
+            </div>
+            <span class="risk-counter-pct risk-val-high">${pct(high)}%</span>
+        </div>
+        <div class="risk-counter-card">
+            <div class="risk-counter-info">
+                <span class="risk-counter-label">סיכון בינוני</span>
+                <span class="risk-counter-value risk-val-medium">${medium}</span>
+            </div>
+            <span class="risk-counter-pct risk-val-medium">${pct(medium)}%</span>
+        </div>
+        <div class="risk-counter-card">
+            <div class="risk-counter-info">
+                <span class="risk-counter-label">סיכון נמוך</span>
+                <span class="risk-counter-value risk-val-low">${low}</span>
+            </div>
+            <span class="risk-counter-pct risk-val-low">${pct(low)}%</span>
+        </div>
     `;
 }
 
@@ -88,8 +106,8 @@ function renderExposureSection() {
 
     if (!clients || clients.length === 0) {
         document.getElementById('exposureSection').innerHTML = `
-            <h2>סקירת חשיפה כוללת</h2>
-            <div class="empty-state">
+            <h2 class="section-title">סקירת חשיפה כוללת</h2>
+            <div class="empty-state glass-card">
                 <div class="empty-state-icon">📈</div>
                 <p>נתוני חשיפה יוצגו לאחר הוספת תיקים</p>
             </div>
@@ -116,20 +134,20 @@ function renderExposureSection() {
         : `<div class="chart-empty-state"><div class="chart-empty-circle"></div><span>אין נתוני סקטורים</span></div>`;
 
     document.getElementById('exposureSection').innerHTML = `
-        <h2>סקירת חשיפה כוללת</h2>
+        <h2 class="section-title">סקירת חשיפה כוללת</h2>
         <div class="exposure-grid">
-            <div class="exposure-card">
+            <div class="exposure-card glass-card">
                 <h3>חלוקת נכסים</h3>
                 <div class="exposure-bar">
-                    <div class="exposure-bar-segment" style="width:${stockPct}%;background:${COLORS.neutral}">מניות ${stockPct.toFixed(1)}%</div>
-                    <div class="exposure-bar-segment" style="width:${bondPct}%;background:${COLORS.bonds}">אג"ח ${bondPct.toFixed(1)}%</div>
+                    <div class="exposure-bar-segment" style="width:${stockPct}%;background:var(--accent-blue)">מניות ${stockPct.toFixed(1)}%</div>
+                    <div class="exposure-bar-segment" style="width:${bondPct}%;background:var(--accent-purple)">אג"ח ${bondPct.toFixed(1)}%</div>
                 </div>
                 <div class="exposure-legend">
-                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:${COLORS.neutral}"></span>מניות: ${formatCurrency(exp.totalStocks)}</div>
-                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:${COLORS.bonds}"></span>אג"ח: ${formatCurrency(exp.totalBonds)}</div>
+                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:var(--accent-blue)"></span>מניות: ${formatCurrency(exp.totalStocks)}</div>
+                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:var(--accent-purple)"></span>אג"ח: ${formatCurrency(exp.totalBonds)}</div>
                 </div>
             </div>
-            <div class="exposure-card">
+            <div class="exposure-card glass-card">
                 <h3>חלוקה לפי סקטורים</h3>
                 ${sectorContent}
             </div>
@@ -159,14 +177,14 @@ function renderExposureSection() {
                     data: sortedSectors.map(s => s[1]),
                     backgroundColor: sortedSectors.map(s => SECTOR_COLORS[s[0]] || SECTOR_COLORS['Other']),
                     borderWidth: 2,
-                    borderColor: '#1e293b'
+                    borderColor: '#0a0a0a'
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 cutout: '40%',
                 plugins: {
-                    legend: { position: 'right', rtl: true, labels: { color: '#f1f5f9', font: { size: 11, weight: '600' }, padding: 8, usePointStyle: true, pointStyleWidth: 10, boxWidth: 10 } },
+                    legend: { position: 'right', rtl: true, labels: { color: 'rgba(255,255,255,0.85)', font: { family: 'Assistant', size: 11, weight: '600' }, padding: 8, usePointStyle: true, pointStyleWidth: 10, boxWidth: 10 } },
                     tooltip: { rtl: true, titleFont: { size: 14 }, bodyFont: { size: 13 }, callbacks: { label: (ctx) => ` ${ctx.label}: ${(ctx.parsed / exp.totalValue * 100).toFixed(1)}% (${formatCurrency(ctx.parsed)})` } }
                 }
             }
@@ -241,8 +259,8 @@ async function _renderCardSparkline(client, renderKey) {
 
     // Chart color based on actual portfolio return, not history endpoints
     const isPositive = calcPortfolioReturn(client).returnPct >= 0;
-    const lineColor = isPositive ? '#22c55e' : '#ef4444';
-    const bgColor = isPositive ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+    const lineColor = isPositive ? '#00ff94' : '#ff4d4d';
+    const bgColor = isPositive ? 'rgba(0,255,148,0.08)' : 'rgba(255,77,77,0.08)';
 
     charts[`perf-${client.id}`] = new Chart(perfCtx, {
         type: 'line',
@@ -288,10 +306,10 @@ function renderSummaryBar() {
     if (!clients || clients.length === 0) {
         document.getElementById('summaryBar').innerHTML = `
             <div class="summary-main">
-                <div class="summary-card-large"><div class="label">סך נכסים מנוהלים</div><div class="value" style="color: var(--color-neutral)">$0</div><div class="sub">0 תיקים פעילים</div></div>
-                <div class="summary-card-large"><div class="label">רווח / הפסד כולל</div><div class="value price-change">$0</div><div class="sub">תשואה: 0.00%</div></div>
-                <div class="summary-card-large"><div class="label">תיקים פעילים</div><div class="value" style="color: var(--text-primary)">0</div></div>
-                <div class="summary-card-large"><div class="label">תשואה ממוצעת</div><div class="value price-change">0.00%</div><div class="sub">ממוצע משוקלל</div></div>
+                <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">$0</span><span class="stat-sub">0 תיקים פעילים</span></div>
+                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">$0</span><span class="stat-sub">תשואה: 0.00%</span></div>
+                <div class="stat-card"><span class="stat-label">תיקים פעילים</span><span class="stat-value">0</span></div>
+                <div class="stat-card"><span class="stat-label">תשואה ממוצעת</span><span class="stat-value">0.00%</span><span class="stat-sub">ממוצע משוקלל</span></div>
             </div>
         `;
         return;
@@ -333,41 +351,56 @@ function renderSummaryBar() {
 
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
-            <div class="summary-card-large">
-                <div class="label">סך נכסים מנוהלים</div>
-                <div class="value" style="color: var(--color-neutral)">${formatCurrency(totalAUM)}</div>
-                <div class="sub">${clients.length} תיקים פעילים</div>
+            <div class="stat-card">
+                <span class="stat-label">סך נכסים מנוהלים</span>
+                <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
+                <span class="stat-sub">${clients.length} תיקים פעילים</span>
             </div>
-            <div class="summary-card-large">
-                <div class="label">רווח / הפסד כולל</div>
-                <div class="value price-change ${profitClass}">${globalAllStale ? '<span style="color:var(--text-muted);font-size:14px">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</div>
-                <div class="sub">תשואה: ${globalAllStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `<span class="price-change ${profitClass}" style="font-weight:700">${profitSign}${totalReturn.toFixed(2)}%</span>`}</div>
+            <div class="stat-card">
+                <span class="stat-label">רווח / הפסד כולל</span>
+                <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
+                <span class="stat-sub">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `<span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
             </div>
-            <div class="summary-card-large">
-                <div class="label">תיקים פעילים</div>
-                <div class="value" style="color: var(--text-primary)">${clients.length}</div>
+            <div class="stat-card">
+                <span class="stat-label">תיקים פעילים</span>
+                <span class="stat-value">${clients.length}</span>
             </div>
-            <div class="summary-card-large">
-                <div class="label">תשואה ממוצעת</div>
-                <div class="value price-change ${avgClass}">${globalAllStale ? '<span style="color:var(--text-muted);font-size:14px">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</div>
-                <div class="sub">ממוצע משוקלל</div>
+            <div class="stat-card">
+                <span class="stat-label">תשואה ממוצעת</span>
+                <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
+                <span class="stat-sub">ממוצע משוקלל</span>
             </div>
         </div>
         <div class="summary-secondary">
-            <div class="summary-card">
-                <div class="label">סיכון גבוה</div>
-                <div class="value" style="color: var(--risk-high)">${highClients.length} תיקים</div>
-                <div class="sub">${formatCurrency(highClients.reduce((s, c) => s + c.portfolioValue, 0))} | ${groupReturn(highClients)}</div>
+            <div class="risk-counter-card">
+                <div class="risk-counter-info">
+                    <span class="risk-counter-label">סיכון גבוה</span>
+                    <span class="risk-counter-value risk-val-high">${highClients.length} תיקים</span>
+                </div>
+                <div class="risk-counter-detail">
+                    <span class="risk-counter-sub">${formatCurrency(highClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
+                    <span class="risk-counter-pct">${groupReturn(highClients)}</span>
+                </div>
             </div>
-            <div class="summary-card">
-                <div class="label">סיכון בינוני</div>
-                <div class="value" style="color: var(--risk-medium)">${medClients.length} תיקים</div>
-                <div class="sub">${formatCurrency(medClients.reduce((s, c) => s + c.portfolioValue, 0))} | ${groupReturn(medClients)}</div>
+            <div class="risk-counter-card">
+                <div class="risk-counter-info">
+                    <span class="risk-counter-label">סיכון בינוני</span>
+                    <span class="risk-counter-value risk-val-medium">${medClients.length} תיקים</span>
+                </div>
+                <div class="risk-counter-detail">
+                    <span class="risk-counter-sub">${formatCurrency(medClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
+                    <span class="risk-counter-pct">${groupReturn(medClients)}</span>
+                </div>
             </div>
-            <div class="summary-card">
-                <div class="label">סיכון נמוך</div>
-                <div class="value" style="color: var(--risk-low)">${lowClients.length} תיקים</div>
-                <div class="sub">${formatCurrency(lowClients.reduce((s, c) => s + c.portfolioValue, 0))} | ${groupReturn(lowClients)}</div>
+            <div class="risk-counter-card">
+                <div class="risk-counter-info">
+                    <span class="risk-counter-label">סיכון נמוך</span>
+                    <span class="risk-counter-value risk-val-low">${lowClients.length} תיקים</span>
+                </div>
+                <div class="risk-counter-detail">
+                    <span class="risk-counter-sub">${formatCurrency(lowClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
+                    <span class="risk-counter-pct">${groupReturn(lowClients)}</span>
+                </div>
             </div>
         </div>
     `;
@@ -393,10 +426,10 @@ function renderClientCards() {
     // Empty state — no portfolios at all
     if (!clients || clients.length === 0) {
         grid.innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state glass-card">
                 <div class="empty-state-icon">📊</div>
                 <h3>אין תיקים להצגה</h3>
-                <p>לחץ על <strong>"+ הוסף תיק"</strong> כדי להתחיל</p>
+                <p>לחץ על <strong style="color:var(--accent-blue)">"+ הוסף תיק"</strong> כדי להתחיל</p>
             </div>
         `;
         updateRiskMiniSummary([]);
@@ -440,10 +473,10 @@ function renderClientCards() {
     // No matching results for current filter
     if (filtered.length === 0) {
         grid.innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state glass-card">
                 <div class="empty-state-icon">🔍</div>
                 <h3>לא נמצאו תיקים תואמים</h3>
-                <p>נסה לשנות את הפילטרים או לחץ על "הכל"</p>
+                <p>נסה לשנות את הפילטרים או לחץ על <strong style="color:var(--accent-blue)">"הכל"</strong></p>
             </div>
         `;
         return;
@@ -451,7 +484,7 @@ function renderClientCards() {
 
     filtered.forEach(client => {
         const card = document.createElement('div');
-        card.className = 'client-card';
+        card.className = 'client-card glass-card';
         card.onclick = () => openModal(client.id);
 
         const stockHoldings = client.holdings.filter(h => h.type === 'stock');
@@ -539,18 +572,36 @@ function renderClientCards() {
         const stockHoldingsWithCost = stockHoldings.filter(h => h.shares > 0 && h.costBasis > 0);
         const allPricesStale = stockHoldingsWithCost.length > 0 && stockHoldingsWithCost.every(h => !h._livePriceResolved);
 
-        const profitClass = allPricesStale ? 'neutral' : (profit >= 0 ? 'positive' : 'negative');
         const profitSign = allPricesStale ? '' : (profit >= 0 ? '+' : '');
+
+        // Return badge color
+        const returnColor = allPricesStale ? '' : (returnPct >= 0 ? 'yield-positive' : 'yield-negative');
 
         card.innerHTML = `
                 <div class="card-header">
-                    <span class="client-name">${client.name}</span>
-                    <div style="display:flex;align-items:center;gap:6px">
+                    <div class="card-header-start">
+                        <h3 class="client-name">${client.name}</h3>
                         <span class="risk-badge ${client.risk}">${client.riskLabel}</span>
+                    </div>
+                    <div class="card-header-end">
+                        <div class="card-view-toggle">
+                            <button class="view-toggle-btn active" onclick="event.stopPropagation();" title="תרשים">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                            </button>
+                            <button class="view-toggle-btn" onclick="event.stopPropagation(); openFullscreenChart(${client.id})" title="גרף ביצועים">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+                            </button>
+                        </div>
                         <div class="card-actions">
-                            <button class="card-action-btn deposit" onclick="event.stopPropagation(); openMgmtModal('depositCash', clients.find(c=>c.id===${client.id}))" title="הפקד מזומן">&#128176;</button>
-                            <button class="card-action-btn" onclick="event.stopPropagation(); openMgmtModal('editClient', clients.find(c=>c.id===${client.id}))" title="ערוך תיק">&#9998;</button>
-                            <button class="card-action-btn delete" onclick="event.stopPropagation(); openMgmtModal('deleteClient', clients.find(c=>c.id===${client.id}))" title="מחק תיק">&#128465;</button>
+                            <button class="card-action-btn deposit" onclick="event.stopPropagation(); openMgmtModal('depositCash', clients.find(c=>c.id===${client.id}))" title="הפקד מזומן">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            </button>
+                            <button class="card-action-btn" onclick="event.stopPropagation(); openMgmtModal('editClient', clients.find(c=>c.id===${client.id}))" title="ערוך תיק">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                            </button>
+                            <button class="card-action-btn delete" onclick="event.stopPropagation(); openMgmtModal('deleteClient', clients.find(c=>c.id===${client.id}))" title="מחק תיק">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -563,30 +614,28 @@ function renderClientCards() {
                         <div class="cash-section">${cashHTML}</div>
                     </div>
                 </div>
-                <div class="time-range-toggle">
-                    <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '1m', this)">1M</button>
-                    <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '3m', this)">3M</button>
-                    <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '1y', this)">1Y</button>
-                    <button class="time-range-btn active" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, 'all', this)">All</button>
-                </div>
-                <div class="card-performance chart-wrapper-relative">
-                    <button class="expand-btn" onclick="event.stopPropagation(); openFullscreenChart(${client.id})" title="הגדל גרף">&#x26F6;</button>
-                    <div class="card-performance-chart">
-                        <canvas id="perf-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
+                <div class="card-sparkline-section">
+                    <div class="time-range-toggle">
+                        <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '1m', this)">1M</button>
+                        <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '3m', this)">3M</button>
+                        <button class="time-range-btn" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, '1y', this)">1Y</button>
+                        <button class="time-range-btn active" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, 'all', this)">All</button>
+                    </div>
+                    <div class="card-performance chart-wrapper-relative">
+                        <button class="expand-btn" onclick="event.stopPropagation(); openFullscreenChart(${client.id})" title="הגדל גרף">&#x26F6;</button>
+                        <div class="card-performance-chart">
+                            <canvas id="perf-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
+                        </div>
                     </div>
                 </div>
             <div class="card-footer">
-                <div>
-                    <div class="portfolio-label">שווי תיק</div>
-                    <div class="portfolio-value">${formatCurrency(client.portfolioValue)}</div>
+                <div class="card-footer-stat">
+                    <span class="card-footer-label">תשואה</span>
+                    <span class="card-footer-value ${returnColor}">${allPricesStale ? '<span class="stat-stale">ממתין...</span>' : `${profitSign}${returnPct.toFixed(2)}%`}</span>
                 </div>
-                <div style="text-align: center;">
-                    <div class="portfolio-label">רווח/הפסד</div>
-                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${allPricesStale ? '<span style="color:var(--text-muted);font-size:12px">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(profit))}`}</div>
-                </div>
-                <div style="text-align: left;">
-                    <div class="portfolio-label">תשואה משוכללת</div>
-                    <div class="price-change ${profitClass}" style="font-size:15px; font-weight:700">${allPricesStale ? '<span style="color:var(--text-muted);font-size:12px">ממתין...</span>' : `${profitSign}${returnPct.toFixed(2)}%`}</div>
+                <div class="card-footer-stat card-footer-stat-end">
+                    <span class="card-footer-label">שווי תיק</span>
+                    <span class="card-footer-value">${formatCurrency(client.portfolioValue)}</span>
                 </div>
             </div>
         `;
@@ -620,8 +669,8 @@ function renderClientCards() {
             }
             const chartData = hasData ? [totalStockPct, totalBondPct] : [1];
             const chartLabels = hasData ? ['מניות', 'אג"ח'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
-            const chartBg = hasData ? ['#3b82f6', '#a855f7'] : ['#334155'];
-            const chartBorder = hasData ? ['#2563eb', '#9333ea'] : ['#475569'];
+            const chartBg = hasData ? ['#00e5ff', '#a855f7'] : ['rgba(255,255,255,0.08)'];
+            const chartBorder = hasData ? ['#00b8d4', '#9333ea'] : ['rgba(255,255,255,0.15)'];
 
             charts[client.id] = new Chart(ctx, {
                 type: 'doughnut',

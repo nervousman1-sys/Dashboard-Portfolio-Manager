@@ -89,9 +89,10 @@ function navigateTo(section) {
             }
             break;
 
+        case 'markets':
         case 'flows':
         case 'news':
-        case 'strategy':
+        case 'analysis':
         case 'settings':
             // Future sections — close macro if active, show placeholder
             if (macroIsActive && typeof closeMacroPage === 'function') {
