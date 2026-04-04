@@ -1,5 +1,92 @@
 // ========== RENDER - DOM Rendering (Summary, Exposure, Client Cards) ==========
 
+// ── Summary bar: cached async data ──
+let _cachedRealizedPnl = null;
+let _cachedDivYield = null;
+let _realizedPnlLoading = false;
+
+// Returns the currently filtered client list (mirrors filter logic in filters.js)
+function _getFilteredClients() {
+    if (typeof activeFilters === 'undefined' || typeof clients === 'undefined') return [];
+    const noFilter = (!activeFilters.risk || activeFilters.risk === 'all')
+        && (!activeFilters.asset || activeFilters.asset === 'all')
+        && (!activeFilters.sector || activeFilters.sector === 'all')
+        && (activeFilters.sizeMin === null && activeFilters.sizeMax === null)
+        && (!activeFilters.search || activeFilters.search === '');
+    if (noFilter) return clients;
+    return clients.filter(c => {
+        if (activeFilters.risk && activeFilters.risk !== 'all' && c.risk !== activeFilters.risk) return false;
+        if (activeFilters.asset && activeFilters.asset !== 'all') {
+            const hasType = activeFilters.asset === 'stocks'
+                ? c.holdings.some(h => h.type === 'stock')
+                : c.holdings.some(h => h.type === 'bond');
+            if (!hasType) return false;
+        }
+        if (activeFilters.sector && activeFilters.sector !== 'all') {
+            if (!c.holdings.some(h => h.sector === activeFilters.sector)) return false;
+        }
+        if (activeFilters.sizeMin !== null && c.portfolioValue < activeFilters.sizeMin) return false;
+        if (activeFilters.sizeMax !== null && c.portfolioValue >= activeFilters.sizeMax) return false;
+        if (activeFilters.search) {
+            const q = activeFilters.search.toLowerCase();
+            const nameMatch = c.name.toLowerCase().includes(q);
+            const tickerMatch = c.holdings.some(h => h.ticker.toLowerCase().includes(q) || h.name.toLowerCase().includes(q));
+            if (!nameMatch && !tickerMatch) return false;
+        }
+        return true;
+    });
+}
+
+// Async loader: fetches realized P/L from all portfolio transactions
+async function _loadRealizedPnlAsync() {
+    if (_realizedPnlLoading || typeof supaFetchTransactions !== 'function') return;
+    _realizedPnlLoading = true;
+    try {
+        let totalRealized = 0;
+        for (const c of clients) {
+            const txs = await supaFetchTransactions(c.id);
+            if (txs && txs.length) {
+                txs.forEach(t => {
+                    if (t.realizedPnl) totalRealized += t.realizedPnl;
+                });
+            }
+        }
+        _cachedRealizedPnl = totalRealized;
+        _realizedPnlLoading = false;
+        // Re-render summary bar with updated data
+        renderSummaryBar();
+    } catch (e) {
+        _realizedPnlLoading = false;
+        console.warn('[renderSummaryBar] Could not load realized P/L:', e.message);
+    }
+}
+
+// ── Currency toggle state ──
+let _displayCurrency = 'USD';
+
+function setCurrency(currency, btn) {
+    _displayCurrency = currency;
+    document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    // Re-render all currency-dependent views
+    renderSummaryBar();
+    renderClientCards();
+    renderExposureSection();
+}
+
+// ── Header date/time clock ──
+function _updateHeaderDatetime() {
+    const el = document.getElementById('headerDatetime');
+    if (!el) return;
+    const now = new Date();
+    const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+    el.textContent = now.toLocaleDateString('en-US', opts);
+}
+
+// Start clock — update every 30 seconds
+_updateHeaderDatetime();
+setInterval(_updateHeaderDatetime, 30000);
+
 // ========== QUANTITY FORMATTING ==========
 
 // Display-only: returns an LTR span that prevents RTL digit truncation.
@@ -303,42 +390,62 @@ async function _renderCardSparkline(client, renderKey) {
 // ========== SUMMARY BAR ==========
 
 function renderSummaryBar() {
+    // Determine which clients to summarize — respects active filters
+    const filtered = _getFilteredClients();
+
     if (!clients || clients.length === 0) {
         document.getElementById('summaryBar').innerHTML = `
             <div class="summary-main">
-                <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">$0</span><span class="stat-sub">0 תיקים פעילים</span></div>
-                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">$0</span><span class="stat-sub">תשואה: 0.00%</span></div>
-                <div class="stat-card"><span class="stat-label">תיקים פעילים</span><span class="stat-value">0</span></div>
-                <div class="stat-card"><span class="stat-label">תשואה ממוצעת</span><span class="stat-value">0.00%</span><span class="stat-sub">ממוצע משוקלל</span></div>
+                <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">$0</span><span class="stat-sub">Total AUM</span></div>
+                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">$0</span><span class="stat-sub">Unrealized P/L</span></div>
+                <div class="stat-card"><span class="stat-label">רווח ממומש</span><span class="stat-value">—</span><span class="stat-sub">Realized P/L</span></div>
+                <div class="stat-card"><span class="stat-label">תשואת דיבידנד</span><span class="stat-value">—</span><span class="stat-sub">Dividend Yield</span></div>
+                <div class="stat-card"><span class="stat-label">תשואה משוקללת</span><span class="stat-value">0.00%</span><span class="stat-sub">Weighted Return</span></div>
+                <div class="stat-card"><span class="stat-label">תיקים מנוהלים</span><span class="stat-value">0</span><span class="stat-sub">Managed Portfolios</span></div>
             </div>
         `;
         return;
     }
-    const totalAUM = clients.reduce((sum, c) => sum + c.portfolioValue, 0);
+
+    const src = filtered.length > 0 ? filtered : clients;
+    const totalAUM = src.reduce((sum, c) => sum + c.portfolioValue, 0);
     // Unified FX-aware profit/return — uses calcPortfolioReturn (clients.js)
-    const allCostBasis = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
-    const allCurrentValue = clients.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
+    const allCostBasis = src.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
+    const allCurrentValue = src.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
     const totalProfit = allCurrentValue - allCostBasis;
     const totalReturn = allCostBasis > 0 ? ((totalProfit) / allCostBasis * 100) : 0;
 
     // Global stale detection — if ALL stock holdings have unresolved prices
-    const allStockHoldings = clients.flatMap(c => c.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.costBasis > 0));
+    const allStockHoldings = src.flatMap(c => c.holdings.filter(h => h.type === 'stock' && h.shares > 0 && h.costBasis > 0));
     const globalAllStale = allStockHoldings.length > 0 && allStockHoldings.every(h => !h._livePriceResolved);
 
     const profitClass = globalAllStale ? 'neutral' : (totalProfit >= 0 ? 'positive' : 'negative');
     const profitSign = globalAllStale ? '' : (totalProfit >= 0 ? '+' : '');
 
-    const highClients = clients.filter(c => c.risk === 'high');
-    const medClients = clients.filter(c => c.risk === 'medium');
-    const lowClients = clients.filter(c => c.risk === 'low');
-
     // Weighted average return across portfolios (based on invested capital)
-    const avgReturn = allCostBasis > 0 ? clients.reduce((s, c) => {
+    const avgReturn = allCostBasis > 0 ? src.reduce((s, c) => {
         const r = calcPortfolioReturn(c);
         return s + r.returnPct * (r.totalCost / allCostBasis);
     }, 0) : 0;
     const avgClass = globalAllStale ? 'neutral' : (avgReturn >= 0 ? 'positive' : 'negative');
     const avgSign = globalAllStale ? '' : (avgReturn >= 0 ? '+' : '');
+
+    // Realized P/L — aggregate from cached transaction data if available
+    const realizedPnl = _cachedRealizedPnl || 0;
+    const hasRealized = _cachedRealizedPnl !== null;
+    const realizedSign = realizedPnl >= 0 ? '+' : '';
+
+    // Dividend yield estimate — sum of annual dividends / total portfolio value
+    const divYield = _cachedDivYield || 0;
+    const hasDivYield = _cachedDivYield !== null;
+
+    // Filter indicator
+    const isFiltered = filtered.length > 0 && filtered.length < clients.length;
+    const filterTag = isFiltered ? `<span class="stat-filter-tag">${src.length} / ${clients.length}</span>` : '';
+
+    const highClients = src.filter(c => c.risk === 'high');
+    const medClients = src.filter(c => c.risk === 'medium');
+    const lowClients = src.filter(c => c.risk === 'low');
 
     function groupReturn(group) {
         const cb = group.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
@@ -351,24 +458,53 @@ function renderSummaryBar() {
 
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
-            <div class="stat-card">
+            <div class="stat-card stat-card-highlight">
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
                 <span class="stat-label">סך נכסים מנוהלים</span>
                 <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
-                <span class="stat-sub">${clients.length} תיקים פעילים</span>
+                <span class="stat-sub">Total AUM ${filterTag}</span>
             </div>
             <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${profitClass === 'positive' ? 'var(--accent-green)' : profitClass === 'negative' ? 'var(--accent-red)' : 'var(--text-muted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                </div>
                 <span class="stat-label">רווח / הפסד כולל</span>
                 <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
-                <span class="stat-sub">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `<span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
+                <span class="stat-sub">${globalAllStale ? '<span class="stat-stale">—</span>' : `<span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
             </div>
             <div class="stat-card">
-                <span class="stat-label">תיקים פעילים</span>
-                <span class="stat-value">${clients.length}</span>
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </div>
+                <span class="stat-label">רווח ממומש</span>
+                <span class="stat-value ${hasRealized ? (realizedPnl >= 0 ? 'stat-val-green' : 'stat-val-red') : ''}">${hasRealized ? `${realizedSign}${formatCurrency(Math.abs(realizedPnl))}` : '—'}</span>
+                <span class="stat-sub">Realized P/L</span>
             </div>
             <div class="stat-card">
-                <span class="stat-label">תשואה ממוצעת</span>
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                </div>
+                <span class="stat-label">תשואת דיבידנד</span>
+                <span class="stat-value ${hasDivYield ? 'stat-val-green' : ''}">${hasDivYield ? `${divYield.toFixed(2)}%` : '—'}</span>
+                <span class="stat-sub">Dividend Yield</span>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${avgClass === 'positive' ? 'var(--accent-green)' : avgClass === 'negative' ? 'var(--accent-red)' : 'var(--text-muted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                </div>
+                <span class="stat-label">תשואה משוקללת</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
-                <span class="stat-sub">ממוצע משוקלל</span>
+                <span class="stat-sub">Weighted Return</span>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                </div>
+                <span class="stat-label">תיקים מנוהלים</span>
+                <span class="stat-value">${src.length}</span>
+                <span class="stat-sub">Managed Portfolios</span>
             </div>
         </div>
         <div class="summary-secondary">
@@ -404,6 +540,9 @@ function renderSummaryBar() {
             </div>
         </div>
     `;
+
+    // Lazy-load realized P/L from transactions (async, updates card when ready)
+    if (!hasRealized) _loadRealizedPnlAsync();
 }
 
 // ========== CLIENT CARDS ==========
