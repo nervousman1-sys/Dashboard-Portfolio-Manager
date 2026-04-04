@@ -9,6 +9,7 @@ function setFilter(type, value, btn) {
 
     _updateDrawerBadge();
     _updateClearFiltersVisibility();
+    renderSummaryBar();
     renderExposureSection();
     renderClientCards();
 }
@@ -16,6 +17,7 @@ function setFilter(type, value, btn) {
 function searchClients(query) {
     activeFilters.search = query;
     _updateClearFiltersVisibility();
+    renderSummaryBar();
     renderExposureSection();
     renderClientCards();
 }
@@ -29,6 +31,7 @@ function setSizeFilter(size, btn) {
     else if (size === 'large') { activeFilters.sizeMin = 500000; activeFilters.sizeMax = null; }
     _updateDrawerBadge();
     _updateClearFiltersVisibility();
+    renderSummaryBar();
     renderExposureSection();
     renderClientCards();
 }
@@ -118,6 +121,7 @@ function clearAllFilters() {
 
     _updateDrawerBadge();
     _updateClearFiltersVisibility();
+    renderSummaryBar();
     renderExposureSection();
     renderClientCards();
 }

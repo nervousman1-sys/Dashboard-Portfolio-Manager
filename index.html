@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=4.0">
-    <link rel="stylesheet" href="css/auth.css?v=4.0">
+    <link rel="stylesheet" href="css/main.css?v=5.0">
+    <link rel="stylesheet" href="css/auth.css?v=5.0">
 </head>
 
 <body>
@@ -173,6 +173,11 @@
                     </div>
                 </div>
                 <div class="header-end">
+                    <div class="header-datetime" id="headerDatetime"></div>
+                    <div class="currency-toggle" id="currencyToggle">
+                        <button class="currency-btn active" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
+                        <button class="currency-btn" data-currency="ILS" onclick="setCurrency('ILS', this)">ILS</button>
+                    </div>
                     <div class="refresh-indicator">
                         <span class="status-dot"></span>
                         <span id="lastUpdate">מעדכן...</span>
