@@ -1212,6 +1212,7 @@ body {
     flex-direction: column;
     gap: 16px;
     padding-left: 24px;
+    padding-top: 20px;
 }
 
 .exp-panel-title {
@@ -1255,19 +1256,19 @@ body {
 
 .exp-asset-bar-track {
     flex: 1;
-    height: 14px;
+    height: 16px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 7px;
+    border-radius: 50px;
     overflow: hidden;
     direction: ltr; /* keep fill growing left-to-right regardless of page RTL */
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .exp-asset-bar-fill {
     height: 100%;
-    border-radius: 7px;
+    border-radius: 50px;
     transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 16px currentColor, 0 0 6px currentColor, inset 0 1px 0 rgba(255,255,255,0.2);
+    box-shadow: 0 0 20px currentColor, 0 0 8px currentColor, inset 0 1px 0 rgba(255,255,255,0.25);
 }
 
 .exp-asset-label {
@@ -1298,7 +1299,7 @@ body {
 .exp-sectors-inner {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 3rem;
     flex: 1;
 }
 
