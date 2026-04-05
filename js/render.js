@@ -458,21 +458,24 @@ function renderSummaryBar() {
     // Determine which clients to summarize — respects active filters
     const filtered = _getFilteredClients();
 
-    if (!clients || clients.length === 0) {
+    // Zero state: no data at all, OR active filter matches nothing
+    if (!clients || clients.length === 0 || filtered.length === 0) {
+        const filterLabel = filtered.length === 0 && clients.length > 0 ? 'אין תיקים תואמים לסינון' : 'Total AUM';
         document.getElementById('summaryBar').innerHTML = `
             <div class="summary-main">
-                <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">$0</span><span class="stat-sub">Total AUM</span></div>
-                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">$0</span><span class="stat-sub">Unrealized P/L</span></div>
-                <div class="stat-card"><span class="stat-label">רווח ממומש</span><span class="stat-value">—</span><span class="stat-sub">Realized P/L</span></div>
-                <div class="stat-card"><span class="stat-label">תשואת דיבידנד</span><span class="stat-value">—</span><span class="stat-sub">Dividend Yield</span></div>
-                <div class="stat-card"><span class="stat-label">תשואה משוקללת</span><span class="stat-value">0.00%</span><span class="stat-sub">Weighted Return</span></div>
-                <div class="stat-card"><span class="stat-label">תיקים מנוהלים</span><span class="stat-value">0</span><span class="stat-sub">Managed Portfolios</span></div>
+                <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">${formatCurrency(0)}</span><span class="stat-sub">${filterLabel}</span></div>
+                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">${formatCurrency(0)}</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">רווח / הפסד ממומש</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">תשואת דיבידנד</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">תשואה משוקללת</span><span class="stat-value">0.00%</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">תיקים פעילים</span><span class="stat-value">0</span><span class="stat-sub">0 / ${clients.length}</span></div>
             </div>
         `;
         return;
     }
 
-    const src = filtered.length > 0 ? filtered : clients;
+    // NEVER fall back to full clients list — empty filter result must show $0
+    const src = filtered;
     const totalAUM = src.reduce((sum, c) => sum + c.portfolioValue, 0);
     // Unified FX-aware profit/return — uses calcPortfolioReturn (clients.js)
     const allCostBasis = src.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
@@ -504,9 +507,15 @@ function renderSummaryBar() {
     const divYield = _cachedDivYield || 0;
     const hasDivYield = _cachedDivYield !== null;
 
-    // Filter indicator
-    const isFiltered = filtered.length > 0 && filtered.length < clients.length;
-    const filterTag = isFiltered ? `<span class="stat-filter-tag">${src.length} / ${clients.length}</span>` : '';
+    // Filter indicator — show N/total when any filter is active
+    const anyFilterActive = typeof activeFilters !== 'undefined' && (
+        (activeFilters.risk && activeFilters.risk !== 'all') ||
+        (activeFilters.asset && activeFilters.asset !== 'all') ||
+        (activeFilters.sector && activeFilters.sector !== 'all') ||
+        activeFilters.sizeMin !== null || activeFilters.sizeMax !== null ||
+        (activeFilters.search && activeFilters.search !== '')
+    );
+    const filterTag = anyFilterActive ? `<span class="stat-filter-tag">${src.length} / ${clients.length}</span>` : '';
 
     // Build portfolio breakdown text for last card
     const highCount = src.filter(c => c.risk === 'high').length;
