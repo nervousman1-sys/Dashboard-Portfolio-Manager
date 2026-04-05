@@ -451,9 +451,9 @@ body {
 .header-clock-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     align-items: flex-start;
-    min-width: 140px;
+    min-width: 100px;
 }
 
 .header-clock-row {
@@ -465,6 +465,7 @@ body {
 }
 
 .header-clock-label {
+    display: none; /* removed per design — label text stripped from header clock */
     font-size: 9px;
     font-weight: 700;
     color: var(--text-muted);
@@ -604,7 +605,7 @@ body {
     background: rgba(5, 5, 5, 0.8);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.03);
-    margin-top: 24px;
+    margin-top: 30px;
 }
 
 .qw-settings-btn {
@@ -620,7 +621,9 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
-    margin-left: 16px;
+    margin-right: 0;
+    margin-left: 0;
+    order: -1; /* RTL flex: order -1 = rightmost position */
 }
 
 .qw-settings-btn:hover {
@@ -1253,19 +1256,19 @@ body {
 
 .exp-asset-bar-track {
     flex: 1;
-    height: 10px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 5px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 7px;
     overflow: hidden;
     direction: ltr; /* keep fill growing left-to-right regardless of page RTL */
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .exp-asset-bar-fill {
     height: 100%;
-    border-radius: 5px;
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 12px currentColor, 0 0 4px currentColor;
+    border-radius: 7px;
+    transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 16px currentColor, 0 0 6px currentColor, inset 0 1px 0 rgba(255,255,255,0.2);
 }
 
 .exp-asset-label {
@@ -1296,7 +1299,7 @@ body {
 .exp-sectors-inner {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 20px;
     flex: 1;
 }
 
@@ -1931,15 +1934,25 @@ body {
     text-align: left;
 }
 
+.card-footer-stat-center {
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    border-right: 1px solid rgba(255,255,255,0.05);
+    border-left: 1px solid rgba(255,255,255,0.05);
+    padding: 0 12px;
+}
+
 .card-footer-label {
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
-    color: rgba(163, 163, 163, 0.8);
+    color: rgba(163, 163, 163, 0.6);
     text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .card-footer-value {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 900;
     color: var(--text-primary);
     letter-spacing: -0.03em;
