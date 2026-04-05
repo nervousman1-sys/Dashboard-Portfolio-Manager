@@ -481,6 +481,38 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* ── Timezone Toggle Buttons ── */
+.header-clock-tz {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 2px;
+}
+
+.tz-btn {
+    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.tz-btn.active {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: rgba(0, 229, 255, 0.4);
+    color: var(--accent-blue);
+}
+
+.tz-btn:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
 /* ── Sentiment Badge ── */
 .header-sentiment {
     display: flex;
@@ -789,7 +821,7 @@ body {
 .stat-label {
     font-size: 9px;
     font-weight: 700;
-    color: rgba(163, 163, 163, 0.5);
+    color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     line-height: 1.2;
@@ -799,7 +831,7 @@ body {
     font-size: 20px;
     font-weight: 900;
     letter-spacing: -0.05em;
-    color: var(--text-primary);
+    color: #ffffff;
     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     line-height: 1.1;
 }
