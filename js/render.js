@@ -203,74 +203,89 @@ function calculateOverallExposure() {
 }
 
 function renderExposureSection() {
-    // Bump version — any pending setTimeout from a previous call becomes stale
     const myVersion = ++_exposureRenderVersion;
-
-    // Destroy previous sector chart (may reference an orphaned canvas)
     _safeDestroyChart('sector-exposure');
 
     if (!clients || clients.length === 0) {
         document.getElementById('exposureSection').innerHTML = `
-            <h2 class="section-title">סקירת חשיפה כוללת</h2>
-            <div class="empty-state glass-card">
-                <div class="empty-state-icon">📈</div>
-                <p>נתוני חשיפה יוצגו לאחר הוספת תיקים</p>
+            <div class="exposure-wrapper glass-card">
+                <h2 class="section-title">סקירת חשיפה כוללת</h2>
+                <div class="empty-state" style="padding:40px">
+                    <p style="color:var(--text-muted)">נתוני חשיפה יוצגו לאחר הוספת תיקים</p>
+                </div>
             </div>
         `;
         return;
     }
+
     const exp = calculateOverallExposure();
-    const stockPct = exp.totalValue > 0 ? (exp.totalStocks / exp.totalValue * 100) : 0;
-    const bondPct = exp.totalValue > 0 ? (exp.totalBonds / exp.totalValue * 100) : 0;
+    const totalValue = exp.totalValue || 1;
 
-    // Sort sectors by value
-    const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]);
+    // Build asset allocation rows (stocks, bonds, cash/other)
+    const cashValue = Math.max(0, totalValue - exp.totalStocks - exp.totalBonds);
+    const assetRows = [
+        { label: 'מניות', value: exp.totalStocks, color: 'var(--accent-blue)' },
+        { label: 'אג"ח',  value: exp.totalBonds,  color: 'var(--accent-purple)' },
+        { label: 'מזומן', value: cashValue,        color: 'rgba(163,163,163,0.4)' }
+    ].filter(r => r.value > 0);
 
-    let legendHTML = '';
-    sortedSectors.forEach(([sector, value]) => {
-        const pct = (value / exp.totalValue * 100).toFixed(1);
+    const assetRowsHTML = assetRows.map(r => {
+        const pct = (r.value / totalValue * 100);
+        return `
+        <div class="exp-asset-row">
+            <div class="exp-asset-meta">
+                <span class="exp-asset-value">${formatCurrency(r.value)}</span>
+                <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
+            </div>
+            <div class="exp-asset-bar-track">
+                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
+            </div>
+            <span class="exp-asset-label">${r.label}</span>
+        </div>`;
+    }).join('');
+
+    // Sector doughnut side
+    const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const sectorLegendHTML = sortedSectors.map(([sector, value]) => {
+        const pct = (value / totalValue * 100).toFixed(0);
         const color = SECTOR_COLORS[sector] || SECTOR_COLORS['Other'];
-        legendHTML += `<div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:${color}"></span>${sector}: ${pct}% (${formatCurrency(value)})</div>`;
-    });
+        return `<div class="exp-sector-item">
+            <span class="exp-sector-pct">${pct}%</span>
+            <span class="exp-sector-name">${sector}</span>
+            <span class="exp-sector-dot" style="background:${color}"></span>
+        </div>`;
+    }).join('');
 
-    // Sector chart or empty-state if no sector data
-    const sectorContent = sortedSectors.length > 0
-        ? `<div class="sector-chart-container"><canvas id="sector-exposure-chart"></canvas></div>`
+    const sectorChart = sortedSectors.length > 0
+        ? `<div class="exp-donut-wrap"><canvas id="sector-exposure-chart"></canvas></div>`
         : `<div class="chart-empty-state"><div class="chart-empty-circle"></div><span>אין נתוני סקטורים</span></div>`;
 
     document.getElementById('exposureSection').innerHTML = `
-        <h2 class="section-title">סקירת חשיפה כוללת</h2>
-        <div class="exposure-grid">
-            <div class="exposure-card glass-card">
-                <h3>חלוקת נכסים</h3>
-                <div class="exposure-bar">
-                    <div class="exposure-bar-segment" style="width:${stockPct}%;background:var(--accent-blue)">מניות ${stockPct.toFixed(1)}%</div>
-                    <div class="exposure-bar-segment" style="width:${bondPct}%;background:var(--accent-purple)">אג"ח ${bondPct.toFixed(1)}%</div>
+        <div class="exposure-wrapper glass-card">
+            <h2 class="section-title">סקירת חשיפה כוללת</h2>
+            <div class="exposure-inner">
+                <div class="exp-assets-panel">
+                    <span class="exp-panel-title">חלוקת נכסים</span>
+                    <div class="exp-asset-rows">${assetRowsHTML}</div>
                 </div>
-                <div class="exposure-legend">
-                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:var(--accent-blue)"></span>מניות: ${formatCurrency(exp.totalStocks)}</div>
-                    <div class="exposure-legend-item"><span class="exposure-legend-dot" style="background:var(--accent-purple)"></span>אג"ח: ${formatCurrency(exp.totalBonds)}</div>
+                <div class="exp-divider"></div>
+                <div class="exp-sectors-panel">
+                    <span class="exp-panel-title">חלוקה לפי סקטורים</span>
+                    <div class="exp-sectors-inner">
+                        <div class="exp-sector-legend">${sectorLegendHTML}</div>
+                        ${sectorChart}
+                    </div>
                 </div>
-            </div>
-            <div class="exposure-card glass-card">
-                <h3>חלוקה לפי סקטורים</h3>
-                ${sectorContent}
             </div>
         </div>
     `;
 
-    // No chart to create if sectors are empty
     if (sortedSectors.length === 0) return;
 
-    // Sector doughnut chart — version-guarded to prevent race conditions
     setTimeout(() => {
-        // Stale callback — a newer renderExposureSection() already ran
         if (myVersion !== _exposureRenderVersion) return;
-
         const ctx = document.getElementById('sector-exposure-chart');
         if (!ctx) return;
-
-        // Belt-and-suspenders: destroy anything already on this canvas
         _destroyChartOnCanvas(ctx);
         _clearCanvas(ctx);
 
@@ -282,15 +297,21 @@ function renderExposureSection() {
                     data: sortedSectors.map(s => s[1]),
                     backgroundColor: sortedSectors.map(s => SECTOR_COLORS[s[0]] || SECTOR_COLORS['Other']),
                     borderWidth: 2,
-                    borderColor: '#0a0a0a'
+                    borderColor: '#020202',
+                    hoverBorderColor: '#020202'
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                cutout: '40%',
+                cutout: '62%',
                 plugins: {
-                    legend: { position: 'right', rtl: true, labels: { color: 'rgba(255,255,255,0.85)', font: { family: 'Assistant', size: 11, weight: '600' }, padding: 8, usePointStyle: true, pointStyleWidth: 10, boxWidth: 10 } },
-                    tooltip: { rtl: true, titleFont: { size: 14 }, bodyFont: { size: 13 }, callbacks: { label: (ctx) => ` ${ctx.label}: ${(ctx.parsed / exp.totalValue * 100).toFixed(1)}% (${formatCurrency(ctx.parsed)})` } }
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.label}: ${(ctx.parsed / exp.totalValue * 100).toFixed(1)}% (${formatCurrency(ctx.parsed)})`
+                        }
+                    }
                 }
             }
         });
@@ -511,10 +532,24 @@ function renderSummaryBar() {
 // Incremented on each render — used as canvas key to force clean re-draw
 let _cardRenderKey = 0;
 
+// ── Portfolio view toggle (grid / list) ──
+let _portfolioView = 'grid';
+
+function setPortfolioView(mode, btn) {
+    _portfolioView = mode;
+    const grid = document.getElementById('clientsGrid');
+    if (!grid) return;
+    grid.classList.toggle('list-view', mode === 'list');
+    document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+}
+
 function renderClientCards() {
     _cardRenderKey++;
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
+    // Restore view mode after innerHTML wipe
+    grid.classList.toggle('list-view', _portfolioView === 'list');
 
     // Destroy only card-level charts (doughnut + sparkline), preserve exposure/modal charts
     const preserveKeys = ['sector-exposure', 'modal-sector'];

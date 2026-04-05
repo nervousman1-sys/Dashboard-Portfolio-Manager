@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=6.0">
-    <link rel="stylesheet" href="css/auth.css?v=6.0">
+    <link rel="stylesheet" href="css/main.css?v=7.0">
+    <link rel="stylesheet" href="css/auth.css?v=7.0">
 </head>
 
 <body>
@@ -349,6 +349,23 @@
 
             <!-- ═══ Risk Mini Summary (compact inline bar) ═══ -->
             <div class="risk-mini-summary" id="riskMiniSummary"></div>
+
+            <!-- ═══ Portfolio Section Header (title + view toggle) ═══ -->
+            <div class="portfolio-section-header">
+                <h2 class="section-title">ניהול תיקי השקעה</h2>
+                <div class="view-toggle-group" id="viewToggleGroup">
+                    <button class="view-toggle-btn active" id="btnGridView" onclick="setPortfolioView('grid', this)" title="תצוגת כרטיסים">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                        </svg>
+                    </button>
+                    <button class="view-toggle-btn" id="btnListView" onclick="setPortfolioView('list', this)" title="תצוגת רשימה">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
 
             <!-- ═══ Portfolio Cards Grid ═══ -->
             <div class="clients-grid" id="clientsGrid"></div>
