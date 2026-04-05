@@ -27,11 +27,25 @@ function pickRandom(arr, n) {
     return shuffle(arr).slice(0, n);
 }
 
-function formatCurrency(val, currency = 'USD') {
-    if (currency === 'ILS') {
-        return val.toLocaleString('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 });
+function formatCurrency(val, sourceCurrency = null) {
+    // Resolve source and display currencies
+    const src = sourceCurrency || 'USD';
+    const display = (typeof _displayCurrency !== 'undefined') ? _displayCurrency : 'USD';
+
+    // Get live USD/ILS rate — fx-service.js populates _fxRates.USDILS on init
+    const rate = (typeof _fxRates !== 'undefined' && _fxRates && _fxRates.USDILS > 0)
+        ? _fxRates.USDILS
+        : (typeof FX_HARDCODED_USDILS !== 'undefined' ? FX_HARDCODED_USDILS : 3.65);
+
+    // Convert value from source currency to display currency
+    let v = Number(val) || 0;
+    if (src === 'USD' && display === 'ILS') v = v * rate;
+    else if (src === 'ILS' && display === 'USD') v = v / rate;
+
+    if (display === 'ILS') {
+        return v.toLocaleString('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 });
     }
-    return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 }
 
 function formatNumber(val) {
