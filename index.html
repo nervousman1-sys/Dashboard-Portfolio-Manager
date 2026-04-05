@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=7.0">
-    <link rel="stylesheet" href="css/auth.css?v=7.0">
+    <link rel="stylesheet" href="css/main.css?v=8.0">
+    <link rel="stylesheet" href="css/auth.css?v=8.0">
 </head>
 
 <body>
@@ -352,7 +352,10 @@
 
             <!-- ═══ Portfolio Section Header (title + view toggle) ═══ -->
             <div class="portfolio-section-header">
-                <h2 class="section-title">ניהול תיקי השקעה</h2>
+                <div class="portfolio-section-title-group">
+                    <h2 class="section-title">ניהול תיקי השקעה</h2>
+                    <span class="portfolio-section-sub" id="portfolioSectionSub"></span>
+                </div>
                 <div class="view-toggle-group" id="viewToggleGroup">
                     <button class="view-toggle-btn active" id="btnGridView" onclick="setPortfolioView('grid', this)" title="תצוגת כרטיסים">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

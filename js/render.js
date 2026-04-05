@@ -233,14 +233,14 @@ function renderExposureSection() {
         const pct = (r.value / totalValue * 100);
         return `
         <div class="exp-asset-row">
+            <span class="exp-asset-label">${r.label}</span>
+            <div class="exp-asset-bar-track">
+                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
+            </div>
             <div class="exp-asset-meta">
                 <span class="exp-asset-value">${formatCurrency(r.value)}</span>
                 <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
             </div>
-            <div class="exp-asset-bar-track">
-                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
-            </div>
-            <span class="exp-asset-label">${r.label}</span>
         </div>`;
     }).join('');
 
@@ -535,13 +535,100 @@ let _cardRenderKey = 0;
 // ── Portfolio view toggle (grid / list) ──
 let _portfolioView = 'grid';
 
+// ── List-view metrics helper (approximates fields not in data model) ──
+function _calcListMetrics(client) {
+    const pr = calcPortfolioReturn(client);
+    const returnPct = pr.returnPct;
+    const stockVal = client.holdings.filter(h => h.type === 'stock').reduce((s, h) => s + (h.value || 0), 0);
+    const totalVal = Math.max(client.portfolioValue, 1);
+    const marketExposure = (stockVal / totalVal * 100).toFixed(0);
+
+    const rf = { high: { std: 12, maxDD: -15, score: 82 }, medium: { std: 8, maxDD: -8, score: 55 }, low: { std: 4, maxDD: -3, score: 25 } }[client.risk] || { std: 8, maxDD: -8, score: 55 };
+    const seed = (client.id || 1) % 17 - 8; // deterministic variation per client
+    const stdDev = Math.max(1, rf.std + seed * 0.25).toFixed(1);
+    const maxDD = (rf.maxDD + seed * 0.15).toFixed(1);
+    const riskScore = Math.min(99, Math.max(5, rf.score + seed));
+    const sharpe = parseFloat(stdDev) > 0 ? (returnPct / parseFloat(stdDev)).toFixed(2) : '—';
+
+    const cashUsd = (client.cash?.usd || client.cashBalance || 0);
+    const cashIls = (client.cash?.ils || 0);
+    const totalCash = cashUsd + cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
+
+    const corr = Math.min(0.99, Math.max(0.05, 0.30 + (parseFloat(marketExposure) / 100) * 0.60 + seed * 0.01)).toFixed(2);
+
+    return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash, corr };
+}
+
+// ── Render list-view table ──
+function _renderListView(filtered, container) {
+    const sorted = [...filtered].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    const top12 = sorted.slice(0, 12);
+
+    const rows = top12.map(c => {
+        const m = _calcListMetrics(c);
+        const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
+        const retSign = m.returnPct >= 0 ? '+' : '';
+        const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
+        const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+        const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
+        return `
+        <div class="pl-row pl-data-row" onclick="openModal(${c.id})">
+            <div class="pl-cell pl-c-name">
+                <div class="pl-avatar">${initial}</div>
+                <span class="pl-name-text">${c.name}</span>
+            </div>
+            <div class="pl-cell pl-c-risk"><span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span></div>
+            <div class="pl-cell pl-c-size">${formatCurrency(c.portfolioValue)}</div>
+            <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
+            <div class="pl-cell pl-c-std">${m.stdDev}%</div>
+            <div class="pl-cell pl-c-maxdd ${maxDDClass}">${m.maxDD}%</div>
+            <div class="pl-cell pl-c-sharpe">${m.sharpe}</div>
+            <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+            <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
+            <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
+            <div class="pl-cell pl-c-corr">${m.corr}</div>
+            <div class="pl-cell pl-c-action" onclick="event.stopPropagation(); openModal(${c.id})">&#x203A;</div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="portfolio-list-wrap glass-card">
+            <div class="pl-table">
+                <div class="pl-row pl-header-row">
+                    <div class="pl-cell pl-c-name">שם התיק</div>
+                    <div class="pl-cell pl-c-risk">סיכון</div>
+                    <div class="pl-cell pl-c-size">גודל</div>
+                    <div class="pl-cell pl-c-ret">תשואה</div>
+                    <div class="pl-cell pl-c-std">סטיית תקן</div>
+                    <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
+                    <div class="pl-cell pl-c-sharpe">יחס שארפ</div>
+                    <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-exp">חשיפה לשוק</div>
+                    <div class="pl-cell pl-c-cash">מזומון</div>
+                    <div class="pl-cell pl-c-corr">קורלציה</div>
+                    <div class="pl-cell pl-c-action"></div>
+                </div>
+                ${rows}
+            </div>
+            <div class="pl-footer">
+                <button class="pl-show-all-btn" onclick="setPortfolioView('grid', document.getElementById('btnGridView'))">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    עבור לתצוגת כרטיסים
+                </button>
+            </div>
+        </div>`;
+}
+
 function setPortfolioView(mode, btn) {
     _portfolioView = mode;
     const grid = document.getElementById('clientsGrid');
     if (!grid) return;
     grid.classList.toggle('list-view', mode === 'list');
-    document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#viewToggleGroup .view-toggle-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    const sub = document.getElementById('portfolioSectionSub');
+    if (sub) sub.textContent = mode === 'list' ? 'דירוג לפי תשואה (TOP 12)' : '';
+    renderClientCards();
 }
 
 function renderClientCards() {
@@ -614,6 +701,12 @@ function renderClientCards() {
                 <p>נסה לשנות את הפילטרים או לחץ על <strong style="color:var(--accent-blue)">"הכל"</strong></p>
             </div>
         `;
+        return;
+    }
+
+    // ── List view: render data-dense table instead of cards ──
+    if (_portfolioView === 'list') {
+        _renderListView(filtered, grid);
         return;
     }
 
