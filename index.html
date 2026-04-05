@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=5.0">
-    <link rel="stylesheet" href="css/auth.css?v=5.0">
+    <link rel="stylesheet" href="css/main.css?v=6.0">
+    <link rel="stylesheet" href="css/auth.css?v=6.0">
 </head>
 
 <body>
@@ -158,124 +158,199 @@
         <!-- Mobile sidebar backdrop -->
         <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
 
-        <!-- ── Main Content (ALL existing elements — IDs/classes UNCHANGED) ── -->
+        <!-- ── Main Content ── -->
         <main class="main-content" id="mainContent">
 
+            <!-- ═══ Top Header ═══ -->
             <header class="header">
                 <div class="header-start">
-                    <div class="header-brand">
-                        <h1>FINEXTIUM</h1>
-                        <span class="header-sub">INTELLIGENCE</span>
-                    </div>
-                    <div class="header-search-wrap">
-                        <svg class="header-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" class="header-search" placeholder="חיפוש לקוח או נייר ערך..." oninput="searchClients(this.value)" />
-                    </div>
-                </div>
-                <div class="header-end">
-                    <div class="header-datetime" id="headerDatetime"></div>
-                    <div class="currency-toggle" id="currencyToggle">
-                        <button class="currency-btn active" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
-                        <button class="currency-btn" data-currency="ILS" onclick="setCurrency('ILS', this)">ILS</button>
-                    </div>
-                    <div class="refresh-indicator">
-                        <span class="status-dot"></span>
-                        <span id="lastUpdate">מעדכן...</span>
+                    <div class="header-user-area">
+                        <div class="header-avatar" id="headerAvatar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <div class="header-user-info" id="headerUserInfo">
+                            <span class="header-user-name" id="headerUserName">Finextium</span>
+                            <span class="header-user-role">מנהל תיקים</span>
+                        </div>
                     </div>
                     <button class="header-action-btn" onclick="refreshAllPrices()" title="רענן מחירים">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     </button>
-                    <button class="header-action-btn" onclick="toggleAlerts()" title="אינדיקטורים מאקרו">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                        <span class="alert-count" id="alertCount" style="display:none">0</span>
-                    </button>
+                </div>
+
+                <div class="header-center">
+                    <div class="header-center-group">
+                        <span class="header-center-label">מטבע תצוגה</span>
+                        <div class="currency-toggle" id="currencyToggle">
+                            <button class="currency-btn active" data-currency="ILS" onclick="setCurrency('ILS', this)">ILS</button>
+                            <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
+                        </div>
+                    </div>
                     <button class="header-action-btn primary" onclick="openMgmtModal('addClient')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         <span>הוסף תיק</span>
                     </button>
+                    <button class="header-action-btn" onclick="toggleAlerts()" title="מאקרו">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        <span>מאקרו</span>
+                        <span class="alert-count" id="alertCount" style="display:none">0</span>
+                    </button>
+                    <button class="header-action-btn" title="שווקים">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                        <span>שווקים</span>
+                    </button>
+                    <button class="header-action-btn" onclick="window.print && window.print()" title="הפק דוח">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        <span>הפק דוח</span>
+                    </button>
+                </div>
+
+                <div class="header-end">
+                    <div class="header-clock-group">
+                        <div class="header-clock-row">
+                            <span class="header-clock-label">עדכון נתונים</span>
+                            <div class="refresh-indicator">
+                                <span class="status-dot"></span>
+                                <span id="lastUpdate">מעדכן...</span>
+                            </div>
+                        </div>
+                        <div class="header-clock-row">
+                            <span class="header-clock-label">שעון מקומי (ISR)</span>
+                            <div class="header-clock" id="headerClock">00:00:00</div>
+                        </div>
+                    </div>
+                    <div class="header-sentiment" id="headerSentiment">
+                        <div class="sentiment-bars">
+                            <span class="s-bar s-bar-red"></span>
+                            <span class="s-bar s-bar-red"></span>
+                            <span class="s-bar s-bar-red"></span>
+                        </div>
+                        <div class="sentiment-text">
+                            <span class="sentiment-label">BEARISH</span>
+                            <span class="sentiment-sub">SENTIMENT</span>
+                        </div>
+                    </div>
                     <div id="userArea" style="display:none"></div>
                 </div>
             </header>
 
-            <div class="macro-page" id="macroPage"></div>
-
-            <div class="summary-bar" id="summaryBar"></div>
-
-            <div class="filters">
-                <div class="filter-group">
-                    <label>סיכון:</label>
-                    <button class="filter-btn active" data-filter="risk" data-value="all"
-                        onclick="setFilter('risk', 'all', this)">הכל</button>
-                    <button class="filter-btn" data-filter="risk" data-value="high"
-                        onclick="setFilter('risk', 'high', this)">גבוה</button>
-                    <button class="filter-btn" data-filter="risk" data-value="medium"
-                        onclick="setFilter('risk', 'medium', this)">בינוני</button>
-                    <button class="filter-btn" data-filter="risk" data-value="low"
-                        onclick="setFilter('risk', 'low', this)">נמוך</button>
-                </div>
-                <div class="filter-separator"></div>
-                <button class="filter-drawer-toggle" id="filterDrawerToggle" onclick="toggleInlineFilters()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
-                    </svg>
-                    <span id="toggleFilterLabel">סינונים נוספים</span>
-                    <span class="drawer-badge" id="drawerBadge" style="display:none">0</span>
+            <!-- ═══ Quick-Watch Market Ticker ═══ -->
+            <div class="quick-watch-bar" id="quickWatchBar">
+                <button class="qw-settings-btn" title="הגדרות מעקב">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
                 </button>
-                <button class="clear-filters-btn" id="clearFiltersBtn" onclick="clearAllFilters()" style="display:none">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                    נקה סינונים
-                </button>
-                <!-- Inline expandable filters -->
-                <div class="inline-filters-glow"></div>
-                <div class="additional-filters-inline" id="additionalFiltersInline">
-                    <div class="filter-group">
-                        <label>נכס:</label>
-                        <button class="filter-btn active" data-filter="asset" data-value="all"
-                            onclick="setFilter('asset', 'all', this)">הכל</button>
-                        <button class="filter-btn" data-filter="asset" data-value="stocks"
-                            onclick="setFilter('asset', 'stocks', this)">מניות</button>
-                        <button class="filter-btn" data-filter="asset" data-value="bonds"
-                            onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
+                <div class="qw-tickers" id="qwTickers">
+                    <div class="qw-ticker">
+                        <span class="qw-name">S&P 500</span>
+                        <span class="qw-price" id="qw-sp500">—</span>
+                        <span class="qw-change positive" id="qw-sp500-chg">—</span>
                     </div>
-                    <div class="filter-separator"></div>
-                    <div class="filter-group">
-                        <label>סקטור:</label>
-                        <button class="filter-btn active" data-filter="sector" data-value="all"
-                            onclick="setFilter('sector', 'all', this)">הכל</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Technology"
-                            onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Healthcare"
-                            onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Financials"
-                            onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Energy"
-                            onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Crypto"
-                            onclick="setFilter('sector', 'Crypto', this)">קריפטו</button>
-                        <button class="filter-btn" data-filter="sector" data-value="Retail"
-                            onclick="setFilter('sector', 'Retail', this)">קמעונאות</button>
+                    <div class="qw-ticker">
+                        <span class="qw-name">NASDAQ 100</span>
+                        <span class="qw-price" id="qw-nasdaq">—</span>
+                        <span class="qw-change positive" id="qw-nasdaq-chg">—</span>
                     </div>
-                    <div class="filter-separator"></div>
-                    <div class="filter-group">
-                        <label>גודל תיק:</label>
-                        <button class="filter-btn active" data-filter="size" data-value="all"
-                            onclick="setSizeFilter('all', this)">הכל</button>
-                        <button class="filter-btn" data-filter="size" data-value="small"
-                            onclick="setSizeFilter('small', this)">קטן מ-250K</button>
-                        <button class="filter-btn" data-filter="size" data-value="medium"
-                            onclick="setSizeFilter('medium', this)">250K-500K</button>
-                        <button class="filter-btn" data-filter="size" data-value="large"
-                            onclick="setSizeFilter('large', this)">500K+</button>
+                    <div class="qw-ticker">
+                        <span class="qw-name">BTC</span>
+                        <span class="qw-price" id="qw-btc">—</span>
+                        <span class="qw-change negative" id="qw-btc-chg">—</span>
+                    </div>
+                    <div class="qw-ticker">
+                        <span class="qw-name">TA-35</span>
+                        <span class="qw-price" id="qw-ta35">—</span>
+                        <span class="qw-change positive" id="qw-ta35-chg">—</span>
                     </div>
                 </div>
             </div>
 
-            <div class="risk-mini-summary" id="riskMiniSummary"></div>
+            <div class="macro-page" id="macroPage"></div>
 
+            <!-- ═══ 6-Card Summary ═══ -->
+            <div class="summary-bar" id="summaryBar"></div>
+
+            <!-- ═══ Exposure Section ═══ -->
             <div class="exposure-section" id="exposureSection"></div>
 
+            <!-- ═══ Filter Bar + Search (above portfolio grid) ═══ -->
+            <div class="filters-search-row">
+                <div class="header-search-wrap">
+                    <svg class="header-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" class="header-search" placeholder="חיפוש לקוח, נייר ערך או סקטור..." oninput="searchClients(this.value)" />
+                </div>
+                <div class="filters" id="filtersBar">
+                    <button class="filter-drawer-toggle" id="filterDrawerToggle" onclick="toggleInlineFilters()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
+                        </svg>
+                        <span id="toggleFilterLabel">סינונים נוספים</span>
+                        <span class="drawer-badge" id="drawerBadge" style="display:none">0</span>
+                    </button>
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="risk" data-value="all"
+                            onclick="setFilter('risk', 'all', this)">הכל</button>
+                        <button class="filter-btn" data-filter="risk" data-value="high"
+                            onclick="setFilter('risk', 'high', this)">סיכון גבוה</button>
+                        <button class="filter-btn" data-filter="risk" data-value="medium"
+                            onclick="setFilter('risk', 'medium', this)">סיכון בינוני</button>
+                        <button class="filter-btn" data-filter="risk" data-value="low"
+                            onclick="setFilter('risk', 'low', this)">סיכון נמוך</button>
+                    </div>
+                    <button class="clear-filters-btn" id="clearFiltersBtn" onclick="clearAllFilters()" style="display:none">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        נקה סינונים
+                    </button>
+                    <!-- Inline expandable filters -->
+                    <div class="inline-filters-glow"></div>
+                    <div class="additional-filters-inline" id="additionalFiltersInline">
+                        <div class="filter-group">
+                            <label>נכס:</label>
+                            <button class="filter-btn active" data-filter="asset" data-value="all"
+                                onclick="setFilter('asset', 'all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="asset" data-value="stocks"
+                                onclick="setFilter('asset', 'stocks', this)">מניות</button>
+                            <button class="filter-btn" data-filter="asset" data-value="bonds"
+                                onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
+                        </div>
+                        <div class="filter-separator"></div>
+                        <div class="filter-group">
+                            <label>סקטור:</label>
+                            <button class="filter-btn active" data-filter="sector" data-value="all"
+                                onclick="setFilter('sector', 'all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Technology"
+                                onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Healthcare"
+                                onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Financials"
+                                onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Energy"
+                                onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Crypto"
+                                onclick="setFilter('sector', 'Crypto', this)">קריפטו</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Retail"
+                                onclick="setFilter('sector', 'Retail', this)">קמעונאות</button>
+                        </div>
+                        <div class="filter-separator"></div>
+                        <div class="filter-group">
+                            <label>גודל תיק:</label>
+                            <button class="filter-btn active" data-filter="size" data-value="all"
+                                onclick="setSizeFilter('all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="size" data-value="small"
+                                onclick="setSizeFilter('small', this)">קטן מ-250K</button>
+                            <button class="filter-btn" data-filter="size" data-value="medium"
+                                onclick="setSizeFilter('medium', this)">250K-500K</button>
+                            <button class="filter-btn" data-filter="size" data-value="large"
+                                onclick="setSizeFilter('large', this)">500K+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ Risk Mini Summary (compact inline bar) ═══ -->
+            <div class="risk-mini-summary" id="riskMiniSummary"></div>
+
+            <!-- ═══ Portfolio Cards Grid ═══ -->
             <div class="clients-grid" id="clientsGrid"></div>
 
         </main>
