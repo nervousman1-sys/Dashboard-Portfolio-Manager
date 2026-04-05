@@ -1200,9 +1200,9 @@ body {
 
 .exposure-inner {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
     gap: 0;
-    align-items: start; /* both panels share the same top baseline */
+    align-items: start; /* all three panels share the same top baseline */
     min-height: 200px;
 }
 
@@ -1278,6 +1278,39 @@ body {
     min-width: 42px;
     text-align: right;
     flex-shrink: 0;
+}
+
+/* ── Currency exposure panel (center column) ── */
+.exp-currency-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 20px;
+}
+
+/* ── Empty state inside exposure panels when filter matches nothing ── */
+.exp-empty-filter {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 8px 0;
+    font-style: italic;
+}
+
+/* ── Doughnut empty ring (no-data placeholder) ── */
+.exp-donut-empty {
+    width: 160px;
+    height: 160px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.exp-donut-empty-ring {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 16px solid rgba(255, 255, 255, 0.06);
+    opacity: 0.5;
 }
 
 /* ── Divider ── */
@@ -3595,6 +3628,10 @@ body {
 
     .exp-assets-panel {
         padding-left: 0;
+    }
+
+    .exp-currency-panel {
+        padding-top: 0;
     }
 
     .exp-sectors-panel {
