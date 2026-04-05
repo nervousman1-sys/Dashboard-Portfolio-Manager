@@ -239,7 +239,6 @@ function calculateOverallExposure(clientsList) {
 function renderExposureSection() {
     const myVersion = ++_exposureRenderVersion;
     _safeDestroyChart('sector-exposure');
-    _safeDestroyChart('currency-exposure');
 
     // Use filtered clients so the section reacts to risk/asset/sector filters
     const filtered = _getFilteredClients();
@@ -285,31 +284,34 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency doughnut (USD + ILS only — BTC excluded) ──
+    // ── Currency split bar (USD / ILS fiat only — BTC excluded) ──
     const curUSD = exp.totalUSD;
     const curILS = exp.totalILS;
-    const curTotal = curUSD + curILS || 1; // base for % (BTC excluded)
+    const curFiatTotal = curUSD + curILS;
+    // When all holdings are USD (typical), show USD at 100%
+    const usdPct = hasFiltered ? (curFiatTotal > 0 ? (curUSD / curFiatTotal * 100) : 100) : 0;
+    const ilsPct = hasFiltered ? (100 - usdPct) : 0;
 
-    // If no ILS data (all-USD portfolio), still show USD at 100%
-    const currencyData = hasFiltered
-        ? (curUSD === 0 && curILS === 0
-            ? [{ label: 'USD', pct: 100, color: '#00e5ff' }]
-            : [
-                ...(curUSD > 0 ? [{ label: 'USD', pct: curUSD / curTotal * 100, color: '#00e5ff' }] : []),
-                ...(curILS > 0 ? [{ label: 'ILS', pct: curILS / curTotal * 100, color: '#c084fc' }] : [])
-              ])
-        : [];
-
-    const currencyLegendHTML = currencyData.map(d => `
-        <div class="exp-sector-item">
-            <span class="exp-sector-pct">${d.pct.toFixed(0)}%</span>
-            <span class="exp-sector-name">${d.label}</span>
-            <span class="exp-sector-dot" style="background:${d.color};box-shadow:0 0 6px ${d.color}"></span>
-        </div>`).join('');
-
-    const currencyChart = hasFiltered && currencyData.length > 0
-        ? `<div class="exp-donut-wrap"><canvas id="currency-exposure-chart"></canvas></div>`
-        : `<div class="exp-donut-empty"><div class="exp-donut-empty-ring"></div></div>`;
+    const currencyBarHTML = hasFiltered ? `
+        <div class="exp-currency-body">
+            <div class="exp-split-bar" dir="ltr">
+                <div class="exp-split-usd" style="width:${usdPct.toFixed(2)}%"></div>
+                ${ilsPct > 0.5 ? `<div class="exp-split-divider"></div><div class="exp-split-ils"></div>` : ''}
+            </div>
+            <div class="exp-split-legend" dir="ltr">
+                <div class="exp-split-legend-item">
+                    <span class="exp-split-legend-dot" style="background:#39FF14;box-shadow:0 0 6px #39FF14"></span>
+                    <span class="exp-split-legend-currency" style="color:#39FF14">USD</span>
+                    <span class="exp-split-legend-pct">${usdPct.toFixed(1)}%</span>
+                </div>
+                ${ilsPct > 0.5 ? `
+                <div class="exp-split-legend-item">
+                    <span class="exp-split-legend-dot" style="background:#007FFF;box-shadow:0 0 6px #007FFF"></span>
+                    <span class="exp-split-legend-currency" style="color:#007FFF">ILS</span>
+                    <span class="exp-split-legend-pct">${ilsPct.toFixed(1)}%</span>
+                </div>` : ''}
+            </div>
+        </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
     // ── Sector doughnut ──
     const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -341,10 +343,7 @@ function renderExposureSection() {
                 <div class="exp-divider"></div>
                 <div class="exp-currency-panel">
                     <span class="exp-panel-title">חשיפה למטבעות</span>
-                    <div class="exp-sectors-inner">
-                        ${currencyChart}
-                        <div class="exp-sector-legend">${currencyLegendHTML}</div>
-                    </div>
+                    ${currencyBarHTML}
                 </div>
                 <div class="exp-divider"></div>
                 <div class="exp-assets-panel">
@@ -391,37 +390,6 @@ function renderExposureSection() {
             });
         }
 
-        // ── Currency doughnut (USD + ILS only) ──
-        const curCtx = document.getElementById('currency-exposure-chart');
-        if (curCtx && currencyData.length > 0) {
-            _destroyChartOnCanvas(curCtx);
-            _clearCanvas(curCtx);
-            charts['currency-exposure'] = new Chart(curCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: currencyData.map(d => d.label),
-                    datasets: [{
-                        data: currencyData.map(d => d.pct),
-                        backgroundColor: currencyData.map(d => d.color),
-                        borderWidth: 1.5,
-                        borderColor: '#0e0e0e',
-                        hoverBorderColor: '#0e0e0e'
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`
-                            }
-                        }
-                    }
-                }
-            });
-        }
     }, 50);
 }
 
