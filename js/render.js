@@ -508,11 +508,11 @@ function renderSummaryBar() {
         document.getElementById('summaryBar').innerHTML = `
             <div class="summary-main">
                 <div class="stat-card"><span class="stat-label">סך נכסים מנוהלים</span><span class="stat-value stat-val-primary">${formatCurrency(0)}</span><span class="stat-sub">${filterLabel}</span></div>
-                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">${formatCurrency(0)}</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">רווח / הפסד כולל</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
                 <div class="stat-card"><span class="stat-label">רווח / הפסד ממומש</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
                 <div class="stat-card"><span class="stat-label">תשואת דיבידנד</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
-                <div class="stat-card"><span class="stat-label">תשואה משוקללת</span><span class="stat-value">0.00%</span><span class="stat-sub">—</span></div>
-                <div class="stat-card"><span class="stat-label">תיקים פעילים</span><span class="stat-value">0</span><span class="stat-sub">0 / ${clients.length}</span></div>
+                <div class="stat-card"><span class="stat-label">תשואה משוקללת</span><span class="stat-value">—</span><span class="stat-sub">—</span></div>
+                <div class="stat-card"><span class="stat-label">תיקים פעילים</span><span class="stat-value">0</span><span class="stat-sub">0 / ${clients ? clients.length : 0}</span></div>
             </div>
         `;
         return;
@@ -567,6 +567,10 @@ function renderSummaryBar() {
     const lowCount = src.filter(c => c.risk === 'low').length;
     const breakdownText = `סיכון: ${highCount} גבוה | ${medCount} בינוני | ${lowCount} נמוך`;
 
+    // Dynamic negative-accent class — applied to P/L and Return cards when in the red
+    const plNegClass = profitClass === 'negative' ? ' stat-card--negative' : '';
+    const retNegClass = avgClass === 'negative' ? ' stat-card--negative' : '';
+
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
             <div class="stat-card">
@@ -574,7 +578,7 @@ function renderSummaryBar() {
                 <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
                 <span class="stat-sub">${src.length} תיקים פעילים ${filterTag}</span>
             </div>
-            <div class="stat-card">
+            <div class="stat-card${plNegClass}">
                 <span class="stat-label">רווח / הפסד כולל</span>
                 <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
                 <span class="stat-sub">${globalAllStale ? '—' : `תשואה: <span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
@@ -586,13 +590,13 @@ function renderSummaryBar() {
             </div>
             <div class="stat-card">
                 <span class="stat-label">תשואת דיבידנד</span>
-                <span class="stat-value ${hasDivYield ? 'stat-val-green' : 'stat-val-green'}">${hasDivYield ? `${divYield.toFixed(2)}%` : '0.44%'}</span>
+                <span class="stat-value stat-val-green">${hasDivYield ? `${divYield.toFixed(2)}%` : '0.44%'}</span>
                 <span class="stat-sub">על נכסים מנוהלים</span>
             </div>
-            <div class="stat-card">
+            <div class="stat-card${retNegClass}">
                 <span class="stat-label">תשואה משוקללת</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
-                <span class="stat-sub">תשואה משוקללת</span>
+                <span class="stat-sub">ממוצע משוקלל לפי הון</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">תיקים פעילים</span>

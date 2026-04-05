@@ -145,11 +145,13 @@ body {
 
 /* ══ Header ══ */
 .header {
-    background: rgba(2, 2, 2, 0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background: rgba(3, 3, 3, 0.96);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 20px;
+    /* Faint cyan hairline at very bottom for brand polish */
+    box-shadow: 0 1px 0 rgba(0,229,255,0.04), 0 4px 20px rgba(0,0,0,0.4);
+    padding: 9px 20px;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -600,11 +602,21 @@ body {
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 8px 20px;
-    background: rgba(5, 5, 5, 0.8);
+    padding: 7px 20px;
+    background: rgba(6, 6, 6, 0.88);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
     margin-top: 40px;
+    position: relative;
+}
+
+/* Subtle left-edge live-data indicator */
+.quick-watch-bar::before {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, transparent 10%, rgba(0,229,255,0.35) 50%, transparent 90%);
 }
 
 .qw-settings-btn {
@@ -743,118 +755,158 @@ body {
     box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.06);
 }
 
-/* ══ Summary Bar ══ */
+/* ════ Summary Bar — 6 Glassmorphism Stat Cards ════ */
 .summary-bar {
-    padding: 20px 24px 16px;
-    background: rgba(10, 10, 10, 0.4);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 14px 24px;
+    background: rgba(4, 4, 4, 0.65);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .summary-main {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
-/* ── Stat Card (6-card Google AI Studio layout) ── */
+/* ── Stat Card Base ── */
 .stat-card {
-    background: rgba(14, 14, 14, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    position: relative;
+    overflow: hidden;
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: var(--radius-lg);
-    padding: 14px 12px;
+    border-radius: 14px;
+    padding: 16px 12px 13px;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 3px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    min-height: 100px;
-    position: relative;
-    overflow: hidden;
+    gap: 4px;
+    min-height: 104px;
+    cursor: default;
+    transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* ── Per-card top accent line via ::before ── */
 .stat-card::before {
     content: '';
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(ellipse at 50% 0%, rgba(0, 229, 255, 0.04), transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 14px 14px 0 0;
+    opacity: 0.8;
 }
 
-.stat-card:hover::before {
-    opacity: 1;
+/* AUM — cyan */
+.stat-card:nth-child(1)::before {
+    background: linear-gradient(90deg, #00e5ff 0%, rgba(0,229,255,0.12) 55%, transparent 100%);
+}
+/* P/L — green by default, overridden to red when negative */
+.stat-card:nth-child(2)::before {
+    background: linear-gradient(90deg, #00ff94 0%, rgba(0,255,148,0.12) 55%, transparent 100%);
+}
+/* Realized P/L — purple */
+.stat-card:nth-child(3)::before {
+    background: linear-gradient(90deg, #c084fc 0%, rgba(192,132,252,0.12) 55%, transparent 100%);
+}
+/* Dividend Yield — gold */
+.stat-card:nth-child(4)::before {
+    background: linear-gradient(90deg, #facc15 0%, rgba(250,204,21,0.12) 55%, transparent 100%);
+}
+/* Weighted Return — green by default, overridden to red when negative */
+.stat-card:nth-child(5)::before {
+    background: linear-gradient(90deg, #00ff94 0%, rgba(0,255,148,0.12) 55%, transparent 100%);
+}
+/* Portfolio Count — soft white */
+.stat-card:nth-child(6)::before {
+    background: linear-gradient(90deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.04) 55%, transparent 100%);
 }
 
+/* ── Dynamic: negative result cards flip accent to red ── */
+.stat-card.stat-card--negative::before {
+    background: linear-gradient(90deg, #ff4d4d 0%, rgba(255,77,77,0.12) 55%, transparent 100%);
+}
+
+/* ── Hover: generic lift ── */
 .stat-card:hover {
-    border-color: rgba(0, 229, 255, 0.2);
-    background: rgba(255, 255, 255, 0.04);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 20px rgba(0, 229, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.13);
+}
+
+/* ── Hover: per-card glow tint ── */
+.stat-card:nth-child(1):hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 18px rgba(0,229,255,0.07);
+    border-color: rgba(0,229,255,0.18);
+}
+.stat-card:nth-child(2):hover,
+.stat-card:nth-child(5):hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 18px rgba(0,255,148,0.07);
+    border-color: rgba(0,255,148,0.16);
+}
+.stat-card:nth-child(3):hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 18px rgba(192,132,252,0.07);
+    border-color: rgba(192,132,252,0.16);
+}
+.stat-card:nth-child(4):hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 18px rgba(250,204,21,0.07);
+    border-color: rgba(250,204,21,0.16);
+}
+.stat-card:nth-child(6):hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+}
+.stat-card.stat-card--negative:hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 18px rgba(255,77,77,0.07);
+    border-color: rgba(255,77,77,0.16);
 }
 
 .stat-card:active {
     transform: scale(0.98);
+    transition-duration: 0.08s;
 }
 
-.stat-icon {
-    display: none;
-}
+/* ── Icon — hidden (kept for API compatibility) ── */
+.stat-icon { display: none; }
+.stat-icon-wrap { display: none; }
 
-.stat-icon-wrap {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: rgba(0, 229, 255, 0.07);
-    border: 1px solid rgba(0, 229, 255, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent-blue);
-    margin-bottom: 4px;
-    flex-shrink: 0;
-    transition: all 0.2s;
-}
-
-.stat-card:hover .stat-icon-wrap {
-    background: rgba(0, 229, 255, 0.12);
-    border-color: rgba(0, 229, 255, 0.25);
-    box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
-}
-
+/* ── Typography hierarchy ── */
 .stat-label {
     font-size: 9px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.36);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     line-height: 1.2;
 }
 
+/* Values animate in whenever the card content is replaced by a filter change */
 .stat-value {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 900;
-    letter-spacing: -0.05em;
+    letter-spacing: -0.04em;
     color: #ffffff;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    line-height: 1.1;
+    line-height: 1.05;
+    animation: statEnter 0.3s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
-
-.stat-val-primary { color: #ffffff; text-shadow: 0 2px 12px rgba(255, 255, 255, 0.2); }
-.stat-val-green { color: var(--accent-green); text-shadow: 0 0 12px rgba(0, 255, 148, 0.15); }
-.stat-val-red { color: var(--accent-red); text-shadow: 0 0 12px rgba(255, 77, 77, 0.15); }
-.stat-stale { color: var(--text-muted); font-size: 13px; }
 
 .stat-sub {
     font-size: 9px;
-    font-weight: 600;
-    color: rgba(163, 163, 163, 0.45);
-    letter-spacing: 0.02em;
+    font-weight: 500;
+    color: rgba(163, 163, 163, 0.42);
+    letter-spacing: 0.03em;
+    animation: statEnter 0.3s 0.07s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
+
+/* Entry keyframe — re-fires on every innerHTML replace (filter changes) */
+@keyframes statEnter {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.stat-val-primary { color: #ffffff; }
+.stat-val-green   { color: var(--accent-green); text-shadow: 0 0 16px rgba(0,255,148,0.22); }
+.stat-val-red     { color: var(--accent-red);   text-shadow: 0 0 16px rgba(255,77,77,0.22); }
+.stat-stale { color: var(--text-muted); font-size: 13px; }
 
 .stat-filter-tag {
     display: inline-block;
@@ -975,28 +1027,33 @@ body {
 
 .filter-btn {
     padding: 5px 14px;
-    border-radius: var(--radius-xl);
-    border: 1px solid var(--border);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
-    color: var(--text-secondary);
+    color: rgba(163, 163, 163, 0.7);
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
     font-family: inherit;
+    letter-spacing: 0.02em;
 }
 
 .filter-btn:hover {
-    border-color: rgba(0, 229, 255, 0.4);
+    border-color: rgba(0, 229, 255, 0.35);
     color: var(--text-primary);
-    background: rgba(0, 229, 255, 0.05);
+    background: rgba(0, 229, 255, 0.04);
+}
+
+.filter-btn:active {
+    transform: scale(0.96);
 }
 
 .filter-btn.active {
-    background: rgba(0, 229, 255, 0.12);
-    border-color: rgba(0, 229, 255, 0.5);
+    background: rgba(0, 229, 255, 0.11);
+    border-color: rgba(0, 229, 255, 0.45);
     color: var(--accent-blue);
-    box-shadow: 0 0 12px rgba(0, 229, 255, 0.1);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.08), 0 0 14px rgba(0,229,255,0.08);
 }
 
 .search-input {
