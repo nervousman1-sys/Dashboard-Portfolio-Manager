@@ -196,14 +196,30 @@ function updateRiskMiniSummary(filteredClients) {
 // Version counter — prevents stale setTimeout callbacks from creating orphaned charts
 let _exposureRenderVersion = 0;
 
+// Known index/ETF tickers — separated from individual stocks in asset allocation
+const _INDEX_TICKERS = new Set([
+    'SPY','QQQ','IWM','DIA','VTI','VOO','VT','VEA','VWO','EFA','EEM',
+    'GLD','SLV','TLT','AGG','BND','LQD','HYG','IAU','USO',
+    'XLE','XLF','XLK','XLV','XLY','XLP','XLU','XLI','XLB','XLRE',
+    'ARKK','ARKW','SMH','SOXX','IBB','XBI','GDX','GDXJ','XRT','KRE',
+    'TA35.TA','TA125.TA','TA90.TA','RSP','MDY','IJH','IJR','SPLG'
+]);
+
 function calculateOverallExposure() {
-    let totalStocks = 0, totalBonds = 0, totalValue = 0;
+    let totalStocks = 0, totalBonds = 0, totalIndices = 0, totalCash = 0, totalValue = 0;
     const sectorTotals = {};
     clients.forEach(c => {
         c.holdings.forEach(h => {
             totalValue += h.value;
-            if (h.type === 'stock') {
-                totalStocks += h.value;
+            if (h.type === 'cash') {
+                totalCash += h.value;
+            } else if (h.type === 'stock' || h.type === 'index') {
+                const isIndex = h.type === 'index' || _INDEX_TICKERS.has(h.ticker);
+                if (isIndex) {
+                    totalIndices += h.value;
+                } else {
+                    totalStocks += h.value;
+                }
                 const sector = h.sector || SECTOR_MAP[h.ticker] || 'Other';
                 sectorTotals[sector] = (sectorTotals[sector] || 0) + h.value;
             } else {
@@ -211,7 +227,7 @@ function calculateOverallExposure() {
             }
         });
     });
-    return { totalStocks, totalBonds, totalValue, sectorTotals };
+    return { totalStocks, totalBonds, totalIndices, totalCash, totalValue, sectorTotals };
 }
 
 function renderExposureSection() {
@@ -233,12 +249,14 @@ function renderExposureSection() {
     const exp = calculateOverallExposure();
     const totalValue = exp.totalValue || 1;
 
-    // Build asset allocation rows (stocks, bonds, cash/other)
-    const cashValue = Math.max(0, totalValue - exp.totalStocks - exp.totalBonds);
+    // Build asset allocation rows (4 categories: stocks, bonds, indices, cash)
+    const residualCash = Math.max(0, totalValue - exp.totalStocks - exp.totalBonds - exp.totalIndices - exp.totalCash);
+    const cashValue = exp.totalCash + residualCash;
     const assetRows = [
-        { label: 'מניות', value: exp.totalStocks, color: 'var(--accent-blue)' },
-        { label: 'אג"ח',  value: exp.totalBonds,  color: 'var(--accent-purple)' },
-        { label: 'מזומן', value: cashValue,        color: 'rgba(163,163,163,0.4)' }
+        { label: 'מניות',  value: exp.totalStocks,  color: 'var(--accent-blue)' },
+        { label: 'אג"ח',   value: exp.totalBonds,   color: 'var(--accent-purple)' },
+        { label: 'מדדים',  value: exp.totalIndices, color: 'var(--accent-green)' },
+        { label: 'מזומן',  value: cashValue,         color: 'rgba(163,163,163,0.45)' }
     ].filter(r => r.value > 0);
 
     const assetRowsHTML = assetRows.map(r => {
