@@ -82,7 +82,7 @@ function _updateHeaderClock() {
     const h = String(now.getHours()).padStart(2, '0');
     const m = String(now.getMinutes()).padStart(2, '0');
     const s = String(now.getSeconds()).padStart(2, '0');
-    el.textContent = `${h} : ${m} : ${s}`;
+    el.textContent = `${h}:${m}:${s}`;
 
     // Update sentiment date
     const sentSub = document.querySelector('.sentiment-sub');

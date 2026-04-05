@@ -323,9 +323,25 @@ async function logout() {
 
 function updateUserDisplay() {
     const userArea = document.getElementById('userArea');
-    if (!userArea) return;
-
     const user = getUser();
+
+    // Populate the new header user name / avatar initials
+    const nameEl = document.getElementById('headerUserName');
+    const avatarEl = document.getElementById('headerAvatar');
+    if (nameEl && user?.username) {
+        // Show "First L." format (first word + first letter of second word)
+        const parts = user.username.split(/[\s@]/);
+        const display = parts.length > 1
+            ? `${parts[0]} ${parts[1].charAt(0)}.`
+            : parts[0];
+        nameEl.textContent = display;
+    }
+    if (avatarEl && user?.username) {
+        const initials = user.username.split(/[\s@]/).map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('');
+        avatarEl.innerHTML = `<span style="font-size:13px;font-weight:900;color:var(--accent-blue)">${initials}</span>`;
+    }
+
+    if (!userArea) return;
     if (user) {
         userArea.innerHTML = `
             <div class="user-display">

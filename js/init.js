@@ -261,6 +261,40 @@ async function init() {
 
     // Auto-refresh every 5 minutes
     setInterval(refreshAllPrices, 300000);
+
+    // Populate quick-watch bar (non-blocking, best-effort)
+    _updateQuickWatch();
+}
+
+// ── Quick-Watch: populate the 4 pinned market tickers ──
+const _QW_TICKERS = [
+    { id: 'sp500',  sym: 'SPY',      label: 'S&P 500',    currency: 'USD' },
+    { id: 'nasdaq', sym: 'QQQ',      label: 'NASDAQ 100', currency: 'USD' },
+    { id: 'btc',    sym: 'BTC-USD',  label: 'BTC',        currency: 'USD' },
+    { id: 'ta35',   sym: 'TA35.TA',  label: 'TA-35',      currency: 'ILS' }
+];
+
+async function _updateQuickWatch() {
+    if (typeof fetchSingleTickerPrice !== 'function') return;
+    for (const t of _QW_TICKERS) {
+        try {
+            const result = await fetchSingleTickerPrice(t.sym, t.currency);
+            if (!result || !result.price) continue;
+            const priceEl = document.getElementById(`qw-${t.id}`);
+            const chgEl   = document.getElementById(`qw-${t.id}-chg`);
+            if (!priceEl || !chgEl) continue;
+
+            const price = result.price;
+            const prev  = result.previousClose || price;
+            const chgPct = prev > 0 ? ((price - prev) / prev * 100) : 0;
+            const isPos  = chgPct >= 0;
+
+            const sym = t.currency === 'ILS' ? '₪' : '$';
+            priceEl.textContent = `${sym}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
+            chgEl.textContent   = `${isPos ? '+' : ''}${chgPct.toFixed(2)}%`;
+            chgEl.className     = `qw-change ${isPos ? 'positive' : 'negative'}`;
+        } catch (_) { /* best-effort */ }
+    }
 }
 
 // ========== PERSISTENT STATE (URL QUERY PARAMS) ==========
