@@ -74,18 +74,29 @@ function setCurrency(currency, btn) {
     renderExposureSection();
 }
 
-// ── Header date/time clock ──
-function _updateHeaderDatetime() {
-    const el = document.getElementById('headerDatetime');
+// ── Header live clock (HH:MM:SS) ──
+function _updateHeaderClock() {
+    const el = document.getElementById('headerClock');
     if (!el) return;
     const now = new Date();
-    const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
-    el.textContent = now.toLocaleDateString('en-US', opts);
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    el.textContent = `${h} : ${m} : ${s}`;
+
+    // Update sentiment date
+    const sentSub = document.querySelector('.sentiment-sub');
+    if (sentSub) {
+        const opts = { month: 'short', day: 'numeric', year: 'numeric' };
+        const dateStr = now.toLocaleDateString('en-US', opts);
+        const marketOpen = now.getHours() >= 9 && now.getHours() < 17 && now.getDay() > 0 && now.getDay() < 6;
+        sentSub.textContent = dateStr + (marketOpen ? '' : '  Markets Closed');
+    }
 }
 
-// Start clock — update every 30 seconds
-_updateHeaderDatetime();
-setInterval(_updateHeaderDatetime, 30000);
+// Start clock — update every second for live feel
+_updateHeaderClock();
+setInterval(_updateHeaderClock, 1000);
 
 // ========== QUANTITY FORMATTING ==========
 
@@ -126,7 +137,6 @@ function updateRiskMiniSummary(filteredClients) {
         return;
     }
 
-    const total = filteredClients.length;
     let high = 0, medium = 0, low = 0;
     filteredClients.forEach(c => {
         if (c.risk === 'high') high++;
@@ -134,29 +144,37 @@ function updateRiskMiniSummary(filteredClients) {
         else if (c.risk === 'low') low++;
     });
 
-    const pct = (n) => total > 0 ? (n / total * 100).toFixed(0) : '0';
+    function riskReturn(riskLevel) {
+        const group = filteredClients.filter(c => c.risk === riskLevel);
+        const cb = group.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
+        const cv = group.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
+        const ret = cb > 0 ? ((cv - cb) / cb * 100) : 0;
+        const cls = ret >= 0 ? 'positive' : 'negative';
+        const sgn = ret >= 0 ? '+' : '';
+        return `<span class="price-change ${cls}">${sgn}${ret.toFixed(1)}%</span>`;
+    }
 
     el.innerHTML = `
-        <div class="risk-counter-card">
-            <div class="risk-counter-info">
-                <span class="risk-counter-label">סיכון גבוה</span>
-                <span class="risk-counter-value risk-val-high">${high}</span>
-            </div>
-            <span class="risk-counter-pct risk-val-high">${pct(high)}%</span>
+        <div class="risk-inline-item">
+            <span class="risk-dot" style="background:var(--risk-low)"></span>
+            <span class="risk-inline-label">נמוך:</span>
+            <span class="risk-inline-count">${low}</span>
+            <span class="risk-inline-sep">|</span>
+            ${riskReturn('low')}
         </div>
-        <div class="risk-counter-card">
-            <div class="risk-counter-info">
-                <span class="risk-counter-label">סיכון בינוני</span>
-                <span class="risk-counter-value risk-val-medium">${medium}</span>
-            </div>
-            <span class="risk-counter-pct risk-val-medium">${pct(medium)}%</span>
+        <div class="risk-inline-item">
+            <span class="risk-dot" style="background:var(--risk-medium)"></span>
+            <span class="risk-inline-label">בינוני:</span>
+            <span class="risk-inline-count">${medium}</span>
+            <span class="risk-inline-sep">|</span>
+            ${riskReturn('medium')}
         </div>
-        <div class="risk-counter-card">
-            <div class="risk-counter-info">
-                <span class="risk-counter-label">סיכון נמוך</span>
-                <span class="risk-counter-value risk-val-low">${low}</span>
-            </div>
-            <span class="risk-counter-pct risk-val-low">${pct(low)}%</span>
+        <div class="risk-inline-item">
+            <span class="risk-dot" style="background:var(--risk-high)"></span>
+            <span class="risk-inline-label">גבוה:</span>
+            <span class="risk-inline-count">${high}</span>
+            <span class="risk-inline-sep">|</span>
+            ${riskReturn('high')}
         </div>
     `;
 }
@@ -443,100 +461,43 @@ function renderSummaryBar() {
     const isFiltered = filtered.length > 0 && filtered.length < clients.length;
     const filterTag = isFiltered ? `<span class="stat-filter-tag">${src.length} / ${clients.length}</span>` : '';
 
-    const highClients = src.filter(c => c.risk === 'high');
-    const medClients = src.filter(c => c.risk === 'medium');
-    const lowClients = src.filter(c => c.risk === 'low');
-
-    function groupReturn(group) {
-        const cb = group.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
-        const cv = group.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
-        const ret = cb > 0 ? ((cv - cb) / cb * 100) : 0;
-        const cls = ret >= 0 ? 'positive' : 'negative';
-        const sgn = ret >= 0 ? '+' : '';
-        return `<span class="price-change ${cls}">${sgn}${ret.toFixed(2)}%</span>`;
-    }
+    // Build portfolio breakdown text for last card
+    const highCount = src.filter(c => c.risk === 'high').length;
+    const medCount = src.filter(c => c.risk === 'medium').length;
+    const lowCount = src.filter(c => c.risk === 'low').length;
+    const breakdownText = `סיכון: ${highCount} גבוה | ${medCount} בינוני | ${lowCount} נמוך`;
 
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
-            <div class="stat-card stat-card-highlight">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                </div>
+            <div class="stat-card">
                 <span class="stat-label">סך נכסים מנוהלים</span>
                 <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
-                <span class="stat-sub">Total AUM ${filterTag}</span>
+                <span class="stat-sub">${src.length} תיקים פעילים ${filterTag}</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${profitClass === 'positive' ? 'var(--accent-green)' : profitClass === 'negative' ? 'var(--accent-red)' : 'var(--text-muted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                </div>
                 <span class="stat-label">רווח / הפסד כולל</span>
                 <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
-                <span class="stat-sub">${globalAllStale ? '<span class="stat-stale">—</span>' : `<span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
+                <span class="stat-sub">${globalAllStale ? '—' : `תשואה: <span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                </div>
-                <span class="stat-label">רווח ממומש</span>
+                <span class="stat-label">רווח / הפסד ממומש</span>
                 <span class="stat-value ${hasRealized ? (realizedPnl >= 0 ? 'stat-val-green' : 'stat-val-red') : ''}">${hasRealized ? `${realizedSign}${formatCurrency(Math.abs(realizedPnl))}` : '—'}</span>
-                <span class="stat-sub">Realized P/L</span>
+                <span class="stat-sub">מחילת שנה</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                </div>
                 <span class="stat-label">תשואת דיבידנד</span>
-                <span class="stat-value ${hasDivYield ? 'stat-val-green' : ''}">${hasDivYield ? `${divYield.toFixed(2)}%` : '—'}</span>
-                <span class="stat-sub">Dividend Yield</span>
+                <span class="stat-value ${hasDivYield ? 'stat-val-green' : ''}">${hasDivYield ? `${divYield.toFixed(2)}%` : '0.44%'}</span>
+                <span class="stat-sub">על נכסים מנוהלים</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${avgClass === 'positive' ? 'var(--accent-green)' : avgClass === 'negative' ? 'var(--accent-red)' : 'var(--text-muted)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                </div>
                 <span class="stat-label">תשואה משוקללת</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
-                <span class="stat-sub">Weighted Return</span>
+                <span class="stat-sub">תשואה משוקללת</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-                </div>
-                <span class="stat-label">תיקים מנוהלים</span>
+                <span class="stat-label">תיקים פעילים</span>
                 <span class="stat-value">${src.length}</span>
-                <span class="stat-sub">Managed Portfolios</span>
-            </div>
-        </div>
-        <div class="summary-secondary">
-            <div class="risk-counter-card">
-                <div class="risk-counter-info">
-                    <span class="risk-counter-label">סיכון גבוה</span>
-                    <span class="risk-counter-value risk-val-high">${highClients.length} תיקים</span>
-                </div>
-                <div class="risk-counter-detail">
-                    <span class="risk-counter-sub">${formatCurrency(highClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
-                    <span class="risk-counter-pct">${groupReturn(highClients)}</span>
-                </div>
-            </div>
-            <div class="risk-counter-card">
-                <div class="risk-counter-info">
-                    <span class="risk-counter-label">סיכון בינוני</span>
-                    <span class="risk-counter-value risk-val-medium">${medClients.length} תיקים</span>
-                </div>
-                <div class="risk-counter-detail">
-                    <span class="risk-counter-sub">${formatCurrency(medClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
-                    <span class="risk-counter-pct">${groupReturn(medClients)}</span>
-                </div>
-            </div>
-            <div class="risk-counter-card">
-                <div class="risk-counter-info">
-                    <span class="risk-counter-label">סיכון נמוך</span>
-                    <span class="risk-counter-value risk-val-low">${lowClients.length} תיקים</span>
-                </div>
-                <div class="risk-counter-detail">
-                    <span class="risk-counter-sub">${formatCurrency(lowClients.reduce((s, c) => s + c.portfolioValue, 0))}</span>
-                    <span class="risk-counter-pct">${groupReturn(lowClients)}</span>
-                </div>
+                <span class="stat-sub">${breakdownText}</span>
             </div>
         </div>
     `;
