@@ -74,22 +74,34 @@ function setCurrency(currency, btn) {
     renderExposureSection();
 }
 
-// ── Header live clock (HH:MM:SS) ──
+// ── Header live clock (HH:MM:SS) with ISR/EST timezone toggle ──
+let _clockTZ = 'ISR';
+
+function setClockTZ(tz, btn) {
+    _clockTZ = tz;
+    document.querySelectorAll('.tz-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const labelEl = document.getElementById('headerClockLabel');
+    if (labelEl) labelEl.textContent = tz === 'ISR' ? 'שעון מקומי (ISR)' : 'שעון ניו יורק (EST)';
+    _updateHeaderClock();
+}
+
 function _updateHeaderClock() {
     const el = document.getElementById('headerClock');
     if (!el) return;
     const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    el.textContent = `${h}:${m}:${s}`;
+    const locale = 'en-US';
+    const tzName = _clockTZ === 'EST' ? 'America/New_York' : 'Asia/Jerusalem';
+    const parts = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tzName });
+    el.textContent = parts;
 
     // Update sentiment date
     const sentSub = document.querySelector('.sentiment-sub');
     if (sentSub) {
-        const opts = { month: 'short', day: 'numeric', year: 'numeric' };
+        const opts = { month: 'short', day: 'numeric', year: 'numeric', timeZone: tzName };
         const dateStr = now.toLocaleDateString('en-US', opts);
-        const marketOpen = now.getHours() >= 9 && now.getHours() < 17 && now.getDay() > 0 && now.getDay() < 6;
+        const tzNow = new Date(now.toLocaleString('en-US', { timeZone: tzName }));
+        const marketOpen = tzNow.getHours() >= 9 && tzNow.getHours() < 17 && tzNow.getDay() > 0 && tzNow.getDay() < 6;
         sentSub.textContent = dateStr + (marketOpen ? '' : '  Markets Closed');
     }
 }
@@ -264,17 +276,17 @@ function renderExposureSection() {
         <div class="exposure-wrapper glass-card">
             <h2 class="section-title">סקירת חשיפה כוללת</h2>
             <div class="exposure-inner">
-                <div class="exp-assets-panel">
-                    <span class="exp-panel-title">חלוקת נכסים</span>
-                    <div class="exp-asset-rows">${assetRowsHTML}</div>
-                </div>
-                <div class="exp-divider"></div>
                 <div class="exp-sectors-panel">
                     <span class="exp-panel-title">חלוקה לפי סקטורים</span>
                     <div class="exp-sectors-inner">
-                        <div class="exp-sector-legend">${sectorLegendHTML}</div>
                         ${sectorChart}
+                        <div class="exp-sector-legend">${sectorLegendHTML}</div>
                     </div>
+                </div>
+                <div class="exp-divider"></div>
+                <div class="exp-assets-panel">
+                    <span class="exp-panel-title">חלוקת נכסים</span>
+                    <div class="exp-asset-rows">${assetRowsHTML}</div>
                 </div>
             </div>
         </div>
@@ -491,37 +503,31 @@ function renderSummaryBar() {
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></div>
                 <span class="stat-label">סך נכסים מנוהלים</span>
                 <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
                 <span class="stat-sub">${src.length} תיקים פעילים ${filterTag}</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
                 <span class="stat-label">רווח / הפסד כולל</span>
                 <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
                 <span class="stat-sub">${globalAllStale ? '—' : `תשואה: <span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
                 <span class="stat-label">רווח / הפסד ממומש</span>
                 <span class="stat-value ${hasRealized ? (realizedPnl >= 0 ? 'stat-val-green' : 'stat-val-red') : ''}">${hasRealized ? `${realizedSign}${formatCurrency(Math.abs(realizedPnl))}` : '—'}</span>
                 <span class="stat-sub">מחילת שנה</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg></div>
                 <span class="stat-label">תשואת דיבידנד</span>
                 <span class="stat-value ${hasDivYield ? 'stat-val-green' : 'stat-val-green'}">${hasDivYield ? `${divYield.toFixed(2)}%` : '0.44%'}</span>
                 <span class="stat-sub">על נכסים מנוהלים</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></div>
                 <span class="stat-label">תשואה משוקללת</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
                 <span class="stat-sub">תשואה משוקללת</span>
             </div>
             <div class="stat-card">
-                <div class="stat-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <span class="stat-label">תיקים פעילים</span>
                 <span class="stat-value">${src.length}</span>
                 <span class="stat-sub">${breakdownText}</span>

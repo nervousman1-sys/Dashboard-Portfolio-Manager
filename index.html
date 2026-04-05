@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=10.0">
-    <link rel="stylesheet" href="css/auth.css?v=10.0">
+    <link rel="stylesheet" href="css/main.css?v=11.0">
+    <link rel="stylesheet" href="css/auth.css?v=11.0">
 </head>
 
 <body>
@@ -164,35 +164,8 @@
             <!-- ═══ Top Header ═══ -->
             <header class="header">
 
-                <!-- ── Screen RIGHT (RTL start): Brand + Search + Bell + User ── -->
+                <!-- ── Screen RIGHT (RTL start): Sentiment + Clock ── -->
                 <div class="header-right">
-                    <div class="header-user-area" id="headerUserInfo">
-                        <div class="header-avatar" id="headerAvatar">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        </div>
-                        <div class="header-user-info">
-                            <span class="header-user-name" id="headerUserName">Finextium</span>
-                            <span class="header-user-role">מנהל תיקים</span>
-                        </div>
-                    </div>
-                    <button class="header-bell-btn" id="headerBellBtn" title="התראות">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                        <span class="bell-dot" id="bellDot"></span>
-                    </button>
-                    <div class="header-search-slim-wrap">
-                        <input type="text" class="header-search-slim" id="headerSearchSlim" placeholder="חיפוש..." oninput="searchClients(this.value)" />
-                        <svg class="header-search-slim-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    </div>
-                    <div class="header-brand">
-                        <div class="header-brand-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-                        </div>
-                        <span class="header-brand-name">FINEXTIUM</span>
-                    </div>
-                </div>
-
-                <!-- ── Screen CENTER: Sentiment + Clock + Currency ── -->
-                <div class="header-center">
                     <div class="header-sentiment" id="headerSentiment">
                         <div class="sentiment-bars">
                             <span class="s-bar s-bar-red"></span>
@@ -205,46 +178,51 @@
                         </div>
                     </div>
                     <div class="header-clock-group">
+                        <div class="header-clock-tz">
+                            <button class="tz-btn active" id="tzISR" onclick="setClockTZ('ISR', this)">ISR</button>
+                            <button class="tz-btn" id="tzEST" onclick="setClockTZ('EST', this)">EST</button>
+                        </div>
                         <div class="header-clock-row">
-                            <span class="header-clock-label">שעון מקומי (ISR)</span>
+                            <span class="header-clock-label" id="headerClockLabel">שעון מקומי (ISR)</span>
                             <div class="header-clock" id="headerClock">00:00:00</div>
                         </div>
-                        <div class="header-clock-row">
-                            <span class="header-clock-label">עדכון נתונים</span>
-                            <div class="refresh-indicator">
-                                <span class="status-dot"></span>
-                                <span id="lastUpdate">מעדכן...</span>
-                            </div>
-                        </div>
                     </div>
-                    <div class="currency-toggle" id="currencyToggle">
-                        <button class="currency-btn active" data-currency="ILS" onclick="setCurrency('ILS', this)">ILS</button>
-                        <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
-                    </div>
-                    <div id="userArea" style="display:none"></div>
                 </div>
 
-                <!-- ── Screen LEFT (RTL end): Action Buttons ── -->
-                <div class="header-left">
+                <!-- ── Screen CENTER: 4 Action Buttons ── -->
+                <div class="header-center">
+                    <span class="header-alert-wrap">
+                        <button class="header-action-btn" onclick="toggleAlerts()" title="נתוני מאקרו">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            <span>נתוני מאקרו</span>
+                        </button>
+                        <span class="alert-count" id="alertCount" style="display:none">0</span>
+                    </span>
                     <button class="header-action-btn primary" onclick="openMgmtModal('addClient')">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         <span>הוסף תיק</span>
-                    </button>
-                    <button class="header-action-btn" onclick="navigateTo('analysis')" title="ניתוח מקיף">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                        <span>ניתוח מקיף</span>
                     </button>
                     <button class="header-action-btn" onclick="navigateTo('markets')" title="שווקים">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
                         <span>שווקים</span>
                     </button>
-                    <span class="header-alert-wrap">
-                        <button class="header-action-btn" onclick="toggleAlerts()" title="מאקרו">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                            <span>מאקרו</span>
-                        </button>
-                        <span class="alert-count" id="alertCount" style="display:none">0</span>
-                    </span>
+                    <button class="header-action-btn" onclick="window.print && window.print()" title="הפקת דוח">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        <span>הפקת דוח</span>
+                    </button>
+                </div>
+
+                <!-- ── Screen LEFT (RTL end): Currency Toggle + Bell ── -->
+                <div class="header-left">
+                    <div class="currency-toggle" id="currencyToggle">
+                        <button class="currency-btn active" data-currency="ILS" onclick="setCurrency('ILS', this)">ILS</button>
+                        <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
+                    </div>
+                    <button class="header-bell-btn" id="headerBellBtn" title="התראות">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        <span class="bell-dot" id="bellDot"></span>
+                    </button>
+                    <div id="userArea" style="display:none"></div>
                 </div>
 
             </header>
