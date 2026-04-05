@@ -604,6 +604,7 @@ body {
     background: rgba(5, 5, 5, 0.8);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.03);
+    margin-top: 24px;
 }
 
 .qw-settings-btn {
@@ -1223,42 +1224,38 @@ body {
 .exp-asset-rows {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
 }
 
 .exp-asset-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
-.exp-asset-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 110px;
-    gap: 1px;
+/* Color dot indicator */
+.exp-asset-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
     flex-shrink: 0;
-}
-
-.exp-asset-value {
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--text-primary);
-    direction: ltr;
 }
 
 .exp-asset-pct {
     font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    min-width: 36px;
+    text-align: left;
+    direction: ltr;
+    flex-shrink: 0;
 }
 
 .exp-asset-bar-track {
     flex: 1;
-    height: 12px;
+    height: 10px;
     background: rgba(255, 255, 255, 0.06);
-    border-radius: 6px;
+    border-radius: 5px;
     overflow: hidden;
     direction: ltr; /* keep fill growing left-to-right regardless of page RTL */
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -1266,17 +1263,16 @@ body {
 
 .exp-asset-bar-fill {
     height: 100%;
-    border-radius: 6px;
+    border-radius: 5px;
     transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 14px currentColor, 0 0 5px currentColor;
-    position: relative;
+    box-shadow: 0 0 12px currentColor, 0 0 4px currentColor;
 }
 
 .exp-asset-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--text-secondary);
-    min-width: 42px;
+    min-width: 38px;
     text-align: right;
     flex-shrink: 0;
 }
@@ -1300,22 +1296,22 @@ body {
 .exp-sectors-inner {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
     flex: 1;
 }
 
 .exp-sector-legend {
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    min-width: 110px;
-    max-width: 130px;
+    gap: 6px;
+    min-width: 100px;
+    max-width: 120px;
 }
 
 .exp-sector-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     direction: rtl;
 }
 
@@ -1327,24 +1323,28 @@ body {
 }
 
 .exp-sector-pct {
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 12px;
+    font-weight: 900;
     color: var(--text-primary);
-    min-width: 30px;
+    min-width: 28px;
     text-align: left;
     direction: ltr;
 }
 
 .exp-sector-name {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-secondary);
     flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 68px;
 }
 
 .exp-donut-wrap {
-    width: 180px;
-    height: 180px;
+    width: 160px;
+    height: 160px;
     flex-shrink: 0;
     position: relative;
 }
