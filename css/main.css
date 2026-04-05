@@ -182,6 +182,43 @@ body {
     flex-shrink: 0;
 }
 
+/* ── Header Bell Button ── */
+.header-bell-btn {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.header-bell-btn:hover {
+    background: rgba(0, 229, 255, 0.08);
+    color: var(--accent-blue);
+    border-color: rgba(0, 229, 255, 0.25);
+}
+
+.bell-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-red);
+    border: 1.5px solid var(--bg-primary);
+    display: none;
+}
+
+.bell-dot.visible { display: block; }
+
 /* ── Header User Area (avatar + name) ── */
 .header-user-area {
     display: flex;
@@ -548,9 +585,6 @@ body {
 .filters-search-row .header-search-wrap {
     max-width: 280px;
     flex-shrink: 0;
-    /* In RTL layout, this sits on the visual left = logical end */
-    margin-right: auto;
-    margin-left: 0;
 }
 
 /* Header Search (shared) */
@@ -695,12 +729,12 @@ body {
     letter-spacing: 0.03em;
 }
 
-/* ── Risk Mini Summary (full-width spaced bar) ── */
+/* ── Risk Mini Summary (full-width equal-spaced bar) ── */
 .risk-mini-summary {
     display: flex;
     align-items: center;
-    justify-content: space-around;
-    padding: 10px 24px;
+    justify-content: space-between;
+    padding: 12px 40px;
     background: rgba(255, 255, 255, 0.015);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -710,9 +744,11 @@ body {
 .risk-inline-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: 8px;
+    font-size: 13px;
     font-weight: 700;
+    flex: 1;
+    justify-content: center;
 }
 
 .risk-dot {
@@ -1084,21 +1120,23 @@ body {
     background: rgba(255, 255, 255, 0.06);
     border-radius: 4px;
     overflow: hidden;
+    direction: ltr; /* keep fill growing left-to-right regardless of page RTL */
 }
 
 .exp-asset-bar-fill {
     height: 100%;
     border-radius: 4px;
     transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 6px currentColor;
+    box-shadow: 0 0 8px currentColor;
 }
 
 .exp-asset-label {
     font-size: 12px;
     font-weight: 700;
     color: var(--text-secondary);
-    min-width: 36px;
+    min-width: 42px;
     text-align: right;
+    flex-shrink: 0;
 }
 
 /* ── Divider ── */
@@ -1162,8 +1200,8 @@ body {
 }
 
 .exp-donut-wrap {
-    width: 160px;
-    height: 160px;
+    width: 180px;
+    height: 180px;
     flex-shrink: 0;
     position: relative;
 }
@@ -1456,14 +1494,20 @@ body {
 .portfolio-section-title-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
+}
+
+.portfolio-section-title-group .section-title {
+    margin-bottom: 0;
 }
 
 .portfolio-section-sub {
     font-size: 10px;
     font-weight: 700;
     color: var(--text-muted);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding-right: 26px; /* align under text, past the ::before accent bar */
 }
 
 /* Empty State */
