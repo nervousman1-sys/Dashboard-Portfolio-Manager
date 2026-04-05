@@ -239,6 +239,7 @@ function calculateOverallExposure(clientsList) {
 function renderExposureSection() {
     const myVersion = ++_exposureRenderVersion;
     _safeDestroyChart('sector-exposure');
+    _safeDestroyChart('currency-exposure');
 
     // Use filtered clients so the section reacts to risk/asset/sector filters
     const filtered = _getFilteredClients();
@@ -284,30 +285,31 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency exposure rows (USD / ILS / BTC) ──
-    const currencyRows = [
-        { label: 'דולר',    symbol: '$',  value: exp.totalUSD, color: '#00ff94' },
-        { label: 'שקל',     symbol: '₪',  value: exp.totalILS, color: '#00e5ff' },
-        { label: 'ביטקוין', symbol: '₿',  value: exp.totalBTC, color: '#f59e0b' }
-    ].filter(r => r.value > 0);
+    // ── Currency doughnut (USD + ILS only — BTC excluded) ──
+    const curUSD = exp.totalUSD;
+    const curILS = exp.totalILS;
+    const curTotal = curUSD + curILS || 1; // base for % (BTC excluded)
 
-    // If all holdings are USD (typical), show USD at 100%
-    const currencyRowsSource = currencyRows.length > 0 ? currencyRows : [
-        { label: 'דולר', symbol: '$', value: totalValue, color: '#00ff94' }
-    ];
+    // If no ILS data (all-USD portfolio), still show USD at 100%
+    const currencyData = hasFiltered
+        ? (curUSD === 0 && curILS === 0
+            ? [{ label: 'USD', pct: 100, color: '#00e5ff' }]
+            : [
+                ...(curUSD > 0 ? [{ label: 'USD', pct: curUSD / curTotal * 100, color: '#00e5ff' }] : []),
+                ...(curILS > 0 ? [{ label: 'ILS', pct: curILS / curTotal * 100, color: '#c084fc' }] : [])
+              ])
+        : [];
 
-    const currencyRowsHTML = hasFiltered ? currencyRowsSource.map(r => {
-        const pct = (r.value / totalValue * 100);
-        return `
-        <div class="exp-asset-row">
-            <span class="exp-asset-dot" style="background:${r.color};box-shadow:0 0 6px ${r.color}"></span>
-            <span class="exp-asset-label">${r.label}</span>
-            <div class="exp-asset-bar-track">
-                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
-            </div>
-            <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
-        </div>`;
-    }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
+    const currencyLegendHTML = currencyData.map(d => `
+        <div class="exp-sector-item">
+            <span class="exp-sector-pct">${d.pct.toFixed(0)}%</span>
+            <span class="exp-sector-name">${d.label}</span>
+            <span class="exp-sector-dot" style="background:${d.color};box-shadow:0 0 6px ${d.color}"></span>
+        </div>`).join('');
+
+    const currencyChart = hasFiltered && currencyData.length > 0
+        ? `<div class="exp-donut-wrap"><canvas id="currency-exposure-chart"></canvas></div>`
+        : `<div class="exp-donut-empty"><div class="exp-donut-empty-ring"></div></div>`;
 
     // ── Sector doughnut ──
     const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -339,7 +341,10 @@ function renderExposureSection() {
                 <div class="exp-divider"></div>
                 <div class="exp-currency-panel">
                     <span class="exp-panel-title">חשיפה למטבעות</span>
-                    <div class="exp-asset-rows">${currencyRowsHTML}</div>
+                    <div class="exp-sectors-inner">
+                        ${currencyChart}
+                        <div class="exp-sector-legend">${currencyLegendHTML}</div>
+                    </div>
                 </div>
                 <div class="exp-divider"></div>
                 <div class="exp-assets-panel">
@@ -350,41 +355,73 @@ function renderExposureSection() {
         </div>
     `;
 
-    if (sortedSectors.length === 0) return;
-
     setTimeout(() => {
         if (myVersion !== _exposureRenderVersion) return;
-        const ctx = document.getElementById('sector-exposure-chart');
-        if (!ctx) return;
-        _destroyChartOnCanvas(ctx);
-        _clearCanvas(ctx);
 
-        charts['sector-exposure'] = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: sortedSectors.map(s => s[0]),
-                datasets: [{
-                    data: sortedSectors.map(s => s[1]),
-                    backgroundColor: sortedSectors.map(s => SECTOR_COLORS[s[0]] || SECTOR_COLORS['Other']),
-                    borderWidth: 1.5,
-                    borderColor: '#0e0e0e',
-                    hoverBorderColor: '#0e0e0e'
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                cutout: '70%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        rtl: true,
-                        callbacks: {
-                            label: (ctx) => ` ${ctx.label}: ${(ctx.parsed / exp.totalValue * 100).toFixed(1)}% (${formatCurrency(ctx.parsed)})`
+        // ── Sector doughnut ──
+        const sectorCtx = document.getElementById('sector-exposure-chart');
+        if (sectorCtx && sortedSectors.length > 0) {
+            _destroyChartOnCanvas(sectorCtx);
+            _clearCanvas(sectorCtx);
+            charts['sector-exposure'] = new Chart(sectorCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sortedSectors.map(s => s[0]),
+                    datasets: [{
+                        data: sortedSectors.map(s => s[1]),
+                        backgroundColor: sortedSectors.map(s => SECTOR_COLORS[s[0]] || SECTOR_COLORS['Other']),
+                        borderWidth: 1.5,
+                        borderColor: '#0e0e0e',
+                        hoverBorderColor: '#0e0e0e'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            rtl: true,
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.label}: ${(ctx.parsed / exp.totalValue * 100).toFixed(1)}% (${formatCurrency(ctx.parsed)})`
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        // ── Currency doughnut (USD + ILS only) ──
+        const curCtx = document.getElementById('currency-exposure-chart');
+        if (curCtx && currencyData.length > 0) {
+            _destroyChartOnCanvas(curCtx);
+            _clearCanvas(curCtx);
+            charts['currency-exposure'] = new Chart(curCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: currencyData.map(d => d.label),
+                    datasets: [{
+                        data: currencyData.map(d => d.pct),
+                        backgroundColor: currencyData.map(d => d.color),
+                        borderWidth: 1.5,
+                        borderColor: '#0e0e0e',
+                        hoverBorderColor: '#0e0e0e'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }, 50);
 }
 
@@ -567,10 +604,6 @@ function renderSummaryBar() {
     const lowCount = src.filter(c => c.risk === 'low').length;
     const breakdownText = `סיכון: ${highCount} גבוה | ${medCount} בינוני | ${lowCount} נמוך`;
 
-    // Dynamic negative-accent class — applied to P/L and Return cards when in the red
-    const plNegClass = profitClass === 'negative' ? ' stat-card--negative' : '';
-    const retNegClass = avgClass === 'negative' ? ' stat-card--negative' : '';
-
     document.getElementById('summaryBar').innerHTML = `
         <div class="summary-main">
             <div class="stat-card">
@@ -578,7 +611,7 @@ function renderSummaryBar() {
                 <span class="stat-value stat-val-primary">${formatCurrency(totalAUM)}</span>
                 <span class="stat-sub">${src.length} תיקים פעילים ${filterTag}</span>
             </div>
-            <div class="stat-card${plNegClass}">
+            <div class="stat-card">
                 <span class="stat-label">רווח / הפסד כולל</span>
                 <span class="stat-value ${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין למחירים...</span>' : `${profitSign}${formatCurrency(Math.abs(totalProfit))}`}</span>
                 <span class="stat-sub">${globalAllStale ? '—' : `תשואה: <span class="${profitClass === 'positive' ? 'stat-val-green' : profitClass === 'negative' ? 'stat-val-red' : ''}" style="font-weight:800">${profitSign}${totalReturn.toFixed(2)}%</span>`}</span>
@@ -593,7 +626,7 @@ function renderSummaryBar() {
                 <span class="stat-value stat-val-green">${hasDivYield ? `${divYield.toFixed(2)}%` : '0.44%'}</span>
                 <span class="stat-sub">על נכסים מנוהלים</span>
             </div>
-            <div class="stat-card${retNegClass}">
+            <div class="stat-card">
                 <span class="stat-label">תשואה משוקללת</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
                 <span class="stat-sub">ממוצע משוקלל לפי הון</span>
