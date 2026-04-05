@@ -601,8 +601,9 @@ body {
     align-items: center;
     gap: 0;
     padding: 8px 20px;
-    background: rgba(2, 2, 2, 0.6);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(5, 5, 5, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .qw-settings-btn {
@@ -685,11 +686,13 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 24px;
+    padding: 12px 24px;
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(8, 8, 8, 0.5);
 }
 
 .filters-search-row .header-search-wrap {
@@ -739,8 +742,10 @@ body {
 
 /* ══ Summary Bar ══ */
 .summary-bar {
-    padding: 16px 24px;
-    background: transparent;
+    padding: 20px 24px 16px;
+    background: rgba(10, 10, 10, 0.4);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .summary-main {
@@ -751,10 +756,10 @@ body {
 
 /* ── Stat Card (6-card Google AI Studio layout) ── */
 .stat-card {
-    background: rgba(10, 10, 10, 0.5);
+    background: rgba(14, 14, 14, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: var(--radius-lg);
     padding: 14px 12px;
     display: flex;
@@ -836,7 +841,7 @@ body {
     line-height: 1.1;
 }
 
-.stat-val-primary { color: var(--accent-blue); text-shadow: 0 0 20px rgba(0, 229, 255, 0.2); }
+.stat-val-primary { color: #ffffff; text-shadow: 0 2px 12px rgba(255, 255, 255, 0.2); }
 .stat-val-green { color: var(--accent-green); text-shadow: 0 0 12px rgba(0, 255, 148, 0.15); }
 .stat-val-red { color: var(--accent-red); text-shadow: 0 0 12px rgba(255, 77, 77, 0.15); }
 .stat-stale { color: var(--text-muted); font-size: 13px; }
@@ -1175,11 +1180,15 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    padding: 0 24px 16px;
+    padding: 20px 24px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .exposure-wrapper {
     padding: 20px 24px;
+    background: rgba(14, 14, 14, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .exposure-wrapper .section-title {
@@ -1247,18 +1256,20 @@ body {
 
 .exp-asset-bar-track {
     flex: 1;
-    height: 8px;
+    height: 12px;
     background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
+    border-radius: 6px;
     overflow: hidden;
     direction: ltr; /* keep fill growing left-to-right regardless of page RTL */
+    border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .exp-asset-bar-fill {
     height: 100%;
-    border-radius: 4px;
-    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 8px currentColor;
+    border-radius: 6px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 14px currentColor, 0 0 5px currentColor;
+    position: relative;
 }
 
 .exp-asset-label {
@@ -1289,15 +1300,16 @@ body {
 .exp-sectors-inner {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex: 1;
 }
 
 .exp-sector-legend {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-width: 120px;
+    gap: 7px;
+    min-width: 110px;
+    max-width: 130px;
 }
 
 .exp-sector-item {
