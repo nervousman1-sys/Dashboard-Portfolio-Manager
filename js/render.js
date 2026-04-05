@@ -81,8 +81,6 @@ function setClockTZ(tz, btn) {
     _clockTZ = tz;
     document.querySelectorAll('.tz-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    const labelEl = document.getElementById('headerClockLabel');
-    if (labelEl) labelEl.textContent = tz === 'ISR' ? 'שעון מקומי (ISR)' : 'שעון ניו יורק (EST)';
     _updateHeaderClock();
 }
 
@@ -878,7 +876,6 @@ function renderClientCards() {
                         <button class="time-range-btn active" onclick="event.stopPropagation(); setCardTimeRange(${client.id}, 'all', this)">All</button>
                     </div>
                     <div class="card-performance chart-wrapper-relative">
-                        <button class="expand-btn" onclick="event.stopPropagation(); openFullscreenChart(${client.id})" title="הגדל גרף">&#x26F6;</button>
                         <div class="card-performance-chart">
                             <canvas id="perf-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
                         </div>
@@ -888,6 +885,10 @@ function renderClientCards() {
                 <div class="card-footer-stat">
                     <span class="card-footer-label">תשואה</span>
                     <span class="card-footer-value ${returnColor}">${allPricesStale ? '<span class="stat-stale">ממתין...</span>' : `${profitSign}${returnPct.toFixed(2)}%`}</span>
+                </div>
+                <div class="card-footer-stat card-footer-stat-center">
+                    <span class="card-footer-label">רווח / הפסד</span>
+                    <span class="card-footer-value ${returnColor}">${allPricesStale ? '<span class="stat-stale">—</span>' : `${profitSign}${formatCurrency(Math.abs(profit))}`}</span>
                 </div>
                 <div class="card-footer-stat card-footer-stat-end">
                     <span class="card-footer-label">שווי תיק</span>
