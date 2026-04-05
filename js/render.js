@@ -203,12 +203,20 @@ const _INDEX_TICKERS = new Set([
     'TA35.TA','TA125.TA','TA90.TA','RSP','MDY','IJH','IJR','SPLG'
 ]);
 
-function calculateOverallExposure() {
+function calculateOverallExposure(clientsList) {
+    const src = clientsList || clients;
     let totalStocks = 0, totalBonds = 0, totalIndices = 0, totalCash = 0, totalValue = 0;
+    let totalUSD = 0, totalILS = 0, totalBTC = 0;
     const sectorTotals = {};
-    clients.forEach(c => {
+    src.forEach(c => {
         c.holdings.forEach(h => {
             totalValue += h.value;
+            // Currency bucketing by holding's native currency
+            const cur = (h.currency || 'USD').toUpperCase();
+            if (cur === 'BTC') totalBTC += h.value;
+            else if (cur === 'ILS') totalILS += h.value;
+            else totalUSD += h.value;
+            // Asset type bucketing
             if (h.type === 'cash') {
                 totalCash += h.value;
             } else if (h.type === 'stock' || h.type === 'index') {
@@ -225,14 +233,19 @@ function calculateOverallExposure() {
             }
         });
     });
-    return { totalStocks, totalBonds, totalIndices, totalCash, totalValue, sectorTotals };
+    return { totalStocks, totalBonds, totalIndices, totalCash, totalValue, sectorTotals, totalUSD, totalILS, totalBTC };
 }
 
 function renderExposureSection() {
     const myVersion = ++_exposureRenderVersion;
     _safeDestroyChart('sector-exposure');
 
-    if (!clients || clients.length === 0) {
+    // Use filtered clients so the section reacts to risk/asset/sector filters
+    const filtered = _getFilteredClients();
+    const hasClients = clients && clients.length > 0;
+    const hasFiltered = filtered.length > 0;
+
+    if (!hasClients) {
         document.getElementById('exposureSection').innerHTML = `
             <div class="exposure-wrapper glass-card">
                 <h2 class="section-title">סקירת חשיפה כוללת</h2>
@@ -244,10 +257,11 @@ function renderExposureSection() {
         return;
     }
 
-    const exp = calculateOverallExposure();
+    // Compute exposure from filtered set (or show zeros if filter matches nothing)
+    const exp = hasFiltered ? calculateOverallExposure(filtered) : { totalStocks: 0, totalBonds: 0, totalIndices: 0, totalCash: 0, totalValue: 0, sectorTotals: {}, totalUSD: 0, totalILS: 0, totalBTC: 0 };
     const totalValue = exp.totalValue || 1;
 
-    // Build asset allocation rows (4 categories: stocks, bonds, indices, cash)
+    // ── Asset allocation rows (4 categories) ──
     const residualCash = Math.max(0, totalValue - exp.totalStocks - exp.totalBonds - exp.totalIndices - exp.totalCash);
     const cashValue = exp.totalCash + residualCash;
     const assetRows = [
@@ -257,7 +271,7 @@ function renderExposureSection() {
         { label: 'מזומן',  value: cashValue,         color: 'rgba(163,163,163,0.45)' }
     ].filter(r => r.value > 0);
 
-    const assetRowsHTML = assetRows.map(r => {
+    const assetRowsHTML = hasFiltered ? assetRows.map(r => {
         const pct = (r.value / totalValue * 100);
         return `
         <div class="exp-asset-row">
@@ -268,9 +282,34 @@ function renderExposureSection() {
             </div>
             <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
         </div>`;
-    }).join('');
+    }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // Sector doughnut side
+    // ── Currency exposure rows (USD / ILS / BTC) ──
+    const currencyRows = [
+        { label: 'דולר',    symbol: '$',  value: exp.totalUSD, color: '#00ff94' },
+        { label: 'שקל',     symbol: '₪',  value: exp.totalILS, color: '#00e5ff' },
+        { label: 'ביטקוין', symbol: '₿',  value: exp.totalBTC, color: '#f59e0b' }
+    ].filter(r => r.value > 0);
+
+    // If all holdings are USD (typical), show USD at 100%
+    const currencyRowsSource = currencyRows.length > 0 ? currencyRows : [
+        { label: 'דולר', symbol: '$', value: totalValue, color: '#00ff94' }
+    ];
+
+    const currencyRowsHTML = hasFiltered ? currencyRowsSource.map(r => {
+        const pct = (r.value / totalValue * 100);
+        return `
+        <div class="exp-asset-row">
+            <span class="exp-asset-dot" style="background:${r.color};box-shadow:0 0 6px ${r.color}"></span>
+            <span class="exp-asset-label">${r.label}</span>
+            <div class="exp-asset-bar-track">
+                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
+            </div>
+            <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
+        </div>`;
+    }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
+
+    // ── Sector doughnut ──
     const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const sectorLegendHTML = sortedSectors.map(([sector, value]) => {
         const pct = (value / totalValue * 100).toFixed(0);
@@ -284,7 +323,7 @@ function renderExposureSection() {
 
     const sectorChart = sortedSectors.length > 0
         ? `<div class="exp-donut-wrap"><canvas id="sector-exposure-chart"></canvas></div>`
-        : `<div class="chart-empty-state"><div class="chart-empty-circle"></div><span>אין נתוני סקטורים</span></div>`;
+        : `<div class="exp-donut-empty"><div class="exp-donut-empty-ring"></div></div>`;
 
     document.getElementById('exposureSection').innerHTML = `
         <div class="exposure-wrapper glass-card">
@@ -296,6 +335,11 @@ function renderExposureSection() {
                         ${sectorChart}
                         <div class="exp-sector-legend">${sectorLegendHTML}</div>
                     </div>
+                </div>
+                <div class="exp-divider"></div>
+                <div class="exp-currency-panel">
+                    <span class="exp-panel-title">חשיפה למטבעות</span>
+                    <div class="exp-asset-rows">${currencyRowsHTML}</div>
                 </div>
                 <div class="exp-divider"></div>
                 <div class="exp-assets-panel">
