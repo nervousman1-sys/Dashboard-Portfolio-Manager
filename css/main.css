@@ -1276,8 +1276,92 @@ body {
 .exp-currency-panel {
     display: flex;
     flex-direction: column;
-    gap: 16px;
     padding-top: 20px;
+}
+
+/* Vertically centers the bar+legend against the 160px doughnut height */
+.exp-currency-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    justify-content: center;
+    min-height: 160px;
+}
+
+/* ── Split Neon Glass Bar ── */
+.exp-split-bar {
+    height: 36px;
+    border-radius: 50px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+        0 0 28px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* USD segment — Neon Green (#39FF14) */
+.exp-split-usd {
+    height: 100%;
+    background: linear-gradient(135deg, rgba(57,255,20,0.88) 0%, rgba(57,255,20,0.58) 100%);
+    box-shadow: 4px 0 20px rgba(57,255,20,0.4), inset 0 2px 0 rgba(255,255,255,0.18);
+    transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+/* ILS segment — Neon Blue (#007FFF) */
+.exp-split-ils {
+    height: 100%;
+    flex: 1;
+    background: linear-gradient(135deg, rgba(0,127,255,0.88) 0%, rgba(0,127,255,0.58) 100%);
+    box-shadow: -4px 0 20px rgba(0,127,255,0.4), inset 0 2px 0 rgba(255,255,255,0.18);
+}
+
+/* Glowing white divider at the split point */
+.exp-split-divider {
+    width: 2px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 10px rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.7);
+    z-index: 2;
+}
+
+/* Legend below the bar */
+.exp-split-legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    align-items: center;
+}
+
+.exp-split-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.exp-split-legend-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.exp-split-legend-currency {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.exp-split-legend-pct {
+    font-size: 14px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -0.03em;
+    direction: ltr;
 }
 
 /* ── Empty state inside exposure panels when filter matches nothing ── */
