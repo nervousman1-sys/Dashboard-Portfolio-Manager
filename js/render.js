@@ -263,14 +263,12 @@ function renderExposureSection() {
         const pct = (r.value / totalValue * 100);
         return `
         <div class="exp-asset-row">
+            <span class="exp-asset-dot" style="background:${r.color};box-shadow:0 0 6px ${r.color}"></span>
             <span class="exp-asset-label">${r.label}</span>
             <div class="exp-asset-bar-track">
                 <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
             </div>
-            <div class="exp-asset-meta">
-                <span class="exp-asset-value">${formatCurrency(r.value)}</span>
-                <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
-            </div>
+            <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
         </div>`;
     }).join('');
 
@@ -326,14 +324,14 @@ function renderExposureSection() {
                 datasets: [{
                     data: sortedSectors.map(s => s[1]),
                     backgroundColor: sortedSectors.map(s => SECTOR_COLORS[s[0]] || SECTOR_COLORS['Other']),
-                    borderWidth: 2,
-                    borderColor: '#020202',
-                    hoverBorderColor: '#020202'
+                    borderWidth: 1.5,
+                    borderColor: '#0e0e0e',
+                    hoverBorderColor: '#0e0e0e'
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                cutout: '62%',
+                cutout: '70%',
                 plugins: {
                     legend: { display: false },
                     tooltip: {
