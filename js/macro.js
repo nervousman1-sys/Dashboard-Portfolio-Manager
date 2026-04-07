@@ -646,6 +646,23 @@ async function _supaSaveMacroData(country, indicators) {
 async function checkAlerts(forceRefresh = false) {
     window._macroUsingCache = { us: false, il: false };
 
+    // Pre-seed globals from verified baseline so first render always shows real data.
+    // Live API data will overwrite these values once async calls resolve.
+    if (!window._macroHeadUS) {
+        const baseUS = {};
+        for (const [key, val] of Object.entries(MACRO_VERIFIED_BASELINE.us)) {
+            if (val.value !== null) baseUS[key] = { ...val };
+        }
+        window._macroHeadUS = baseUS;
+    }
+    if (!window._macroHeadIL) {
+        const baseIL = {};
+        for (const [key, val] of Object.entries(MACRO_VERIFIED_BASELINE.il)) {
+            if (val.value !== null) baseIL[key] = { ...val };
+        }
+        window._macroHeadIL = baseIL;
+    }
+
     // Layer 0: Seed localStorage cache from Supabase (persisted verified data)
     if (!forceRefresh) {
         try {
