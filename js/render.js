@@ -284,6 +284,26 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
+    // ── Currency neon boxes (USD / ILS fiat only — BTC excluded) ──
+    const curUSD = exp.totalUSD;
+    const curILS = exp.totalILS;
+    const curFiatTotal = curUSD + curILS;
+    const usdPct = hasFiltered ? (curFiatTotal > 0 ? (curUSD / curFiatTotal * 100) : 100) : 0;
+    const ilsPct = hasFiltered ? (100 - usdPct) : 0;
+
+    const currencyBoxesHTML = hasFiltered ? `
+        <div class="exp-currency-boxes">
+            <div class="exp-currency-box exp-currency-box--usd">
+                <span class="exp-currency-symbol">$</span>
+                <span class="exp-currency-lbl">USD <strong>${usdPct.toFixed(1)}%</strong></span>
+            </div>
+            ${ilsPct > 0.5 ? `
+            <div class="exp-currency-box exp-currency-box--ils">
+                <span class="exp-currency-symbol">₪</span>
+                <span class="exp-currency-lbl">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
+            </div>` : ''}
+        </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
+
     // ── Sector doughnut ──
     const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const sectorLegendHTML = sortedSectors.map(([sector, value]) => {
@@ -310,6 +330,11 @@ function renderExposureSection() {
                         ${sectorChart}
                         <div class="exp-sector-legend">${sectorLegendHTML}</div>
                     </div>
+                </div>
+                <div class="exp-divider"></div>
+                <div class="exp-currency-panel">
+                    <span class="exp-panel-title">חשיפה למטבעות</span>
+                    ${currencyBoxesHTML}
                 </div>
                 <div class="exp-divider"></div>
                 <div class="exp-assets-panel">
