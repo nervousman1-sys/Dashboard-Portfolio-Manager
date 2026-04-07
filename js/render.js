@@ -269,7 +269,7 @@ function renderExposureSection() {
         { label: 'אג"ח',   value: exp.totalBonds,   color: 'var(--accent-purple)' },
         { label: 'מדדים',  value: exp.totalIndices, color: 'var(--accent-green)' },
         { label: 'מזומן',  value: cashValue,         color: 'rgba(163,163,163,0.45)' }
-    ].filter(r => r.value > 0);
+    ];
 
     const assetRowsHTML = hasFiltered ? assetRows.map(r => {
         const pct = (r.value / totalValue * 100);
@@ -297,11 +297,10 @@ function renderExposureSection() {
                 <span class="exp-currency-symbol">$</span>
                 <span class="exp-currency-lbl">USD <strong>${usdPct.toFixed(1)}%</strong></span>
             </div>
-            ${ilsPct > 0.5 ? `
             <div class="exp-currency-box exp-currency-box--ils">
                 <span class="exp-currency-symbol">₪</span>
                 <span class="exp-currency-lbl">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
-            </div>` : ''}
+            </div>
         </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
     // ── Sector doughnut ──
