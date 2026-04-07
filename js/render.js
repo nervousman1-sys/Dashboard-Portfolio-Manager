@@ -282,7 +282,7 @@ function renderExposureSection() {
         { label: 'מניות',  value: exp.totalStocks,  color: 'var(--accent-blue)' },
         { label: 'אג"ח',   value: exp.totalBonds,   color: 'var(--accent-purple)' },
         { label: 'מדדים',  value: exp.totalIndices, color: 'var(--accent-green)' },
-        { label: 'מזומן',  value: cashValue,         color: 'rgba(163,163,163,0.45)' }
+        { label: 'מזומן',  value: cashValue,         color: 'var(--accent-orange)' }
     ];
 
     const assetRowsHTML = hasFiltered ? assetRows.map(r => {
