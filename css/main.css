@@ -1214,7 +1214,6 @@ body {
     flex-direction: column;
     gap: 16px;
     padding-left: 24px;
-    padding-top: 20px;
 }
 
 .exp-panel-title {
@@ -1326,12 +1325,15 @@ body {
 
 .exp-currency-boxes {
     display: flex;
-    flex-direction: column;
-    gap: 14px;
+    flex-direction: row;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
     width: 100%;
 }
 
 .exp-currency-box {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 12px;
