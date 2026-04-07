@@ -248,6 +248,10 @@ const _US_INDICATORS = [
     { key: 'unemployment', fmpName: 'Unemployment Rate',          label: 'שיעור אבטלה',              unit: '%' },
 ];
 
+// Session flag: set to true when FMP economic_calendar returns 403 (free-tier restriction).
+// Prevents repeated 403 requests in the same session.
+let _fmpCalendarBlocked = false;
+
 async function _fetchFMPUSIndicators(forceRefresh) {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY' || FMP_API_KEY === '') {
         _macroApiStatus.fmpUS = 'No key';
@@ -434,7 +438,7 @@ async function _fetchILHeadlines(forceRefresh) {
     // TODO: If FMP lacks IL data, replace this block with:
     //   https://api.tradingeconomics.com/country/indicators?c=<API_KEY>&country=israel
     //   (requires TradingEconomics subscription — set TRADING_ECONOMICS_KEY in env-config.js)
-    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY' && !_fmpCalendarBlocked) {
         try {
             const now  = new Date();
             const from = new Date(now);
@@ -443,7 +447,10 @@ async function _fetchILHeadlines(forceRefresh) {
                 `?from=${from.toISOString().split('T')[0]}&to=${now.toISOString().split('T')[0]}` +
                 `&apikey=${FMP_API_KEY}`;
             const res = await _macroFetch(url);
-            if (res.ok) {
+            if (res.status === 403) {
+                _fmpCalendarBlocked = true;
+                console.warn('[Macro] FMP economic_calendar: 403 Forbidden — endpoint not available on current plan. Using verified baseline data.');
+            } else if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) {
                     const ilEvents = data
@@ -532,6 +539,7 @@ async function _fetchCalendarEvents(country, cacheKey, forceRefresh) {
         if (cached && cached.length > 0) return cached;
     }
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY' || FMP_API_KEY === '') return null;
+    if (_fmpCalendarBlocked) return null;
 
     try {
         const now  = new Date();
@@ -541,6 +549,11 @@ async function _fetchCalendarEvents(country, cacheKey, forceRefresh) {
             `?from=${from.toISOString().split('T')[0]}&to=${now.toISOString().split('T')[0]}` +
             `&apikey=${FMP_API_KEY}`;
         const res = await _macroFetch(url);
+        if (res.status === 403) {
+            _fmpCalendarBlocked = true;
+            console.warn('[Macro] FMP economic_calendar: 403 Forbidden — skipping calendar endpoint for this session.');
+            return null;
+        }
         if (!res.ok) return null;
         const data = await res.json();
         if (!Array.isArray(data)) return null;

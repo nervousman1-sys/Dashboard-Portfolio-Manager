@@ -650,6 +650,16 @@ body {
     justify-content: space-around;
 }
 
+.qw-last-update {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+    padding: 0 16px 0 8px;
+    flex-shrink: 0;
+    direction: rtl;
+}
+
 .qw-ticker {
     display: flex;
     align-items: center;
