@@ -1,5 +1,13 @@
 // ========== INIT - Initialization & Event Handlers ==========
 
+// ── Quick-Watch ticker config — declared first so it is available when init() runs ──
+const _QW_TICKERS = [
+    { id: 'sp500',  sym: 'SPY',      label: 'S&P 500',    currency: 'USD' },
+    { id: 'nasdaq', sym: 'QQQ',      label: 'NASDAQ 100', currency: 'USD' },
+    { id: 'btc',    sym: 'BTC-USD',  label: 'BTC',        currency: 'USD' },
+    { id: 'ta35',   sym: 'TA35.TA',  label: 'TA-35',      currency: 'ILS' }
+];
+
 // ========== LOCAL CACHE (instant offline-first UI) ==========
 
 const CLIENTS_CACHE_KEY = 'portfolio_clients_cache';
@@ -269,13 +277,6 @@ async function init() {
 }
 
 // ── Quick-Watch: populate the 4 pinned market tickers ──
-const _QW_TICKERS = [
-    { id: 'sp500',  sym: 'SPY',      label: 'S&P 500',    currency: 'USD' },
-    { id: 'nasdaq', sym: 'QQQ',      label: 'NASDAQ 100', currency: 'USD' },
-    { id: 'btc',    sym: 'BTC-USD',  label: 'BTC',        currency: 'USD' },
-    { id: 'ta35',   sym: 'TA35.TA',  label: 'TA-35',      currency: 'ILS' }
-];
-
 async function _updateQuickWatch() {
     if (typeof fetchSingleTickerPrice !== 'function') return;
     for (const t of _QW_TICKERS) {
