@@ -84,18 +84,20 @@ let _cacheRendered = false;
         console.log(`[Init] Phase 0: Instant render of ${cached.length} cached portfolios`);
         clients = cached;
 
-        // These render functions are synchronous DOM writes
-        renderSummaryBar();
-        renderExposureSection();
-        renderClientCards();
-        updateUserDisplay();
-
-        // Hide skeleton overlay immediately
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) overlay.classList.add('hidden');
-
-        document.getElementById('lastUpdate').textContent = 'מעדכן נתונים...';
-        _cacheRendered = true;
+        try {
+            renderSummaryBar();
+            renderExposureSection();
+            renderClientCards();
+            updateUserDisplay();
+        } catch (e) {
+            console.error('[Init] Phase 0 render failed:', e);
+        } finally {
+            // Always hide overlay — even if a render function throws
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.classList.add('hidden');
+            document.getElementById('lastUpdate').textContent = 'מעדכן נתונים...';
+            _cacheRendered = true;
+        }
     }
 })();
 
