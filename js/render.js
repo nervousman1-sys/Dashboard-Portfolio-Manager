@@ -312,11 +312,6 @@ function renderExposureSection() {
                     </div>
                 </div>
                 <div class="exp-divider"></div>
-                <div class="exp-currency-panel">
-                    <span class="exp-panel-title">חשיפה למטבעות</span>
-                    ${currencyBarHTML}
-                </div>
-                <div class="exp-divider"></div>
                 <div class="exp-assets-panel">
                     <span class="exp-panel-title">חלוקת נכסים</span>
                     <div class="exp-asset-rows">${assetRowsHTML}</div>
