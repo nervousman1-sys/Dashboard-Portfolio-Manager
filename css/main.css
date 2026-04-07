@@ -1325,7 +1325,7 @@ body {
 
 .exp-currency-boxes {
     display: flex;
-    flex-direction: row;
+    flex-direction: row-reverse;
     gap: 20px;
     justify-content: center;
     align-items: center;

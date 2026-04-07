@@ -208,6 +208,7 @@ function calculateOverallExposure(clientsList) {
     let totalStocks = 0, totalBonds = 0, totalIndices = 0, totalCash = 0, totalValue = 0;
     let totalUSD = 0, totalILS = 0, totalBTC = 0;
     const sectorTotals = {};
+    const ilsRate = (typeof USD_ILS_RATE !== 'undefined' && USD_ILS_RATE > 0) ? USD_ILS_RATE : 3.7;
     src.forEach(c => {
         c.holdings.forEach(h => {
             totalValue += h.value;
@@ -232,6 +233,19 @@ function calculateOverallExposure(clientsList) {
                 totalBonds += h.value;
             }
         });
+
+        // ── Client-level cash (stored separately from holdings) ──
+        // cash.usd is in USD; cash.ils is in ILS — convert to USD for consistent totals.
+        const cashUsd = c.cash?.usd || (c.cashBalance && (!c.cash?.ils) ? c.cashBalance : 0) || 0;
+        const cashIls = c.cash?.ils || 0;
+        const cashIlsInUsd = cashIls / ilsRate;
+        const clientCash = cashUsd + cashIlsInUsd;
+        if (clientCash > 0) {
+            totalCash  += clientCash;
+            totalValue += clientCash;
+            totalUSD   += cashUsd;
+            totalILS   += cashIlsInUsd;
+        }
     });
     return { totalStocks, totalBonds, totalIndices, totalCash, totalValue, sectorTotals, totalUSD, totalILS, totalBTC };
 }
