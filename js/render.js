@@ -284,35 +284,6 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency split bar (USD / ILS fiat only — BTC excluded) ──
-    const curUSD = exp.totalUSD;
-    const curILS = exp.totalILS;
-    const curFiatTotal = curUSD + curILS;
-    // When all holdings are USD (typical), show USD at 100%
-    const usdPct = hasFiltered ? (curFiatTotal > 0 ? (curUSD / curFiatTotal * 100) : 100) : 0;
-    const ilsPct = hasFiltered ? (100 - usdPct) : 0;
-
-    const currencyBarHTML = hasFiltered ? `
-        <div class="exp-currency-body">
-            <div class="exp-split-bar" dir="ltr">
-                <div class="exp-split-usd" style="width:${usdPct.toFixed(2)}%"></div>
-                ${ilsPct > 0.5 ? `<div class="exp-split-divider"></div><div class="exp-split-ils"></div>` : ''}
-            </div>
-            <div class="exp-split-legend" dir="ltr">
-                <div class="exp-split-legend-item">
-                    <span class="exp-split-legend-dot" style="background:#39FF14;box-shadow:0 0 6px #39FF14"></span>
-                    <span class="exp-split-legend-currency" style="color:#39FF14">USD</span>
-                    <span class="exp-split-legend-pct">${usdPct.toFixed(1)}%</span>
-                </div>
-                ${ilsPct > 0.5 ? `
-                <div class="exp-split-legend-item">
-                    <span class="exp-split-legend-dot" style="background:#007FFF;box-shadow:0 0 6px #007FFF"></span>
-                    <span class="exp-split-legend-currency" style="color:#007FFF">ILS</span>
-                    <span class="exp-split-legend-pct">${ilsPct.toFixed(1)}%</span>
-                </div>` : ''}
-            </div>
-        </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
-
     // ── Sector doughnut ──
     const sortedSectors = Object.entries(exp.sectorTotals).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const sectorLegendHTML = sortedSectors.map(([sector, value]) => {
