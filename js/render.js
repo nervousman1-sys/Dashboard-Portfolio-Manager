@@ -298,23 +298,37 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency neon boxes (USD / ILS fiat only — BTC excluded) ──
+    // ── Currency vertical gauges (USD / ILS fiat only — BTC excluded) ──
     const curUSD = exp.totalUSD;
     const curILS = exp.totalILS;
     const curFiatTotal = curUSD + curILS;
     const usdPct = hasFiltered ? (curFiatTotal > 0 ? (curUSD / curFiatTotal * 100) : 100) : 0;
     const ilsPct = hasFiltered ? (100 - usdPct) : 0;
 
+    // Scale ticks: 5 evenly spaced labels at 0, 25, 50, 75, 100%
+    const _ticks = [100, 75, 50, 25, 0].map(v =>
+        `<span class="gauge-tick-label">${v}</span>`).join('');
+
     const currencyBoxesHTML = hasFiltered ? `
-        <div class="exp-currency-boxes">
-            <div class="exp-currency-box exp-currency-box--usd">
-                <span class="exp-currency-symbol">$</span>
-                <span class="exp-currency-lbl">USD <strong>${usdPct.toFixed(1)}%</strong></span>
+        <div class="exp-gauge-row">
+            <div class="exp-gauge exp-gauge--ils">
+                <div class="gauge-ticks">${_ticks}</div>
+                <div class="gauge-tube">
+                    <div class="gauge-fill gauge-fill--ils" style="height:${ilsPct.toFixed(1)}%"></div>
+                    <span class="gauge-symbol">₪</span>
+                </div>
             </div>
-            <div class="exp-currency-box exp-currency-box--ils">
-                <span class="exp-currency-symbol">₪</span>
-                <span class="exp-currency-lbl">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
+            <div class="exp-gauge exp-gauge--usd">
+                <div class="gauge-tube">
+                    <div class="gauge-fill gauge-fill--usd" style="height:${usdPct.toFixed(1)}%"></div>
+                    <span class="gauge-symbol">$</span>
+                </div>
+                <div class="gauge-ticks">${_ticks}</div>
             </div>
+        </div>
+        <div class="exp-gauge-labels">
+            <span class="exp-gauge-lbl exp-gauge-lbl--ils">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
+            <span class="exp-gauge-lbl exp-gauge-lbl--usd">USD <strong>${usdPct.toFixed(1)}%</strong></span>
         </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
     // ── Sector doughnut ──
