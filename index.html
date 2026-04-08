@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=25.0">
+    <link rel="stylesheet" href="css/main.css?v=26.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -277,9 +277,12 @@
 
             </header>
 
-            <!-- ═══ Quick-Watch Market Ticker ═══ -->
+            <!-- ═══ Quick-Watch Label + Ticker Bar ═══ -->
+            <div class="dash-section-label-row">
+                <span class="dash-section-label">נכסים לצפייה בעמוד הבית</span>
+            </div>
             <div class="quick-watch-bar" id="quickWatchBar">
-                <button class="qw-settings-btn" title="הגדרות מעקב">
+                <button class="qw-settings-btn" title="הגדרות מעקב" onclick="openTickerModal()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="3" />
@@ -287,34 +290,44 @@
                             d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                     </svg>
                 </button>
-                <div class="qw-tickers" id="qwTickers">
-                    <div class="qw-ticker">
-                        <span class="qw-name">S&P 500</span>
-                        <span class="qw-price" id="qw-sp500">—</span>
-                        <span class="qw-change positive" id="qw-sp500-chg">—</span>
+                <!-- Ticker items built dynamically by _renderQWTickers() in init.js -->
+                <div class="qw-tickers" id="qwTickers"></div>
+                <span class="qw-last-update" id="lastUpdate"></span>
+            </div>
+
+            <!-- ═══ Ticker Config Modal ═══ -->
+            <div class="qw-config-modal" id="qwConfigModal" onclick="if(event.target===this)closeTickerModal()">
+                <div class="qw-config-inner" dir="rtl">
+                    <div class="qw-config-header">
+                        <h3 class="qw-config-title">הגדרת נכסים לצפייה</h3>
+                        <button class="qw-config-close" onclick="closeTickerModal()">✕</button>
                     </div>
-                    <div class="qw-ticker">
-                        <span class="qw-name">NASDAQ 100</span>
-                        <span class="qw-price" id="qw-nasdaq">—</span>
-                        <span class="qw-change positive" id="qw-nasdaq-chg">—</span>
+                    <p class="qw-config-hint">בחר עד 4 נכסים שיוצגו בסרגל המעקב</p>
+                    <input type="text" id="qwSearchInput" class="qw-search-input" placeholder="חיפוש לפי שם או סימול..."
+                        oninput="_renderModalAssetList(this.value)" />
+                    <div class="qw-config-cols">
+                        <div class="qw-config-col">
+                            <div class="qw-config-col-title">כל הנכסים</div>
+                            <div class="qw-pool-list" id="qwPoolList"></div>
+                        </div>
+                        <div class="qw-config-col">
+                            <div class="qw-config-col-title">נבחרו <span id="qwSelectedCount">0/4</span></div>
+                            <div class="qw-selected-list" id="qwSelectedList"></div>
+                        </div>
                     </div>
-                    <div class="qw-ticker">
-                        <span class="qw-name">BTC</span>
-                        <span class="qw-price" id="qw-btc">—</span>
-                        <span class="qw-change negative" id="qw-btc-chg">—</span>
-                    </div>
-                    <div class="qw-ticker">
-                        <span class="qw-name">TA-35</span>
-                        <span class="qw-price" id="qw-ta35">—</span>
-                        <span class="qw-change positive" id="qw-ta35-chg">—</span>
+                    <div class="qw-config-actions">
+                        <button class="qw-save-btn" onclick="saveTickerConfig()">שמור שינויים</button>
+                        <button class="qw-cancel-btn" onclick="closeTickerModal()">ביטול</button>
                     </div>
                 </div>
-                <span class="qw-last-update" id="lastUpdate"></span>
             </div>
 
             <div class="macro-page" id="macroPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
+            <div class="dash-section-label-row">
+                <span class="dash-section-label">סיכום נכסים מנוהלים</span>
+            </div>
             <div class="summary-bar" id="summaryBar"></div>
 
             <!-- ═══ Exposure Section ═══ -->

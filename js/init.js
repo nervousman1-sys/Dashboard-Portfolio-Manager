@@ -1,12 +1,48 @@
 // ========== INIT - Initialization & Event Handlers ==========
 
-// ── Quick-Watch ticker config — declared first so it is available when init() runs ──
-const _QW_TICKERS = [
-    { id: 'sp500',  sym: 'SPY',      label: 'S&P 500',    currency: 'USD' },
-    { id: 'nasdaq', sym: 'QQQ',      label: 'NASDAQ 100', currency: 'USD' },
-    { id: 'btc',    sym: 'BTC-USD',  label: 'BTC',        currency: 'USD' },
-    { id: 'ta35',   sym: 'TA35.TA',  label: 'TA-35',      currency: 'ILS' }
+// ── Quick-Watch: full searchable pool ──
+const _QW_TICKER_POOL = [
+    { sym: 'SPY',      label: 'S&P 500 ETF',    type: 'index',  currency: 'USD' },
+    { sym: 'QQQ',      label: 'NASDAQ 100 ETF',  type: 'index',  currency: 'USD' },
+    { sym: 'DIA',      label: 'Dow Jones ETF',   type: 'index',  currency: 'USD' },
+    { sym: 'IWM',      label: 'Russell 2000',    type: 'index',  currency: 'USD' },
+    { sym: 'TA35.TA',  label: 'TA-35',           type: 'index',  currency: 'ILS' },
+    { sym: 'BTC-USD',  label: 'Bitcoin (BTC)',   type: 'crypto', currency: 'USD' },
+    { sym: 'ETH-USD',  label: 'Ethereum (ETH)',  type: 'crypto', currency: 'USD' },
+    { sym: 'SOL-USD',  label: 'Solana (SOL)',    type: 'crypto', currency: 'USD' },
+    { sym: 'AAPL',     label: 'Apple',           type: 'stock',  currency: 'USD' },
+    { sym: 'MSFT',     label: 'Microsoft',       type: 'stock',  currency: 'USD' },
+    { sym: 'NVDA',     label: 'NVIDIA',          type: 'stock',  currency: 'USD' },
+    { sym: 'TSLA',     label: 'Tesla',           type: 'stock',  currency: 'USD' },
+    { sym: 'AMZN',     label: 'Amazon',          type: 'stock',  currency: 'USD' },
+    { sym: 'GOOGL',    label: 'Alphabet',        type: 'stock',  currency: 'USD' },
+    { sym: 'META',     label: 'Meta',            type: 'stock',  currency: 'USD' },
+    { sym: 'GLD',      label: 'Gold ETF',        type: 'stock',  currency: 'USD' },
 ];
+
+const _QW_LS_KEY = 'finextium_qw_tickers';
+
+// Default 4 tickers — overridden by localStorage if user has saved a config
+const _QW_DEFAULT = [
+    { sym: 'SPY',     label: 'S&P 500',    type: 'index',  currency: 'USD' },
+    { sym: 'QQQ',     label: 'NASDAQ 100', type: 'index',  currency: 'USD' },
+    { sym: 'BTC-USD', label: 'BTC',        type: 'crypto', currency: 'USD' },
+    { sym: 'TA35.TA', label: 'TA-35',      type: 'index',  currency: 'ILS' }
+];
+
+function _loadQWTickers() {
+    try {
+        const saved = localStorage.getItem(_QW_LS_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 4) return parsed;
+        }
+    } catch (_) {}
+    return _QW_DEFAULT.map(t => ({ ...t }));
+}
+
+// Mutable array — rebuilt from localStorage or default at init, updated on modal save
+let _QW_TICKERS = _loadQWTickers();
 
 // ========== LOCAL CACHE (instant offline-first UI) ==========
 
@@ -272,32 +308,147 @@ async function init() {
     // Auto-refresh every 5 minutes
     setInterval(refreshAllPrices, 300000);
 
-    // Populate quick-watch bar (non-blocking, best-effort)
+    // Build ticker DOM then fetch prices (non-blocking, best-effort)
+    _renderQWTickers();
     _updateQuickWatch();
 }
 
-// ── Quick-Watch: populate the 4 pinned market tickers ──
+// ── Quick-Watch: build ticker DOM from _QW_TICKERS ──
+function _renderQWTickers() {
+    const container = document.getElementById('qwTickers');
+    if (!container) return;
+    container.innerHTML = _QW_TICKERS.map(t => {
+        const domId = t.sym.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+        const typeTag = t.type === 'crypto' ? 'crypto' : t.type === 'index' ? 'idx' : '';
+        return `
+        <div class="qw-ticker" id="qw-item-${domId}">
+            <span class="qw-name">${t.label}${typeTag ? `<span class="qw-type-tag">${typeTag}</span>` : ''}</span>
+            <span class="qw-price" id="qw-${domId}">—</span>
+            <span class="qw-change" id="qw-${domId}-chg">—</span>
+        </div>`;
+    }).join('');
+}
+
+// ── Quick-Watch: fetch prices and update DOM ──
 async function _updateQuickWatch() {
     if (typeof fetchSingleTickerPrice !== 'function') return;
     for (const t of _QW_TICKERS) {
+        const domId = t.sym.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
         try {
             const result = await fetchSingleTickerPrice(t.sym, t.currency);
             if (!result || !result.price) continue;
-            const priceEl = document.getElementById(`qw-${t.id}`);
-            const chgEl   = document.getElementById(`qw-${t.id}-chg`);
+            const priceEl = document.getElementById(`qw-${domId}`);
+            const chgEl   = document.getElementById(`qw-${domId}-chg`);
+            const itemEl  = document.getElementById(`qw-item-${domId}`);
             if (!priceEl || !chgEl) continue;
 
-            const price = result.price;
-            const prev  = result.previousClose || price;
-            const chgPct = prev > 0 ? ((price - prev) / prev * 100) : 0;
-            const isPos  = chgPct >= 0;
+            const price   = result.price;
+            const prev    = result.previousClose || price;
+            const chgPct  = prev > 0 ? ((price - prev) / prev * 100) : 0;
+            const isPos   = chgPct >= 0;
 
-            const sym = t.currency === 'ILS' ? '₪' : '$';
-            priceEl.textContent = `${sym}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
-            chgEl.textContent   = `${isPos ? '+' : ''}${chgPct.toFixed(2)}%`;
-            chgEl.className     = `qw-change ${isPos ? 'positive' : 'negative'}`;
+            // Unit logic: indices show plain points, crypto/stocks show currency symbol
+            const numFmt = Number(price).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+            if (t.type === 'index') {
+                priceEl.textContent = numFmt;
+            } else {
+                const sym = t.currency === 'ILS' ? '₪' : '$';
+                priceEl.textContent = `${sym}${numFmt}`;
+            }
+
+            chgEl.textContent = `${isPos ? '+' : ''}${chgPct.toFixed(2)}%`;
+            chgEl.className   = `qw-change ${isPos ? 'positive' : 'negative'}`;
+
+            // Glow indicator on parent item
+            if (itemEl) {
+                itemEl.classList.remove('qw-ticker--positive', 'qw-ticker--negative');
+                itemEl.classList.add(isPos ? 'qw-ticker--positive' : 'qw-ticker--negative');
+            }
         } catch (_) { /* best-effort */ }
     }
+}
+
+// ========== TICKER CONFIGURATION MODAL ==========
+
+let _qwPendingSelection = [];
+
+function openTickerModal() {
+    _qwPendingSelection = _QW_TICKERS.map(t => ({ ...t }));
+    _renderModalAssetList('');
+    _renderModalSelectedList();
+    const modal = document.getElementById('qwConfigModal');
+    if (modal) {
+        modal.classList.add('active');
+        document.getElementById('qwSearchInput').value = '';
+        document.getElementById('qwSearchInput').focus();
+    }
+}
+
+function closeTickerModal() {
+    const modal = document.getElementById('qwConfigModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function _renderModalAssetList(query) {
+    const el = document.getElementById('qwPoolList');
+    if (!el) return;
+    const q = query.toLowerCase().trim();
+    const filtered = q
+        ? _QW_TICKER_POOL.filter(t => t.label.toLowerCase().includes(q) || t.sym.toLowerCase().includes(q))
+        : _QW_TICKER_POOL;
+
+    el.innerHTML = filtered.map(t => {
+        const isSelected = _qwPendingSelection.some(s => s.sym === t.sym);
+        const typeLabel = t.type === 'index' ? 'מדד' : t.type === 'crypto' ? 'קריפטו' : 'מניה';
+        return `<div class="qw-pool-item ${isSelected ? 'selected' : ''}" onclick="_toggleQWAsset('${t.sym}')">
+            <span class="qw-pool-label">${t.label}</span>
+            <span class="qw-pool-sym">${t.sym}</span>
+            <span class="qw-pool-type">${typeLabel}</span>
+            ${isSelected ? '<span class="qw-pool-check">✓</span>' : ''}
+        </div>`;
+    }).join('') || '<p style="color:var(--text-muted);padding:12px;font-size:12px;">לא נמצאו תוצאות</p>';
+}
+
+function _renderModalSelectedList() {
+    const el = document.getElementById('qwSelectedList');
+    if (!el) return;
+    el.innerHTML = _qwPendingSelection.map(t => `
+        <div class="qw-selected-item">
+            <span>${t.label}</span>
+            <button class="qw-remove-btn" onclick="_removeQWAsset('${t.sym}')">✕</button>
+        </div>`).join('');
+    const countEl = document.getElementById('qwSelectedCount');
+    if (countEl) countEl.textContent = `${_qwPendingSelection.length}/4`;
+}
+
+function _toggleQWAsset(sym) {
+    const existing = _qwPendingSelection.findIndex(t => t.sym === sym);
+    if (existing !== -1) {
+        _qwPendingSelection.splice(existing, 1);
+    } else {
+        if (_qwPendingSelection.length >= 4) return; // max 4
+        const poolItem = _QW_TICKER_POOL.find(t => t.sym === sym);
+        if (poolItem) _qwPendingSelection.push({ ...poolItem });
+    }
+    const query = document.getElementById('qwSearchInput')?.value || '';
+    _renderModalAssetList(query);
+    _renderModalSelectedList();
+}
+
+function _removeQWAsset(sym) {
+    _qwPendingSelection = _qwPendingSelection.filter(t => t.sym !== sym);
+    const query = document.getElementById('qwSearchInput')?.value || '';
+    _renderModalAssetList(query);
+    _renderModalSelectedList();
+}
+
+function saveTickerConfig() {
+    if (_qwPendingSelection.length === 0) return;
+    _QW_TICKERS = _qwPendingSelection.map(t => ({ ...t }));
+    try { localStorage.setItem(_QW_LS_KEY, JSON.stringify(_QW_TICKERS)); } catch (_) {}
+    _renderQWTickers();
+    _updateQuickWatch();
+    closeTickerModal();
 }
 
 // ========== PERSISTENT STATE (URL QUERY PARAMS) ==========
