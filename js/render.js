@@ -336,7 +336,7 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency segmented horizontal glass bar (USD / ILS fiat only) ──
+    // ── Currency neon glass boxes (USD / ILS fiat only — BTC excluded) ──
     const curUSD = exp.totalUSD;
     const curILS = exp.totalILS;
     const curFiatTotal = curUSD + curILS;
@@ -344,23 +344,14 @@ function renderExposureSection() {
     const ilsPct = hasFiltered ? (100 - usdPct) : 0;
 
     const currencyBoxesHTML = hasFiltered ? `
-        <div class="exp-cur-seg-wrap">
-            <div class="exp-cur-seg-labels">
-                <span class="exp-cur-seg-label exp-cur-seg-label--usd">
-                    <span class="exp-cur-seg-sym">$</span>
-                    <span class="exp-cur-seg-name">USD</span>
-                    <strong class="exp-cur-seg-pct">${usdPct.toFixed(1)}%</strong>
-                </span>
-                <span class="exp-cur-seg-label exp-cur-seg-label--ils">
-                    <span class="exp-cur-seg-sym">₪</span>
-                    <span class="exp-cur-seg-name">ILS</span>
-                    <strong class="exp-cur-seg-pct">${ilsPct.toFixed(1)}%</strong>
-                </span>
+        <div class="exp-cur-boxes">
+            <div class="exp-cur-box exp-cur-box--usd">
+                <span class="exp-cur-symbol">$</span>
+                <span class="exp-cur-lbl">USD <strong>${usdPct.toFixed(1)}%</strong></span>
             </div>
-            <div class="exp-cur-seg-bar">
-                <div class="exp-cur-seg-fill exp-cur-seg-fill--usd" style="width:${usdPct.toFixed(2)}%"></div>
-                <div class="exp-cur-seg-divider"></div>
-                <div class="exp-cur-seg-fill exp-cur-seg-fill--ils" style="width:${ilsPct.toFixed(2)}%"></div>
+            <div class="exp-cur-box exp-cur-box--ils">
+                <span class="exp-cur-symbol">₪</span>
+                <span class="exp-cur-lbl">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
             </div>
         </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
