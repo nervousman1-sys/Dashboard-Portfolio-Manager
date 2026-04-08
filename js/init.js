@@ -326,43 +326,85 @@ function _renderQWTickers() {
     }).join('');
 }
 
-// ── Quick-Watch: fetch prices and update DOM ──
-async function _updateQuickWatch() {
-    if (typeof fetchSingleTickerPrice !== 'function') return;
+// ── Quick-Watch price cache (localStorage) ──
+const _QW_PRICE_CACHE_KEY = 'finextium_qw_prices';
+
+function _saveQWPriceCache(prices) {
+    try { localStorage.setItem(_QW_PRICE_CACHE_KEY, JSON.stringify({ ts: Date.now(), prices })); } catch (_) {}
+}
+
+function _loadQWPriceCache() {
+    try {
+        const raw = localStorage.getItem(_QW_PRICE_CACHE_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        // Cache valid for 30 minutes
+        if (Date.now() - obj.ts > 30 * 60 * 1000) return null;
+        return obj.prices || null;
+    } catch (_) { return null; }
+}
+
+function _applyQWPrices(priceMap) {
     for (const t of _QW_TICKERS) {
         const domId = t.sym.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-        try {
-            const result = await fetchSingleTickerPrice(t.sym, t.currency);
-            if (!result || !result.price) continue;
-            const priceEl = document.getElementById(`qw-${domId}`);
-            const chgEl   = document.getElementById(`qw-${domId}-chg`);
-            const itemEl  = document.getElementById(`qw-item-${domId}`);
-            if (!priceEl || !chgEl) continue;
+        const data  = priceMap[t.sym];
+        if (!data || !data.price) continue;
+        const priceEl = document.getElementById(`qw-${domId}`);
+        const chgEl   = document.getElementById(`qw-${domId}-chg`);
+        const itemEl  = document.getElementById(`qw-item-${domId}`);
+        if (!priceEl || !chgEl) continue;
 
-            const price   = result.price;
-            const prev    = result.previousClose || price;
-            const chgPct  = prev > 0 ? ((price - prev) / prev * 100) : 0;
-            const isPos   = chgPct >= 0;
+        const price  = data.price;
+        const prev   = data.previousClose || price;
+        const chgPct = prev > 0 ? ((price - prev) / prev * 100) : 0;
+        const isPos  = chgPct >= 0;
 
-            // Unit logic: indices show plain points, crypto/stocks show currency symbol
-            const numFmt = Number(price).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-            if (t.type === 'index') {
-                priceEl.textContent = numFmt;
-            } else {
-                const sym = t.currency === 'ILS' ? '₪' : '$';
-                priceEl.textContent = `${sym}${numFmt}`;
-            }
-
-            chgEl.textContent = `${isPos ? '+' : ''}${chgPct.toFixed(2)}%`;
-            chgEl.className   = `qw-change ${isPos ? 'positive' : 'negative'}`;
-
-            // Glow indicator on parent item
-            if (itemEl) {
-                itemEl.classList.remove('qw-ticker--positive', 'qw-ticker--negative');
-                itemEl.classList.add(isPos ? 'qw-ticker--positive' : 'qw-ticker--negative');
-            }
-        } catch (_) { /* best-effort */ }
+        // All pool entries are type:'index' — always plain points, no currency symbol
+        priceEl.textContent = Number(price).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+        chgEl.textContent   = `${isPos ? '+' : ''}${chgPct.toFixed(2)}%`;
+        chgEl.className     = `qw-change ${isPos ? 'positive' : 'negative'}`;
+        if (itemEl) {
+            itemEl.classList.remove('qw-ticker--positive', 'qw-ticker--negative');
+            itemEl.classList.add(isPos ? 'qw-ticker--positive' : 'qw-ticker--negative');
+        }
     }
+}
+
+// ── Quick-Watch: fetch prices and update DOM ──
+// Strategy: render cached prices immediately, then fetch fresh data in parallel.
+// Each ticker retries up to 2 times with exponential backoff before giving up.
+async function _updateQuickWatch() {
+    if (typeof fetchSingleTickerPrice !== 'function') return;
+
+    // Step 1: apply cache immediately so UI is never blank
+    const cached = _loadQWPriceCache();
+    if (cached) _applyQWPrices(cached);
+
+    // Step 2: fetch fresh prices with per-ticker retry + 3s timeout
+    const freshPrices = cached ? { ...cached } : {};
+    const fetchWithRetry = async (t, attempt = 0) => {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            const result = await fetchSingleTickerPrice(t.sym, t.currency);
+            clearTimeout(timeout);
+            if (result && result.price) {
+                freshPrices[t.sym] = result;
+            }
+        } catch (_) {
+            if (attempt < 2) {
+                await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+                return fetchWithRetry(t, attempt + 1);
+            }
+            // All retries exhausted — cached value already shown, no further action
+        }
+    };
+
+    await Promise.allSettled(_QW_TICKERS.map(t => fetchWithRetry(t)));
+
+    // Step 3: apply fresh prices and persist to cache
+    _applyQWPrices(freshPrices);
+    _saveQWPriceCache(freshPrices);
 }
 
 // ========== TICKER CONFIGURATION MODAL ==========
