@@ -955,6 +955,97 @@ body {
 
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
+/* ══ Hero Above-Fold Wrapper ══ */
+/* Ensures the portfolio grid is always below the fold on ≥1080p screens */
+.hero-above-fold {
+    min-height: calc(100vh - 56px); /* subtract header height */
+    display: flex;
+    flex-direction: column;
+}
+
+/* FX-Adjusted Return Toggle */
+.fx-toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    padding: 4px 10px 4px 6px;
+    border-radius: 20px;
+    border: 1px solid rgba(0,229,255,0.12);
+    background: rgba(0,229,255,0.04);
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.fx-toggle-wrap:hover {
+    border-color: rgba(0,229,255,0.25);
+    background: rgba(0,229,255,0.08);
+}
+
+.fx-toggle-wrap input[type="checkbox"] {
+    display: none;
+}
+
+.fx-toggle-slider {
+    width: 30px;
+    height: 16px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.fx-toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: right 0.2s, background 0.2s;
+}
+
+.fx-toggle-wrap input:checked + .fx-toggle-slider {
+    background: rgba(0,229,255,0.3);
+}
+
+.fx-toggle-wrap input:checked + .fx-toggle-slider::after {
+    right: calc(100% - 14px);
+    background: var(--accent-blue);
+    box-shadow: 0 0 6px rgba(0,229,255,0.7);
+}
+
+.fx-toggle-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.fx-toggle-wrap input:checked ~ .fx-toggle-label {
+    color: var(--accent-blue);
+}
+
+/* FX badge shown on 'תשואה משוקללת' card when toggle is ON */
+.fx-badge {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--accent-blue);
+    background: rgba(0,229,255,0.12);
+    border: 1px solid rgba(0,229,255,0.25);
+    border-radius: 4px;
+    padding: 1px 4px;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
 /* ══ Filters + Search Row ══ */
 .filters-search-row {
     display: flex;
@@ -1574,127 +1665,62 @@ body {
     padding: 0 12px;
 }
 
-/* Row holding the two gauges side-by-side */
-.exp-gauge-row {
-    display: flex;
-    gap: 16px;
-    align-items: flex-end;
-    height: 180px;
-}
-
-/* Single gauge unit — tube + optional tick column */
-.exp-gauge {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    height: 100%;
-}
-
-/* Tick column: 5 labels from top (100) to bottom (0) */
-.gauge-ticks {
+/* ── Segmented horizontal currency bar ── */
+.exp-seg-bar-wrap {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    padding: 2px 0;
-}
-
-.gauge-tick-label {
-    font-size: 8px;
-    font-weight: 700;
-    color: var(--text-muted);
-    font-family: 'Courier New', monospace;
-    letter-spacing: 0.02em;
-    line-height: 1;
-}
-
-/* The tube container */
-.gauge-tube {
-    position: relative;
-    width: 46px;
-    height: 100%;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    overflow: hidden;
-    display: flex;
-    align-items: flex-end;
-    /* subtle grid texture */
-    background-image:
-        repeating-linear-gradient(
-            to bottom,
-            transparent 0px,
-            transparent 34px,
-            rgba(255,255,255,0.025) 35px
-        );
-}
-
-/* The fill — grows from bottom */
-.gauge-fill {
+    gap: 10px;
     width: 100%;
-    transition: height 0.8s cubic-bezier(0.34, 1.2, 0.64, 1);
-    border-radius: 0 0 9px 9px;
+    padding: 4px 0;
 }
 
-.gauge-fill--usd {
-    background: linear-gradient(to top, #00C2C2, rgba(0,194,194,0.4));
-    box-shadow: 0 0 18px rgba(0, 194, 194, 0.45), inset 0 0 10px rgba(0,194,194,0.15);
-}
-
-.gauge-fill--ils {
-    background: linear-gradient(to top, #007FFF, rgba(0,127,255,0.35));
-    box-shadow: 0 0 18px rgba(0, 127, 255, 0.45), inset 0 0 10px rgba(0,127,255,0.15);
-}
-
-/* Large glowing symbol centered inside the tube */
-.gauge-symbol {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 22px;
-    font-weight: 900;
-    pointer-events: none;
-    z-index: 2;
-}
-
-.exp-gauge--usd .gauge-symbol {
-    color: #00C2C2;
-    text-shadow: 0 0 14px rgba(0, 194, 194, 0.9), 0 0 4px rgba(0,194,194,0.6);
-}
-
-.exp-gauge--ils .gauge-symbol {
-    color: #007FFF;
-    text-shadow: 0 0 14px rgba(0, 127, 255, 0.9), 0 0 4px rgba(0,127,255,0.6);
-}
-
-/* Label row under the gauges */
-.exp-gauge-labels {
+.exp-seg-bar {
     display: flex;
-    gap: 16px;
-    justify-content: center;
+    height: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
 }
 
-.exp-gauge-lbl {
+.exp-seg-usd {
+    background: linear-gradient(90deg, #00C2C2, rgba(0,194,194,0.7));
+    box-shadow: 0 0 10px rgba(0,194,194,0.35);
+    transition: width 0.6s cubic-bezier(0.34, 1.1, 0.64, 1);
+    border-radius: 8px 0 0 8px;
+}
+
+.exp-seg-ils {
+    background: linear-gradient(90deg, rgba(0,127,255,0.7), #007FFF);
+    box-shadow: 0 0 10px rgba(0,127,255,0.35);
+    transition: width 0.6s cubic-bezier(0.34, 1.1, 0.64, 1);
+    border-radius: 0 8px 8px 0;
+}
+
+.exp-seg-labels {
+    display: flex;
+    justify-content: space-between;
+    direction: ltr;
+}
+
+.exp-seg-lbl {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    font-family: 'Courier New', monospace;
 }
 
-.exp-gauge-lbl strong {
-    font-size: 13px;
+.exp-seg-lbl strong {
     font-weight: 900;
-    font-family: 'Courier New', monospace;
+    font-size: 13px;
 }
 
-.exp-gauge-lbl--usd {
+.exp-seg-lbl--usd {
     color: #00C2C2;
     text-shadow: 0 0 8px rgba(0,194,194,0.5);
 }
 
-.exp-gauge-lbl--ils {
+.exp-seg-lbl--ils {
     color: #007FFF;
     text-shadow: 0 0 8px rgba(0,127,255,0.5);
 }

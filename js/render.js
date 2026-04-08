@@ -64,6 +64,44 @@ async function _loadRealizedPnlAsync() {
 // ── Currency toggle state ──
 let _displayCurrency = 'USD';
 
+// ── FX-adjusted return toggle ──
+// When ON: cost basis for USD holdings is adjusted by the USD/ILS rate change
+// since purchase date, reflecting true ILS-investor returns.
+let _fxAdjustedReturn = false;
+
+function setFxAdjusted(checked) {
+    _fxAdjustedReturn = !!checked;
+    renderSummaryBar();
+    renderClientCards();
+}
+
+// FX-adjusted return calculator — wraps calcPortfolioReturn.
+// When _fxAdjustedReturn is ON, USD cost basis is inflated by the ratio of
+// (current USD/ILS rate) / (purchase-time rate estimate) so that USD depreciation
+// against ILS reduces the apparent return for an ILS investor.
+function _calcReturn(client) {
+    if (!_fxAdjustedReturn) return calcPortfolioReturn(client);
+    const currentRate = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0)
+        ? _fxRates.USDILS
+        : (typeof FX_HARDCODED_USDILS !== 'undefined' ? FX_HARDCODED_USDILS : 3.65);
+    // Use a reference rate of 3.9 (approximate mid-2023 USDILS when most portfolios were built).
+    // The adjustment factor = currentRate / referenceRate; if USD weakened, factor < 1,
+    // making the USD cost basis cheaper in ILS terms — i.e., reducing effective ILS return.
+    const refRate = 3.9;
+    const fxFactor = currentRate / refRate;
+    const fxAdj = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const totalValue = client.holdings.reduce((s, h) => s + (h.value || 0) * fxAdj(h.currency), 0);
+    const totalCost  = client.holdings.reduce((s, h) => {
+        const base = (h.costBasis || 0) * fxAdj(h.currency);
+        // Apply FX adjustment only to USD-denominated holdings
+        const isUSD = (h.currency || 'USD').toUpperCase() === 'USD';
+        return s + (isUSD ? base * fxFactor : base);
+    }, 0);
+    const profit = totalValue - totalCost;
+    const returnPct = totalCost > 0 ? (profit / totalCost * 100) : 0;
+    return { totalValue, totalCost, profit, returnPct };
+}
+
 function setCurrency(currency, btn) {
     _displayCurrency = currency;
     document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
@@ -298,37 +336,23 @@ function renderExposureSection() {
         </div>`;
     }).join('') : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
-    // ── Currency vertical gauges (USD / ILS fiat only — BTC excluded) ──
+    // ── Currency segmented bar (USD / ILS fiat only — BTC excluded) ──
     const curUSD = exp.totalUSD;
     const curILS = exp.totalILS;
     const curFiatTotal = curUSD + curILS;
     const usdPct = hasFiltered ? (curFiatTotal > 0 ? (curUSD / curFiatTotal * 100) : 100) : 0;
     const ilsPct = hasFiltered ? (100 - usdPct) : 0;
 
-    // Scale ticks: 5 evenly spaced labels at 0, 25, 50, 75, 100%
-    const _ticks = [100, 75, 50, 25, 0].map(v =>
-        `<span class="gauge-tick-label">${v}</span>`).join('');
-
     const currencyBoxesHTML = hasFiltered ? `
-        <div class="exp-gauge-row">
-            <div class="exp-gauge exp-gauge--ils">
-                <div class="gauge-ticks">${_ticks}</div>
-                <div class="gauge-tube">
-                    <div class="gauge-fill gauge-fill--ils" style="height:${ilsPct.toFixed(1)}%"></div>
-                    <span class="gauge-symbol">₪</span>
-                </div>
+        <div class="exp-seg-bar-wrap">
+            <div class="exp-seg-bar">
+                <div class="exp-seg-usd" style="width:${usdPct.toFixed(1)}%"></div>
+                <div class="exp-seg-ils" style="width:${ilsPct.toFixed(1)}%"></div>
             </div>
-            <div class="exp-gauge exp-gauge--usd">
-                <div class="gauge-tube">
-                    <div class="gauge-fill gauge-fill--usd" style="height:${usdPct.toFixed(1)}%"></div>
-                    <span class="gauge-symbol">$</span>
-                </div>
-                <div class="gauge-ticks">${_ticks}</div>
+            <div class="exp-seg-labels">
+                <span class="exp-seg-lbl exp-seg-lbl--usd">$ USD <strong>${usdPct.toFixed(1)}%</strong></span>
+                <span class="exp-seg-lbl exp-seg-lbl--ils">₪ ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
             </div>
-        </div>
-        <div class="exp-gauge-labels">
-            <span class="exp-gauge-lbl exp-gauge-lbl--ils">ILS <strong>${ilsPct.toFixed(1)}%</strong></span>
-            <span class="exp-gauge-lbl exp-gauge-lbl--usd">USD <strong>${usdPct.toFixed(1)}%</strong></span>
         </div>` : `<div class="exp-empty-filter">אין נתונים לסינון זה</div>`;
 
     // ── Sector doughnut ──
@@ -544,9 +568,9 @@ function renderSummaryBar() {
     // NEVER fall back to full clients list — empty filter result must show $0
     const src = filtered;
     const totalAUM = src.reduce((sum, c) => sum + c.portfolioValue, 0);
-    // Unified FX-aware profit/return — uses calcPortfolioReturn (clients.js)
-    const allCostBasis = src.reduce((s, c) => s + calcPortfolioReturn(c).totalCost, 0);
-    const allCurrentValue = src.reduce((s, c) => s + calcPortfolioReturn(c).totalValue, 0);
+    // Use _calcReturn so FX-adjusted toggle is respected
+    const allCostBasis = src.reduce((s, c) => s + _calcReturn(c).totalCost, 0);
+    const allCurrentValue = src.reduce((s, c) => s + _calcReturn(c).totalValue, 0);
     const totalProfit = allCurrentValue - allCostBasis;
     const totalReturn = allCostBasis > 0 ? ((totalProfit) / allCostBasis * 100) : 0;
 
@@ -559,7 +583,7 @@ function renderSummaryBar() {
 
     // Weighted average return across portfolios (based on invested capital)
     const avgReturn = allCostBasis > 0 ? src.reduce((s, c) => {
-        const r = calcPortfolioReturn(c);
+        const r = _calcReturn(c);
         return s + r.returnPct * (r.totalCost / allCostBasis);
     }, 0) : 0;
     const avgClass = globalAllStale ? 'neutral' : (avgReturn >= 0 ? 'positive' : 'negative');
@@ -613,7 +637,7 @@ function renderSummaryBar() {
                 <span class="stat-sub">על נכסים מנוהלים</span>
             </div>
             <div class="stat-card">
-                <span class="stat-label">תשואה משוקללת</span>
+                <span class="stat-label">תשואה משוקללת${_fxAdjustedReturn ? ' <span class="fx-badge">FX</span>' : ''}</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
                 <span class="stat-sub">ממוצע משוקלל לפי הון</span>
             </div>
