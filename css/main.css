@@ -1523,7 +1523,7 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    padding: 16px 24px 20px;
+    padding: 16px 24px 52px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1662,79 +1662,98 @@ body {
     padding: 0 12px;
 }
 
-/* ── Neon glass currency boxes ── */
-.exp-cur-boxes {
+/* ── Segmented horizontal glass currency bar ── */
+.exp-cur-seg-wrap {
     display: flex;
-    flex-direction: row-reverse;
+    flex-direction: column;
     gap: 10px;
     width: 100%;
 }
 
-.exp-cur-box {
-    flex: 1;
+/* Labels row: USD on right (rtl-first), ILS on left */
+.exp-cur-seg-labels {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: var(--radius-md);
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(4px);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    align-items: flex-end;
+    width: 100%;
 }
 
-.exp-cur-box:hover {
-    transform: translateY(-2px);
+.exp-cur-seg-label {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
 }
 
-.exp-cur-box--usd {
-    border-color: rgba(0, 194, 194, 0.35);
-    box-shadow: 0 0 14px rgba(0, 194, 194, 0.15), inset 0 0 18px rgba(0, 194, 194, 0.04);
-}
-
-.exp-cur-box--usd:hover {
-    box-shadow: 0 0 22px rgba(0, 194, 194, 0.28), inset 0 0 22px rgba(0, 194, 194, 0.07);
-}
-
-.exp-cur-box--ils {
-    border-color: rgba(0, 127, 255, 0.35);
-    box-shadow: 0 0 14px rgba(0, 127, 255, 0.15), inset 0 0 18px rgba(0, 127, 255, 0.04);
-}
-
-.exp-cur-box--ils:hover {
-    box-shadow: 0 0 22px rgba(0, 127, 255, 0.28), inset 0 0 22px rgba(0, 127, 255, 0.07);
-}
-
-.exp-cur-symbol {
-    font-size: 26px;
+.exp-cur-seg-sym {
+    font-size: 18px;
     font-weight: 800;
     line-height: 1;
+}
+
+.exp-cur-seg-name {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.exp-cur-seg-pct {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.exp-cur-seg-label--usd .exp-cur-seg-sym,
+.exp-cur-seg-label--usd .exp-cur-seg-pct {
+    color: #00C2C2;
+    text-shadow: 0 0 10px rgba(0, 194, 194, 0.6);
+}
+
+.exp-cur-seg-label--ils .exp-cur-seg-sym,
+.exp-cur-seg-label--ils .exp-cur-seg-pct {
+    color: #007FFF;
+    text-shadow: 0 0 10px rgba(0, 127, 255, 0.6);
+}
+
+/* The bar itself */
+.exp-cur-seg-bar {
+    display: flex;
+    flex-direction: row-reverse;
+    height: 18px;
+    border-radius: 9px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    position: relative;
+}
+
+.exp-cur-seg-fill {
+    height: 100%;
+    transition: width 0.5s ease;
     flex-shrink: 0;
 }
 
-.exp-cur-box--usd .exp-cur-symbol {
-    color: #00C2C2;
-    text-shadow: 0 0 12px rgba(0, 194, 194, 0.75);
+.exp-cur-seg-fill--usd {
+    background: linear-gradient(90deg, rgba(0, 194, 194, 0.55) 0%, rgba(0, 229, 255, 0.75) 100%);
+    box-shadow: 0 0 12px rgba(0, 194, 194, 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    border-radius: 9px 0 0 9px;
 }
 
-.exp-cur-box--ils .exp-cur-symbol {
-    color: #007FFF;
-    text-shadow: 0 0 12px rgba(0, 127, 255, 0.75);
+.exp-cur-seg-fill--ils {
+    background: linear-gradient(90deg, rgba(0, 127, 255, 0.75) 0%, rgba(0, 85, 180, 0.55) 100%);
+    box-shadow: 0 0 12px rgba(0, 127, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    border-radius: 0 9px 9px 0;
 }
 
-.exp-cur-lbl {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.04em;
-}
-
-.exp-cur-lbl strong {
-    display: block;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-top: 1px;
+.exp-cur-seg-divider {
+    width: 2px;
+    height: 100%;
+    flex-shrink: 0;
+    background: #ffffff;
+    opacity: 0.9;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.8), 0 0 14px rgba(0, 229, 255, 0.5);
+    z-index: 2;
 }
 
 /* ── Right panel: Sector doughnut ── */
