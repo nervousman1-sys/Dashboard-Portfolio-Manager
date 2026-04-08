@@ -1,33 +1,30 @@
 // ========== INIT - Initialization & Event Handlers ==========
 
-// ── Quick-Watch: full searchable pool ──
+// ── Quick-Watch: searchable pool — analytical indices only, no crypto ──
 const _QW_TICKER_POOL = [
-    { sym: 'SPY',      label: 'S&P 500 ETF',    type: 'index',  currency: 'USD' },
-    { sym: 'QQQ',      label: 'NASDAQ 100 ETF',  type: 'index',  currency: 'USD' },
-    { sym: 'DIA',      label: 'Dow Jones ETF',   type: 'index',  currency: 'USD' },
-    { sym: 'IWM',      label: 'Russell 2000',    type: 'index',  currency: 'USD' },
-    { sym: 'TA35.TA',  label: 'TA-35',           type: 'index',  currency: 'ILS' },
-    { sym: 'BTC-USD',  label: 'Bitcoin (BTC)',   type: 'crypto', currency: 'USD' },
-    { sym: 'ETH-USD',  label: 'Ethereum (ETH)',  type: 'crypto', currency: 'USD' },
-    { sym: 'SOL-USD',  label: 'Solana (SOL)',    type: 'crypto', currency: 'USD' },
-    { sym: 'AAPL',     label: 'Apple',           type: 'stock',  currency: 'USD' },
-    { sym: 'MSFT',     label: 'Microsoft',       type: 'stock',  currency: 'USD' },
-    { sym: 'NVDA',     label: 'NVIDIA',          type: 'stock',  currency: 'USD' },
-    { sym: 'TSLA',     label: 'Tesla',           type: 'stock',  currency: 'USD' },
-    { sym: 'AMZN',     label: 'Amazon',          type: 'stock',  currency: 'USD' },
-    { sym: 'GOOGL',    label: 'Alphabet',        type: 'stock',  currency: 'USD' },
-    { sym: 'META',     label: 'Meta',            type: 'stock',  currency: 'USD' },
-    { sym: 'GLD',      label: 'Gold ETF',        type: 'stock',  currency: 'USD' },
+    { sym: 'SPY',      label: 'S&P 500',      type: 'index', currency: 'USD' },
+    { sym: 'QQQ',      label: 'NASDAQ 100',   type: 'index', currency: 'USD' },
+    { sym: 'DIA',      label: 'Dow Jones',    type: 'index', currency: 'USD' },
+    { sym: 'IWM',      label: 'Russell 2000', type: 'index', currency: 'USD' },
+    { sym: 'EWG',      label: 'DAX (Germany)', type: 'index', currency: 'USD' },
+    { sym: 'EWQ',      label: 'CAC 40 (France)', type: 'index', currency: 'USD' },
+    { sym: 'EWJ',      label: 'Nikkei (Japan)', type: 'index', currency: 'USD' },
+    { sym: 'FXI',      label: 'China Large-Cap', type: 'index', currency: 'USD' },
+    { sym: 'TA35.TA',  label: 'TA-35',        type: 'index', currency: 'ILS' },
+    { sym: 'GLD',      label: 'Gold',         type: 'index', currency: 'USD' },
+    { sym: 'USO',      label: 'Oil (WTI)',    type: 'index', currency: 'USD' },
+    { sym: 'TLT',      label: 'US Bonds 20Y', type: 'index', currency: 'USD' },
 ];
 
 const _QW_LS_KEY = 'finextium_qw_tickers';
 
-// Default 4 tickers — overridden by localStorage if user has saved a config
+// Default 5 tickers: the core analytical indices
 const _QW_DEFAULT = [
-    { sym: 'SPY',     label: 'S&P 500',    type: 'index',  currency: 'USD' },
-    { sym: 'QQQ',     label: 'NASDAQ 100', type: 'index',  currency: 'USD' },
-    { sym: 'BTC-USD', label: 'BTC',        type: 'crypto', currency: 'USD' },
-    { sym: 'TA35.TA', label: 'TA-35',      type: 'index',  currency: 'ILS' }
+    { sym: 'SPY',     label: 'S&P 500',    type: 'index', currency: 'USD' },
+    { sym: 'QQQ',     label: 'NASDAQ 100', type: 'index', currency: 'USD' },
+    { sym: 'EWG',     label: 'DAX',        type: 'index', currency: 'USD' },
+    { sym: 'EWQ',     label: 'CAC 40',     type: 'index', currency: 'USD' },
+    { sym: 'TA35.TA', label: 'TA-35',      type: 'index', currency: 'ILS' }
 ];
 
 function _loadQWTickers() {
@@ -35,7 +32,7 @@ function _loadQWTickers() {
         const saved = localStorage.getItem(_QW_LS_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 4) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 5) return parsed;
         }
     } catch (_) {}
     return _QW_DEFAULT.map(t => ({ ...t }));
@@ -418,7 +415,7 @@ function _renderModalSelectedList() {
             <button class="qw-remove-btn" onclick="_removeQWAsset('${t.sym}')">✕</button>
         </div>`).join('');
     const countEl = document.getElementById('qwSelectedCount');
-    if (countEl) countEl.textContent = `${_qwPendingSelection.length}/4`;
+    if (countEl) countEl.textContent = `${_qwPendingSelection.length}/5`;
 }
 
 function _toggleQWAsset(sym) {
@@ -426,7 +423,7 @@ function _toggleQWAsset(sym) {
     if (existing !== -1) {
         _qwPendingSelection.splice(existing, 1);
     } else {
-        if (_qwPendingSelection.length >= 4) return; // max 4
+        if (_qwPendingSelection.length >= 5) return; // max 5
         const poolItem = _QW_TICKER_POOL.find(t => t.sym === sym);
         if (poolItem) _qwPendingSelection.push({ ...poolItem });
     }
