@@ -956,15 +956,15 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   min-height = full viewport minus the sticky header (~56px).
-   flex-direction:column + margin-top:auto on .filters-search-row
-   pushes the filter bar + risk summary to the visual fold boundary.
-   overflow-x:clip only — vertical must stay visible so flex children
-   can grow freely and margin-top:auto has room to work. */
+   height = full viewport minus the sticky header (~56px).
+   justify-content:space-between distributes all child sections
+   (ticker, summary, exposure, filters, risk) evenly so they fill
+   the screen without any single dead-space gap. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - 56px);
+    justify-content: space-between;
     overflow-x: clip;
 }
 
@@ -1060,7 +1060,6 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
-    margin-top: auto; /* pushes this + risk-mini-summary to fold bottom */
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
