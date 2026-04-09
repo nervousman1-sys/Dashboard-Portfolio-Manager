@@ -969,6 +969,13 @@ body {
     box-sizing: border-box;
 }
 
+/* ══ Top Fold Spacer ══
+   Fixed-basis spacer above .exposure-section — pushes charts toward fold center
+   without growing. Increase flex-basis to push charts lower. */
+.top-fold-spacer {
+    flex: 0 1 30px;
+}
+
 /* ══ Flexible Spacer ══
    Grows to fill any leftover vertical space between exposure section
    and bottom-fold-group. min-height guarantees a small gap even when
