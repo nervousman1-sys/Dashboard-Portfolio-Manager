@@ -320,7 +320,7 @@ function renderExposureSection() {
         { label: 'מניות',  value: exp.totalStocks,  color: 'var(--accent-blue)' },
         { label: 'אג"ח',   value: exp.totalBonds,   color: 'var(--accent-purple)' },
         { label: 'מדדים',  value: exp.totalIndices, color: 'var(--accent-green)' },
-        { label: 'מזומן',  value: cashValue,         color: 'var(--accent-orange)' }
+        { label: 'מזומן',  value: cashValue,         color: '#f5f7ff' }
     ];
 
     const assetRowsHTML = hasFiltered ? assetRows.map(r => {
@@ -330,7 +330,7 @@ function renderExposureSection() {
             <span class="exp-asset-dot" style="background:${r.color};box-shadow:0 0 6px ${r.color}"></span>
             <span class="exp-asset-label">${r.label}</span>
             <div class="exp-asset-bar-track">
-                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color}"></div>
+                <div class="exp-asset-bar-fill" style="width:${pct.toFixed(1)}%;background:${r.color};color:${r.color}"></div>
             </div>
             <span class="exp-asset-pct" style="color:${r.color}">${pct.toFixed(1)}%</span>
         </div>`;
