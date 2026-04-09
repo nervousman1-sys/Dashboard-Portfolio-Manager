@@ -1545,13 +1545,13 @@ body {
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
     padding: 16px 24px 10px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .exposure-wrapper {
     padding: 20px 24px;
-    min-height: 390px; /* fills vertical space, eliminates empty hole above filter row */
+    min-height: 350px; /* reduced by 40px — prevents bottom indicators from being cut off */
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
