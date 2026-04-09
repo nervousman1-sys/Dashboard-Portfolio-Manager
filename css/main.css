@@ -983,7 +983,8 @@ body {
    the viewport is exactly the size of the content. */
 .fold-spacer {
     flex: 1 1 auto;
-    min-height: 20px;
+    min-height: 12px;
+    max-height: 40px;
 }
 
 /* ══ Bottom Fold Group ══
