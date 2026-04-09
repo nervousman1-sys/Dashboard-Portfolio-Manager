@@ -961,8 +961,8 @@ body {
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding-top: 10px;
+    justify-content: space-evenly;
+    padding-top: 0;
     padding-bottom: 0;
     height: calc(100vh - 60px);
     overflow-x: clip;
