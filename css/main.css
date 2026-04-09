@@ -636,6 +636,7 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     position: relative;
+    margin-bottom: 30px;
 }
 
 /* Subtle left-edge live-data indicator */
@@ -962,8 +963,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 20px;
-    padding-top: 25px;
+    padding-top: 80px;
     height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
@@ -973,7 +973,7 @@ body {
    Fixed-basis spacer above .exposure-section — pushes charts toward fold center
    without growing. Increase flex-basis to push charts lower. */
 .top-fold-spacer {
-    flex: 0 1 80px;
+    flex: 0 1 10px;
 }
 
 /* ══ Flexible Spacer ══
@@ -1139,6 +1139,7 @@ body {
 /* ════ Summary Bar — 6 Glassmorphism Stat Cards ════ */
 .summary-bar {
     padding: 12px 24px 14px;
+    margin-bottom: 15px;
     background: rgba(4, 4, 4, 0.65);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
