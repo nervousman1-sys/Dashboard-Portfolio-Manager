@@ -973,7 +973,7 @@ body {
    Fixed-basis spacer above .exposure-section — pushes charts toward fold center
    without growing. Increase flex-basis to push charts lower. */
 .top-fold-spacer {
-    flex: 0 1 10px;
+    flex: 0 1 20px;
 }
 
 /* ══ Flexible Spacer ══
@@ -982,7 +982,7 @@ body {
    the viewport is exactly the size of the content. */
 .fold-spacer {
     flex: 1 1 auto;
-    min-height: 15px;
+    min-height: 10px;
 }
 
 /* ══ Bottom Fold Group ══
@@ -992,6 +992,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    margin-bottom: 30px;
 }
 
 /* FX-Adjusted Return Toggle */
