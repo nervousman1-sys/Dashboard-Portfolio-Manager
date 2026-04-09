@@ -955,18 +955,18 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   flex-start keeps top sections (ticker → summary → exposure) tightly grouped.
-   gap:15px provides uniform breathing room between each child block.
-   padding-top:20px separates the first section from the sticky header.
-   min-height:calc(100vh - 60px) = viewport minus header, fold ends precisely here. */
+   height (not min-height) locks the fold to exactly one viewport minus the header.
+   space-evenly distributes equal breathing room above/between/below the top sections.
+   .exposure-section has flex:1 so it absorbs the bulk of the vertical space,
+   matching the screenshot where charts dominate the fold. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    gap: 15px;
-    padding-top: 20px;
-    min-height: calc(100vh - 60px);
+    justify-content: space-evenly;
+    padding: 20px 0;
+    height: calc(100vh - 60px);
     overflow-x: clip;
+    box-sizing: border-box;
 }
 
 /* FX-Adjusted Return Toggle */
@@ -1061,8 +1061,6 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
-    margin-top: 15px;
-    margin-bottom: 5px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
@@ -1223,6 +1221,7 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     width: 100%;
+    margin-top: auto; /* anchors risk row to fold bottom when space-evenly leaves room */
 }
 
 .risk-inline-item {
@@ -1533,8 +1532,10 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
+    flex: 1;          /* grows to fill remaining fold height — makes charts dominant */
     padding: 16px 24px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden; /* prevent chart canvas overflow within the flex child */
 }
 
 .exposure-wrapper {
