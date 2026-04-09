@@ -54,12 +54,30 @@ function toggleInlineFilters(forceState) {
 
     if (shouldOpen) {
         container.classList.add('open');
+        document.body.classList.add('filter-modal-open');
         if (toggle) toggle.classList.add('is-open');
         if (label) label.textContent = 'סגור סינונים';
+        // Bind backdrop click once — closes modal when clicking outside
+        if (!container._backdropHandlerBound) {
+            container._backdropHandler = function(e) {
+                const modal = document.getElementById('additionalFiltersInline');
+                if (!modal || !modal.classList.contains('open')) return;
+                if (!modal.contains(e.target) && !e.target.closest('#filterDrawerToggle')) {
+                    toggleInlineFilters(false);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', container._backdropHandler), 0);
+            container._backdropHandlerBound = true;
+        }
     } else {
         container.classList.remove('open');
+        document.body.classList.remove('filter-modal-open');
         if (toggle) toggle.classList.remove('is-open');
         if (label) label.textContent = 'סינונים נוספים';
+        if (container._backdropHandlerBound && container._backdropHandler) {
+            document.removeEventListener('click', container._backdropHandler);
+            container._backdropHandlerBound = false;
+        }
     }
 }
 
