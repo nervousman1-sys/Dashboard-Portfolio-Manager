@@ -955,18 +955,27 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   flex-start keeps top sections (ticker → summary → exposure) tightly grouped.
-   gap:15px provides uniform breathing room between each child block.
-   padding-top:20px separates the first section from the sticky header.
-   min-height:calc(100vh - 60px) = viewport minus header, fold ends precisely here. */
+   space-between: equal gap above ticker, between ticker/summary, summary/charts,
+   charts/bottom-fold-group. padding-top:25px separates first section from header.
+   height (not min-height) locks the fold to exactly one viewport. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    gap: 15px;
-    padding-top: 20px;
-    min-height: calc(100vh - 60px);
+    justify-content: space-between;
+    padding-top: 25px;
+    height: calc(100vh - 60px);
     overflow-x: clip;
+    box-sizing: border-box;
+}
+
+/* ══ Bottom Fold Group ══
+   Wraps filter row + risk summary as one sticky unit at the fold bottom.
+   margin-top:auto pushes the group down regardless of how space-between distributes above. */
+.bottom-fold-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
 }
 
 /* FX-Adjusted Return Toggle */
@@ -1061,8 +1070,6 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
-    margin-top: 15px;
-    margin-bottom: 5px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
@@ -1539,6 +1546,7 @@ body {
 
 .exposure-wrapper {
     padding: 20px 24px;
+    min-height: 300px; /* ensures charts render with substance, not compressed */
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
