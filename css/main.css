@@ -962,7 +962,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding-top: 40px;
+    padding-top: 90px;
     padding-bottom: 0;
     height: calc(100vh - 60px);
     overflow-x: clip;
