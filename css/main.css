@@ -703,7 +703,7 @@ body {
 .qw-name {
     font-size: 13px;
     font-weight: 700;
-    color: var(--text-muted);
+    color: rgba(245, 245, 245, 0.95);
     letter-spacing: 0.05em;
 }
 
@@ -962,7 +962,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding-top: 50px;
+    padding-top: 20px;
     padding-bottom: 0;
     height: calc(100vh - 76px);
     overflow-x: clip;
