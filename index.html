@@ -281,7 +281,6 @@
             <div class="hero-above-fold">
 
             <!-- ═══ Quick-Watch Ticker Bar ═══ -->
-            <div class="fold-section-label">נכסים שנבחרו לצפייה במסך הבית</div>
             <div class="quick-watch-bar" id="quickWatchBar">
                 <!-- Ticker items built dynamically by _renderQWTickers() in init.js -->
                 <div class="qw-tickers" id="qwTickers"></div>
@@ -327,11 +326,13 @@
             <div class="macro-page" id="macroPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
-            <div class="fold-section-label">נתוני תיקי השקעות</div>
             <div class="summary-bar" id="summaryBar"></div>
 
             <!-- ═══ Exposure Section ═══ -->
             <div class="exposure-section" id="exposureSection"></div>
+
+            <!-- ═══ Flexible spacer — pushes bottom-fold-group to end of fold without hardcoded margins ═══ -->
+            <div class="fold-spacer"></div>
 
             <!-- ═══ Bottom Fold Group — filters + risk anchored together ═══ -->
             <div class="bottom-fold-group">
