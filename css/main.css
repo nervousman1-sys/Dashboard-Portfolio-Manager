@@ -636,6 +636,7 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     position: relative;
+    margin-bottom: 40px;
 }
 
 /* Subtle left-edge live-data indicator */
@@ -955,16 +956,15 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   space-between: proportional gaps between ticker / summary / charts / bottom-group.
-   padding-top:40px gives "air" between the sticky header and first section.
-   gap:30px is additive breathing room between each flex child on top of space-between.
+   flex-start: sections stack from top, per-section margin-bottom controls spacing.
+   padding-top:60px gives generous air between sticky header and first section.
+   bottom-fold-group uses margin-top:auto to pin to fold bottom.
    height locks fold to exactly one viewport minus header. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 35px;
-    padding-top: 50px;
+    justify-content: flex-start;
+    padding-top: 60px;
     height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
@@ -1069,6 +1069,7 @@ body {
     align-items: center;
     gap: 12px;
     padding: 12px 24px;
+    margin-top: 10px;
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
@@ -1125,6 +1126,7 @@ body {
 /* ════ Summary Bar — 6 Glassmorphism Stat Cards ════ */
 .summary-bar {
     padding: 12px 24px 14px;
+    margin-bottom: 40px;
     background: rgba(4, 4, 4, 0.65);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -1543,6 +1545,7 @@ body {
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
     padding: 16px 24px 10px;
+    margin-bottom: 15px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
