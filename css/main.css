@@ -4000,9 +4000,9 @@ body.filter-modal-open::after {
     }
 
     .header {
-        padding: 6px 12px;
-        gap: 6px;
-        flex-wrap: wrap;
+        padding: 10px 14px;
+        gap: 8px;
+        flex-wrap: nowrap;
     }
 
     /* On mobile: show user area + simplified center, hide clock/sentiment */
@@ -4035,28 +4035,76 @@ body.filter-modal-open::after {
         display: none;
     }
 
-    /* Quick-watch: horizontal scroll on mobile */
+    /* ═══ Quick-watch on mobile: ALL tickers fit in viewport, no horizontal scroll ═══ */
     .quick-watch-bar {
-        padding: 6px 12px;
-        overflow-x: auto;
+        padding: 10px 8px;
+        overflow: hidden;
+        gap: 4px;
+    }
+
+    /* Hide "last update" text on mobile — no room */
+    .qw-last-update {
+        display: none;
+    }
+
+    /* Settings gear — tiny on mobile */
+    .qw-settings-btn {
+        width: 28px;
+        height: 28px;
+        flex-shrink: 0;
+    }
+
+    .qw-settings-btn svg {
+        width: 14px;
+        height: 14px;
     }
 
     .qw-tickers {
-        gap: 0;
-        min-width: max-content;
+        gap: 2px;
+        min-width: 0;
+        width: 100%;
+        flex: 1 1 auto;
+        justify-content: space-between;
     }
 
     .qw-ticker {
-        gap: 6px;
-        padding: 4px 10px;
+        flex: 1 1 0;
+        min-width: 0;
+        gap: 3px;
+        padding: 4px 4px;
+        border-left-width: 1px;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .qw-ticker .qw-name {
+        font-size: 8px;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
     }
 
     .qw-price {
-        font-size: 13px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .qw-change {
+        font-size: 8px;
+        padding: 1px 3px;
+        white-space: nowrap;
+    }
+
+    /* Hide the small type-tag badge (IDX / STK / CRY) on mobile */
+    .qw-type-tag {
+        display: none;
     }
 
     .summary-bar {
-        padding: 12px 16px;
+        padding: 10px 12px;
+        margin-bottom: 0;
     }
 
     .summary-main {
@@ -4065,12 +4113,18 @@ body.filter-modal-open::after {
     }
 
     .stat-card {
-        padding: 10px 8px;
-        min-height: 72px;
+        padding: 12px 6px;
+        min-height: 82px;
+        border-radius: 12px;
+        gap: 4px;
     }
 
     .stat-value {
-        font-size: 15px;
+        font-size: 16px;
+    }
+
+    .stat-sub {
+        font-size: 9px;
     }
 
     .stat-icon {
@@ -4078,25 +4132,102 @@ body.filter-modal-open::after {
     }
 
     .stat-label {
-        font-size: 8px;
+        font-size: 9px;
+        letter-spacing: 0.08em;
     }
 
-    /* Filters row stacks on mobile */
+    /* ═══ Mobile hero fold: natural stacking, no space-between ═══ */
+    .hero-above-fold {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        height: auto;
+        min-height: auto;
+        padding-top: 0;
+        padding-bottom: 0;
+        gap: 12px;
+    }
+
+    /* ═══ Mobile: hide exposure + risk strip from first fold ═══
+       Match reference phone layout where these are not in the above-fold. */
+    .hero-above-fold .exposure-section,
+    .hero-above-fold .risk-mini-summary,
+    .hero-above-fold .top-fold-spacer,
+    .hero-above-fold .fold-spacer {
+        display: none;
+    }
+
+    .bottom-fold-group {
+        gap: 10px;
+        margin-bottom: 0;
+    }
+
+    .quick-watch-bar {
+        margin-bottom: 0;
+    }
+
+    /* ═══ Mobile filters: stacked column matching reference ═══ */
     .filters-search-row {
         flex-direction: column;
-        padding: 8px 16px;
+        padding: 8px 14px;
+        gap: 10px;
+        background: transparent;
+        border: none;
+    }
+
+    /* Hide FX toggle on mobile — not in reference */
+    .filters-search-row .fx-toggle-wrap {
+        display: none;
+    }
+
+    /* Reorder: filters first, then search (matches reference) */
+    .filters-search-row .filters {
+        order: 1;
+        width: 100%;
+        overflow: visible;
+        flex-wrap: wrap;
+        justify-content: center;
         gap: 8px;
     }
 
     .filters-search-row .header-search-wrap {
+        order: 2;
         max-width: none;
         width: 100%;
+        flex: none;
     }
 
-    .filters {
+    /* "סינונים נוספים" toggle — full-width row by itself */
+    .filters .filter-drawer-toggle {
         width: 100%;
-        overflow-x: auto;
+        justify-content: center;
+        padding: 10px 14px;
+        font-size: 12px;
+        border-radius: 24px;
+    }
+
+    /* Risk filter buttons — single centered row */
+    .filters .filter-group {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        gap: 6px;
         flex-wrap: nowrap;
+    }
+
+    .filters .filter-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 8px 6px;
+        font-size: 11px;
+        text-align: center;
+    }
+
+    /* Search bar — full-width */
+    .filters-search-row .header-search {
+        font-size: 13px;
+        padding: 12px 16px;
+        padding-right: 42px;
     }
 
     /* Risk bar compact on mobile */
