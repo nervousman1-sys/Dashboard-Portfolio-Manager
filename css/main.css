@@ -963,8 +963,8 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 30px;
-    padding-top: 40px;
+    gap: 35px;
+    padding-top: 50px;
     height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
@@ -1548,7 +1548,7 @@ body {
 
 .exposure-wrapper {
     padding: 20px 24px;
-    min-height: 345px; /* +45px taller — fills vertical space, pushes fold bottom content down */
+    min-height: 390px; /* fills vertical space, eliminates empty hole above filter row */
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
