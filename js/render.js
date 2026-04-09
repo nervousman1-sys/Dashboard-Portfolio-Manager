@@ -320,7 +320,7 @@ function renderExposureSection() {
         { label: 'מניות',  value: exp.totalStocks,  color: 'var(--accent-blue)' },
         { label: 'אג"ח',   value: exp.totalBonds,   color: 'var(--accent-purple)' },
         { label: 'מדדים',  value: exp.totalIndices, color: 'var(--accent-green)' },
-        { label: 'מזומן',  value: cashValue,         color: '#ff6fb5' }
+        { label: 'מזומן',  value: cashValue,         color: '#ffd6ea' }
     ];
 
     const assetRowsHTML = hasFiltered ? assetRows.map(r => {

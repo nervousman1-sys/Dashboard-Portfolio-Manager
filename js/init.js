@@ -451,17 +451,18 @@ function closeTickerModal() {
     if (modal) modal.classList.remove('active');
 }
 
-function _renderModalAssetList(query) {
+// Runtime cache of dynamic search results — keyed by sym so _toggleQWAsset
+// can find full metadata for items that aren't in the static pool.
+let _qwDynamicResults = [];
+let _qwSearchTimeout = null;
+let _qwLastQuery = '';
+
+function _renderQWPool(items) {
     const el = document.getElementById('qwPoolList');
     if (!el) return;
-    const q = query.toLowerCase().trim();
-    const filtered = q
-        ? _QW_TICKER_POOL.filter(t => t.label.toLowerCase().includes(q) || t.sym.toLowerCase().includes(q))
-        : _QW_TICKER_POOL;
-
-    el.innerHTML = filtered.map(t => {
+    el.innerHTML = items.map(t => {
         const isSelected = _qwPendingSelection.some(s => s.sym === t.sym);
-        const typeLabel = t.type === 'index' ? 'מדד' : t.type === 'crypto' ? 'קריפטו' : 'מניה';
+        const typeLabel = t.type === 'index' ? 'מדד' : t.type === 'crypto' ? 'קריפטו' : t.type === 'bond' ? 'אג"ח' : 'מניה';
         return `<div class="qw-pool-item ${isSelected ? 'selected' : ''}" onclick="_toggleQWAsset('${t.sym}')">
             <span class="qw-pool-label">${t.label}</span>
             <span class="qw-pool-sym">${t.sym}</span>
@@ -469,6 +470,91 @@ function _renderModalAssetList(query) {
             ${isSelected ? '<span class="qw-pool-check">✓</span>' : ''}
         </div>`;
     }).join('') || '<p style="color:var(--text-muted);padding:12px;font-size:12px;">לא נמצאו תוצאות</p>';
+}
+
+function _mapApiToPool(item) {
+    const isIsraeli = item.exchange === 'TASE' || item.currency === 'ILS';
+    const displaySym = isIsraeli && !item.symbol.endsWith('.TA') ? item.symbol + '.TA' : item.symbol;
+    const t = (item.type || '').toLowerCase();
+    let poolType = 'stock';
+    if (t.includes('etf') || t.includes('mutual') || t.includes('index')) poolType = 'index';
+    return {
+        sym: displaySym,
+        label: item.name || item.symbol,
+        type: poolType,
+        currency: isIsraeli ? 'ILS' : (item.currency || 'USD')
+    };
+}
+
+function _mapHebrewToPool(r) {
+    return {
+        sym: r.symbol,
+        label: r.hebrewName || r.name || r.symbol,
+        type: 'stock',
+        currency: (r.currency === 'ILA' ? 'ILS' : r.currency) || 'USD'
+    };
+}
+
+function _mapBondToPool(r) {
+    return {
+        sym: r.symbol,
+        label: r.hebrewName || r.name || r.symbol,
+        type: 'bond',
+        currency: 'ILS'
+    };
+}
+
+async function _renderModalAssetList(query) {
+    const el = document.getElementById('qwPoolList');
+    if (!el) return;
+    const q = (query || '').toLowerCase().trim();
+    _qwLastQuery = q;
+
+    if (!q) {
+        _qwDynamicResults = [];
+        _renderQWPool(_QW_TICKER_POOL);
+        return;
+    }
+
+    // Static pool matches (shown instantly)
+    const staticMatches = _QW_TICKER_POOL.filter(t =>
+        t.label.toLowerCase().includes(q) || t.sym.toLowerCase().includes(q)
+    );
+
+    // Local Hebrew stocks + bonds (shown instantly)
+    const localStocks = (typeof searchHebrewNames === 'function') ? searchHebrewNames(query) : [];
+    const localBonds  = (typeof searchLocalBonds === 'function') ? searchLocalBonds(query) : [];
+    const localPool   = [
+        ...staticMatches,
+        ...localStocks.map(_mapHebrewToPool),
+        ...localBonds.map(_mapBondToPool)
+    ];
+    _qwDynamicResults = _dedupeBySym(localPool);
+    _renderQWPool(_qwDynamicResults);
+
+    // Debounced API call — merges results as they arrive
+    clearTimeout(_qwSearchTimeout);
+    _qwSearchTimeout = setTimeout(async () => {
+        if (_qwLastQuery !== q) return; // query changed — abort
+        try {
+            const apiResults = await searchTwelveDataSymbols(query);
+            if (_qwLastQuery !== q) return;
+            const apiPool = apiResults.map(_mapApiToPool);
+            _qwDynamicResults = _dedupeBySym([..._qwDynamicResults, ...apiPool]);
+            _renderQWPool(_qwDynamicResults);
+        } catch (_) { /* ignore */ }
+    }, 280);
+}
+
+function _dedupeBySym(list) {
+    const seen = new Set();
+    const out = [];
+    for (const item of list) {
+        if (seen.has(item.sym)) continue;
+        seen.add(item.sym);
+        out.push(item);
+    }
+    return out;
 }
 
 function _renderModalSelectedList() {
@@ -489,7 +575,9 @@ function _toggleQWAsset(sym) {
         _qwPendingSelection.splice(existing, 1);
     } else {
         if (_qwPendingSelection.length >= 5) return; // max 5
-        const poolItem = _QW_TICKER_POOL.find(t => t.sym === sym);
+        const poolItem =
+            _QW_TICKER_POOL.find(t => t.sym === sym) ||
+            _qwDynamicResults.find(t => t.sym === sym);
         if (poolItem) _qwPendingSelection.push({ ...poolItem });
     }
     const query = document.getElementById('qwSearchInput')?.value || '';
