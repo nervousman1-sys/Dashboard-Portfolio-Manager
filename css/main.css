@@ -955,10 +955,14 @@ body {
 
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
-/* ══ Hero Above-Fold Wrapper ══ */
+/* ══ Hero Above-Fold Wrapper ══
+   min-height pushes the filter row + risk summary to the fold bottom on 1080p.
+   150px = ~56px sticky header + ~94px for filter-search-row + risk-mini-summary.
+   On shorter viewports the natural content height takes over (min-height ignored). */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
+    min-height: calc(100vh - 150px);
 }
 
 /* FX-Adjusted Return Toggle */
@@ -1523,7 +1527,7 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    padding: 16px 24px 52px;
+    padding: 16px 24px 20px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -4981,7 +4985,7 @@ body {
     flex: 1;
     min-width: 0;                  /* prevent flex overflow */
     min-height: 100vh;
-    overflow-x: hidden;
+    overflow-x: clip;              /* clip (not hidden) — avoids breaking position:sticky on .header */
     transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
