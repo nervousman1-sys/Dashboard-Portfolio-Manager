@@ -956,15 +956,15 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   height = full viewport minus the sticky header (~56px).
-   justify-content:space-between distributes all child sections
-   (ticker, summary, exposure, filters, risk) evenly so they fill
-   the screen without any single dead-space gap. */
+   Top content (ticker, summary, exposure) groups tightly via flex-start + gap.
+   .filters-search-row uses margin-top:clamp() to create a flexible but bounded
+   gap — never a dead hole, never flush — anchoring filters+risk to the fold bottom. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
+    gap: 0;
     min-height: calc(100vh - 56px);
-    justify-content: space-between;
     overflow-x: clip;
 }
 
@@ -1060,6 +1060,9 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
+    /* clamp: always at least 20px gap above, scales with viewport, caps at 60px —
+       never a dead hole, never flush against exposure section */
+    margin-top: clamp(20px, 5vh, 60px);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
@@ -1530,7 +1533,7 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    padding: 16px 24px 20px;
+    padding: 16px 24px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
