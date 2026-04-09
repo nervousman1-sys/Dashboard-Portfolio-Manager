@@ -956,13 +956,15 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   min-height pushes the filter row + risk summary to the fold bottom on 1080p.
-   150px = ~56px sticky header + ~94px for filter-search-row + risk-mini-summary.
-   On shorter viewports the natural content height takes over (min-height ignored). */
+   height = full viewport minus the sticky header (~56px).
+   flex-direction:column + margin-top:auto on the filter row pushes
+   the filter bar + risk summary to the visual fold boundary.
+   overflow:clip prevents scroll bleed without breaking sticky children. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 150px);
+    min-height: calc(100vh - 56px);
+    overflow: clip;
 }
 
 /* FX-Adjusted Return Toggle */
@@ -1057,6 +1059,7 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
+    margin-top: auto; /* pushes this + risk-mini-summary to fold bottom */
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
