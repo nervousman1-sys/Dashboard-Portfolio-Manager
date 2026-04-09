@@ -963,8 +963,9 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    padding-top: 30px;
-    min-height: calc(100vh - 60px);
+    padding-top: 20px;
+    padding-bottom: 15px;
+    height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
 }
@@ -981,7 +982,8 @@ body {
    and bottom-fold-group. min-height guarantees a small gap even when
    the viewport is exactly the size of the content. */
 .fold-spacer {
-    flex: 0 0 35px;
+    flex: 1 1 auto;
+    min-height: 20px;
 }
 
 /* ══ Bottom Fold Group ══
@@ -990,8 +992,7 @@ body {
 .bottom-fold-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 30px;
+    gap: 10px;
 }
 
 /* FX-Adjusted Return Toggle */
