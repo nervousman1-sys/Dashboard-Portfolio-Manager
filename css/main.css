@@ -955,18 +955,27 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   height (not min-height) locks the fold to exactly one viewport minus the header.
-   space-evenly distributes equal breathing room above/between/below the top sections.
-   .exposure-section has flex:1 so it absorbs the bulk of the vertical space,
-   matching the screenshot where charts dominate the fold. */
+   space-between: equal gap above ticker, between ticker/summary, summary/charts,
+   charts/bottom-fold-group. padding-top:25px separates first section from header.
+   height (not min-height) locks the fold to exactly one viewport. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: space-evenly;
-    padding: 20px 0;
+    justify-content: space-between;
+    padding-top: 25px;
     height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
+}
+
+/* ══ Bottom Fold Group ══
+   Wraps filter row + risk summary as one sticky unit at the fold bottom.
+   margin-top:auto pushes the group down regardless of how space-between distributes above. */
+.bottom-fold-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
 }
 
 /* FX-Adjusted Return Toggle */
@@ -1221,7 +1230,6 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     width: 100%;
-    margin-top: auto; /* anchors risk row to fold bottom when space-evenly leaves room */
 }
 
 .risk-inline-item {
@@ -1532,14 +1540,13 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    flex: 1;          /* grows to fill remaining fold height — makes charts dominant */
     padding: 16px 24px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    overflow: hidden; /* prevent chart canvas overflow within the flex child */
 }
 
 .exposure-wrapper {
     padding: 20px 24px;
+    min-height: 300px; /* ensures charts render with substance, not compressed */
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
