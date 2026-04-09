@@ -4056,7 +4056,8 @@ body.filter-modal-open::after {
     }
 
     .summary-bar {
-        padding: 12px 16px;
+        padding: 10px 12px;
+        margin-bottom: 0;
     }
 
     .summary-main {
@@ -4065,12 +4066,18 @@ body.filter-modal-open::after {
     }
 
     .stat-card {
-        padding: 10px 8px;
-        min-height: 72px;
+        padding: 12px 6px;
+        min-height: 82px;
+        border-radius: 12px;
+        gap: 4px;
     }
 
     .stat-value {
-        font-size: 15px;
+        font-size: 16px;
+    }
+
+    .stat-sub {
+        font-size: 9px;
     }
 
     .stat-icon {
@@ -4078,7 +4085,38 @@ body.filter-modal-open::after {
     }
 
     .stat-label {
-        font-size: 8px;
+        font-size: 9px;
+        letter-spacing: 0.08em;
+    }
+
+    /* ═══ Mobile hero fold: natural stacking, no space-between ═══ */
+    .hero-above-fold {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        height: auto;
+        min-height: auto;
+        padding-top: 0;
+        padding-bottom: 0;
+        gap: 10px;
+    }
+
+    /* ═══ Mobile: hide exposure + risk strip from first fold ═══
+       Match reference phone layout where these are not in the above-fold. */
+    .hero-above-fold .exposure-section,
+    .hero-above-fold .risk-mini-summary,
+    .hero-above-fold .top-fold-spacer,
+    .hero-above-fold .fold-spacer {
+        display: none;
+    }
+
+    .bottom-fold-group {
+        gap: 10px;
+        margin-bottom: 0;
+    }
+
+    .quick-watch-bar {
+        margin-bottom: 0;
     }
 
     /* Filters row stacks on mobile */
