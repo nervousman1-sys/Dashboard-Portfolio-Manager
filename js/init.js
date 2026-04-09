@@ -1,19 +1,42 @@
 // ========== INIT - Initialization & Event Handlers ==========
 
-// ── Quick-Watch: searchable pool — analytical indices only, no crypto ──
+// ── Quick-Watch: searchable pool — indices, US mega-caps, TASE stocks, crypto ──
 const _QW_TICKER_POOL = [
-    { sym: 'SPY',      label: 'S&P 500',      type: 'index', currency: 'USD' },
-    { sym: 'QQQ',      label: 'NASDAQ 100',   type: 'index', currency: 'USD' },
-    { sym: 'DIA',      label: 'Dow Jones',    type: 'index', currency: 'USD' },
-    { sym: 'IWM',      label: 'Russell 2000', type: 'index', currency: 'USD' },
-    { sym: 'EWG',      label: 'DAX (Germany)', type: 'index', currency: 'USD' },
-    { sym: 'EWQ',      label: 'CAC 40 (France)', type: 'index', currency: 'USD' },
-    { sym: 'EWJ',      label: 'Nikkei (Japan)', type: 'index', currency: 'USD' },
-    { sym: 'FXI',      label: 'China Large-Cap', type: 'index', currency: 'USD' },
-    { sym: 'TA35.TA',  label: 'TA-35',        type: 'index', currency: 'ILS' },
-    { sym: 'GLD',      label: 'Gold',         type: 'index', currency: 'USD' },
-    { sym: 'USO',      label: 'Oil (WTI)',    type: 'index', currency: 'USD' },
-    { sym: 'TLT',      label: 'US Bonds 20Y', type: 'index', currency: 'USD' },
+    // Global Indices
+    { sym: 'SPY',      label: 'S&P 500',          type: 'index',  currency: 'USD' },
+    { sym: 'QQQ',      label: 'NASDAQ 100',        type: 'index',  currency: 'USD' },
+    { sym: 'DIA',      label: 'Dow Jones',         type: 'index',  currency: 'USD' },
+    { sym: 'IWM',      label: 'Russell 2000',      type: 'index',  currency: 'USD' },
+    { sym: 'EWG',      label: 'DAX (Germany)',     type: 'index',  currency: 'USD' },
+    { sym: 'EWQ',      label: 'CAC 40 (France)',   type: 'index',  currency: 'USD' },
+    { sym: 'EWJ',      label: 'Nikkei (Japan)',    type: 'index',  currency: 'USD' },
+    { sym: 'FXI',      label: 'China Large-Cap',   type: 'index',  currency: 'USD' },
+    { sym: 'TA35.TA',  label: 'TA-35',             type: 'index',  currency: 'ILS' },
+    { sym: 'GLD',      label: 'Gold',              type: 'index',  currency: 'USD' },
+    { sym: 'USO',      label: 'Oil (WTI)',         type: 'index',  currency: 'USD' },
+    { sym: 'TLT',      label: 'US Bonds 20Y',      type: 'index',  currency: 'USD' },
+    // US Mega-Cap Stocks (NASDAQ / S&P 500)
+    { sym: 'AAPL',     label: 'Apple',             type: 'stock',  currency: 'USD' },
+    { sym: 'MSFT',     label: 'Microsoft',         type: 'stock',  currency: 'USD' },
+    { sym: 'NVDA',     label: 'NVIDIA',            type: 'stock',  currency: 'USD' },
+    { sym: 'AMZN',     label: 'Amazon',            type: 'stock',  currency: 'USD' },
+    { sym: 'GOOGL',    label: 'Alphabet (Google)', type: 'stock',  currency: 'USD' },
+    { sym: 'META',     label: 'Meta',              type: 'stock',  currency: 'USD' },
+    { sym: 'TSLA',     label: 'Tesla',             type: 'stock',  currency: 'USD' },
+    { sym: 'JPM',      label: 'JPMorgan Chase',    type: 'stock',  currency: 'USD' },
+    { sym: 'V',        label: 'Visa',              type: 'stock',  currency: 'USD' },
+    { sym: 'JNJ',      label: 'Johnson & Johnson', type: 'stock',  currency: 'USD' },
+    { sym: 'XOM',      label: 'ExxonMobil',        type: 'stock',  currency: 'USD' },
+    // Tel Aviv Stock Exchange (TASE)
+    { sym: 'NICE.TA',  label: 'NICE Systems',      type: 'stock',  currency: 'ILS' },
+    { sym: 'CHKP.TA',  label: 'Check Point',       type: 'stock',  currency: 'ILS' },
+    { sym: 'TEVA.TA',  label: 'Teva',              type: 'stock',  currency: 'ILS' },
+    { sym: 'ICL.TA',   label: 'ICL Group',         type: 'stock',  currency: 'ILS' },
+    { sym: 'LUMI.TA',  label: 'Bank Leumi',        type: 'stock',  currency: 'ILS' },
+    { sym: 'DSCT.TA',  label: 'Bank Discount',     type: 'stock',  currency: 'ILS' },
+    // Crypto
+    { sym: 'BTC-USD',  label: 'Bitcoin (BTC)',     type: 'crypto', currency: 'USD' },
+    { sym: 'ETH-USD',  label: 'Ethereum (ETH)',    type: 'crypto', currency: 'USD' },
 ];
 
 const _QW_LS_KEY = 'finextium_qw_tickers';

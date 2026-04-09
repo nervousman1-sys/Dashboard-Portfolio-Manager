@@ -626,6 +626,17 @@ body {
     box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
 }
 
+/* ══ Fold Section Labels (above ticker bar and summary bar) ══ */
+.fold-section-label {
+    padding: 0 24px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    opacity: 0.55;
+}
+
 /* ══ Quick-Watch Market Ticker Bar ══ */
 .quick-watch-bar {
     display: flex;
