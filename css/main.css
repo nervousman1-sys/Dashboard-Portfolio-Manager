@@ -963,7 +963,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    padding-top: 80px;
+    padding-top: 30px;
     height: calc(100vh - 60px);
     overflow-x: clip;
     box-sizing: border-box;
