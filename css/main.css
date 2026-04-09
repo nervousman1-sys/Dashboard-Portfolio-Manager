@@ -635,7 +635,6 @@ body {
     background: rgba(6, 6, 6, 0.88);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
-    margin-bottom: 8px;
     position: relative;
 }
 
@@ -956,15 +955,17 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   Top content (ticker, summary, exposure) groups tightly via flex-start + gap.
-   .filters-search-row uses margin-top:clamp() to create a flexible but bounded
-   gap — never a dead hole, never flush — anchoring filters+risk to the fold bottom. */
+   flex-start keeps top sections (ticker → summary → exposure) tightly grouped.
+   gap:15px provides uniform breathing room between each child block.
+   padding-top:20px separates the first section from the sticky header.
+   min-height:calc(100vh - 60px) = viewport minus header, fold ends precisely here. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 0;
-    min-height: calc(100vh - 56px);
+    gap: 15px;
+    padding-top: 20px;
+    min-height: calc(100vh - 60px);
     overflow-x: clip;
 }
 
@@ -1060,9 +1061,8 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
-    /* clamp: always at least 20px gap above, scales with viewport, caps at 60px —
-       never a dead hole, never flush against exposure section */
-    margin-top: clamp(20px, 5vh, 60px);
+    margin-top: 15px;
+    margin-bottom: 5px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
