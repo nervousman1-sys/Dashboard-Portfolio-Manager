@@ -1060,6 +1060,9 @@ body {
     /* In RTL: filters on right, search on left (visually: filters start, search end) */
     flex-direction: row;
     justify-content: space-between;
+    /* clamp: always at least 20px gap above, scales with viewport, caps at 60px —
+       never a dead hole, never flush against exposure section */
+    margin-top: clamp(20px, 5vh, 60px);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(8, 8, 8, 0.5);
@@ -1530,7 +1533,7 @@ body {
 
 /* ══ Exposure Section — Redesign ══ */
 .exposure-section {
-    padding: 16px 24px 20px;
+    padding: 16px 24px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
