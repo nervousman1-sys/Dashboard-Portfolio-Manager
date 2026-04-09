@@ -956,15 +956,16 @@ body {
 .qw-cancel-btn:hover { background: rgba(255,255,255,0.09); }
 
 /* ══ Hero Above-Fold Wrapper ══
-   height = full viewport minus the sticky header (~56px).
-   flex-direction:column + margin-top:auto on the filter row pushes
-   the filter bar + risk summary to the visual fold boundary.
-   overflow:clip prevents scroll bleed without breaking sticky children. */
+   min-height = full viewport minus the sticky header (~56px).
+   flex-direction:column + margin-top:auto on .filters-search-row
+   pushes the filter bar + risk summary to the visual fold boundary.
+   overflow-x:clip only — vertical must stay visible so flex children
+   can grow freely and margin-top:auto has room to work. */
 .hero-above-fold {
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - 56px);
-    overflow: clip;
+    overflow-x: clip;
 }
 
 /* FX-Adjusted Return Toggle */
