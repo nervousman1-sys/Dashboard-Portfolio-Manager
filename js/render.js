@@ -731,7 +731,57 @@ function _calcListMetrics(client) {
         riskScore = Math.round(Math.min(99, Math.max(5, stockPct * 60 + Math.abs(parseFloat(maxDD)) * 1.5)));
     }
 
-    return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash, corr };
+    // ── Cumulative P&L (absolute $) ──
+    const pr = calcPortfolioReturn(client);
+    const cumulativePnl = pr.profit;
+
+    // ── Daily P&L — sum of (shares * (price - previousClose)) per holding ──
+    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    let dailyPnl = 0;
+    client.holdings.forEach(h => {
+        if (h.previousClose && h.previousClose > 0 && h.price > 0) {
+            dailyPnl += (h.price - h.previousClose) * (h.shares || 0) * fx(h.currency);
+        }
+    });
+
+    // ── Dividend Yield estimate — from holdings with known dividend data ──
+    let divYield = 0;
+    const annualDivs = client.holdings.reduce((s, h) => s + ((h.annualDividend || 0) * (h.shares || 0) * fx(h.currency)), 0);
+    if (totalVal > 0) divYield = (annualDivs / totalVal * 100);
+
+    // ── Concentration — largest single holding as % of portfolio ──
+    let concentration = 0;
+    client.holdings.forEach(h => {
+        const w = ((h.value || 0) * fx(h.currency)) / totalVal * 100;
+        if (w > concentration) concentration = w;
+    });
+
+    // ── Value at Risk (parametric 95% 1-day VaR) ──
+    const dailyStd = parseFloat(stdDev) / Math.sqrt(21); // monthly → daily
+    const VaR = isNaN(dailyStd) ? 0 : totalVal * (dailyStd / 100) * 1.65; // 95% confidence
+
+    // ── Sortino Ratio — like Sharpe but only penalizes downside deviation ──
+    let sortino = '—';
+    if (hist.length >= 2) {
+        const values = hist.map(h => h.value).filter(v => v > 0);
+        if (values.length >= 2) {
+            const returns = [];
+            for (let i = 1; i < values.length; i++) {
+                returns.push((values[i] - values[i - 1]) / values[i - 1] * 100);
+            }
+            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const downside = returns.filter(r => r < 0);
+            const downsideVar = downside.length > 0 ? downside.reduce((a, r) => a + r * r, 0) / downside.length : 0;
+            const downsideDev = Math.sqrt(downsideVar) * Math.sqrt(12); // annualized
+            sortino = downsideDev > 0 ? ((returnPct - 4.5) / downsideDev).toFixed(2) : '—';
+        }
+    }
+
+    // ── Buying Power — cash available for new investments ──
+    const buyingPower = totalCash;
+
+    return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash, corr,
+             cumulativePnl, dailyPnl, divYield, concentration, VaR, sortino, buyingPower };
 }
 
 // ── Render list-view table ──
@@ -745,6 +795,10 @@ function _renderListView(filtered, container) {
         const retSign = m.returnPct >= 0 ? '+' : '';
         const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
         const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+        const cumPnlClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
+        const cumPnlSign = m.cumulativePnl >= 0 ? '+' : '';
+        const dailyPnlClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
+        const dailyPnlSign = m.dailyPnl >= 0 ? '+' : '';
         const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
         return `
         <div class="pl-row pl-data-row" onclick="openModal(${c.id})">
@@ -755,12 +809,19 @@ function _renderListView(filtered, container) {
             <div class="pl-cell pl-c-risk"><span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span></div>
             <div class="pl-cell pl-c-size">${formatCurrency(c.portfolioValue)}</div>
             <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
-            <div class="pl-cell pl-c-std">${m.stdDev}%</div>
+            <div class="pl-cell pl-c-cumpnl ${cumPnlClass}">${cumPnlSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
+            <div class="pl-cell pl-c-dailypnl ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
+            <div class="pl-cell pl-c-divyield">${m.divYield.toFixed(2)}%</div>
+            <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
             <div class="pl-cell pl-c-maxdd ${maxDDClass}">${m.maxDD}%</div>
             <div class="pl-cell pl-c-sharpe">${m.sharpe}</div>
-            <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+            <div class="pl-cell pl-c-sortino">${m.sortino}</div>
+            <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
+            <div class="pl-cell pl-c-var">${formatCurrency(m.VaR)}</div>
             <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
             <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
+            <div class="pl-cell pl-c-buying">${formatCurrency(m.buyingPower)}</div>
+            <div class="pl-cell pl-c-std">${m.stdDev}%</div>
             <div class="pl-cell pl-c-corr">${m.corr}</div>
             <div class="pl-cell pl-c-action" onclick="event.stopPropagation(); openModal(${c.id})">&#x203A;</div>
         </div>`;
@@ -774,12 +835,19 @@ function _renderListView(filtered, container) {
                     <div class="pl-cell pl-c-risk">סיכון</div>
                     <div class="pl-cell pl-c-size">גודל</div>
                     <div class="pl-cell pl-c-ret">תשואה</div>
-                    <div class="pl-cell pl-c-std">סטיית תקן</div>
-                    <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
-                    <div class="pl-cell pl-c-sharpe">יחס שארפ</div>
+                    <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
+                    <div class="pl-cell pl-c-dailypnl">יומי</div>
+                    <div class="pl-cell pl-c-divyield">דיבידנד</div>
                     <div class="pl-cell pl-c-score">RISK SCORE</div>
-                    <div class="pl-cell pl-c-exp">חשיפה לשוק</div>
-                    <div class="pl-cell pl-c-cash">מזומון</div>
+                    <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
+                    <div class="pl-cell pl-c-sharpe">שארפ</div>
+                    <div class="pl-cell pl-c-sortino">סורטינו</div>
+                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
+                    <div class="pl-cell pl-c-var">שווי בסיכון</div>
+                    <div class="pl-cell pl-c-exp">חשיפה</div>
+                    <div class="pl-cell pl-c-cash">מזומן</div>
+                    <div class="pl-cell pl-c-buying">כוח קנייה</div>
+                    <div class="pl-cell pl-c-std">סטיית תקן</div>
                     <div class="pl-cell pl-c-corr">קורלציה</div>
                     <div class="pl-cell pl-c-action"></div>
                 </div>
@@ -797,37 +865,39 @@ function _renderListView(filtered, container) {
         </div>`;
 }
 
-// ── Full Portfolio List Modal — opens a full-screen list with search ──
+// ── Full Portfolio List — opens a full-screen scrollable page with all data ──
 function openFullPortfolioList() {
     let existing = document.getElementById('fullPortfolioListModal');
     if (existing) existing.remove();
 
     const sorted = [...clients].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
 
-    const modal = document.createElement('div');
-    modal.id = 'fullPortfolioListModal';
-    modal.className = 'full-list-modal';
-    modal.innerHTML = `
-        <div class="full-list-modal-content">
+    const page = document.createElement('div');
+    page.id = 'fullPortfolioListModal';
+    page.className = 'full-list-page';
+    page.innerHTML = `
+        <div class="full-list-page-inner">
             <div class="full-list-header">
-                <h2>רשימת כל התיקים</h2>
+                <h2>רשימת כל התיקים <span class="full-list-count">(${sorted.length})</span></h2>
                 <button class="full-list-close" onclick="closeFullPortfolioList()">&times;</button>
             </div>
             <div class="full-list-search-wrap">
-                <input type="text" class="full-list-search" id="fullListSearch" placeholder="חיפוש תיק..." oninput="_filterFullList()" />
+                <input type="text" class="full-list-search" id="fullListSearch" placeholder="חיפוש תיק לפי שם או טיקר..." oninput="_filterFullList()" />
             </div>
             <div class="full-list-body" id="fullListBody"></div>
         </div>`;
-    document.body.appendChild(modal);
+    document.body.appendChild(page);
+    document.body.classList.add('full-list-open');
     _renderFullList(sorted);
-    setTimeout(() => modal.classList.add('open'), 10);
+    setTimeout(() => page.classList.add('open'), 10);
 }
 
 function closeFullPortfolioList() {
-    const modal = document.getElementById('fullPortfolioListModal');
-    if (!modal) return;
-    modal.classList.remove('open');
-    setTimeout(() => modal.remove(), 300);
+    const page = document.getElementById('fullPortfolioListModal');
+    if (!page) return;
+    page.classList.remove('open');
+    document.body.classList.remove('full-list-open');
+    setTimeout(() => page.remove(), 300);
 }
 
 function _filterFullList() {
@@ -844,25 +914,126 @@ function _renderFullList(list) {
         body.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:32px;font-size:14px">לא נמצאו תיקים</p>';
         return;
     }
-    body.innerHTML = list.map(c => {
-        const pr = calcPortfolioReturn(c);
-        const retClass = pr.returnPct >= 0 ? 'positive' : 'negative';
-        const retSign = pr.returnPct >= 0 ? '+' : '';
-        const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
-        return `
-        <div class="full-list-row" onclick="closeFullPortfolioList(); openModal(${c.id})">
-            <div class="full-list-avatar">${initial}</div>
-            <div class="full-list-info">
-                <span class="full-list-name">${c.name}</span>
-                <span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span>
-            </div>
-            <div class="full-list-numbers">
-                <span class="full-list-value">${formatCurrency(c.portfolioValue)}</span>
-                <span class="full-list-ret price-change ${retClass}">${retSign}${pr.returnPct.toFixed(2)}%</span>
-            </div>
-            <span class="full-list-chevron">&#x203A;</span>
-        </div>`;
-    }).join('');
+    const isMobile = window.innerWidth <= 768;
+
+    if (isMobile) {
+        // Mobile: card-based rows with expand
+        body.innerHTML = list.map(c => {
+            const m = _calcListMetrics(c);
+            const retClass = m.returnPct >= 0 ? 'positive' : 'negative';
+            const retSign = m.returnPct >= 0 ? '+' : '';
+            const cumClass = m.cumulativePnl >= 0 ? 'positive' : 'negative';
+            const cumSign = m.cumulativePnl >= 0 ? '+' : '';
+            const dailyClass = m.dailyPnl >= 0 ? 'positive' : 'negative';
+            const dailySign = m.dailyPnl >= 0 ? '+' : '';
+            const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+            const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
+            const maxDDClass = parseFloat(m.maxDD) < 0 ? 'negative' : '';
+            return `
+            <div class="full-list-card" data-id="${c.id}">
+                <div class="full-list-card-top" onclick="_toggleFullListCard(this)">
+                    <div class="full-list-avatar">${initial}</div>
+                    <div class="full-list-info">
+                        <span class="full-list-name">${c.name}</span>
+                        <span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span>
+                    </div>
+                    <div class="full-list-numbers">
+                        <span class="full-list-value">${formatCurrency(c.portfolioValue)}</span>
+                        <span class="full-list-ret price-change ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</span>
+                    </div>
+                    <span class="full-list-expand-icon">&#x25BC;</span>
+                </div>
+                <div class="full-list-card-details">
+                    <div class="fl-detail-grid">
+                        <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד מצטבר</span><span class="fl-detail-val price-change ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד יומי</span><span class="fl-detail-val price-change ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">תשואת דיבידנד</span><span class="fl-detail-val">${m.divYield.toFixed(2)}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">RISK SCORE</span><span class="fl-detail-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">מקס' ירידה</span><span class="fl-detail-val price-change ${maxDDClass}">${m.maxDD}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">יחס שארפ</span><span class="fl-detail-val">${m.sharpe}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">יחס סורטינו</span><span class="fl-detail-val">${m.sortino}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">ריכוזיות</span><span class="fl-detail-val">${m.concentration.toFixed(0)}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">שווי בסיכון</span><span class="fl-detail-val">${formatCurrency(m.VaR)}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">חשיפה לשוק</span><span class="fl-detail-val">${m.marketExposure}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">מזומן</span><span class="fl-detail-val">${formatCurrency(m.totalCash)}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">כוח קנייה</span><span class="fl-detail-val">${formatCurrency(m.buyingPower)}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">סטיית תקן</span><span class="fl-detail-val">${m.stdDev}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">קורלציה</span><span class="fl-detail-val">${m.corr}</span></div>
+                    </div>
+                    <button class="fl-open-modal-btn" onclick="closeFullPortfolioList(); openModal(${c.id})">פתח תיק מלא &larr;</button>
+                </div>
+            </div>`;
+        }).join('');
+    } else {
+        // Desktop: full table with all columns
+        const tableRows = list.map(c => {
+            const m = _calcListMetrics(c);
+            const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
+            const retSign = m.returnPct >= 0 ? '+' : '';
+            const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
+            const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+            const cumClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
+            const cumSign = m.cumulativePnl >= 0 ? '+' : '';
+            const dailyClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
+            const dailySign = m.dailyPnl >= 0 ? '+' : '';
+            const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
+            return `
+            <div class="pl-row pl-data-row" onclick="closeFullPortfolioList(); openModal(${c.id})">
+                <div class="pl-cell pl-c-name"><div class="pl-avatar">${initial}</div><span class="pl-name-text">${c.name}</span></div>
+                <div class="pl-cell pl-c-risk"><span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span></div>
+                <div class="pl-cell pl-c-size">${formatCurrency(c.portfolioValue)}</div>
+                <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
+                <div class="pl-cell pl-c-cumpnl ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
+                <div class="pl-cell pl-c-dailypnl ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
+                <div class="pl-cell pl-c-divyield">${m.divYield.toFixed(2)}%</div>
+                <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+                <div class="pl-cell pl-c-maxdd ${maxDDClass}">${m.maxDD}%</div>
+                <div class="pl-cell pl-c-sharpe">${m.sharpe}</div>
+                <div class="pl-cell pl-c-sortino">${m.sortino}</div>
+                <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
+                <div class="pl-cell pl-c-var">${formatCurrency(m.VaR)}</div>
+                <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
+                <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
+                <div class="pl-cell pl-c-buying">${formatCurrency(m.buyingPower)}</div>
+                <div class="pl-cell pl-c-std">${m.stdDev}%</div>
+                <div class="pl-cell pl-c-corr">${m.corr}</div>
+                <div class="pl-cell pl-c-action">&#x203A;</div>
+            </div>`;
+        }).join('');
+
+        body.innerHTML = `
+            <div class="pl-table full-list-table">
+                <div class="pl-row pl-header-row">
+                    <div class="pl-cell pl-c-name">שם התיק</div>
+                    <div class="pl-cell pl-c-risk">סיכון</div>
+                    <div class="pl-cell pl-c-size">גודל</div>
+                    <div class="pl-cell pl-c-ret">תשואה</div>
+                    <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
+                    <div class="pl-cell pl-c-dailypnl">יומי</div>
+                    <div class="pl-cell pl-c-divyield">דיבידנד</div>
+                    <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
+                    <div class="pl-cell pl-c-sharpe">שארפ</div>
+                    <div class="pl-cell pl-c-sortino">סורטינו</div>
+                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
+                    <div class="pl-cell pl-c-var">שווי בסיכון</div>
+                    <div class="pl-cell pl-c-exp">חשיפה</div>
+                    <div class="pl-cell pl-c-cash">מזומן</div>
+                    <div class="pl-cell pl-c-buying">כוח קנייה</div>
+                    <div class="pl-cell pl-c-std">סטיית תקן</div>
+                    <div class="pl-cell pl-c-corr">קורלציה</div>
+                    <div class="pl-cell pl-c-action"></div>
+                </div>
+                ${tableRows}
+            </div>`;
+    }
+}
+
+// Toggle expand/collapse for mobile full-list cards
+function _toggleFullListCard(topEl) {
+    const card = topEl.closest('.full-list-card');
+    if (!card) return;
+    card.classList.toggle('expanded');
 }
 
 function setPortfolioView(mode, btn) {
