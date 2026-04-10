@@ -41,12 +41,11 @@ const _QW_TICKER_POOL = [
 
 const _QW_LS_KEY = 'finextium_qw_tickers';
 
-// Default 5 tickers: the core analytical indices
+// Default 4 tickers: the core analytical indices
 const _QW_DEFAULT = [
     { sym: 'SPY',     label: 'S&P 500',    type: 'index', currency: 'USD' },
     { sym: 'QQQ',     label: 'NASDAQ 100', type: 'index', currency: 'USD' },
     { sym: 'EWG',     label: 'DAX',        type: 'index', currency: 'USD' },
-    { sym: 'EWQ',     label: 'CAC 40',     type: 'index', currency: 'USD' },
     { sym: 'TA35.TA', label: 'TA-35',      type: 'index', currency: 'ILS' }
 ];
 
