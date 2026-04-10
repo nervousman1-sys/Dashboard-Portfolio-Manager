@@ -4137,6 +4137,11 @@ body.filter-modal-open::after {
         border-bottom-width: 2px;
     }
 
+    /* On mobile show max 4 tickers — hide 5th if user configured 5 */
+    .qw-ticker:nth-child(n+5) {
+        display: none;
+    }
+
     .summary-bar {
         padding: 10px 12px;
         margin-bottom: 0;
