@@ -134,7 +134,10 @@ async function handleGoogleLogin() {
     try {
         const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
-            options: { redirectTo }
+            options: {
+                redirectTo,
+                queryParams: { prompt: 'select_account' }
+            }
         });
         if (error) {
             showAuthError('שגיאה בהתחברות עם Google');
@@ -312,7 +315,7 @@ function clearAllAppData() {
 // ========== LOGOUT ==========
 
 async function logout() {
-    await supabaseClient.auth.signOut();
+    await supabaseClient.auth.signOut({ scope: 'global' });
     clearToken();
     clearAllAppData();
     showLoginForm();
