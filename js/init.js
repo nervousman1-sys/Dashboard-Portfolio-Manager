@@ -565,7 +565,7 @@ function _renderModalSelectedList() {
             <button class="qw-remove-btn" onclick="_removeQWAsset('${t.sym}')">✕</button>
         </div>`).join('');
     const countEl = document.getElementById('qwSelectedCount');
-    if (countEl) countEl.textContent = `${_qwPendingSelection.length}/5`;
+    if (countEl) countEl.textContent = `${_qwPendingSelection.length}/4`;
 }
 
 function _toggleQWAsset(sym) {
@@ -573,7 +573,7 @@ function _toggleQWAsset(sym) {
     if (existing !== -1) {
         _qwPendingSelection.splice(existing, 1);
     } else {
-        if (_qwPendingSelection.length >= 5) return; // max 5
+        if (_qwPendingSelection.length >= 4) return; // max 4
         const poolItem =
             _QW_TICKER_POOL.find(t => t.sym === sym) ||
             _qwDynamicResults.find(t => t.sym === sym);
