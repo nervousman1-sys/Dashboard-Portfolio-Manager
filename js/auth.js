@@ -341,6 +341,15 @@ function updateUserDisplay() {
         avatarEl.innerHTML = `<span style="font-size:13px;font-weight:900;color:var(--accent-blue)">${initials}</span>`;
     }
 
+    // Populate mobile bottom nav menu label with user name
+    const mobileMenuLabel = document.getElementById('mobileMenuLabel');
+    if (mobileMenuLabel && user?.username) {
+        const parts = user.username.split(/[\s@]/);
+        mobileMenuLabel.textContent = parts.length > 1 ? `${parts[0]} ${parts[1].charAt(0)}.` : parts[0];
+    } else if (mobileMenuLabel) {
+        mobileMenuLabel.textContent = 'תפריט';
+    }
+
     if (!userArea) return;
     if (user) {
         userArea.innerHTML = `

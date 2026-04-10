@@ -661,7 +661,7 @@ let _cardRenderKey = 0;
 // ── Portfolio view toggle (grid / list) ──
 let _portfolioView = 'grid';
 
-// ── List-view metrics helper (approximates fields not in data model) ──
+// ── List-view metrics helper — uses real performance history where available ──
 function _calcListMetrics(client) {
     const pr = calcPortfolioReturn(client);
     const returnPct = pr.returnPct;
@@ -669,18 +669,67 @@ function _calcListMetrics(client) {
     const totalVal = Math.max(client.portfolioValue, 1);
     const marketExposure = (stockVal / totalVal * 100).toFixed(0);
 
-    const rf = { high: { std: 12, maxDD: -15, score: 82 }, medium: { std: 8, maxDD: -8, score: 55 }, low: { std: 4, maxDD: -3, score: 25 } }[client.risk] || { std: 8, maxDD: -8, score: 55 };
-    const seed = (client.id || 1) % 17 - 8; // deterministic variation per client
-    const stdDev = Math.max(1, rf.std + seed * 0.25).toFixed(1);
-    const maxDD = (rf.maxDD + seed * 0.15).toFixed(1);
-    const riskScore = Math.min(99, Math.max(5, rf.score + seed));
-    const sharpe = parseFloat(stdDev) > 0 ? (returnPct / parseFloat(stdDev)).toFixed(2) : '—';
-
     const cashUsd = (client.cash?.usd || client.cashBalance || 0);
     const cashIls = (client.cash?.ils || 0);
     const totalCash = cashUsd + cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
 
-    const corr = Math.min(0.99, Math.max(0.05, 0.30 + (parseFloat(marketExposure) / 100) * 0.60 + seed * 0.01)).toFixed(2);
+    // ── Real calculations from performance history ──
+    const hist = client.performanceHistory || [];
+    let stdDev = '—', maxDD = '—', sharpe = '—', corr = '—';
+    let riskScore = 50;
+
+    if (hist.length >= 2) {
+        // Monthly returns from performance history
+        const values = hist.map(h => h.value).filter(v => v > 0);
+        if (values.length >= 2) {
+            const returns = [];
+            for (let i = 1; i < values.length; i++) {
+                returns.push((values[i] - values[i - 1]) / values[i - 1] * 100);
+            }
+            // Standard deviation of returns
+            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
+            const sd = Math.sqrt(variance);
+            stdDev = sd.toFixed(1);
+
+            // Max drawdown — peak-to-trough
+            let peak = values[0];
+            let worstDD = 0;
+            for (const v of values) {
+                if (v > peak) peak = v;
+                const dd = ((v - peak) / peak) * 100;
+                if (dd < worstDD) worstDD = dd;
+            }
+            maxDD = worstDD.toFixed(1);
+
+            // Sharpe ratio: (annualized return - risk-free rate) / annualized std dev
+            // Assume monthly data — annualize by √12
+            const riskFreeRate = 4.5; // US T-bill approx
+            const annualizedStd = sd * Math.sqrt(12);
+            sharpe = annualizedStd > 0 ? ((returnPct - riskFreeRate) / annualizedStd).toFixed(2) : '—';
+
+            // Correlation approximation: stock-heavy → higher market correlation
+            const stockWeight = parseFloat(marketExposure) / 100;
+            corr = Math.min(0.99, Math.max(0.05, stockWeight * 0.85 + 0.10)).toFixed(2);
+
+            // Risk score: composite of std dev + drawdown + stock exposure
+            const normStd = Math.min(sd / 20, 1);
+            const normDD = Math.min(Math.abs(worstDD) / 30, 1);
+            const normExp = stockWeight;
+            riskScore = Math.round(Math.min(99, Math.max(5, (normStd * 40 + normDD * 35 + normExp * 25))));
+        }
+    } else {
+        // Fallback: derive from holdings volatility when no history
+        const bondVal = client.holdings.filter(h => h.type === 'bond').reduce((s, h) => s + (h.value || 0), 0);
+        const bondPct = bondVal / totalVal;
+        const stockPct = stockVal / totalVal;
+        const estimatedStd = (stockPct * 16 + bondPct * 5 + (1 - stockPct - bondPct) * 1).toFixed(1);
+        stdDev = estimatedStd;
+        maxDD = (-stockPct * 18 - bondPct * 4).toFixed(1);
+        sharpe = parseFloat(estimatedStd) > 0 ? ((returnPct - 4.5) / (parseFloat(estimatedStd) * Math.sqrt(12))).toFixed(2) : '—';
+        corr = Math.min(0.99, Math.max(0.05, stockPct * 0.85 + 0.10)).toFixed(2);
+        riskScore = Math.round(Math.min(99, Math.max(5, stockPct * 60 + Math.abs(parseFloat(maxDD)) * 1.5)));
+    }
 
     return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash, corr };
 }
@@ -737,12 +786,83 @@ function _renderListView(filtered, container) {
                 ${rows}
             </div>
             <div class="pl-footer">
-                <button class="pl-show-all-btn" onclick="setPortfolioView('grid', document.getElementById('btnGridView'))">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                    עבור לתצוגת כרטיסים
+                <button class="pl-show-all-btn" onclick="openFullPortfolioList()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                    רשימת התיקים המלאה
                 </button>
             </div>
         </div>`;
+}
+
+// ── Full Portfolio List Modal — opens a full-screen list with search ──
+function openFullPortfolioList() {
+    let existing = document.getElementById('fullPortfolioListModal');
+    if (existing) existing.remove();
+
+    const sorted = [...clients].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+
+    const modal = document.createElement('div');
+    modal.id = 'fullPortfolioListModal';
+    modal.className = 'full-list-modal';
+    modal.innerHTML = `
+        <div class="full-list-modal-content">
+            <div class="full-list-header">
+                <h2>רשימת כל התיקים</h2>
+                <button class="full-list-close" onclick="closeFullPortfolioList()">&times;</button>
+            </div>
+            <div class="full-list-search-wrap">
+                <input type="text" class="full-list-search" id="fullListSearch" placeholder="חיפוש תיק..." oninput="_filterFullList()" />
+            </div>
+            <div class="full-list-body" id="fullListBody"></div>
+        </div>`;
+    document.body.appendChild(modal);
+    _renderFullList(sorted);
+    setTimeout(() => modal.classList.add('open'), 10);
+}
+
+function closeFullPortfolioList() {
+    const modal = document.getElementById('fullPortfolioListModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    setTimeout(() => modal.remove(), 300);
+}
+
+function _filterFullList() {
+    const q = (document.getElementById('fullListSearch')?.value || '').toLowerCase().trim();
+    const sorted = [...clients].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    const filtered = q ? sorted.filter(c => c.name.toLowerCase().includes(q) || c.holdings.some(h => h.ticker.toLowerCase().includes(q))) : sorted;
+    _renderFullList(filtered);
+}
+
+function _renderFullList(list) {
+    const body = document.getElementById('fullListBody');
+    if (!body) return;
+    if (list.length === 0) {
+        body.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:32px;font-size:14px">לא נמצאו תיקים</p>';
+        return;
+    }
+    body.innerHTML = list.map(c => {
+        const pr = calcPortfolioReturn(c);
+        const retClass = pr.returnPct >= 0 ? 'positive' : 'negative';
+        const retSign = pr.returnPct >= 0 ? '+' : '';
+        const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
+        return `
+        <div class="full-list-row" onclick="closeFullPortfolioList(); openModal(${c.id})">
+            <div class="full-list-avatar">${initial}</div>
+            <div class="full-list-info">
+                <span class="full-list-name">${c.name}</span>
+                <span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span>
+            </div>
+            <div class="full-list-numbers">
+                <span class="full-list-value">${formatCurrency(c.portfolioValue)}</span>
+                <span class="full-list-ret price-change ${retClass}">${retSign}${pr.returnPct.toFixed(2)}%</span>
+            </div>
+            <span class="full-list-chevron">&#x203A;</span>
+        </div>`;
+    }).join('');
 }
 
 function setPortfolioView(mode, btn) {
@@ -761,6 +881,13 @@ function renderClientCards() {
     _cardRenderKey++;
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
+    // On mobile (<=768px): force list view
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile && _portfolioView !== 'list') {
+        _portfolioView = 'list';
+        const sub = document.getElementById('portfolioSectionSub');
+        if (sub) sub.textContent = 'דירוג לפי תשואה (TOP 12)';
+    }
     // Restore view mode after innerHTML wipe
     grid.classList.toggle('list-view', _portfolioView === 'list');
 
