@@ -4005,13 +4005,17 @@ body.filter-modal-open::after {
         flex-wrap: nowrap;
     }
 
-    /* On mobile: show user area + simplified center, hide clock/sentiment */
+    /* On mobile: hide center, clock, and user name — keep essential icons only */
     .header-center {
         display: none;
     }
 
+    .header-clock-group {
+        display: none;
+    }
+
     .header-left {
-        gap: 4px;
+        gap: 6px;
     }
 
     .header-left .header-action-btn span {
@@ -4019,6 +4023,14 @@ body.filter-modal-open::after {
     }
 
     .header-user-info {
+        display: none;
+    }
+
+    /* Hide username/logout in header — moved to mobile menu */
+    #userArea .user-display .username {
+        display: none;
+    }
+    #userArea .user-display .logout-btn {
         display: none;
     }
 
@@ -4079,8 +4091,8 @@ body.filter-modal-open::after {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 1px;
-        padding: 8px 4px 6px;
+        gap: 2px;
+        padding: 10px 4px 8px;
         background: rgba(12, 12, 14, 0.85);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -4153,15 +4165,15 @@ body.filter-modal-open::after {
     }
 
     .stat-card {
-        padding: 16px 10px 14px;
-        min-height: 90px;
+        padding: 18px 10px 16px;
+        min-height: 96px;
         border-radius: 12px;
         gap: 6px;
         justify-content: center;
     }
 
     .stat-value {
-        font-size: 20px;
+        font-size: 21px;
     }
 
     .stat-sub {
@@ -4179,17 +4191,16 @@ body.filter-modal-open::after {
         color: rgba(245, 245, 245, 0.9);
     }
 
-    /* ═══ Mobile hero fold: fills viewport so portfolio is below the fold ═══
-       Header ~54px + bottom nav 72px ≈ 126px reserved. svh for mobile safe-area. */
+    /* ═══ Mobile hero fold: fills viewport so portfolio is below the fold ═══ */
     .hero-above-fold {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
         height: auto;
         min-height: calc(100svh - 130px);
-        padding-top: 6px;
-        padding-bottom: 10px;
-        gap: 10px;
+        padding-top: 4px;
+        padding-bottom: 6px;
+        gap: 6px;
     }
 
     /* ═══ Mobile: hide exposure + risk strip from first fold ═══
@@ -4245,9 +4256,10 @@ body.filter-modal-open::after {
     .filters .filter-drawer-toggle {
         width: 100%;
         justify-content: center;
-        padding: 10px 14px;
-        font-size: 12px;
+        padding: 14px 14px;
+        font-size: 13px;
         border-radius: 24px;
+        background: rgba(255, 255, 255, 0.04);
     }
 
     /* Risk filter buttons — single centered row */
@@ -4262,15 +4274,15 @@ body.filter-modal-open::after {
     .filters .filter-btn {
         flex: 1 1 0;
         min-width: 0;
-        padding: 8px 6px;
-        font-size: 11px;
+        padding: 10px 6px;
+        font-size: 12px;
         text-align: center;
     }
 
     /* Search bar — full-width */
     .filters-search-row .header-search {
         font-size: 13px;
-        padding: 12px 16px;
+        padding: 14px 16px;
         padding-right: 42px;
     }
 
