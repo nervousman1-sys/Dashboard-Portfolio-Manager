@@ -4143,28 +4143,30 @@ body.filter-modal-open::after {
     }
 
     .summary-bar {
-        padding: 10px 12px;
+        padding: 8px 10px;
         margin-bottom: 0;
     }
 
     .summary-main {
         grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        gap: 6px;
     }
 
     .stat-card {
-        padding: 12px 6px;
-        min-height: 82px;
+        padding: 14px 8px 12px;
+        min-height: 110px;
         border-radius: 12px;
-        gap: 4px;
+        gap: 6px;
+        justify-content: center;
     }
 
     .stat-value {
-        font-size: 16px;
+        font-size: 18px;
     }
 
     .stat-sub {
-        font-size: 9px;
+        font-size: 10px;
+        color: rgba(235, 235, 240, 0.75);
     }
 
     .stat-icon {
@@ -4172,8 +4174,9 @@ body.filter-modal-open::after {
     }
 
     .stat-label {
-        font-size: 9px;
-        letter-spacing: 0.08em;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: rgba(245, 245, 245, 0.9);
     }
 
     /* ═══ Mobile hero fold: fills viewport so portfolio is below the fold ═══
