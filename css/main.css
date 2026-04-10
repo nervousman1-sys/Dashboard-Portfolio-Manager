@@ -4035,98 +4035,103 @@ body.filter-modal-open::after {
         display: none;
     }
 
-    /* ═══ Quick-watch on mobile: 2x2 grid of rectangular ticker cards ═══
-       Each ticker gets its own spacious rectangle so all text is readable. */
+    /* ═══ Quick-watch on mobile: 4 rectangular cards in ONE row ═══
+       Matches phone screenshot: compact readable cards, no horizontal scroll. */
     .quick-watch-bar {
-        padding: 10px 12px;
+        padding: 8px 10px;
         overflow: hidden;
-        gap: 8px;
-        flex-wrap: nowrap;
-        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
     }
 
-    /* Hide "last update" text on mobile — no room */
+    /* Hide "last update" text on mobile */
     .qw-last-update {
         display: none;
     }
 
-    /* Settings gear — compact square, anchored top-left */
+    /* Settings gear — hidden in bar, use modal gear from bottom-right */
     .qw-settings-btn {
-        width: 32px;
-        height: 32px;
-        flex-shrink: 0;
-        margin-top: 4px;
+        position: absolute;
+        left: 10px;
+        top: 8px;
+        width: 26px;
+        height: 26px;
+        z-index: 2;
     }
 
     .qw-settings-btn svg {
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
     }
 
-    /* Tickers become a 2x2 responsive grid */
+    /* Tickers in single-row 4-column grid */
     .qw-tickers {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        flex: 1 1 auto;
-        min-width: 0;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
         width: 100%;
+        min-width: 0;
     }
 
-    /* Each ticker is a rectangular card */
+    /* Each ticker = compact rectangular card */
     .qw-ticker {
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: 8px 10px;
-        background: rgba(14, 14, 14, 0.72);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-left: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 10px;
+        gap: 1px;
+        padding: 8px 4px 6px;
+        background: rgba(12, 12, 14, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
         min-width: 0;
         overflow: hidden;
+        text-align: center;
     }
 
-    /* Remove the vertical divider separator used on desktop */
     .qw-ticker:last-child {
-        border-left: 1px solid rgba(255, 255, 255, 0.06);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
     }
 
+    /* Price — largest, top */
+    .qw-price {
+        font-size: 13px;
+        font-weight: 900;
+        white-space: nowrap;
+        order: 1;
+        line-height: 1.15;
+    }
+
+    /* Name — small, bottom */
     .qw-ticker .qw-name {
-        font-size: 10px;
+        font-size: 7px;
         font-weight: 700;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.03em;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 100%;
         order: 3;
+        opacity: 0.85;
     }
 
-    .qw-price {
-        font-size: 15px;
-        font-weight: 900;
-        white-space: nowrap;
-        order: 1;
-    }
-
+    /* Change badge — between price and name */
     .qw-change {
-        font-size: 10px;
+        font-size: 8px;
         font-weight: 800;
-        padding: 1px 5px;
+        padding: 1px 4px;
+        border-radius: 3px;
         white-space: nowrap;
         order: 2;
-        align-self: flex-start;
     }
 
-    /* Hide the small type-tag badge (IDX / STK / CRY) on mobile */
+    /* Hide the type-tag badge on mobile */
     .qw-type-tag {
         display: none;
     }
 
-    /* Positive/negative accent glow strip on bottom of rectangular card */
+    /* Positive/negative glow strip */
     .qw-ticker--positive,
     .qw-ticker--negative {
         border-bottom-width: 2px;
