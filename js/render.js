@@ -869,30 +869,55 @@ function _renderListView(filtered, container) {
         </div>`;
 }
 
-// ── Full Portfolio List — opens a full-screen scrollable page with all data ──
+// ── Full Portfolio List — opens a full-screen page with header, filters & full table ──
+let _fullListRiskFilter = 'all';
+let _fullListAssetFilter = 'all';
+
 function openFullPortfolioList() {
     let existing = document.getElementById('fullPortfolioListModal');
     if (existing) existing.remove();
 
-    const sorted = [...clients].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    _fullListRiskFilter = 'all';
+    _fullListAssetFilter = 'all';
 
     const page = document.createElement('div');
     page.id = 'fullPortfolioListModal';
     page.className = 'full-list-page';
     page.innerHTML = `
         <div class="full-list-page-inner">
-            <div class="full-list-header">
-                <h2>רשימת כל התיקים <span class="full-list-count">(${sorted.length})</span></h2>
-                <button class="full-list-close" onclick="closeFullPortfolioList()">&times;</button>
-            </div>
-            <div class="full-list-search-wrap">
-                <input type="text" class="full-list-search" id="fullListSearch" placeholder="חיפוש תיק לפי שם או טיקר..." oninput="_filterFullList()" />
+            <div class="full-list-page-top">
+                <div class="full-list-title-row">
+                    <div class="portfolio-section-title-group">
+                        <h2 class="section-title">ניהול תיקי השקעה</h2>
+                        <span class="portfolio-section-sub">כל התיקים (${clients.length})</span>
+                    </div>
+                    <button class="full-list-close-btn" onclick="closeFullPortfolioList()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        חזור לדשבורד
+                    </button>
+                </div>
+                <div class="full-list-filters">
+                    <div class="filter-group">
+                        <button class="filter-btn active" onclick="_setFullListFilter('risk','all',this)">הכל</button>
+                        <button class="filter-btn" onclick="_setFullListFilter('risk','high',this)">סיכון גבוה</button>
+                        <button class="filter-btn" onclick="_setFullListFilter('risk','medium',this)">סיכון בינוני</button>
+                        <button class="filter-btn" onclick="_setFullListFilter('risk','low',this)">סיכון נמוך</button>
+                    </div>
+                    <div class="filter-group">
+                        <button class="filter-btn active" onclick="_setFullListFilter('asset','all',this)">הכל</button>
+                        <button class="filter-btn" onclick="_setFullListFilter('asset','stocks',this)">מניות</button>
+                        <button class="filter-btn" onclick="_setFullListFilter('asset','bonds',this)">אג"ח</button>
+                    </div>
+                    <div class="full-list-search-wrap">
+                        <input type="text" class="full-list-search" id="fullListSearch" placeholder="חיפוש תיק לפי שם או טיקר..." oninput="_filterFullList()" />
+                    </div>
+                </div>
             </div>
             <div class="full-list-body" id="fullListBody"></div>
         </div>`;
     document.body.appendChild(page);
     document.body.classList.add('full-list-open');
-    _renderFullList(sorted);
+    _filterFullList();
     setTimeout(() => page.classList.add('open'), 10);
 }
 
@@ -904,11 +929,32 @@ function closeFullPortfolioList() {
     setTimeout(() => page.remove(), 300);
 }
 
+function _setFullListFilter(type, value, btn) {
+    if (type === 'risk') _fullListRiskFilter = value;
+    if (type === 'asset') _fullListAssetFilter = value;
+    // Update active state on buttons within the same filter-group
+    const group = btn.closest('.filter-group');
+    if (group) group.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _filterFullList();
+}
+
 function _filterFullList() {
     const q = (document.getElementById('fullListSearch')?.value || '').toLowerCase().trim();
-    const sorted = [...clients].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
-    const filtered = q ? sorted.filter(c => c.name.toLowerCase().includes(q) || c.holdings.some(h => h.ticker.toLowerCase().includes(q))) : sorted;
-    _renderFullList(filtered);
+    let list = [...clients];
+    // Apply risk filter
+    if (_fullListRiskFilter !== 'all') list = list.filter(c => c.risk === _fullListRiskFilter);
+    // Apply asset filter
+    if (_fullListAssetFilter === 'stocks') list = list.filter(c => c.holdings.some(h => h.type === 'stock'));
+    if (_fullListAssetFilter === 'bonds') list = list.filter(c => c.holdings.some(h => h.type === 'bond'));
+    // Apply search
+    if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || c.holdings.some(h => h.ticker.toLowerCase().includes(q)));
+    // Sort by return
+    list.sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    // Update count
+    const sub = document.querySelector('#fullPortfolioListModal .portfolio-section-sub');
+    if (sub) sub.textContent = list.length === clients.length ? `כל התיקים (${clients.length})` : `${list.length} מתוך ${clients.length} תיקים`;
+    _renderFullList(list);
 }
 
 function _renderFullList(list) {
