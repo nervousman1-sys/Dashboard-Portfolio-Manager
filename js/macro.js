@@ -776,11 +776,8 @@ function markAlertRead(alertId) {
 
 function toggleAlerts() {
     document.querySelector('.header').style.display         = 'none';
-    document.querySelector('.summary-bar').style.display    = 'none';
-    document.querySelector('.filters').style.display        = 'none';
-    const rs = document.getElementById('riskMiniSummary');
-    if (rs) rs.style.display                                = 'none';
-    document.getElementById('exposureSection').style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) heroFold.style.display                    = 'none';
     document.getElementById('clientsGrid').style.display   = 'none';
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display                              = 'none';
@@ -938,7 +935,7 @@ function _renderIndicatorsTab() {
 
     // ── US Section ──
     html += `<div class="macro-country-section macro-section-us">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> USA Indicators</h2>
+        <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> US Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('cpi',          usHead.cpi,          'אינפלציה שנתית (CPI YoY)',    '%')}
             ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'אינפלציה ליבה (Core CPI)',    '%')}
@@ -960,7 +957,7 @@ function _renderIndicatorsTab() {
 
     // ── Israel Section ──
     html += `<div class="macro-country-section macro-section-il">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> Israel Indicators</h2>
+        <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> IL Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
             ${_renderHeadlineWidget('il_core_cpi',      ilHead.il_core_cpi,      'אינפלציה ליבה (Core CPI)',  '%')}
@@ -1065,11 +1062,8 @@ function closeMacroPage() {
     mp.classList.remove('active');
     mp.innerHTML = '';
     document.querySelector('.header').style.display          = '';
-    document.querySelector('.summary-bar').style.display     = '';
-    document.querySelector('.filters').style.display         = '';
-    const rs = document.getElementById('riskMiniSummary');
-    if (rs) rs.style.display                                 = '';
-    document.getElementById('exposureSection').style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) heroFold.style.display                     = '';
     document.getElementById('clientsGrid').style.display     = '';
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display                               = '';
