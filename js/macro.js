@@ -782,6 +782,8 @@ function toggleAlerts() {
     if (rs) rs.style.display                                = 'none';
     document.getElementById('exposureSection').style.display = 'none';
     document.getElementById('clientsGrid').style.display   = 'none';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display                              = 'none';
 
     _advanceLastSeen();
     _resolveReadState(alerts);
@@ -827,7 +829,7 @@ function _renderMacroPage() {
 
     mp.innerHTML = `
         <div class="macro-page-header">
-            <h1>מאקרו כלכלה — ארה"ב וישראל</h1>
+            <h1 class="macro-main-title">אינדיקטורים כלכליים</h1>
             <div style="display:flex;gap:8px;align-items:center">
                 <button class="macro-back-btn" onclick="_refreshMacroData()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -936,7 +938,7 @@ function _renderIndicatorsTab() {
 
     // ── US Section ──
     html += `<div class="macro-country-section macro-section-us">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> אינדיקטורים כלכליים ארה"ב</h2>
+        <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> USA Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('cpi',          usHead.cpi,          'אינפלציה שנתית (CPI YoY)',    '%')}
             ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'אינפלציה ליבה (Core CPI)',    '%')}
@@ -958,7 +960,7 @@ function _renderIndicatorsTab() {
 
     // ── Israel Section ──
     html += `<div class="macro-country-section macro-section-il">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> אינדיקטורים כלכליים ישראל</h2>
+        <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> Israel Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
             ${_renderHeadlineWidget('il_core_cpi',      ilHead.il_core_cpi,      'אינפלציה ליבה (Core CPI)',  '%')}
@@ -1069,5 +1071,7 @@ function closeMacroPage() {
     if (rs) rs.style.display                                 = '';
     document.getElementById('exposureSection').style.display = '';
     document.getElementById('clientsGrid').style.display     = '';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display                               = '';
     if (typeof clearURLState === 'function') clearURLState();
 }
