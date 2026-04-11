@@ -661,81 +661,32 @@ let _cardRenderKey = 0;
 // ── Portfolio view toggle (grid / list) ──
 let _portfolioView = 'grid';
 
-// ── List-view metrics helper — uses real performance history where available ──
+// ── List-view metrics helper ──
+// REAL data: returnPct, cumulativePnl, dailyPnl, concentration, marketExposure, totalCash,
+//            riskScore (composite from allocation weights).
+// CALCULATED from performanceHistory (when available): stdDev, maxDD, sharpe, sortino, VaR.
+// NOTE: Correlation is NOT shown — we do not have benchmark (S&P 500) time series to compute it.
+//       Dividend yield is NOT shown — the price API does not return annual dividend data.
 function _calcListMetrics(client) {
     const pr = calcPortfolioReturn(client);
     const returnPct = pr.returnPct;
-    const stockVal = client.holdings.filter(h => h.type === 'stock').reduce((s, h) => s + (h.value || 0), 0);
+    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+
+    const stockVal = client.holdings.filter(h => h.type === 'stock').reduce((s, h) => s + (h.value || 0) * fx(h.currency), 0);
+    const bondVal  = client.holdings.filter(h => h.type === 'bond').reduce((s, h) => s + (h.value || 0) * fx(h.currency), 0);
     const totalVal = Math.max(client.portfolioValue, 1);
     const marketExposure = (stockVal / totalVal * 100).toFixed(0);
+    const stockPct = stockVal / totalVal;
+    const bondPct  = bondVal / totalVal;
 
     const cashUsd = (client.cash?.usd || client.cashBalance || 0);
     const cashIls = (client.cash?.ils || 0);
     const totalCash = cashUsd + cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
 
-    // ── Real calculations from performance history ──
-    const hist = client.performanceHistory || [];
-    let stdDev = '—', maxDD = '—', sharpe = '—', corr = '—';
-    let riskScore = 50;
-
-    if (hist.length >= 2) {
-        // Monthly returns from performance history
-        const values = hist.map(h => h.value).filter(v => v > 0);
-        if (values.length >= 2) {
-            const returns = [];
-            for (let i = 1; i < values.length; i++) {
-                returns.push((values[i] - values[i - 1]) / values[i - 1] * 100);
-            }
-            // Standard deviation of returns
-            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-            const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
-            const sd = Math.sqrt(variance);
-            stdDev = sd.toFixed(1);
-
-            // Max drawdown — peak-to-trough
-            let peak = values[0];
-            let worstDD = 0;
-            for (const v of values) {
-                if (v > peak) peak = v;
-                const dd = ((v - peak) / peak) * 100;
-                if (dd < worstDD) worstDD = dd;
-            }
-            maxDD = worstDD.toFixed(1);
-
-            // Sharpe ratio: (annualized return - risk-free rate) / annualized std dev
-            // Assume monthly data — annualize by √12
-            const riskFreeRate = 4.5; // US T-bill approx
-            const annualizedStd = sd * Math.sqrt(12);
-            sharpe = annualizedStd > 0 ? ((returnPct - riskFreeRate) / annualizedStd).toFixed(2) : '—';
-
-            // Correlation approximation: stock-heavy → higher market correlation
-            const stockWeight = parseFloat(marketExposure) / 100;
-            corr = Math.min(0.99, Math.max(0.05, stockWeight * 0.85 + 0.10)).toFixed(2);
-
-            // Risk score: composite of std dev + drawdown + stock exposure
-            const normStd = Math.min(sd / 20, 1);
-            const normDD = Math.min(Math.abs(worstDD) / 30, 1);
-            const normExp = stockWeight;
-            riskScore = Math.round(Math.min(99, Math.max(5, (normStd * 40 + normDD * 35 + normExp * 25))));
-        }
-    } else {
-        // Fallback: derive from holdings volatility when no history
-        const bondVal = client.holdings.filter(h => h.type === 'bond').reduce((s, h) => s + (h.value || 0), 0);
-        const bondPct = bondVal / totalVal;
-        const stockPct = stockVal / totalVal;
-        const estimatedStd = (stockPct * 16 + bondPct * 5 + (1 - stockPct - bondPct) * 1).toFixed(1);
-        stdDev = estimatedStd;
-        maxDD = (-stockPct * 18 - bondPct * 4).toFixed(1);
-        sharpe = parseFloat(estimatedStd) > 0 ? ((returnPct - 4.5) / (parseFloat(estimatedStd) * Math.sqrt(12))).toFixed(2) : '—';
-        corr = Math.min(0.99, Math.max(0.05, stockPct * 0.85 + 0.10)).toFixed(2);
-        riskScore = Math.round(Math.min(99, Math.max(5, stockPct * 60 + Math.abs(parseFloat(maxDD)) * 1.5)));
-    }
-
-    // ── Cumulative P&L (absolute $) ──
+    // ── Cumulative P&L (real: current value - cost basis) ──
     const cumulativePnl = pr.profit;
 
-    // ── Daily P&L — sum of (shares * (price - previousClose)) per holding ──
-    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    // ── Daily P&L (real: sum of (price - previousClose) * shares per holding) ──
     let dailyPnl = 0;
     client.holdings.forEach(h => {
         if (h.previousClose && h.previousClose > 0 && h.price > 0) {
@@ -743,44 +694,79 @@ function _calcListMetrics(client) {
         }
     });
 
-    // ── Dividend Yield estimate — from holdings with known dividend data ──
-    let divYield = 0;
-    const annualDivs = client.holdings.reduce((s, h) => s + ((h.annualDividend || 0) * (h.shares || 0) * fx(h.currency)), 0);
-    if (totalVal > 0) divYield = (annualDivs / totalVal * 100);
-
-    // ── Concentration — largest single holding as % of portfolio ──
+    // ── Concentration (real: weight of largest single holding) ──
     let concentration = 0;
+    let topHolding = '';
     client.holdings.forEach(h => {
         const w = ((h.value || 0) * fx(h.currency)) / totalVal * 100;
-        if (w > concentration) concentration = w;
+        if (w > concentration) { concentration = w; topHolding = h.ticker || h.name || ''; }
     });
 
-    // ── Value at Risk (parametric 95% 1-day VaR) ──
-    const dailyStd = parseFloat(stdDev) / Math.sqrt(21); // monthly → daily
-    const VaR = isNaN(dailyStd) ? 0 : totalVal * (dailyStd / 100) * 1.65; // 95% confidence
+    // ── Performance-history based metrics ──
+    const hist = client.performanceHistory || [];
+    let stdDev = '—', maxDD = '—', sharpe = '—', sortino = '—';
+    let riskScore = 50;
+    let hasHistory = false;
 
-    // ── Sortino Ratio — like Sharpe but only penalizes downside deviation ──
-    let sortino = '—';
     if (hist.length >= 2) {
         const values = hist.map(h => h.value).filter(v => v > 0);
         if (values.length >= 2) {
+            hasHistory = true;
             const returns = [];
             for (let i = 1; i < values.length; i++) {
                 returns.push((values[i] - values[i - 1]) / values[i - 1] * 100);
             }
+            // Std Dev of monthly returns (real: from actual portfolio value history)
             const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
+            const sd = Math.sqrt(variance);
+            stdDev = sd.toFixed(1);
+
+            // Max Drawdown (real: peak-to-trough from portfolio value history)
+            let peak = values[0], worstDD = 0;
+            for (const v of values) {
+                if (v > peak) peak = v;
+                const dd = ((v - peak) / peak) * 100;
+                if (dd < worstDD) worstDD = dd;
+            }
+            maxDD = worstDD.toFixed(1);
+
+            // Sharpe (real: annualized — (return - risk-free) / annualized std)
+            const riskFreeRate = 4.5;
+            const annualizedStd = sd * Math.sqrt(12);
+            sharpe = annualizedStd > 0 ? ((returnPct - riskFreeRate) / annualizedStd).toFixed(2) : '—';
+
+            // Sortino (real: like Sharpe but only downside deviation)
             const downside = returns.filter(r => r < 0);
             const downsideVar = downside.length > 0 ? downside.reduce((a, r) => a + r * r, 0) / downside.length : 0;
-            const downsideDev = Math.sqrt(downsideVar) * Math.sqrt(12); // annualized
-            sortino = downsideDev > 0 ? ((returnPct - 4.5) / downsideDev).toFixed(2) : '—';
+            const downsideDev = Math.sqrt(downsideVar) * Math.sqrt(12);
+            sortino = downsideDev > 0 ? ((returnPct - riskFreeRate) / downsideDev).toFixed(2) : '—';
+
+            // Risk score (composite: volatility 40% + drawdown 35% + stock exposure 25%)
+            const normStd = Math.min(sd / 20, 1);
+            const normDD = Math.min(Math.abs(worstDD) / 30, 1);
+            riskScore = Math.round(Math.min(99, Math.max(5, (normStd * 40 + normDD * 35 + stockPct * 25))));
         }
     }
 
-    // ── Buying Power — cash available for new investments ──
-    const buyingPower = totalCash;
+    if (!hasHistory) {
+        // No history — risk score from allocation weights only (real: based on actual holdings mix)
+        riskScore = Math.round(Math.min(99, Math.max(5, stockPct * 70 + bondPct * 20 + (1 - stockPct - bondPct) * 5)));
+    }
 
-    return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash, corr,
-             cumulativePnl, dailyPnl, divYield, concentration, VaR, sortino, buyingPower };
+    // ── VaR 95% 1-day (parametric: from std dev when available) ──
+    const dailyStd = parseFloat(stdDev) / Math.sqrt(21);
+    const VaR = isNaN(dailyStd) ? 0 : totalVal * (dailyStd / 100) * 1.65;
+
+    // ── Number of holdings ──
+    const holdingsCount = client.holdings.filter(h => h.shares > 0).length;
+
+    // ── Bond allocation % ──
+    const bondExposure = (bondPct * 100).toFixed(0);
+
+    return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash,
+             cumulativePnl, dailyPnl, concentration, topHolding, VaR, sortino,
+             holdingsCount, bondExposure, hasHistory };
 }
 
 // ── Render list-view table ──
@@ -812,39 +798,38 @@ function _renderListView(filtered, container) {
             <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
             <div class="pl-cell pl-c-cumpnl ${cumPnlClass}">${cumPnlSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
             <div class="pl-cell pl-c-dailypnl ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
-            <div class="pl-cell pl-c-divyield">${m.divYield.toFixed(2)}%</div>
             <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+            <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
+            <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
+            <div class="pl-cell pl-c-bondexp">${m.bondExposure}%</div>
+            <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
+            <div class="pl-cell pl-c-var">${m.hasHistory ? formatCurrency(m.VaR) : '—'}</div>
             <div class="pl-cell pl-c-maxdd ${maxDDClass}">${m.maxDD}%</div>
             <div class="pl-cell pl-c-sharpe">${m.sharpe}</div>
             <div class="pl-cell pl-c-sortino">${m.sortino}</div>
-            <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
-            <div class="pl-cell pl-c-var">${formatCurrency(m.VaR)}</div>
-            <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
-            <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
-            <div class="pl-cell pl-c-buying">${formatCurrency(m.buyingPower)}</div>
             <div class="pl-cell pl-c-std">${m.stdDev}%</div>
-            <div class="pl-cell pl-c-corr">${m.corr}</div>
+            <div class="pl-cell pl-c-holdings">${m.holdingsCount}</div>
             <div class="pl-cell pl-c-action" onclick="event.stopPropagation(); openModal(${c.id})">&#x203A;</div>
-            ${isMob ? `
-            <div class="pl-mobile-details">
-                <div class="pl-mob-grid">
-                    <div class="pl-mob-item"><span class="pl-mob-label">רווח/הפסד יומי</span><span class="pl-mob-val ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">דיבידנד</span><span class="pl-mob-val">${m.divYield.toFixed(2)}%</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">RISK SCORE</span><span class="pl-mob-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">מקס' ירידה</span><span class="pl-mob-val ${maxDDClass}">${m.maxDD}%</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">שארפ</span><span class="pl-mob-val">${m.sharpe}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">סורטינו</span><span class="pl-mob-val">${m.sortino}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">ריכוזיות</span><span class="pl-mob-val">${m.concentration.toFixed(0)}%</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">שווי בסיכון</span><span class="pl-mob-val">${formatCurrency(m.VaR)}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">חשיפה</span><span class="pl-mob-val">${m.marketExposure}%</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">מזומן</span><span class="pl-mob-val">${formatCurrency(m.totalCash)}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">כוח קנייה</span><span class="pl-mob-val">${formatCurrency(m.buyingPower)}</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">סטיית תקן</span><span class="pl-mob-val">${m.stdDev}%</span></div>
-                    <div class="pl-mob-item"><span class="pl-mob-label">קורלציה</span><span class="pl-mob-val">${m.corr}</span></div>
-                </div>
-                <button class="pl-mob-open-btn" onclick="event.stopPropagation(); openModal(${c.id})">פתח תיק מלא &larr;</button>
-            </div>` : ''}
-        </div>`;
+        </div>
+        ${isMob ? `<div class="pl-mobile-details-wrap" style="display:none" data-row-id="${c.id}">
+            <div class="pl-mob-grid">
+                <div class="pl-mob-item"><span class="pl-mob-label">רווח/הפסד יומי</span><span class="pl-mob-val ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">RISK SCORE</span><span class="pl-mob-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">ריכוזיות</span><span class="pl-mob-val">${m.concentration.toFixed(0)}% ${m.topHolding ? '(' + m.topHolding + ')' : ''}</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">חשיפת מניות</span><span class="pl-mob-val">${m.marketExposure}%</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">חשיפת אג"ח</span><span class="pl-mob-val">${m.bondExposure}%</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">מזומן</span><span class="pl-mob-val">${formatCurrency(m.totalCash)}</span></div>
+                ${m.hasHistory ? `
+                <div class="pl-mob-item"><span class="pl-mob-label">שווי בסיכון (VaR)</span><span class="pl-mob-val">${formatCurrency(m.VaR)}</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">מקס' ירידה</span><span class="pl-mob-val ${maxDDClass}">${m.maxDD}%</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">שארפ</span><span class="pl-mob-val">${m.sharpe}</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">סורטינו</span><span class="pl-mob-val">${m.sortino}</span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">סטיית תקן (חודשי)</span><span class="pl-mob-val">${m.stdDev}%</span></div>
+                ` : '<div class="pl-mob-item" style="grid-column:1/-1"><span class="pl-mob-label">אין היסטוריית ביצועים — יחסי סיכון לא זמינים</span></div>'}
+                <div class="pl-mob-item"><span class="pl-mob-label">נכסים בתיק</span><span class="pl-mob-val">${m.holdingsCount}</span></div>
+            </div>
+            <button class="pl-mob-open-btn" onclick="event.stopPropagation(); openModal(${c.id})">פתח תיק מלא &larr;</button>
+        </div>` : ''}`;
     }).join('');
 
     container.innerHTML = `
@@ -853,22 +838,21 @@ function _renderListView(filtered, container) {
                 <div class="pl-row pl-header-row">
                     <div class="pl-cell pl-c-name">שם התיק</div>
                     <div class="pl-cell pl-c-risk">סיכון</div>
-                    <div class="pl-cell pl-c-size">גודל</div>
-                    <div class="pl-cell pl-c-ret">תשואה</div>
+                    <div class="pl-cell pl-c-size">שווי תיק</div>
+                    <div class="pl-cell pl-c-ret">תשואה %</div>
                     <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
-                    <div class="pl-cell pl-c-dailypnl">יומי</div>
-                    <div class="pl-cell pl-c-divyield">דיבידנד</div>
+                    <div class="pl-cell pl-c-dailypnl">רווח יומי</div>
                     <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
+                    <div class="pl-cell pl-c-exp">חשיפת מניות</div>
+                    <div class="pl-cell pl-c-bondexp">חשיפת אג"ח</div>
+                    <div class="pl-cell pl-c-cash">מזומן</div>
+                    <div class="pl-cell pl-c-var">VaR 95%</div>
                     <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
                     <div class="pl-cell pl-c-sharpe">שארפ</div>
                     <div class="pl-cell pl-c-sortino">סורטינו</div>
-                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
-                    <div class="pl-cell pl-c-var">שווי בסיכון</div>
-                    <div class="pl-cell pl-c-exp">חשיפה</div>
-                    <div class="pl-cell pl-c-cash">מזומן</div>
-                    <div class="pl-cell pl-c-buying">כוח קנייה</div>
-                    <div class="pl-cell pl-c-std">סטיית תקן</div>
-                    <div class="pl-cell pl-c-corr">קורלציה</div>
+                    <div class="pl-cell pl-c-std">סט"ת חודשי</div>
+                    <div class="pl-cell pl-c-holdings">נכסים</div>
                     <div class="pl-cell pl-c-action"></div>
                 </div>
                 ${rows}
@@ -967,18 +951,19 @@ function _renderFullList(list) {
                     <div class="fl-detail-grid">
                         <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד מצטבר</span><span class="fl-detail-val price-change ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד יומי</span><span class="fl-detail-val price-change ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">תשואת דיבידנד</span><span class="fl-detail-val">${m.divYield.toFixed(2)}%</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">RISK SCORE</span><span class="fl-detail-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">ריכוזיות</span><span class="fl-detail-val">${m.concentration.toFixed(0)}% ${m.topHolding ? '(' + m.topHolding + ')' : ''}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">חשיפת מניות</span><span class="fl-detail-val">${m.marketExposure}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">חשיפת אג"ח</span><span class="fl-detail-val">${m.bondExposure}%</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">מזומן</span><span class="fl-detail-val">${formatCurrency(m.totalCash)}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">נכסים בתיק</span><span class="fl-detail-val">${m.holdingsCount}</span></div>
+                        ${m.hasHistory ? `
+                        <div class="fl-detail-item"><span class="fl-detail-label">VaR 95%</span><span class="fl-detail-val">${formatCurrency(m.VaR)}</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">מקס' ירידה</span><span class="fl-detail-val price-change ${maxDDClass}">${m.maxDD}%</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">יחס שארפ</span><span class="fl-detail-val">${m.sharpe}</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">יחס סורטינו</span><span class="fl-detail-val">${m.sortino}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">ריכוזיות</span><span class="fl-detail-val">${m.concentration.toFixed(0)}%</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">שווי בסיכון</span><span class="fl-detail-val">${formatCurrency(m.VaR)}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">חשיפה לשוק</span><span class="fl-detail-val">${m.marketExposure}%</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">מזומן</span><span class="fl-detail-val">${formatCurrency(m.totalCash)}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">כוח קנייה</span><span class="fl-detail-val">${formatCurrency(m.buyingPower)}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">סטיית תקן</span><span class="fl-detail-val">${m.stdDev}%</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">קורלציה</span><span class="fl-detail-val">${m.corr}</span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">סט"ת חודשי</span><span class="fl-detail-val">${m.stdDev}%</span></div>
+                        ` : '<div class="fl-detail-item" style="grid-column:1/-1"><span class="fl-detail-label">אין היסטוריית ביצועים — יחסי סיכון לא זמינים</span></div>'}
                     </div>
                     <button class="fl-open-modal-btn" onclick="closeFullPortfolioList(); openModal(${c.id})">פתח תיק מלא &larr;</button>
                 </div>
@@ -1005,18 +990,17 @@ function _renderFullList(list) {
                 <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
                 <div class="pl-cell pl-c-cumpnl ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
                 <div class="pl-cell pl-c-dailypnl ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
-                <div class="pl-cell pl-c-divyield">${m.divYield.toFixed(2)}%</div>
                 <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+                <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
+                <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
+                <div class="pl-cell pl-c-bondexp">${m.bondExposure}%</div>
+                <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
+                <div class="pl-cell pl-c-var">${m.hasHistory ? formatCurrency(m.VaR) : '—'}</div>
                 <div class="pl-cell pl-c-maxdd ${maxDDClass}">${m.maxDD}%</div>
                 <div class="pl-cell pl-c-sharpe">${m.sharpe}</div>
                 <div class="pl-cell pl-c-sortino">${m.sortino}</div>
-                <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
-                <div class="pl-cell pl-c-var">${formatCurrency(m.VaR)}</div>
-                <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
-                <div class="pl-cell pl-c-cash">${formatCurrency(m.totalCash)}</div>
-                <div class="pl-cell pl-c-buying">${formatCurrency(m.buyingPower)}</div>
                 <div class="pl-cell pl-c-std">${m.stdDev}%</div>
-                <div class="pl-cell pl-c-corr">${m.corr}</div>
+                <div class="pl-cell pl-c-holdings">${m.holdingsCount}</div>
                 <div class="pl-cell pl-c-action">&#x203A;</div>
             </div>`;
         }).join('');
@@ -1026,22 +1010,21 @@ function _renderFullList(list) {
                 <div class="pl-row pl-header-row">
                     <div class="pl-cell pl-c-name">שם התיק</div>
                     <div class="pl-cell pl-c-risk">סיכון</div>
-                    <div class="pl-cell pl-c-size">גודל</div>
-                    <div class="pl-cell pl-c-ret">תשואה</div>
+                    <div class="pl-cell pl-c-size">שווי תיק</div>
+                    <div class="pl-cell pl-c-ret">תשואה %</div>
                     <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
-                    <div class="pl-cell pl-c-dailypnl">יומי</div>
-                    <div class="pl-cell pl-c-divyield">דיבידנד</div>
+                    <div class="pl-cell pl-c-dailypnl">רווח יומי</div>
                     <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
+                    <div class="pl-cell pl-c-exp">חשיפת מניות</div>
+                    <div class="pl-cell pl-c-bondexp">חשיפת אג"ח</div>
+                    <div class="pl-cell pl-c-cash">מזומן</div>
+                    <div class="pl-cell pl-c-var">VaR 95%</div>
                     <div class="pl-cell pl-c-maxdd">מקס' ירידה</div>
                     <div class="pl-cell pl-c-sharpe">שארפ</div>
                     <div class="pl-cell pl-c-sortino">סורטינו</div>
-                    <div class="pl-cell pl-c-conc">ריכוזיות</div>
-                    <div class="pl-cell pl-c-var">שווי בסיכון</div>
-                    <div class="pl-cell pl-c-exp">חשיפה</div>
-                    <div class="pl-cell pl-c-cash">מזומן</div>
-                    <div class="pl-cell pl-c-buying">כוח קנייה</div>
-                    <div class="pl-cell pl-c-std">סטיית תקן</div>
-                    <div class="pl-cell pl-c-corr">קורלציה</div>
+                    <div class="pl-cell pl-c-std">סט"ת חודשי</div>
+                    <div class="pl-cell pl-c-holdings">נכסים</div>
                     <div class="pl-cell pl-c-action"></div>
                 </div>
                 ${tableRows}
