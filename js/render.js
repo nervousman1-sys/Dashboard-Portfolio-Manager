@@ -732,7 +732,6 @@ function _calcListMetrics(client) {
     }
 
     // ── Cumulative P&L (absolute $) ──
-    const pr = calcPortfolioReturn(client);
     const cumulativePnl = pr.profit;
 
     // ── Daily P&L — sum of (shares * (price - previousClose)) per holding ──
