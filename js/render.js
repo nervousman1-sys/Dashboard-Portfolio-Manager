@@ -800,8 +800,10 @@ function _renderListView(filtered, container) {
         const dailyPnlClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
         const dailyPnlSign = m.dailyPnl >= 0 ? '+' : '';
         const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
+        const isMob = window.innerWidth <= 768;
+        const rowClick = isMob ? `_toggleMobileRow(this, ${c.id})` : `openModal(${c.id})`;
         return `
-        <div class="pl-row pl-data-row" onclick="openModal(${c.id})">
+        <div class="pl-row pl-data-row" onclick="${rowClick}">
             <div class="pl-cell pl-c-name">
                 <div class="pl-avatar">${initial}</div>
                 <span class="pl-name-text">${c.name}</span>
@@ -824,6 +826,25 @@ function _renderListView(filtered, container) {
             <div class="pl-cell pl-c-std">${m.stdDev}%</div>
             <div class="pl-cell pl-c-corr">${m.corr}</div>
             <div class="pl-cell pl-c-action" onclick="event.stopPropagation(); openModal(${c.id})">&#x203A;</div>
+            ${isMob ? `
+            <div class="pl-mobile-details">
+                <div class="pl-mob-grid">
+                    <div class="pl-mob-item"><span class="pl-mob-label">רווח/הפסד יומי</span><span class="pl-mob-val ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">דיבידנד</span><span class="pl-mob-val">${m.divYield.toFixed(2)}%</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">RISK SCORE</span><span class="pl-mob-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">מקס' ירידה</span><span class="pl-mob-val ${maxDDClass}">${m.maxDD}%</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">שארפ</span><span class="pl-mob-val">${m.sharpe}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">סורטינו</span><span class="pl-mob-val">${m.sortino}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">ריכוזיות</span><span class="pl-mob-val">${m.concentration.toFixed(0)}%</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">שווי בסיכון</span><span class="pl-mob-val">${formatCurrency(m.VaR)}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">חשיפה</span><span class="pl-mob-val">${m.marketExposure}%</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">מזומן</span><span class="pl-mob-val">${formatCurrency(m.totalCash)}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">כוח קנייה</span><span class="pl-mob-val">${formatCurrency(m.buyingPower)}</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">סטיית תקן</span><span class="pl-mob-val">${m.stdDev}%</span></div>
+                    <div class="pl-mob-item"><span class="pl-mob-label">קורלציה</span><span class="pl-mob-val">${m.corr}</span></div>
+                </div>
+                <button class="pl-mob-open-btn" onclick="event.stopPropagation(); openModal(${c.id})">פתח תיק מלא &larr;</button>
+            </div>` : ''}
         </div>`;
     }).join('');
 
@@ -1034,6 +1055,14 @@ function _toggleFullListCard(topEl) {
     const card = topEl.closest('.full-list-card');
     if (!card) return;
     card.classList.toggle('expanded');
+}
+
+// Toggle expand/collapse for mobile main-table rows
+function _toggleMobileRow(rowEl, clientId) {
+    const isExpanded = rowEl.classList.contains('expanded');
+    // Collapse all other expanded rows
+    rowEl.closest('.pl-table')?.querySelectorAll('.pl-data-row.expanded').forEach(r => r.classList.remove('expanded'));
+    if (!isExpanded) rowEl.classList.add('expanded');
 }
 
 function setPortfolioView(mode, btn) {
