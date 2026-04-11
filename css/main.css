@@ -2027,7 +2027,7 @@ body.filter-modal-open::after {
 /* 18-column RTL grid: name | risk | size | return% | cumPnl | dailyPnl | riskScore | conc | stockExp | bondExp | cash | VaR | maxDD | sharpe | sortino | stdDev | holdings | action */
 .pl-row {
     display: grid;
-    grid-template-columns: minmax(100px, 1.2fr) 60px 90px 68px 90px 80px 78px 60px 72px 66px 80px 78px 72px 56px 60px 68px 52px 30px;
+    grid-template-columns: 130px 60px 90px 68px 90px 80px 78px 60px 72px 66px 80px 78px 72px 56px 60px 68px 52px 30px;
     align-items: center;
     direction: rtl;
     min-width: 1300px;
