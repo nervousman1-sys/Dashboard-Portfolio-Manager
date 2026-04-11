@@ -776,8 +776,13 @@ function markAlertRead(alertId) {
 
 function toggleAlerts() {
     document.querySelector('.header').style.display         = 'none';
+    // Hide all hero-above-fold children EXCEPT macroPage itself
     const heroFold = document.querySelector('.hero-above-fold');
-    if (heroFold) heroFold.style.display                    = 'none';
+    if (heroFold) {
+        Array.from(heroFold.children).forEach(child => {
+            if (child.id !== 'macroPage') child.style.display = 'none';
+        });
+    }
     document.getElementById('clientsGrid').style.display   = 'none';
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display                              = 'none';
@@ -1062,8 +1067,13 @@ function closeMacroPage() {
     mp.classList.remove('active');
     mp.innerHTML = '';
     document.querySelector('.header').style.display          = '';
+    // Restore all hero-above-fold children
     const heroFold = document.querySelector('.hero-above-fold');
-    if (heroFold) heroFold.style.display                     = '';
+    if (heroFold) {
+        Array.from(heroFold.children).forEach(child => {
+            child.style.display = '';
+        });
+    }
     document.getElementById('clientsGrid').style.display     = '';
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display                               = '';

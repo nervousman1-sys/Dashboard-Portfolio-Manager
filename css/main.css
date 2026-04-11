@@ -2041,7 +2041,7 @@ body.filter-modal-open::after {
 .pl-header-row .pl-cell {
     font-size: 10px;
     font-weight: 800;
-    color: var(--text-muted);
+    color: rgba(245, 245, 250, 0.92);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
