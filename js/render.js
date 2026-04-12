@@ -672,8 +672,11 @@ function _calcListMetrics(client) {
     const returnPct = pr.returnPct;
     const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
 
-    const stockVal = client.holdings.filter(h => h.type === 'stock').reduce((s, h) => s + (h.value || 0) * fx(h.currency), 0);
-    const bondVal  = client.holdings.filter(h => h.type === 'bond').reduce((s, h) => s + (h.value || 0) * fx(h.currency), 0);
+    // Use _valueInDisplayCurrency (set by _recalcPortfolioWithFx) for exact consistency
+    // with client.portfolioValue. Fallback to h.value * fx() if not yet computed.
+    const hVal = (h) => h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0) * fx(h.currency);
+    const stockVal = client.holdings.filter(h => h.type === 'stock').reduce((s, h) => s + hVal(h), 0);
+    const bondVal  = client.holdings.filter(h => h.type === 'bond').reduce((s, h) => s + hVal(h), 0);
     const totalVal = Math.max(client.portfolioValue, 1);
     const marketExposure = (stockVal / totalVal * 100).toFixed(0);
     const stockPct = stockVal / totalVal;
@@ -698,7 +701,7 @@ function _calcListMetrics(client) {
     let concentration = 0;
     let topHolding = '';
     client.holdings.forEach(h => {
-        const w = ((h.value || 0) * fx(h.currency)) / totalVal * 100;
+        const w = hVal(h) / totalVal * 100;
         if (w > concentration) { concentration = w; topHolding = h.ticker || h.name || ''; }
     });
 

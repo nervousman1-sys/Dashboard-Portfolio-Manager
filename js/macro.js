@@ -940,7 +940,7 @@ function _renderIndicatorsTab() {
 
     // ── US Section ──
     html += `<div class="macro-country-section macro-section-us">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇺🇸</span> US Indicators</h2>
+        <h2 class="macro-country-header">US Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('cpi',          usHead.cpi,          'אינפלציה שנתית (CPI YoY)',    '%')}
             ${_renderHeadlineWidget('core_cpi',     usHead.core_cpi,     'אינפלציה ליבה (Core CPI)',    '%')}
@@ -962,7 +962,7 @@ function _renderIndicatorsTab() {
 
     // ── Israel Section ──
     html += `<div class="macro-country-section macro-section-il">
-        <h2 class="macro-country-header"><span class="macro-country-flag">🇮🇱</span> IL Indicators</h2>
+        <h2 class="macro-country-header">IL Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
             ${_renderHeadlineWidget('il_core_cpi',      ilHead.il_core_cpi,      'אינפלציה ליבה (Core CPI)',  '%')}
