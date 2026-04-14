@@ -526,6 +526,17 @@ body {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.sentiment-score-badge {
+    font-size: 13px;
+    font-weight: 900;
+    color: rgba(245, 245, 250, 0.9);
+    min-width: 28px;
+    text-align: center;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+}
+
 .sentiment-bars {
     display: flex;
     gap: 2px;

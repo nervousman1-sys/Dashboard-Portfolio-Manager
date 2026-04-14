@@ -43,13 +43,27 @@ function _scoreToSentiment(score) {
     return                   { label: 'EXTREME FEAR',  labelHe: 'פחד קיצוני',      zone: 'extreme-fear',  color: '#ef4444', barClass: 's-bar-red',    bars: 1 };
 }
 
+// ── Generic FMP fetch with fallback URLs ──
+async function _fmpFetch(urls) {
+    for (const url of urls) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (data && (!Array.isArray(data) || data.length > 0)) return data;
+        } catch (_) {}
+    }
+    return null;
+}
+
 // ── Fetch VIX quote from FMP ──
 async function _fetchVIX() {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
     try {
-        const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=%5EVIX&apikey=${FMP_API_KEY}`);
-        if (!res.ok) return null;
-        const data = await res.json();
+        const data = await _fmpFetch([
+            `https://financialmodelingprep.com/stable/quote?symbol=%5EVIX&apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/api/v3/quote/%5EVIX?apikey=${FMP_API_KEY}`
+        ]);
         const q = Array.isArray(data) ? data[0] : data;
         if (q && q.price > 0) {
             return { price: q.price, change: q.changesPercentage || 0, name: 'VIX' };
@@ -62,9 +76,10 @@ async function _fetchVIX() {
 async function _fetchSP500() {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
     try {
-        const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=%5EGSPC&apikey=${FMP_API_KEY}`);
-        if (!res.ok) return null;
-        const data = await res.json();
+        const data = await _fmpFetch([
+            `https://financialmodelingprep.com/stable/quote?symbol=%5EGSPC&apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/api/v3/quote/%5EGSPC?apikey=${FMP_API_KEY}`
+        ]);
         const q = Array.isArray(data) ? data[0] : data;
         if (q && q.price > 0) {
             return { price: q.price, change: q.changesPercentage || 0, name: 'S&P 500' };
@@ -73,14 +88,14 @@ async function _fetchSP500() {
     return null;
 }
 
-// ── Fetch CNN Fear & Greed from FMP (when available) ──
+// ── Fetch CNN Fear & Greed from FMP ──
 async function _fetchFearGreed() {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
     try {
-        const res = await fetch(`https://financialmodelingprep.com/api/v4/fear-and-greed-index?apikey=${FMP_API_KEY}`);
-        if (!res.ok) return null;
-        const data = await res.json();
-        // FMP returns array with { value, valueClassification, timestamp }
+        const data = await _fmpFetch([
+            `https://financialmodelingprep.com/api/v4/fear-and-greed-index?apikey=${FMP_API_KEY}`,
+            `https://financialmodelingprep.com/stable/fear-and-greed-index?apikey=${FMP_API_KEY}`
+        ]);
         if (Array.isArray(data) && data.length > 0) {
             const latest = data[0];
             const score = parseFloat(latest.value);
@@ -178,18 +193,25 @@ function updateSentimentWidget(sentiment) {
     const container = document.getElementById('headerSentiment');
     if (!container) return;
 
+    const scoreBadge = document.getElementById('sentimentScoreBadge');
     const barsEl = container.querySelector('.sentiment-bars');
     const labelEl = container.querySelector('.sentiment-label');
     const subEl = container.querySelector('.sentiment-sub');
 
     if (!barsEl || !labelEl) return;
 
+    // Update score badge (0-100)
+    if (scoreBadge) {
+        scoreBadge.textContent = sentiment.compositeScore;
+        scoreBadge.style.color = sentiment.color;
+    }
+
     // Update label
     labelEl.textContent = sentiment.label;
     labelEl.style.color = sentiment.color;
+    labelEl.style.opacity = '1';
 
     // Update bars: show 1-5 bars depending on sentiment intensity
-    // Fear = fewer bars (red), Greed = more bars (green), Neutral = medium (yellow)
     const maxBars = 5;
     let barsHTML = '';
     for (let i = 0; i < maxBars; i++) {
@@ -199,15 +221,14 @@ function updateSentimentWidget(sentiment) {
     }
     barsEl.innerHTML = barsHTML;
 
-    // Update subtitle with score + source
+    // Update subtitle with source info
     if (subEl) {
-        const scoreText = `Score: ${sentiment.compositeScore}/100`;
-        const sourceText = sentiment.source ? ` · ${sentiment.source}` : '';
-        subEl.textContent = scoreText + sourceText;
+        const sourceText = sentiment.source && sentiment.source !== 'fallback' ? sentiment.source : 'Market Data';
+        subEl.textContent = sourceText;
     }
 
     // Update container border accent
-    container.style.borderColor = sentiment.color + '33'; // 20% opacity
+    container.style.borderColor = sentiment.color + '33';
 }
 
 // ── Initialize: fetch and render ──
