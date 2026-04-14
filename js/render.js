@@ -131,9 +131,9 @@ function _updateHeaderClock() {
     const parts = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tzName });
     el.textContent = parts;
 
-    // Update sentiment date
+    // Update sentiment sub-line: show score source if sentiment is loaded, else show date
     const sentSub = document.querySelector('.sentiment-sub');
-    if (sentSub) {
+    if (sentSub && !window._marketSentiment) {
         const opts = { month: 'short', day: 'numeric', year: 'numeric', timeZone: tzName };
         const dateStr = now.toLocaleDateString('en-US', opts);
         const tzNow = new Date(now.toLocaleString('en-US', { timeZone: tzName }));
