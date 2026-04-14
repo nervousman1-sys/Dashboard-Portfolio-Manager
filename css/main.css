@@ -537,9 +537,10 @@ body {
     border-radius: 2px;
 }
 
-.s-bar-red { background: var(--accent-red); }
-.s-bar-green { background: var(--accent-green); }
+.s-bar-red    { background: var(--accent-red); }
+.s-bar-green  { background: var(--accent-green); }
 .s-bar-yellow { background: var(--accent-yellow); }
+.s-bar-dim    { background: rgba(255, 255, 255, 0.08); }
 
 .sentiment-text {
     display: flex;

@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v198';
+const CACHE_NAME = 'portfolio-dashboard-v199';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -16,6 +16,7 @@ const STATIC_ASSETS = [
     './js/api.js',
     './js/fx-service.js',
     './js/price-service.js',
+    './js/sentiment-service.js',
     './js/auth.js',
     './js/clients.js',
     './js/charts.js',
@@ -65,6 +66,7 @@ const NETWORK_FIRST_FILES = [
     'auth.js',
     'init.js',
     'price-service.js',
+    'sentiment-service.js',
     'supabase-config.js',
     'supabase-api.js',
     'portfolio.js',
