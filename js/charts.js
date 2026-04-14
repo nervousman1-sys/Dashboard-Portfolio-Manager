@@ -899,8 +899,8 @@ async function _fetchIntradayPortfolioData(client, range) {
         return null;
     }
 
-    // Top 5 holdings by value — enough for weighted representation
-    const topStocks = [...stocks].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 5);
+    // Use top 12 holdings by value for accurate portfolio representation
+    const topStocks = [...stocks].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 12);
     const totalPortfolioValue = client.portfolioValue || 1;
 
     // 1D: 5min candles — request 200 points (covers ~2.5 trading days) to handle
@@ -994,23 +994,39 @@ async function _fetchIntradayPortfolioData(client, range) {
 
     const is1D = (range === '1d');
 
-    const points = filteredBackbone.map((v, i) => {
+    // Build time-based lookup maps for each series to avoid index misalignment.
+    // Different stocks may have different numbers of candles (missing minutes/hours),
+    // so index-based access (s.values[i]) would match wrong time points.
+    const _seriesTimeMaps = filteredSeries.map(s => {
+        const tMap = new Map();
+        for (const v of s.values) {
+            // Round to nearest minute to handle slight timestamp differences
+            const t = new Date(v.datetime);
+            const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+            tMap.set(key, v.close);
+        }
+        return { ...s, timeMap: tMap };
+    });
+
+    const points = filteredBackbone.map((v) => {
         const date = new Date(v.datetime);
+        const timeKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
 
         // Weighted return from each holding at this time point
         let weightedReturn = 0;
-        for (const s of filteredSeries) {
-            if (s.values[i]) {
+        for (const s of _seriesTimeMaps) {
+            const thisClose = s.timeMap.get(timeKey);
+            if (thisClose !== undefined) {
                 // 1D baseline: use PREVIOUS DAY'S close if available (Google Finance style).
                 // Other ranges: use first data point as baseline (cumulative return).
                 const baseClose = (is1D && prevDayClose[s.ticker])
                     ? prevDayClose[s.ticker]
                     : s.values[0].close;
-                const thisClose = s.values[i].close;
                 if (baseClose > 0) {
                     weightedReturn += ((thisClose - baseClose) / baseClose) * 100 * s.weight;
                 }
             }
+            // If no data for this time point, this holding contributes 0 change (held flat)
         }
 
         const portfolioValueAtPoint = totalPortfolioValue * (1 + weightedReturn / 100);
@@ -1020,7 +1036,7 @@ async function _fetchIntradayPortfolioData(client, range) {
             _dateObj: date,
             value: parseFloat(portfolioValueAtPoint.toFixed(2)),
             returnPct: parseFloat(weightedReturn.toFixed(2)),
-            _isPrevCloseBaseline: is1D  // flag for normalization in renderPerformanceChart
+            _isPrevCloseBaseline: is1D
         };
     });
 
@@ -1400,12 +1416,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //      confusing mismatch where the chart shows 27% but the card shows 33%.
     //      The difference was caused by idle cash diluting the denominator.
     //
-    const totalCostBasis = calcPortfolioReturn(client).totalCost;
-    const cashBal = client.cashBalance || 0;
-
     // 1D data already has returnPct relative to previous close — use it directly.
     const is1DPrevCloseNorm = isIntraday && range === '1d' && hist.length > 0 && hist[0]._isPrevCloseBaseline;
-    const useCostBasisNorm = usePercentMode && !hasBenchmarks && !is1DPrevCloseNorm && totalCostBasis > 0;
 
     // Ensure the LAST point uses the actual current portfolio value (not a stale
     // synthetic estimate), so the endpoint always reflects reality.
@@ -1413,9 +1425,16 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         hist[hist.length - 1].value = client.portfolioValue;
     }
 
-    const firstValue = useCostBasisNorm
-        ? totalCostBasis               // costBasis denominator (matches dashboard)
-        : (hist[0].value || 1);        // first visible point (for benchmark comparison)
+    // Normalization:
+    //   - With benchmarks: normalize from first visible point (all start at 0%)
+    //   - Without benchmarks: normalize from first visible point too, but scale so that
+    //     the endpoint matches the dashboard's return % (cost-basis based).
+    //   - 1D: use pre-computed returnPct from previous day's close.
+    //
+    // NOTE: We do NOT subtract current cash from historical values — that was inaccurate
+    // because cash changes over time. Instead we normalize the full portfolio value
+    // from the first visible point, giving accurate relative movement at every point.
+    const firstValue = hist[0].value || 1;
 
     const portfolioPoints = hist.map(p => {
         const x = (p._dateObj || _parseHistDate(p.date)).getTime();
@@ -1424,13 +1443,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             if (is1DPrevCloseNorm) {
                 return { x, y: p.returnPct || 0 };
             }
-            if (useCostBasisNorm) {
-                // Holdings-only return — subtract cash so denominator = costBasis only
-                const holdingsValue = (p.value || 0) - cashBal;
-                const returnPct = ((holdingsValue - totalCostBasis) / totalCostBasis) * 100;
-                return { x, y: returnPct };
-            }
-            // With benchmarks: normalize from first visible point (all start at 0%)
+            // Normalize from first visible point — shows accurate relative movement
             const returnPct = firstValue > 0
                 ? ((p.value - firstValue) / firstValue) * 100
                 : 0;
