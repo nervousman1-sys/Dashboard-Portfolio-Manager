@@ -169,43 +169,97 @@ async function openModal(clientId) {
                     <!-- ── Category 1: Portfolio Summary ── -->
                     <div class="modal-stats-category">
                         <div class="modal-stats-category-title">תמונת תיק</div>
-                        <div class="modal-stats">
-                            <div class="modal-stat"><div class="stat-label">שווי תיק כולל</div><div class="stat-value val-accent">${formatCurrency(client.portfolioValue)}</div></div>
-                            <div class="modal-stat"><div class="stat-label">השקעה ראשונית</div><div class="stat-value">${formatCurrency(client.initialInvestment)}</div></div>
-                            <div class="modal-stat"><div class="stat-label">רווח/הפסד מצטבר</div><div class="stat-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</div></div>
-                            <div class="modal-stat"><div class="stat-label">תשואה משוכללת</div><div class="stat-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</div></div>
+                        <div class="modal-stats cols-6">
+                            <div class="modal-stat stat-hero">
+                                <div class="stat-label">שווי תיק כולל</div>
+                                <div class="stat-value val-accent">${formatCurrency(client.portfolioValue)}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">השקעה ראשונית</div>
+                                <div class="stat-value val-neutral">${formatCurrency(client.initialInvestment)}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">רווח/הפסד</div>
+                                <div class="stat-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">תשואה</div>
+                                <div class="stat-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">P&L יומי</div>
+                                <div class="stat-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- ── Category 2: Allocation Breakdown ── -->
                     <div class="modal-stats-category">
                         <div class="modal-stats-category-title">הרכב תיק</div>
-                        <div class="modal-stats">
-                            <div class="modal-stat"><div class="stat-label">שווי מניות</div><div class="stat-value">${formatCurrency(totalStockValue)}</div><div class="stat-sub">${_rm ? _rm.marketExposure + '%' : '—'} מהתיק</div></div>
-                            <div class="modal-stat"><div class="stat-label">שווי אג"ח</div><div class="stat-value">${formatCurrency(totalBondValue)}</div><div class="stat-sub">${_rm ? _rm.bondExposure + '%' : '—'} מהתיק</div></div>
-                            <div class="modal-stat"><div class="stat-label">מזומן (USD)</div><div class="stat-value">${formatCurrency(client.cash?.usd || 0, 'USD')}</div></div>
-                            <div class="modal-stat"><div class="stat-label">מזומן (ILS)</div><div class="stat-value">${formatCurrency(client.cash?.ils || 0, 'ILS')}</div></div>
-                        </div>
-                        <div class="modal-stats" style="margin-top:8px">
-                            <div class="modal-stat"><div class="stat-label">מספר נכסים</div><div class="stat-value">${_rm ? _rm.holdingsCount : client.holdings.length}</div></div>
-                            <div class="modal-stat"><div class="stat-label">ריכוזיות עליונה</div><div class="stat-value">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</div><div class="stat-sub">${_rm ? _rm.topHolding : ''}</div></div>
-                            <div class="modal-stat"><div class="stat-label">רווח/הפסד יומי</div><div class="stat-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</div></div>
-                            <div class="modal-stat"><div class="stat-label">חשיפת מניות</div><div class="stat-value">${_rm ? _rm.marketExposure + '%' : '—'}</div></div>
+                        <div class="modal-stats cols-6">
+                            <div class="modal-stat">
+                                <div class="stat-label">מניות</div>
+                                <div class="stat-value val-neutral">${formatCurrency(totalStockValue)}</div>
+                                <div class="stat-sub">${_rm ? _rm.marketExposure + '% מהתיק' : ''}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">אג"ח</div>
+                                <div class="stat-value val-neutral">${formatCurrency(totalBondValue)}</div>
+                                <div class="stat-sub">${_rm ? _rm.bondExposure + '% מהתיק' : ''}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">מזומן USD</div>
+                                <div class="stat-value val-neutral">${formatCurrency(client.cash?.usd || 0, 'USD')}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">מזומן ILS</div>
+                                <div class="stat-value val-neutral">${formatCurrency(client.cash?.ils || 0, 'ILS')}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">נכסים</div>
+                                <div class="stat-value val-neutral">${_rm ? _rm.holdingsCount : client.holdings.length}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">ריכוזיות</div>
+                                <div class="stat-value ${_rm && _rm.concentration > 50 ? 'val-warn' : 'val-neutral'}">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</div>
+                                <div class="stat-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- ── Category 3: Risk Metrics ── -->
                     <div class="modal-stats-category">
                         <div class="modal-stats-category-title">מדדי סיכון</div>
-                        <div class="modal-stats cols-3">
-                            <div class="modal-stat"><div class="stat-label">ציון סיכון</div><div class="stat-value ${_rm && _rm.riskScore >= 75 ? 'val-negative' : _rm && _rm.riskScore >= 50 ? '' : 'val-positive'}">${_rm ? _rm.riskScore : '—'}<span style="font-size:10px;opacity:0.5">/100</span></div></div>
-                            <div class="modal-stat"><div class="stat-label">סטיית תקן (חודשית)</div><div class="stat-value">${_rm ? _rm.stdDev + '%' : '—'}</div></div>
-                            <div class="modal-stat"><div class="stat-label">ירידה מקסימלית</div><div class="stat-value ${_rm && parseFloat(_rm.maxDD) < 0 ? 'val-negative' : ''}">${_rm ? _rm.maxDD + '%' : '—'}</div></div>
-                            <div class="modal-stat"><div class="stat-label">שארפ (Sharpe)</div><div class="stat-value">${_rm ? _rm.sharpe : '—'}</div></div>
-                            <div class="modal-stat"><div class="stat-label">סורטינו (Sortino)</div><div class="stat-value">${_rm ? _rm.sortino : '—'}</div></div>
-                            <div class="modal-stat"><div class="stat-label">VaR 95% יומי</div><div class="stat-value val-negative">${_rm && _rm.VaR > 0 ? '-' + formatCurrency(_rm.VaR) : '—'}</div></div>
+                        <div class="modal-stats cols-6">
+                            <div class="modal-stat">
+                                <div class="stat-label">ציון סיכון</div>
+                                <div class="stat-value ${_rm && _rm.riskScore >= 75 ? 'val-negative' : _rm && _rm.riskScore >= 40 ? 'val-warn' : 'val-positive'}">${_rm ? _rm.riskScore : '—'}<span style="font-size:8px;opacity:0.35">/100</span></div>
+                                <div class="risk-score-bar"><div class="risk-score-bar-fill" style="width:${_rm ? _rm.riskScore : 0}%;background:${_rm && _rm.riskScore >= 75 ? '#ff4d4d' : _rm && _rm.riskScore >= 40 ? '#facc15' : '#00ff94'}"></div></div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">סטיית תקן</div>
+                                <div class="stat-value ${_rm && _rm.stdDev !== '—' && parseFloat(_rm.stdDev) > 15 ? 'val-warn' : 'val-neutral'}">${_rm && _rm.stdDev !== '—' ? _rm.stdDev + '%' : '—'}</div>
+                                <div class="stat-sub">חודשית</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">Max Drawdown</div>
+                                <div class="stat-value ${_rm && _rm.maxDD !== '—' && parseFloat(_rm.maxDD) < 0 ? 'val-negative' : 'val-neutral'}">${_rm && _rm.maxDD !== '—' ? _rm.maxDD + '%' : '—'}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">Sharpe</div>
+                                <div class="stat-value ${_rm && _rm.sharpe !== '—' ? (parseFloat(_rm.sharpe) >= 1 ? 'val-positive' : parseFloat(_rm.sharpe) >= 0 ? 'val-warn' : 'val-negative') : 'val-muted'}">${_rm ? _rm.sharpe : '—'}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">Sortino</div>
+                                <div class="stat-value ${_rm && _rm.sortino !== '—' ? (parseFloat(_rm.sortino) >= 1.5 ? 'val-positive' : parseFloat(_rm.sortino) >= 0 ? 'val-warn' : 'val-negative') : 'val-muted'}">${_rm ? _rm.sortino : '—'}</div>
+                            </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">VaR 95%</div>
+                                <div class="stat-value ${_rm && _rm.VaR > 0 ? 'val-negative' : 'val-muted'}">${_rm && _rm.VaR > 0 ? '-' + formatCurrency(_rm.VaR) : '—'}</div>
+                                <div class="stat-sub">יומי</div>
+                            </div>
                         </div>
-                        ${_rm && !_rm.hasHistory ? '<div style="text-align:center;font-size:10px;color:rgba(245,245,250,0.35);margin-top:6px">* ציון סיכון מבוסס על הרכב תיק בלבד — אין היסטוריית ביצועים זמינה</div>' : ''}
+                        ${_rm && !_rm.hasHistory ? '<div class="modal-stats-footnote">* מבוסס על הרכב תיק — אין היסטוריה</div>' : ''}
                     </div>
                 </div>
                 <div class="modal-charts-row">
