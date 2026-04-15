@@ -306,9 +306,9 @@ async function openModal(clientId) {
             </div>
             <!-- Tab: Sectors -->
             <div class="modal-tab-content" id="tab-sectors">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-                    <div><div style="height:280px"><canvas id="modal-sector-chart"></canvas></div></div>
-                    <div><table class="sector-table"><thead><tr><th>סקטור</th><th>שווי</th><th>אחוז</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
+                <div class="sectors-layout">
+                    <div class="sectors-chart-wrap"><canvas id="modal-sector-chart"></canvas></div>
+                    <div class="sectors-table-wrap"><table class="sector-table"><thead><tr><th>סקטור</th><th>שווי</th><th>אחוז</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
                 </div>
             </div>
             <!-- Tab: Transactions -->

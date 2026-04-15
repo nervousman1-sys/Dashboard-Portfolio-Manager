@@ -2706,6 +2706,23 @@ body.filter-modal-open::after {
     color: var(--text-secondary);
 }
 
+/* ── Sectors Tab Layout ── */
+.sectors-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.sectors-chart-wrap {
+    height: 280px;
+}
+
+.sectors-table-wrap {
+    overflow-y: auto;
+    max-height: 320px;
+}
+
 .transaction-badge {
     padding: 2px 8px;
     border-radius: 8px;
@@ -3040,6 +3057,56 @@ body.filter-modal-open::after {
     .display-mode-btn {
         font-size: 10px;
         padding: 2px 6px;
+    }
+
+    /* ── Sectors tab: stack vertically, smaller chart ── */
+    .sectors-layout {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    .sectors-chart-wrap {
+        height: 180px;
+        max-width: 220px;
+        margin: 0 auto;
+    }
+    .sectors-table-wrap {
+        max-height: 200px;
+    }
+    .sector-table {
+        font-size: 11px;
+    }
+    .sector-table th {
+        padding: 5px 8px;
+        font-size: 9px;
+    }
+    .sector-table td {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+
+    /* ── Holdings tab: compact table ── */
+    .holdings-table-wrapper {
+        font-size: 11px;
+    }
+    .holdings-table th,
+    .holdings-table td {
+        padding: 5px 4px;
+        font-size: 10px;
+    }
+    .add-asset-btn {
+        font-size: 11px;
+        padding: 6px 12px;
+        margin-bottom: 8px;
+    }
+
+    /* ── Ensure perf chart is visible and properly sized ── */
+    .modal-performance-container canvas {
+        min-height: 120px;
+    }
+    .expand-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 12px;
     }
 }
 
