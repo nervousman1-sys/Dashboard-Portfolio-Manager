@@ -602,6 +602,12 @@ function saveTickerConfig() {
 
 // ========== PERSISTENT STATE (URL QUERY PARAMS) ==========
 
+// ========== BROWSER HISTORY & BACK BUTTON SUPPORT ==========
+// Uses pushState so that the browser back button (and Android back gesture)
+// navigates between dashboard views: dashboard ← modal ← macro ← full-list.
+
+let _suppressPopstate = false; // prevent loops when we programmatically navigate
+
 function updateURLState(params) {
     const url = new URL(window.location);
     url.searchParams.delete('view');
@@ -614,7 +620,8 @@ function updateURLState(params) {
         }
     });
 
-    history.replaceState(null, '', url);
+    // pushState creates a history entry — back button returns to previous state
+    history.pushState({ finextium: true, ...params }, '', url);
 }
 
 function clearURLState() {
@@ -622,7 +629,7 @@ function clearURLState() {
     url.searchParams.delete('view');
     url.searchParams.delete('client');
     url.searchParams.delete('tab');
-    history.replaceState(null, '', url);
+    history.pushState({ finextium: true, dashboard: true }, '', url);
 }
 
 function restoreStateFromURL() {
@@ -633,6 +640,8 @@ function restoreStateFromURL() {
 
     if (view === 'macro') {
         toggleAlerts();
+    } else if (view === 'fulllist') {
+        if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     } else if (clientId) {
         const id = parseInt(clientId);
         const client = clients.find(c => c.id === id);
@@ -645,6 +654,48 @@ function restoreStateFromURL() {
         }
     }
 }
+
+// ── Back button handler (browser + Android) ──
+window.addEventListener('popstate', function(e) {
+    if (_suppressPopstate) { _suppressPopstate = false; return; }
+
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get('view');
+    const clientId = params.get('client');
+
+    // Close everything first
+    const modalOpen = document.getElementById('modalOverlay')?.classList.contains('active');
+    const macroOpen = document.getElementById('macroPage')?.style.display === 'block';
+    const fullListOpen = document.querySelector('.full-list-page');
+
+    if (fullListOpen && !clientId && view !== 'fulllist') {
+        if (typeof closeFullPortfolioList === 'function') closeFullPortfolioList();
+        return;
+    }
+    if (modalOpen && !clientId) {
+        // Back from modal → dashboard (don't push new state)
+        _suppressPopstate = true;
+        document.getElementById('modalOverlay').classList.remove('active');
+        return;
+    }
+    if (macroOpen && view !== 'macro') {
+        if (typeof closeMacroPage === 'function') closeMacroPage();
+        return;
+    }
+
+    // Restore whatever the URL says
+    if (clientId) {
+        const id = parseInt(clientId);
+        if (id && clients && clients.find(c => c.id === id)) {
+            _suppressPopstate = true;
+            openModal(id);
+        }
+    } else if (view === 'macro') {
+        if (typeof toggleAlerts === 'function') toggleAlerts();
+    } else if (view === 'fulllist') {
+        if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
+    }
+});
 
 // ========== AUTH CHECK (runs AFTER cache render) ==========
 
