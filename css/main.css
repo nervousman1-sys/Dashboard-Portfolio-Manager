@@ -2963,15 +2963,83 @@ body.filter-modal-open::after {
 }
 
 @media (max-width: 768px) {
-    .modal-charts-row {
-        flex-direction: column;
+    /* ── Modal: full-screen mobile takeover ── */
+    .modal-overlay {
+        padding: 0;
+        align-items: stretch;
+    }
+    .modal {
+        max-height: 100vh;
+        max-width: 100%;
+        border-radius: 0;
+        border: none;
     }
 
+    /* ── Header: compact ── */
+    .modal-header {
+        padding: 10px 14px;
+        gap: 8px;
+    }
+    .modal-header h2 {
+        font-size: 17px;
+    }
+    .modal-header .risk-badge {
+        font-size: 9px;
+        padding: 2px 8px;
+        margin-top: 2px !important;
+    }
+    /* Hide action buttons on mobile — keep only close X */
+    .modal-header > div:last-child .filter-btn {
+        display: none;
+    }
+    .modal-close {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+    }
+
+    /* ── Tabs: compact ── */
+    .modal-tab-bar {
+        gap: 0;
+    }
+    .modal-tab {
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+
+    /* ── Body: reduced padding ── */
+    .modal-body {
+        padding: 10px 12px;
+    }
+
+    /* ── Charts: hide donut on overview, show only perf chart ── */
+    .modal-charts-row {
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
     .modal-chart-container.modal-chart-small {
-        width: 180px;
-        height: 180px;
-        flex: 0 0 auto;
-        margin: 0 auto;
+        display: none;
+    }
+    .modal-performance-container {
+        height: 200px;
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+    .modal-performance-container .perf-chart-header {
+        margin-bottom: 4px;
+    }
+    .perf-time-range .time-btn {
+        padding: 3px 6px;
+        font-size: 10px;
+    }
+    .perf-benchmarks .benchmark-toggle-btn {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+    .display-mode-btn {
+        font-size: 10px;
+        padding: 2px 6px;
     }
 }
 
@@ -4622,8 +4690,24 @@ body.filter-modal-open::after {
         align-items: center;
     }
 
+    /* ── Mobile Stats: compact borderless grid ── */
+    .modal-stats-wrapper {
+        gap: 3px;
+        margin-bottom: 6px;
+    }
+    .modal-stats-category-title {
+        font-size: 8px;
+        margin-bottom: 3px;
+        padding-bottom: 3px;
+        letter-spacing: 1.5px;
+    }
+    .modal-stats-category-title::before {
+        width: 2px;
+        height: 8px;
+    }
     .modal-stats {
         grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
     }
     .modal-stats.cols-3 {
         grid-template-columns: repeat(3, 1fr);
@@ -4631,14 +4715,23 @@ body.filter-modal-open::after {
     .modal-stats.cols-6 {
         grid-template-columns: repeat(3, 1fr);
     }
+    .modal-stat {
+        padding: 4px 3px 3px;
+        border: none;
+        background: rgba(255, 255, 255, 0.015);
+        border-radius: 3px;
+    }
+    .modal-stat:hover {
+        border: none;
+    }
     .modal-stat.stat-hero {
         grid-column: span 3;
-    }
-    .modal-stat {
-        padding: 5px 4px 4px;
+        padding: 5px 3px 4px;
+        border: 1px solid rgba(0, 229, 255, 0.08);
     }
     .modal-stat .stat-label {
-        font-size: 8px;
+        font-size: 7.5px;
+        margin-bottom: 0;
     }
     .modal-stat .stat-value {
         font-size: 11px;
@@ -4646,12 +4739,16 @@ body.filter-modal-open::after {
     .modal-stat.stat-hero .stat-value {
         font-size: 13px;
     }
-    .modal-stats-wrapper {
-        gap: 4px;
-        margin-bottom: 10px;
+    .modal-stat .stat-sub {
+        font-size: 7px;
     }
-    .modal-stats {
-        gap: 2px;
+    .risk-score-bar {
+        height: 2px;
+        margin-top: 2px;
+    }
+    .modal-stats-footnote {
+        font-size: 7px;
+        margin-top: 2px;
     }
 
     .macro-page-header {
