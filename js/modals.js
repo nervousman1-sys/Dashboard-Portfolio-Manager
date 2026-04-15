@@ -166,13 +166,14 @@ async function openModal(clientId) {
             <!-- Tab: Overview -->
             <div class="modal-tab-content active" id="tab-overview">
                 <div class="modal-stats-wrapper">
-                    <!-- ── Category 1: Portfolio Summary ── -->
+                    <!-- ── Category 1: Portfolio Snapshot ── -->
                     <div class="modal-stats-category">
                         <div class="modal-stats-category-title">תמונת תיק</div>
-                        <div class="modal-stats cols-6">
-                            <div class="modal-stat stat-hero">
+                        <div class="modal-stats" style="grid-template-columns: 2fr repeat(3, 1fr)">
+                            <div class="modal-stat stat-hero" style="grid-row: span 2">
                                 <div class="stat-label">שווי תיק כולל</div>
                                 <div class="stat-value val-accent">${formatCurrency(client.portfolioValue)}</div>
+                                <div class="stat-sub">${_rm ? _rm.holdingsCount + ' נכסים' : ''}</div>
                             </div>
                             <div class="modal-stat">
                                 <div class="stat-label">השקעה ראשונית</div>
@@ -190,13 +191,18 @@ async function openModal(clientId) {
                                 <div class="stat-label">P&L יומי</div>
                                 <div class="stat-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</div>
                             </div>
+                            <div class="modal-stat">
+                                <div class="stat-label">ריכוזיות</div>
+                                <div class="stat-value ${_rm && _rm.concentration > 50 ? 'val-warn' : 'val-neutral'}">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</div>
+                                <div class="stat-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- ── Category 2: Allocation Breakdown ── -->
                     <div class="modal-stats-category">
                         <div class="modal-stats-category-title">הרכב תיק</div>
-                        <div class="modal-stats cols-6">
+                        <div class="modal-stats cols-4" style="grid-template-columns: repeat(4, 1fr)">
                             <div class="modal-stat">
                                 <div class="stat-label">מניות</div>
                                 <div class="stat-value val-neutral">${formatCurrency(totalStockValue)}</div>
@@ -214,15 +220,6 @@ async function openModal(clientId) {
                             <div class="modal-stat">
                                 <div class="stat-label">מזומן ILS</div>
                                 <div class="stat-value val-neutral">${formatCurrency(client.cash?.ils || 0, 'ILS')}</div>
-                            </div>
-                            <div class="modal-stat">
-                                <div class="stat-label">נכסים</div>
-                                <div class="stat-value val-neutral">${_rm ? _rm.holdingsCount : client.holdings.length}</div>
-                            </div>
-                            <div class="modal-stat">
-                                <div class="stat-label">ריכוזיות</div>
-                                <div class="stat-value ${_rm && _rm.concentration > 50 ? 'val-warn' : 'val-neutral'}">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</div>
-                                <div class="stat-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
                             </div>
                         </div>
                     </div>

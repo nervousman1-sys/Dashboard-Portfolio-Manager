@@ -922,6 +922,7 @@ function openFullPortfolioList() {
     document.body.classList.add('full-list-open');
     _filterFullList();
     setTimeout(() => page.classList.add('open'), 10);
+    if (typeof updateURLState === 'function') updateURLState({ view: 'fulllist' });
 }
 
 function closeFullPortfolioList() {
@@ -930,6 +931,7 @@ function closeFullPortfolioList() {
     page.classList.remove('open');
     document.body.classList.remove('full-list-open');
     setTimeout(() => page.remove(), 300);
+    if (typeof clearURLState === 'function') clearURLState();
 }
 
 function _setFullListFilter(type, value, btn) {
