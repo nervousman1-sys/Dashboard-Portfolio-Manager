@@ -3025,14 +3025,18 @@ body.filter-modal-open::after {
         padding: 8px 10px;
     }
 
-    /* ── Stats: 2-column clean grid ── */
+    /* ── Stats: compact 2-column mobile grid ── */
     .modal-stats-wrapper {
-        gap: 2px;
+        gap: 4px;
         margin-bottom: 6px;
+    }
+    .modal-stats-category {
+        padding: 6px 6px 5px;
+        border-radius: 5px;
     }
     .modal-stats-category-title {
         font-size: 8px;
-        margin-bottom: 3px;
+        margin-bottom: 4px;
         padding-bottom: 2px;
         letter-spacing: 1.5px;
     }
@@ -3040,45 +3044,50 @@ body.filter-modal-open::after {
         width: 2px;
         height: 7px;
     }
-    .modal-stats {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 2px;
-    }
+    /* Override all grids to 2 columns on mobile — including inline styles */
+    .modal-stats,
     .modal-stats.cols-3,
+    .modal-stats.cols-4,
     .modal-stats.cols-6 {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 3px;
     }
     .modal-stat {
-        padding: 4px 5px 3px;
+        padding: 5px 5px 4px;
         border: none;
-        background: rgba(255, 255, 255, 0.015);
-        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.018);
+        border-radius: 4px;
         display: flex;
         flex-direction: column;
         align-items: center;
     }
-    .modal-stat:hover { border: none; }
+    .modal-stat::after { display: none; }
+    .modal-stat:hover { border: none; transform: none; }
     .modal-stat.stat-hero {
         grid-column: span 2;
-        padding: 5px 5px 4px;
+        grid-row: span 1 !important;
+        padding: 6px 8px 5px;
         border: 1px solid rgba(0, 229, 255, 0.10);
         flex-direction: row;
         justify-content: center;
-        gap: 8px;
+        gap: 10px;
+        background: linear-gradient(135deg, rgba(0, 229, 255, 0.03), transparent);
     }
+    .modal-stat.stat-hero::before { display: none; }
     .modal-stat.stat-hero .stat-label {
         margin-bottom: 0;
         font-size: 8px;
     }
     .modal-stat .stat-label {
         font-size: 7.5px;
-        margin-bottom: 0;
+        margin-bottom: 1px;
+        color: rgba(245, 245, 250, 0.85);
     }
     .modal-stat .stat-value {
         font-size: 11px;
     }
     .modal-stat.stat-hero .stat-value {
-        font-size: 13px;
+        font-size: 14px;
     }
     .modal-stat .stat-sub {
         font-size: 6.5px;
