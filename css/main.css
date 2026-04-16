@@ -2816,7 +2816,7 @@ body.filter-modal-open::after {
 
 /* Full-width perf chart in overview (no donut beside it) */
 .ov-chart-section .modal-performance-container {
-    height: 240px;
+    height: 260px;
 }
 
 /* Performance chart controls */
@@ -3041,9 +3041,11 @@ body.filter-modal-open::after {
     .ov-hero-strip {
         flex-wrap: wrap;
         justify-content: center;
-        padding: 10px 12px;
-        gap: 4px;
-        margin-bottom: 6px;
+        padding: 12px 14px;
+        gap: 6px;
+        margin-bottom: 0;
+        border-radius: 10px 10px 0 0;
+        border-bottom: none;
     }
     .ov-hero-strip::before { height: 1px; }
     .ov-hero-main {
@@ -3051,83 +3053,99 @@ body.filter-modal-open::after {
         flex: none;
         padding: 0;
         align-items: center;
-        gap: 1px;
+        gap: 2px;
+        margin-bottom: 4px;
     }
     .ov-hero-label {
-        font-size: 9px;
+        font-size: 10px;
+        letter-spacing: 1.5px;
     }
     .ov-hero-value {
-        font-size: 22px;
+        font-size: 26px;
     }
     .ov-hero-divider {
-        width: 50%;
+        width: 60%;
         height: 1px;
-        margin: 1px auto;
+        margin: 4px auto;
         flex: none;
+        background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.20), transparent);
     }
     .ov-hero-kpi {
-        padding: 0 8px;
-        gap: 1px;
+        padding: 0 10px;
+        gap: 2px;
     }
     .ov-kpi-label {
-        font-size: 9px;
+        font-size: 9.5px;
     }
     .ov-kpi-value {
-        font-size: 13px;
+        font-size: 14px;
     }
 
     /* ── Two-Panel Grid → stacked on mobile ── */
     .ov-panels {
         grid-template-columns: 1fr;
-        gap: 5px;
-        margin-bottom: 6px;
+        gap: 6px;
+        margin-bottom: 8px;
     }
     .ov-panel {
-        padding: 8px 8px 6px;
+        padding: 10px 10px 8px;
     }
     .ov-panel-title {
-        font-size: 9px;
-        margin-bottom: 5px;
-        padding-bottom: 3px;
-        letter-spacing: 1.5px;
+        font-size: 10px;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        letter-spacing: 1.8px;
+        text-align: center;
+        justify-content: center;
     }
     .ov-panel-title::before {
-        height: 9px;
+        height: 10px;
         width: 2px;
     }
     .ov-panel-grid.cols-3 {
         grid-template-columns: repeat(3, 1fr);
-        gap: 3px;
+        gap: 4px;
     }
     .ov-cell {
-        padding: 5px 3px 4px;
+        padding: 6px 4px 5px;
+        text-align: center;
     }
     .ov-cell-label {
-        font-size: 8.5px;
-        margin-bottom: 1px;
+        font-size: 9px;
+        margin-bottom: 2px;
     }
     .ov-cell-value {
-        font-size: 12px;
+        font-size: 13px;
     }
     .ov-cell-sub {
-        font-size: 7.5px;
+        font-size: 8px;
     }
     .ov-cell-bar {
         width: 70%;
         height: 2px;
-        margin-top: 2px;
+        margin: 3px auto 0;
     }
     .ov-panel-footnote {
         font-size: 8px;
     }
+    /* Currency row mobile */
+    .ov-currency-row {
+        gap: 6px;
+        margin-top: 6px;
+        padding-top: 6px;
+        justify-content: center;
+    }
+    .ov-cur-flag { font-size: 12px; }
+    .ov-cur-name { font-size: 9px; }
+    .ov-cur-pct { font-size: 11px; }
 
     /* ── Chart section mobile — compact to avoid scrolling ── */
     .ov-chart-section .modal-performance-container {
-        height: 170px;
+        height: 160px;
         padding: 4px;
     }
     .ov-chart-section .modal-performance-container canvas {
-        min-height: 90px;
+        min-height: 80px;
     }
 
     /* ── Charts: perf only, no donut ── */
@@ -3549,6 +3567,59 @@ body.filter-modal-open::after {
     font-size: 10px;
     color: rgba(245, 245, 250, 0.30);
     margin-top: 6px;
+}
+
+/* ── Currency Exposure Row ── */
+.ov-currency-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.ov-cur-box {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.ov-cur-flag {
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(0, 229, 255, 0.7);
+    width: 20px;
+    text-align: center;
+}
+
+.ov-cur-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(245,245,250,0.60);
+}
+
+.ov-cur-pct {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(245,245,250,0.92);
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-cur-bar-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.ov-cur-bar-usd {
+    height: 100%;
+    background: linear-gradient(90deg, #00e5ff, #00b8d4);
+    border-radius: 2px;
+    transition: width 0.5s ease;
 }
 
 /* ── Full-Width Chart Section ── */
@@ -4928,6 +4999,17 @@ body.filter-modal-open::after {
         flex-direction: column;
         align-items: center;
     }
+    .card-body .holdings-summary {
+        overflow: visible;
+        width: 100%;
+    }
+    .card-body .holdings-list {
+        overflow: visible;
+        max-height: none;
+    }
+    .card-footer {
+        flex-wrap: wrap;
+    }
 
     /* ── Mobile Stats: handled in first @media(768px) block above ── */
 
@@ -6081,11 +6163,35 @@ body.filter-modal-open::after {
     letter-spacing: -0.5px;
 }
 
-.sidebar-clock-label {
-    font-size: 10px;
-    color: rgba(245,245,250,0.40);
-    letter-spacing: 1px;
-    margin-top: 2px;
+.sidebar-tz-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.sidebar-tz-btn {
+    padding: 4px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: transparent;
+    color: rgba(245,245,250,0.50);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sidebar-tz-btn.active {
+    background: rgba(0, 229, 255, 0.10);
+    border-color: rgba(0, 229, 255, 0.25);
+    color: rgba(0, 229, 255, 0.90);
+}
+
+.sidebar-tz-btn:hover:not(.active) {
+    border-color: rgba(255,255,255,0.15);
+    color: rgba(245,245,250,0.75);
 }
 
 /* ── Sidebar report button ── */

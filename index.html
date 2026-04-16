@@ -174,7 +174,10 @@
                 <!-- Clock (mirrors header clock, visible on mobile) -->
                 <div class="sidebar-clock-group">
                     <div class="sidebar-clock" id="sidebarClock">00:00:00</div>
-                    <div class="sidebar-clock-label">IL / NY</div>
+                    <div class="sidebar-tz-toggle">
+                        <button class="sidebar-tz-btn active" onclick="setClockTZ('ISR', null); document.querySelectorAll('.sidebar-tz-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">ישראל</button>
+                        <button class="sidebar-tz-btn" onclick="setClockTZ('EST', null); document.querySelectorAll('.sidebar-tz-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">ארה״ב</button>
+                    </div>
                 </div>
                 <!-- Generate Report -->
                 <button class="sidebar-report-btn" onclick="_closeMobileSidebar(); if(typeof generateReport==='function') generateReport();">

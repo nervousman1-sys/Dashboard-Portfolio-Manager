@@ -224,6 +224,22 @@ async function openModal(clientId) {
                                 <div class="ov-cell-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
                             </div>
                         </div>
+                        <!-- Currency Exposure sub-section -->
+                        <div class="ov-currency-row">
+                            <div class="ov-cur-box">
+                                <span class="ov-cur-flag">$</span>
+                                <span class="ov-cur-name">USD</span>
+                                <span class="ov-cur-pct">${_rm ? _rm.usdExposurePct + '%' : '—'}</span>
+                            </div>
+                            <div class="ov-cur-bar-track">
+                                <div class="ov-cur-bar-usd" style="width:${_rm ? _rm.usdExposurePct : 50}%"></div>
+                            </div>
+                            <div class="ov-cur-box">
+                                <span class="ov-cur-flag">₪</span>
+                                <span class="ov-cur-name">ILS</span>
+                                <span class="ov-cur-pct">${_rm ? _rm.ilsExposurePct + '%' : '—'}</span>
+                            </div>
+                        </div>
                     </div>
                     <!-- Panel: Risk -->
                     <div class="ov-panel">
