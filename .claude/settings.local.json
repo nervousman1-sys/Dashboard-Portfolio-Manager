@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -c js/modals.js)",
+      "Bash(node -c js/render.js)"
+    ]
+  }
+}

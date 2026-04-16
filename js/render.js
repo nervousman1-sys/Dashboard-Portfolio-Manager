@@ -1301,6 +1301,21 @@ function renderClientCards() {
         // Return badge color
         const returnColor = allPricesStale ? '' : (returnPct >= 0 ? 'yield-positive' : 'yield-negative');
 
+        // Currency exposure for card
+        const _fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+        const _hv = (h) => h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0) * _fx(h.currency);
+        let _cardUsdVal = 0, _cardIlsVal = 0;
+        client.holdings.forEach(h => {
+            const cur = (h.currency || 'USD').toUpperCase();
+            if (cur === 'ILS' || cur === 'ILA') _cardIlsVal += _hv(h);
+            else _cardUsdVal += _hv(h);
+        });
+        _cardUsdVal += _cashUsd;
+        _cardIlsVal += _cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
+        const _cardTotal = Math.max(_cardUsdVal + _cardIlsVal, 1);
+        const _cardUsdPct = (_cardUsdVal / _cardTotal * 100).toFixed(0);
+        const _cardIlsPct = (100 - parseFloat(_cardUsdPct)).toFixed(0);
+
         card.innerHTML = `
                 <div class="card-header">
                     <div class="card-header-start">
@@ -1364,6 +1379,11 @@ function renderClientCards() {
                     <span class="card-footer-label">שווי תיק</span>
                     <span class="card-footer-value">${formatCurrency(client.portfolioValue)}</span>
                 </div>
+            </div>
+            <div class="card-currency-bar">
+                <span class="card-cur-label">$ ${_cardUsdPct}%</span>
+                <div class="card-cur-track"><div class="card-cur-fill" style="width:${_cardUsdPct}%"></div></div>
+                <span class="card-cur-label">₪ ${_cardIlsPct}%</span>
             </div>
         `;
 
