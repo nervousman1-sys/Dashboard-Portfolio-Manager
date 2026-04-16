@@ -1463,10 +1463,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         data: portfolioPoints,
         borderColor: mainColor,
         backgroundColor: fillColor,
-        borderWidth: 3,
+        borderWidth: _isMobile ? 2 : 3,
         fill: true,
         pointRadius: 0,
-        pointHoverRadius: 5,
+        pointHoverRadius: _isMobile ? 3 : 5,
         pointHoverBackgroundColor: mainColor,
         pointHoverBorderColor: '#fff',
         pointHoverBorderWidth: 2,
@@ -1554,6 +1554,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     else timeUnit = 'year';                            // 10Y+  → show years
 
     // ── 10. Construct Chart.js instance — complete options object ──
+    const _isMobile = window.innerWidth <= 768;
+    const _isFullscreen = canvasId === 'fullscreen-chart';
     const chartInstance = new Chart(canvas, {
         type: 'line',
         data: { datasets },
@@ -1563,7 +1565,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             // Layout padding — safety buffer so line never touches container walls
             layout: {
-                padding: { top: 30, bottom: 30, left: 15, right: 30 }
+                padding: _isFullscreen
+                    ? (_isMobile ? { top: 12, bottom: 10, left: 8, right: 14 } : { top: 30, bottom: 30, left: 15, right: 30 })
+                    : (_isMobile ? { top: 8, bottom: 6, left: 4, right: 8 } : { top: 30, bottom: 30, left: 15, right: 30 })
             },
 
             interaction: {
@@ -1596,10 +1600,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     ticks: {
                         source: hasBenchmarks ? 'auto' : 'data',  // 'auto' for mixed-resolution datasets
                         autoSkip: true,
-                        maxTicksLimit: 12,
+                        maxTicksLimit: _isMobile ? (_isFullscreen ? 7 : 5) : 12,
                         maxRotation: 0,
                         color: '#94a3b8',
-                        font: { size: 10 }
+                        font: { size: _isMobile ? 9 : 10 }
                     },
                     grid: {
                         color: 'rgba(148,163,184,0.07)',
@@ -1615,7 +1619,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     grace: '10%',
                     ticks: {
                         color: '#94a3b8',
-                        font: { size: 10 },
+                        font: { size: _isMobile ? 9 : 10 },
                         callback: usePercentMode
                             ? function(v) {
                                 // Percentage Y-axis: "+12.5%", "-3.2%", "0.0%"
@@ -1627,8 +1631,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                                 if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
                                 return '$' + v.toFixed(0);
                             },
-                        maxTicksLimit: 6,
-                        padding: 8,
+                        maxTicksLimit: _isMobile ? 4 : 6,
+                        padding: _isMobile ? 4 : 8,
                         precision: 2
                     },
                     grid: {
@@ -1646,10 +1650,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     rtl: true,
                     labels: {
                         color: '#94a3b8',
-                        font: { size: 10 },
+                        font: { size: _isMobile ? 9 : 10 },
                         usePointStyle: true,
                         pointStyleWidth: 6,
-                        padding: 10,
+                        padding: _isMobile ? 8 : 10,
                         boxWidth: 6
                     }
                 },
@@ -1659,9 +1663,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     backgroundColor: 'rgba(15,23,42,0.92)',
                     borderColor: 'rgba(148,163,184,0.2)',
                     borderWidth: 1,
-                    titleFont: { size: 11, weight: '600' },
-                    bodyFont: { size: 11 },
-                    padding: 10,
+                    titleFont: { size: _isMobile ? 9 : 11, weight: '600' },
+                    bodyFont: { size: _isMobile ? 9 : 11 },
+                    padding: _isMobile ? 6 : 10,
                     cornerRadius: 6,
                     displayColors: true,
                     boxWidth: 8,
