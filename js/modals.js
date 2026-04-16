@@ -165,23 +165,23 @@ async function openModal(clientId) {
         <div class="modal-body">
             <!-- Tab: Overview -->
             <div class="modal-tab-content active" id="tab-overview">
-                <!-- ═══ HERO STRIP — Portfolio Value + Key Metrics ═══ -->
-                <div class="ov-hero-strip">
-                    <div class="ov-hero-main">
+                <!-- ═══ HERO — Portfolio Value (top) + KPI Cards (bottom) ═══ -->
+                <div class="ov-hero-block">
+                    <div class="ov-hero-top">
                         <span class="ov-hero-label">שווי תיק כולל</span>
                         <span class="ov-hero-value">${formatCurrency(client.portfolioValue)}</span>
                     </div>
-                    <div class="ov-hero-divider"></div>
+                    <div class="ov-hero-sep"></div>
                     <div class="ov-hero-kpis">
-                        <div class="ov-hero-kpi">
+                        <div class="ov-kpi-card">
                             <span class="ov-kpi-label">רווח/הפסד</span>
                             <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
                         </div>
-                        <div class="ov-hero-kpi">
+                        <div class="ov-kpi-card">
                             <span class="ov-kpi-label">תשואה</span>
                             <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
                         </div>
-                        <div class="ov-hero-kpi">
+                        <div class="ov-kpi-card">
                             <span class="ov-kpi-label">P&L יומי</span>
                             <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
                         </div>
@@ -227,19 +227,24 @@ async function openModal(clientId) {
                             </div>
                         </div>
                         <!-- Currency Exposure sub-section -->
-                        <div class="ov-currency-row">
-                            <div class="ov-cur-box">
-                                <span class="ov-cur-flag">$</span>
-                                <span class="ov-cur-name">USD</span>
-                                <span class="ov-cur-pct">${_rm ? _rm.usdExposurePct + '%' : '—'}</span>
-                            </div>
-                            <div class="ov-cur-bar-track">
-                                <div class="ov-cur-bar-usd" style="width:${_rm ? _rm.usdExposurePct : 50}%"></div>
-                            </div>
-                            <div class="ov-cur-box">
-                                <span class="ov-cur-flag">₪</span>
-                                <span class="ov-cur-name">ILS</span>
-                                <span class="ov-cur-pct">${_rm ? _rm.ilsExposurePct + '%' : '—'}</span>
+                        <div class="ov-currency-section">
+                            <div class="ov-cur-header">חשיפה מטבעית</div>
+                            <div class="ov-cur-chips">
+                                <div class="ov-cur-chip ov-cur-chip-usd">
+                                    <span class="ov-cur-symbol">$</span>
+                                    <span class="ov-cur-tag">USD</span>
+                                    <span class="ov-cur-pct-val">${_rm ? _rm.usdExposurePct : 50}%</span>
+                                </div>
+                                <div class="ov-cur-bar-wrap">
+                                    <div class="ov-cur-bar-bg">
+                                        <div class="ov-cur-bar-fill-usd" style="width:${_rm ? _rm.usdExposurePct : 50}%"></div>
+                                    </div>
+                                </div>
+                                <div class="ov-cur-chip ov-cur-chip-ils">
+                                    <span class="ov-cur-symbol">₪</span>
+                                    <span class="ov-cur-tag">ILS</span>
+                                    <span class="ov-cur-pct-val">${_rm ? _rm.ilsExposurePct : 50}%</span>
+                                </div>
                             </div>
                         </div>
                     </div>
