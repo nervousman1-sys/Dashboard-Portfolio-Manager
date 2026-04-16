@@ -2505,6 +2505,39 @@ body.filter-modal-open::after {
     letter-spacing: -0.03em;
 }
 
+/* ── Card Currency Exposure Bar ── */
+.card-currency-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 16px 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.card-cur-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(245,245,250,0.55);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+}
+
+.card-cur-track {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.card-cur-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00e5ff, #00b8d4);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
 /* Legacy compat */
 .portfolio-value {
     font-size: 15px;
@@ -3041,11 +3074,10 @@ body.filter-modal-open::after {
     .ov-hero-strip {
         flex-wrap: wrap;
         justify-content: center;
-        padding: 12px 14px;
-        gap: 6px;
-        margin-bottom: 0;
-        border-radius: 10px 10px 0 0;
-        border-bottom: none;
+        padding: 10px 10px 8px;
+        gap: 4px;
+        margin-bottom: 6px;
+        border-radius: 10px;
     }
     .ov-hero-strip::before { height: 1px; }
     .ov-hero-main {
@@ -3054,98 +3086,106 @@ body.filter-modal-open::after {
         padding: 0;
         align-items: center;
         gap: 2px;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
     .ov-hero-label {
-        font-size: 10px;
-        letter-spacing: 1.5px;
+        font-size: 9px;
+        letter-spacing: 1.2px;
     }
     .ov-hero-value {
-        font-size: 26px;
+        font-size: 24px;
     }
     .ov-hero-divider {
-        width: 60%;
+        width: 50%;
         height: 1px;
-        margin: 4px auto;
+        margin: 3px auto;
         flex: none;
         background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.20), transparent);
     }
     .ov-hero-kpi {
-        padding: 0 10px;
-        gap: 2px;
+        padding: 0 8px;
+        gap: 1px;
     }
     .ov-kpi-label {
-        font-size: 9.5px;
+        font-size: 9px;
     }
     .ov-kpi-value {
-        font-size: 14px;
+        font-size: 13px;
     }
 
     /* ── Two-Panel Grid → stacked on mobile ── */
     .ov-panels {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
         gap: 6px;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     .ov-panel {
-        padding: 10px 10px 8px;
+        padding: 8px 6px 6px;
+        overflow: hidden;
     }
     .ov-panel-title {
-        font-size: 10px;
-        margin-bottom: 6px;
-        padding-bottom: 4px;
-        letter-spacing: 1.8px;
+        font-size: 9px;
+        margin-bottom: 5px;
+        padding-bottom: 3px;
+        letter-spacing: 1.5px;
         text-align: center;
         justify-content: center;
     }
     .ov-panel-title::before {
-        height: 10px;
+        height: 8px;
         width: 2px;
     }
     .ov-panel-grid.cols-3 {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 4px;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 3px;
     }
     .ov-cell {
-        padding: 6px 4px 5px;
+        padding: 5px 2px 4px;
         text-align: center;
+        overflow: hidden;
+        min-width: 0;
     }
     .ov-cell-label {
-        font-size: 9px;
-        margin-bottom: 2px;
+        font-size: 8px;
+        margin-bottom: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .ov-cell-value {
-        font-size: 13px;
+        font-size: 12px;
+        white-space: nowrap;
     }
     .ov-cell-sub {
-        font-size: 8px;
+        font-size: 7px;
     }
     .ov-cell-bar {
         width: 70%;
         height: 2px;
-        margin: 3px auto 0;
+        margin: 2px auto 0;
     }
     .ov-panel-footnote {
-        font-size: 8px;
+        font-size: 7px;
     }
     /* Currency row mobile */
     .ov-currency-row {
-        gap: 6px;
-        margin-top: 6px;
-        padding-top: 6px;
+        gap: 5px;
+        margin-top: 5px;
+        padding-top: 5px;
         justify-content: center;
     }
-    .ov-cur-flag { font-size: 12px; }
-    .ov-cur-name { font-size: 9px; }
-    .ov-cur-pct { font-size: 11px; }
+    .ov-cur-flag { font-size: 11px; }
+    .ov-cur-name { font-size: 8px; }
+    .ov-cur-pct { font-size: 10px; }
+    .ov-cur-bar-track { min-width: 40px; }
 
-    /* ── Chart section mobile — compact to avoid scrolling ── */
+    /* ── Chart section mobile ── */
     .ov-chart-section .modal-performance-container {
-        height: 160px;
+        height: 180px;
         padding: 4px;
     }
     .ov-chart-section .modal-performance-container canvas {
-        min-height: 80px;
+        min-height: 100px;
     }
 
     /* ── Charts: perf only, no donut ── */
