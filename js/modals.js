@@ -172,17 +172,19 @@ async function openModal(clientId) {
                         <span class="ov-hero-value">${formatCurrency(client.portfolioValue)}</span>
                     </div>
                     <div class="ov-hero-divider"></div>
-                    <div class="ov-hero-kpi">
-                        <span class="ov-kpi-label">רווח/הפסד</span>
-                        <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
-                    </div>
-                    <div class="ov-hero-kpi">
-                        <span class="ov-kpi-label">תשואה</span>
-                        <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
-                    </div>
-                    <div class="ov-hero-kpi">
-                        <span class="ov-kpi-label">P&L יומי</span>
-                        <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
+                    <div class="ov-hero-kpis">
+                        <div class="ov-hero-kpi">
+                            <span class="ov-kpi-label">רווח/הפסד</span>
+                            <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
+                        </div>
+                        <div class="ov-hero-kpi">
+                            <span class="ov-kpi-label">תשואה</span>
+                            <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
+                        </div>
+                        <div class="ov-hero-kpi">
+                            <span class="ov-kpi-label">P&L יומי</span>
+                            <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
+                        </div>
                     </div>
                 </div>
 

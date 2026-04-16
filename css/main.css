@@ -3443,6 +3443,12 @@ body.filter-modal-open::after {
     flex-shrink: 0;
 }
 
+.ov-hero-kpis {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
 .ov-hero-kpi {
     display: flex;
     flex-direction: column;
