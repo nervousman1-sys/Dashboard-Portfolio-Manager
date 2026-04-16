@@ -2496,6 +2496,12 @@ body.filter-modal-open::after {
     font-size: 14px;
     font-weight: 900;
     color: var(--text-primary);
+}
+.card-footer-value.yield-positive {
+    color: var(--accent-green);
+}
+.card-footer-value.yield-negative {
+    color: var(--accent-red);
     letter-spacing: -0.03em;
 }
 
@@ -2810,7 +2816,7 @@ body.filter-modal-open::after {
 
 /* Full-width perf chart in overview (no donut beside it) */
 .ov-chart-section .modal-performance-container {
-    height: 280px;
+    height: 240px;
 }
 
 /* Performance chart controls */
@@ -4766,9 +4772,10 @@ body.filter-modal-open::after {
         padding: 12px 16px 4px;
     }
 
-    /* Hide grid/list toggle on mobile — always list */
+    /* Show grid/list toggle on mobile */
     .view-toggle-group {
-        display: none;
+        display: flex;
+        gap: 4px;
     }
 
     .clients-grid.list-view {
@@ -6055,6 +6062,67 @@ body.filter-modal-open::after {
     padding: 16px;
     border-top: 1px solid var(--border);
     margin-top: auto;
+}
+
+/* ── Sidebar clock (mobile only) ── */
+.sidebar-clock-group {
+    display: none;           /* hidden on desktop */
+    text-align: center;
+    padding: 8px 0 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.sidebar-clock {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent-cyan, #00e5ff);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+}
+
+.sidebar-clock-label {
+    font-size: 10px;
+    color: rgba(245,245,250,0.40);
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+
+/* ── Sidebar report button ── */
+.sidebar-report-btn {
+    display: none;           /* hidden on desktop */
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(0, 229, 255, 0.15);
+    background: rgba(0, 229, 255, 0.04);
+    color: rgba(0, 229, 255, 0.85);
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.sidebar-report-btn:hover {
+    background: rgba(0, 229, 255, 0.08);
+}
+
+.sidebar-report-btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* Show clock + report on mobile sidebar */
+@media (max-width: 768px) {
+    .sidebar-clock-group { display: block; }
+    .sidebar-report-btn { display: flex; }
 }
 
 .sidebar-logout {

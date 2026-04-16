@@ -131,6 +131,10 @@ function _updateHeaderClock() {
     const parts = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tzName });
     el.textContent = parts;
 
+    // Sync sidebar clock (mobile)
+    const sbClock = document.getElementById('sidebarClock');
+    if (sbClock) sbClock.textContent = parts;
+
     // Update sentiment sub-line: show score source if sentiment is loaded, else show date
     const sentSub = document.querySelector('.sentiment-sub');
     if (sentSub && !window._marketSentiment) {
