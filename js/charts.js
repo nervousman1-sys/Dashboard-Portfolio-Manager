@@ -1555,6 +1555,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 10. Construct Chart.js instance — complete options object ──
     const _isMobile = window.innerWidth <= 768;
+    const _isFullscreen = canvasId === 'fullscreen-chart';
     const chartInstance = new Chart(canvas, {
         type: 'line',
         data: { datasets },
@@ -1564,9 +1565,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             // Layout padding — safety buffer so line never touches container walls
             layout: {
-                padding: _isMobile
-                    ? { top: 10, bottom: 8, left: 4, right: 8 }
-                    : { top: 30, bottom: 30, left: 15, right: 30 }
+                padding: _isFullscreen
+                    ? (_isMobile ? { top: 12, bottom: 10, left: 8, right: 14 } : { top: 30, bottom: 30, left: 15, right: 30 })
+                    : (_isMobile ? { top: 8, bottom: 6, left: 4, right: 8 } : { top: 30, bottom: 30, left: 15, right: 30 })
             },
 
             interaction: {
@@ -1599,10 +1600,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     ticks: {
                         source: hasBenchmarks ? 'auto' : 'data',  // 'auto' for mixed-resolution datasets
                         autoSkip: true,
-                        maxTicksLimit: _isMobile ? 5 : 12,
+                        maxTicksLimit: _isMobile ? (_isFullscreen ? 7 : 5) : 12,
                         maxRotation: 0,
                         color: '#94a3b8',
-                        font: { size: _isMobile ? 8 : 10 }
+                        font: { size: _isMobile ? 9 : 10 }
                     },
                     grid: {
                         color: 'rgba(148,163,184,0.07)',
@@ -1618,7 +1619,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     grace: '10%',
                     ticks: {
                         color: '#94a3b8',
-                        font: { size: _isMobile ? 8 : 10 },
+                        font: { size: _isMobile ? 9 : 10 },
                         callback: usePercentMode
                             ? function(v) {
                                 // Percentage Y-axis: "+12.5%", "-3.2%", "0.0%"
@@ -1649,10 +1650,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     rtl: true,
                     labels: {
                         color: '#94a3b8',
-                        font: { size: _isMobile ? 8 : 10 },
+                        font: { size: _isMobile ? 9 : 10 },
                         usePointStyle: true,
                         pointStyleWidth: 6,
-                        padding: _isMobile ? 6 : 10,
+                        padding: _isMobile ? 8 : 10,
                         boxWidth: 6
                     }
                 },

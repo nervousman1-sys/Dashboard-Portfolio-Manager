@@ -3075,55 +3075,57 @@ body.filter-modal-open::after {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 12px 10px 10px;
+        padding: 14px 12px 12px;
         gap: 0;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
         border-radius: 10px;
     }
     .ov-hero-strip::before { height: 1px; }
     .ov-hero-main {
         width: 100%;
         flex: none;
-        padding: 0;
+        padding: 0 0 10px;
         align-items: center;
         text-align: center;
-        gap: 2px;
+        gap: 3px;
         margin-bottom: 0;
     }
     .ov-hero-label {
-        font-size: 9px;
-        letter-spacing: 1.2px;
+        font-size: 10px;
+        letter-spacing: 1.5px;
     }
     .ov-hero-value {
-        font-size: 24px;
+        font-size: 26px;
+        letter-spacing: -0.5px;
     }
     .ov-hero-divider {
-        width: 60%;
+        width: 80%;
         height: 1px;
-        margin: 8px auto;
+        margin: 0 auto 10px;
         flex: none;
-        background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.25), transparent);
+        background: linear-gradient(90deg, transparent 5%, rgba(0, 229, 255, 0.30) 50%, transparent 95%);
     }
     .ov-hero-kpis {
         display: flex;
-        justify-content: center;
-        align-items: center;
+        justify-content: space-evenly;
+        align-items: flex-start;
         width: 100%;
         gap: 0;
         flex-shrink: 0;
     }
     .ov-hero-kpi {
         flex: 1;
-        padding: 0 4px;
-        gap: 1px;
+        padding: 0 2px;
+        gap: 2px;
         min-width: 0;
+        align-items: center;
     }
     .ov-kpi-label {
-        font-size: 8px;
+        font-size: 9px;
         white-space: nowrap;
     }
     .ov-kpi-value {
-        font-size: 12px;
+        font-size: 13px;
         white-space: nowrap;
     }
 
@@ -3183,15 +3185,17 @@ body.filter-modal-open::after {
     }
     /* Currency row mobile */
     .ov-currency-row {
-        gap: 5px;
-        margin-top: 5px;
-        padding-top: 5px;
+        gap: 8px;
+        margin-top: 8px;
+        padding: 8px 6px 0;
         justify-content: center;
+        border-top: 1px solid rgba(255,255,255,0.06);
     }
-    .ov-cur-flag { font-size: 11px; }
-    .ov-cur-name { font-size: 8px; }
-    .ov-cur-pct { font-size: 10px; }
-    .ov-cur-bar-track { min-width: 40px; }
+    .ov-cur-box { gap: 4px; }
+    .ov-cur-flag { font-size: 13px; }
+    .ov-cur-name { font-size: 9px; }
+    .ov-cur-pct { font-size: 11px; font-weight: 700; }
+    .ov-cur-bar-track { min-width: 60px; height: 5px; }
 
     /* ── Chart section mobile ── */
     .ov-chart-section .modal-performance-container {
@@ -3424,6 +3428,72 @@ body.filter-modal-open::after {
     padding: 6px 0 0;
 }
 
+/* ── Fullscreen Chart — Mobile ── */
+@media (max-width: 768px) {
+    .fullscreen-chart-overlay {
+        padding: 0;
+    }
+    .fullscreen-chart-box {
+        width: 100%;
+        height: 100vh;
+        max-width: 100%;
+        border-radius: 0;
+        border: none;
+    }
+    .fullscreen-chart-header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .fullscreen-chart-header h3 {
+        font-size: 14px;
+        text-align: center;
+    }
+    .fullscreen-chart-header .perf-time-range {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px;
+    }
+    .fullscreen-chart-header .time-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+    .fullscreen-chart-header .perf-benchmarks {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px;
+    }
+    .fullscreen-chart-header .benchmark-toggle-btn {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    .fullscreen-chart-header .display-mode-btn {
+        font-size: 10px;
+    }
+    .fullscreen-chart-controls {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+    }
+    .fullscreen-chart-controls .zoom-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 15px;
+    }
+    .fullscreen-chart-controls .modal-close {
+        width: 32px;
+        height: 32px;
+    }
+    .fullscreen-chart-body {
+        flex: 1;
+        padding: 8px 4px 12px;
+        min-height: 0;
+    }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    OVERVIEW TAB — Premium Financial Terminal
    Clear typography, generous spacing, institutional grade
@@ -3488,9 +3558,7 @@ body.filter-modal-open::after {
 }
 
 .ov-hero-kpis {
-    display: flex;
-    align-items: center;
-    gap: 0;
+    display: contents;
 }
 
 .ov-hero-kpi {
