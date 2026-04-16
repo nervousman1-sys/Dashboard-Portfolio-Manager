@@ -210,11 +210,19 @@ async function openModal(clientId) {
                                 <div class="ov-cell-bar"><div class="ov-cell-bar-fill" style="width:${_rm ? (100 - _rm.marketExposure - _rm.bondExposure) : 0}%;background:#00ff94"></div></div>
                                 <div class="ov-cell-sub">${_rm ? (100 - _rm.marketExposure - _rm.bondExposure).toFixed(1) + '%' : ''}</div>
                             </div>
-                        </div>
-                        <div class="ov-panel-footer">
-                            <span>השקעה ראשונית: <b>${formatCurrency(client.initialInvestment)}</b></span>
-                            <span>נכסים: <b>${_rm ? _rm.holdingsCount : client.holdings.length}</b></span>
-                            <span>ריכוזיות: <b class="${_rm && _rm.concentration > 50 ? 'val-warn' : ''}">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</b> ${_rm && _rm.topHolding ? '(' + _rm.topHolding + ')' : ''}</span>
+                            <div class="ov-cell">
+                                <div class="ov-cell-label">השקעה ראשונית</div>
+                                <div class="ov-cell-value">${formatCurrency(client.initialInvestment)}</div>
+                            </div>
+                            <div class="ov-cell">
+                                <div class="ov-cell-label">נכסים</div>
+                                <div class="ov-cell-value">${_rm ? _rm.holdingsCount : client.holdings.length}</div>
+                            </div>
+                            <div class="ov-cell">
+                                <div class="ov-cell-label">ריכוזיות</div>
+                                <div class="ov-cell-value ${_rm && _rm.concentration > 50 ? 'val-warn' : ''}">${_rm ? _rm.concentration.toFixed(1) + '%' : '—'}</div>
+                                <div class="ov-cell-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
+                            </div>
                         </div>
                     </div>
                     <!-- Panel: Risk -->

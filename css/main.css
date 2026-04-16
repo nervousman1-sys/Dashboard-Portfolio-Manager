@@ -2810,7 +2810,7 @@ body.filter-modal-open::after {
 
 /* Full-width perf chart in overview (no donut beside it) */
 .ov-chart-section .modal-performance-container {
-    height: 340px;
+    height: 280px;
 }
 
 /* Performance chart controls */
@@ -2995,6 +2995,7 @@ body.filter-modal-open::after {
         max-width: 100%;
         border-radius: 0;
         border: none;
+        overflow-x: hidden;
     }
 
     /* ── Header: single row, name + X ── */
@@ -3032,79 +3033,95 @@ body.filter-modal-open::after {
 
     /* ── Overview: Hero Strip mobile ── */
     .ov-hero-strip {
-        flex-direction: column;
         flex-wrap: wrap;
         justify-content: center;
-        padding: 14px 16px;
-        gap: 8px;
-        margin-bottom: 10px;
+        padding: 10px 12px;
+        gap: 4px;
+        margin-bottom: 6px;
     }
+    .ov-hero-strip::before { height: 1px; }
     .ov-hero-main {
         width: 100%;
         flex: none;
         padding: 0;
         align-items: center;
+        gap: 1px;
     }
     .ov-hero-label {
-        font-size: 11px;
+        font-size: 9px;
     }
     .ov-hero-value {
-        font-size: 24px;
+        font-size: 22px;
     }
     .ov-hero-divider {
-        width: 60%;
+        width: 50%;
         height: 1px;
-        margin: 2px auto;
+        margin: 1px auto;
         flex: none;
     }
     .ov-hero-kpi {
-        padding: 0 10px;
+        padding: 0 8px;
+        gap: 1px;
     }
     .ov-kpi-label {
-        font-size: 10px;
+        font-size: 9px;
     }
     .ov-kpi-value {
-        font-size: 15px;
+        font-size: 13px;
     }
 
     /* ── Two-Panel Grid → stacked on mobile ── */
     .ov-panels {
         grid-template-columns: 1fr;
-        gap: 8px;
-        margin-bottom: 10px;
+        gap: 5px;
+        margin-bottom: 6px;
     }
     .ov-panel {
-        padding: 12px 12px 8px;
+        padding: 8px 8px 6px;
     }
     .ov-panel-title {
-        font-size: 10px;
-        margin-bottom: 8px;
-        padding-bottom: 5px;
+        font-size: 9px;
+        margin-bottom: 5px;
+        padding-bottom: 3px;
+        letter-spacing: 1.5px;
+    }
+    .ov-panel-title::before {
+        height: 9px;
+        width: 2px;
     }
     .ov-panel-grid.cols-3 {
         grid-template-columns: repeat(3, 1fr);
-        gap: 5px;
+        gap: 3px;
     }
     .ov-cell {
-        padding: 8px 5px 6px;
+        padding: 5px 3px 4px;
     }
     .ov-cell-label {
-        font-size: 10px;
+        font-size: 8.5px;
+        margin-bottom: 1px;
     }
     .ov-cell-value {
-        font-size: 14px;
+        font-size: 12px;
     }
     .ov-cell-sub {
-        font-size: 9px;
+        font-size: 7.5px;
     }
-    .ov-panel-footer {
-        font-size: 10px;
-        gap: 10px;
+    .ov-cell-bar {
+        width: 70%;
+        height: 2px;
+        margin-top: 2px;
+    }
+    .ov-panel-footnote {
+        font-size: 8px;
     }
 
-    /* ── Chart section mobile ── */
+    /* ── Chart section mobile — compact to avoid scrolling ── */
     .ov-chart-section .modal-performance-container {
-        height: 220px;
+        height: 170px;
+        padding: 4px;
+    }
+    .ov-chart-section .modal-performance-container canvas {
+        min-height: 90px;
     }
 
     /* ── Charts: perf only, no donut ── */
@@ -3310,8 +3327,8 @@ body.filter-modal-open::after {
     align-items: center;
     justify-content: center;
     gap: 0;
-    padding: 20px 28px;
-    margin-bottom: 14px;
+    padding: 16px 24px;
+    margin-bottom: 10px;
     background: linear-gradient(135deg, rgba(0, 229, 255, 0.04) 0%, rgba(0, 0, 0, 0.12) 100%);
     border: 1px solid rgba(0, 229, 255, 0.12);
     border-radius: 12px;
@@ -3399,15 +3416,15 @@ body.filter-modal-open::after {
 .ov-panels {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
 .ov-panel {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
-    padding: 16px 18px 12px;
+    padding: 12px 14px 10px;
     position: relative;
 }
 
