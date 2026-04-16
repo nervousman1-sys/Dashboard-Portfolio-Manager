@@ -771,9 +771,22 @@ function _calcListMetrics(client) {
     // ── Bond allocation % ──
     const bondExposure = (bondPct * 100).toFixed(0);
 
+    // ── Currency exposure (USD vs ILS) ──
+    let usdHoldingsVal = 0, ilsHoldingsVal = 0;
+    client.holdings.forEach(h => {
+        const cur = (h.currency || 'USD').toUpperCase();
+        if (cur === 'ILS' || cur === 'ILA') ilsHoldingsVal += hVal(h);
+        else usdHoldingsVal += hVal(h);
+    });
+    usdHoldingsVal += cashUsd;
+    ilsHoldingsVal += cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
+    const usdExposurePct = totalVal > 0 ? (usdHoldingsVal / totalVal * 100).toFixed(1) : '0';
+    const ilsExposurePct = totalVal > 0 ? (ilsHoldingsVal / totalVal * 100).toFixed(1) : '0';
+
     return { returnPct, marketExposure, stdDev, maxDD, riskScore, sharpe, totalCash,
              cumulativePnl, dailyPnl, concentration, topHolding, VaR, sortino,
-             holdingsCount, bondExposure, hasHistory };
+             holdingsCount, bondExposure, hasHistory,
+             usdExposurePct, ilsExposurePct, usdHoldingsVal, ilsHoldingsVal };
 }
 
 // ── Render list-view table ──
@@ -1118,13 +1131,6 @@ function renderClientCards() {
     _cardRenderKey++;
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
-    // On mobile (<=768px): force list view
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile && _portfolioView !== 'list') {
-        _portfolioView = 'list';
-        const sub = document.getElementById('portfolioSectionSub');
-        if (sub) sub.textContent = 'דירוג לפי תשואה (TOP 12)';
-    }
     // Restore view mode after innerHTML wipe
     grid.classList.toggle('list-view', _portfolioView === 'list');
 
