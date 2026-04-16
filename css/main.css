@@ -3072,10 +3072,11 @@ body.filter-modal-open::after {
 
     /* ── Overview: Hero Strip mobile ── */
     .ov-hero-strip {
-        flex-wrap: wrap;
+        flex-direction: column;
+        align-items: center;
         justify-content: center;
-        padding: 10px 10px 8px;
-        gap: 4px;
+        padding: 12px 10px 10px;
+        gap: 0;
         margin-bottom: 6px;
         border-radius: 10px;
     }
@@ -3085,8 +3086,9 @@ body.filter-modal-open::after {
         flex: none;
         padding: 0;
         align-items: center;
+        text-align: center;
         gap: 2px;
-        margin-bottom: 2px;
+        margin-bottom: 0;
     }
     .ov-hero-label {
         font-size: 9px;
@@ -3096,21 +3098,33 @@ body.filter-modal-open::after {
         font-size: 24px;
     }
     .ov-hero-divider {
-        width: 50%;
+        width: 60%;
         height: 1px;
-        margin: 3px auto;
+        margin: 8px auto;
         flex: none;
-        background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.20), transparent);
+        background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.25), transparent);
+    }
+    .ov-hero-kpis {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        gap: 0;
+        flex-shrink: 0;
     }
     .ov-hero-kpi {
-        padding: 0 8px;
+        flex: 1;
+        padding: 0 4px;
         gap: 1px;
+        min-width: 0;
     }
     .ov-kpi-label {
-        font-size: 9px;
+        font-size: 8px;
+        white-space: nowrap;
     }
     .ov-kpi-value {
-        font-size: 13px;
+        font-size: 12px;
+        white-space: nowrap;
     }
 
     /* ── Two-Panel Grid → stacked on mobile ── */
@@ -3181,11 +3195,41 @@ body.filter-modal-open::after {
 
     /* ── Chart section mobile ── */
     .ov-chart-section .modal-performance-container {
-        height: 180px;
-        padding: 4px;
+        height: 280px;
+        padding: 8px 4px;
+        position: relative;
     }
     .ov-chart-section .modal-performance-container canvas {
-        min-height: 100px;
+        min-height: 220px;
+    }
+    .ov-chart-section .perf-chart-header {
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 4px 2px;
+    }
+    .ov-chart-section .perf-time-range {
+        gap: 2px;
+    }
+    .ov-chart-section .time-btn {
+        padding: 3px 6px;
+        font-size: 9px;
+    }
+    .ov-chart-section .perf-benchmarks {
+        gap: 4px;
+    }
+    .ov-chart-section .benchmark-toggle-btn {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+    .ov-chart-section .display-mode-btn {
+        font-size: 9px;
+        width: 22px;
+        height: 22px;
+    }
+    .ov-chart-section .expand-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
     }
 
     /* ── Charts: perf only, no donut ── */
