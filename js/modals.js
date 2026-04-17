@@ -390,10 +390,31 @@ async function openModal(clientId) {
         _modalPerfRange = '1y';
         _modalPerfBenchmarks = [];
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
-        renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
-            _modalPerfChartInstance = inst;
-        });
-    }, 100);
+
+        // Wait for canvas to have real dimensions before rendering
+        const _perfCanvas = document.getElementById('modal-perf-chart');
+        if (_perfCanvas) {
+            const _waitForCanvas = () => {
+                return new Promise(resolve => {
+                    let tries = 0;
+                    const check = () => {
+                        tries++;
+                        if ((_perfCanvas.offsetWidth > 0 && _perfCanvas.offsetHeight > 0) || tries > 30) {
+                            resolve();
+                        } else {
+                            requestAnimationFrame(check);
+                        }
+                    };
+                    requestAnimationFrame(check);
+                });
+            };
+            _waitForCanvas().then(() => {
+                renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
+                    _modalPerfChartInstance = inst;
+                });
+            });
+        }
+    }, 150);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──
     _loadTransactionHistory(client.id);
