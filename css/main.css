@@ -2662,7 +2662,7 @@ body.filter-modal-open::after {
 }
 
 .modal-body {
-    padding: 16px 20px;
+    padding: 14px 20px 10px;
     flex: 1;
     overflow: hidden;
     min-height: 0;
@@ -2709,28 +2709,23 @@ body.filter-modal-open::after {
 }
 
 .modal-tab-content.active {
-    display: flex;
-    flex-direction: column;
+    display: block;
     flex: 1;
     min-height: 0;
     overflow: hidden;
 }
 
-/* Holdings / Transactions / Sectors — internal scroll for their table areas */
+/* Overview: no scroll, everything fits */
+#tab-overview {
+    overflow: hidden;
+}
+
+/* Holdings / Transactions: allow scrolling inside the table area */
 #tab-holdings,
-#tab-transactions {
+#tab-transactions,
+#tab-sectors {
     overflow-y: auto;
-}
-#tab-holdings .holdings-table-wrapper,
-#tab-transactions .holdings-table-wrapper {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-}
-#tab-sectors .sectors-layout {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
+    overflow-x: hidden;
 }
 
 .benchmark-legend {
@@ -2853,21 +2848,11 @@ body.filter-modal-open::after {
     flex-shrink: 0;
 }
 
-/* Canvas wrapper: fills remaining flex space, canvas is positioned absolute inside it.
-   Chart.js reads the wrapper's clientWidth/clientHeight (correct!) not the container's.
-   This definitively fixes the "black canvas" bug. */
-.perf-canvas-wrap {
-    flex: 1;
-    position: relative;
-    min-height: 0;
-    min-height: 120px; /* safety floor */
-}
-.perf-canvas-wrap canvas {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+/* Canvas fills whatever height remains after the header */
+.modal-performance-container canvas {
+    display: block;
     width: 100% !important;
-    height: 100% !important;
+    /* Height is set explicitly by JS in renderPerformanceChart() before Chart.js init */
 }
 
 .modal-performance-container h3 {
@@ -2889,11 +2874,12 @@ body.filter-modal-open::after {
     flex: 1;
 }
 
-/* Full-width perf chart in overview — fills remaining flex space, no fixed height */
+/* Full-width perf chart — concrete height so Chart.js always gets non-zero clientHeight.
+   Uses clamp: never smaller than 220px, never larger than 340px. */
 .ov-chart-section .modal-performance-container {
-    height: auto;
-    flex: 1;
-    min-height: 0;
+    height: clamp(220px, calc(96vh - 480px), 340px);
+    flex: none;
+    min-height: 220px;
     margin-bottom: 0;
     border: 1px solid rgba(0, 229, 255, 0.08);
 }
@@ -3117,37 +3103,19 @@ body.filter-modal-open::after {
     background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.10), transparent);
 }
 
-/* Scan line animation — sweeps across vertically */
+/* Scan line element kept in HTML but hidden — no animation */
 .ov-hero-scan {
-    position: absolute;
-    top: -100%;
-    left: 0;
-    right: 0;
-    height: 40%;
-    background: linear-gradient(180deg,
-        transparent 0%,
-        rgba(0, 229, 255, 0.025) 50%,
-        transparent 100%);
-    animation: heroScan 4s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 0;
+    display: none;
 }
 
-@keyframes heroScan {
-    0%   { top: -40%; opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-}
-
-/* Inner wrapper above scan line */
+/* Inner wrapper */
 .ov-hero-inner {
     position: relative;
     z-index: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 22px 32px 18px;
+    padding: 16px 32px 14px;
 }
 
 /* Top section: label + value + live badge */
@@ -3155,8 +3123,8 @@ body.filter-modal-open::after {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding-bottom: 14px;
+    gap: 3px;
+    padding-bottom: 10px;
 }
 
 .ov-hero-label {
@@ -3289,15 +3257,15 @@ body.filter-modal-open::after {
 .ov-panels {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
 .ov-panel {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
-    padding: 12px 14px 10px;
+    padding: 10px 12px 8px;
     position: relative;
 }
 
@@ -3336,7 +3304,7 @@ body.filter-modal-open::after {
 
 .ov-cell {
     text-align: center;
-    padding: 10px 8px 8px;
+    padding: 7px 6px 6px;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.018);
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -3423,8 +3391,8 @@ body.filter-modal-open::after {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 14px;
-    margin-bottom: 8px;
+    padding: 6px 14px;
+    margin-bottom: 7px;
     background: rgba(0, 229, 255, 0.02);
     border: 1px solid rgba(0, 229, 255, 0.06);
     border-radius: 8px;
@@ -3475,12 +3443,9 @@ body.filter-modal-open::after {
     transition: width 0.5s ease;
 }
 
-/* ── Full-Width Chart Section: flex-grows to fill remaining modal space ── */
+/* ── Full-Width Chart Section ── */
 .ov-chart-section {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    flex-shrink: 0;
     margin-top: 0;
 }
 
@@ -3643,18 +3608,11 @@ body.filter-modal-open::after {
     .ov-curbar-pct { font-size: 11px; }
     .ov-curbar-track { height: 5px; }
 
-    /* ── Chart section mobile: fixed height since parent scrolls ── */
-    .ov-chart-section {
-        flex: none;
+    /* ── Chart section mobile: explicit height ── */
+    .ov-chart-section .modal-performance-container {
         height: 240px;
         min-height: 240px;
-    }
-    .ov-chart-section .modal-performance-container {
-        height: 100%;
         padding: 8px 6px;
-    }
-    .perf-canvas-wrap {
-        min-height: 160px;
     }
     .ov-chart-section .perf-chart-header {
         flex-wrap: wrap;

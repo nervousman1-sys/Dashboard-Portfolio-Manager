@@ -1259,9 +1259,24 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const container = canvas.parentElement;
     _showChartLoading(container);
 
-    // Canvas is positioned absolute inside .perf-canvas-wrap (position:relative; flex:1).
-    // Chart.js reads the wrapper's clientWidth/clientHeight which equals the flex-allocated
-    // space — no manual sizing needed. The wrapper's min-height prevents zero-size canvas.
+    // Set canvas dimensions explicitly BEFORE Chart.js initializes.
+    // Chart.js with responsive:true reads canvas.parentElement.clientHeight to determine the
+    // canvas pixel buffer size. If the container is a flex child that hasn't resolved its
+    // height yet, clientHeight can be 0, causing a "black canvas" (zero-size render buffer).
+    // Explicitly stamping the canvas width/height attributes here guarantees correct dimensions
+    // regardless of flex chain resolution timing.
+    {
+        const _containerH = container.clientHeight || 280;
+        const _containerW = container.clientWidth || 600;
+        const _hdrEl = container.querySelector('.perf-chart-header');
+        const _hdrH = _hdrEl ? (_hdrEl.offsetHeight + 8) : 56; // +8 gap
+        const _padV = 24; // 12px top + 12px bottom container padding
+        const _canvasH = Math.max(150, _containerH - _hdrH - _padV);
+        canvas.style.height = _canvasH + 'px';
+        canvas.style.width = '100%';
+        canvas.height = _canvasH;
+        canvas.width = _containerW - _padV;
+    }
 
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
