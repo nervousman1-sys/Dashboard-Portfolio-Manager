@@ -226,27 +226,6 @@ async function openModal(clientId) {
                                 <div class="ov-cell-sub">${_rm && _rm.topHolding ? _rm.topHolding : ''}</div>
                             </div>
                         </div>
-                        <!-- Currency Exposure sub-section -->
-                        <div class="ov-currency-section">
-                            <div class="ov-cur-header">חשיפה מטבעית</div>
-                            <div class="ov-cur-chips">
-                                <div class="ov-cur-chip ov-cur-chip-usd">
-                                    <span class="ov-cur-symbol">$</span>
-                                    <span class="ov-cur-tag">USD</span>
-                                    <span class="ov-cur-pct-val">${_rm ? _rm.usdExposurePct : 50}%</span>
-                                </div>
-                                <div class="ov-cur-bar-wrap">
-                                    <div class="ov-cur-bar-bg">
-                                        <div class="ov-cur-bar-fill-usd" style="width:${_rm ? _rm.usdExposurePct : 50}%"></div>
-                                    </div>
-                                </div>
-                                <div class="ov-cur-chip ov-cur-chip-ils">
-                                    <span class="ov-cur-symbol">₪</span>
-                                    <span class="ov-cur-tag">ILS</span>
-                                    <span class="ov-cur-pct-val">${_rm ? _rm.ilsExposurePct : 50}%</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                     <!-- Panel: Risk -->
                     <div class="ov-panel">
@@ -284,7 +263,24 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
-                <!-- ═══ FULL-WIDTH PERFORMANCE CHART (no donut in overview) ═══ -->
+                <!-- ═══ CURRENCY EXPOSURE — full-width row ═══ -->
+                <div class="ov-currency-bar">
+                    <div class="ov-curbar-side">
+                        <span class="ov-curbar-symbol">$</span>
+                        <span class="ov-curbar-label">USD</span>
+                        <span class="ov-curbar-pct">${_rm ? _rm.usdExposurePct : 50}%</span>
+                    </div>
+                    <div class="ov-curbar-track">
+                        <div class="ov-curbar-fill" style="width:${_rm ? _rm.usdExposurePct : 50}%"></div>
+                    </div>
+                    <div class="ov-curbar-side">
+                        <span class="ov-curbar-pct">${_rm ? _rm.ilsExposurePct : 50}%</span>
+                        <span class="ov-curbar-label">ILS</span>
+                        <span class="ov-curbar-symbol">₪</span>
+                    </div>
+                </div>
+
+                <!-- ═══ FULL-WIDTH PERFORMANCE CHART ═══ -->
                 <div class="ov-chart-section">
                     <div class="modal-performance-container chart-wrapper-relative">
                         <button class="expand-btn" onclick="openFullscreenChart(currentModalClientId)" title="הגדל גרף">&#x26F6;</button>
