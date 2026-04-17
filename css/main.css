@@ -2812,7 +2812,7 @@ body.filter-modal-open::after {
     border-radius: 12px;
     padding: 12px;
     border: 1px solid var(--border);
-    overflow: visible;
+    overflow: hidden;
 }
 
 /* Header items (buttons, time range) don't grow — canvas takes remaining flex space */
@@ -3267,75 +3267,57 @@ body.filter-modal-open::after {
     margin-top: 6px;
 }
 
-/* ── Currency Exposure Section ── */
-.ov-currency-section {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255,255,255,0.06);
-}
-
-.ov-cur-header {
-    font-size: 10px;
-    font-weight: 600;
-    color: rgba(0, 229, 255, 0.65);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    text-align: center;
-    margin-bottom: 8px;
-}
-
-.ov-cur-chips {
+/* ── Currency Exposure Bar — full-width row between panels and chart ── */
+.ov-currency-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 10px;
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px;
 }
 
-.ov-cur-chip {
+.ov-curbar-side {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 6px;
-    white-space: nowrap;
+    gap: 6px;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
-.ov-cur-symbol {
-    font-size: 13px;
+.ov-curbar-symbol {
+    font-size: 15px;
     font-weight: 800;
     color: rgba(0, 229, 255, 0.75);
+    line-height: 1;
 }
 
-.ov-cur-tag {
-    font-size: 10px;
+.ov-curbar-label {
+    font-size: 11px;
     font-weight: 600;
-    color: rgba(245,245,250,0.55);
+    color: rgba(245,245,250,0.50);
     letter-spacing: 0.5px;
 }
 
-.ov-cur-pct-val {
-    font-size: 12px;
+.ov-curbar-pct {
+    font-size: 13px;
     font-weight: 700;
     color: rgba(245,245,250,0.92);
     font-variant-numeric: tabular-nums;
 }
 
-.ov-cur-bar-wrap {
+.ov-curbar-track {
     flex: 1;
-    min-width: 0;
-}
-
-.ov-cur-bar-bg {
-    width: 100%;
     height: 6px;
     background: rgba(255,255,255,0.06);
     border-radius: 3px;
     overflow: hidden;
+    min-width: 40px;
 }
 
-.ov-cur-bar-fill-usd {
+.ov-curbar-fill {
     height: 100%;
     background: linear-gradient(90deg, #00e5ff, #00b8d4);
     border-radius: 3px;
@@ -3485,48 +3467,37 @@ body.filter-modal-open::after {
     .ov-panel-footnote {
         font-size: 7px;
     }
-    /* Currency section mobile */
-    .ov-currency-section {
-        margin-top: 8px;
-        padding-top: 8px;
+    /* Currency bar mobile */
+    .ov-currency-bar {
+        gap: 8px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        border-radius: 8px;
     }
-    .ov-cur-header {
-        font-size: 8px;
-        letter-spacing: 1.2px;
-        margin-bottom: 6px;
-    }
-    .ov-cur-chips {
-        gap: 6px;
-    }
-    .ov-cur-chip {
-        padding: 3px 6px;
-        gap: 3px;
-    }
-    .ov-cur-symbol { font-size: 11px; }
-    .ov-cur-tag { font-size: 8px; }
-    .ov-cur-pct-val { font-size: 10px; }
-    .ov-cur-bar-bg { height: 5px; }
+    .ov-curbar-symbol { font-size: 13px; }
+    .ov-curbar-label { font-size: 9px; }
+    .ov-curbar-pct { font-size: 11px; }
+    .ov-curbar-track { height: 5px; }
 
     /* ── Chart section mobile ── */
     .ov-chart-section .modal-performance-container {
-        height: 280px;
-        padding: 8px 4px;
-        position: relative;
+        height: 260px;
+        padding: 8px 6px;
     }
     .ov-chart-section .modal-performance-container canvas {
-        min-height: 220px;
+        min-height: 180px;
     }
     .ov-chart-section .perf-chart-header {
         flex-wrap: wrap;
         gap: 4px;
-        padding: 4px 2px;
+        margin-bottom: 4px;
     }
     .ov-chart-section .perf-time-range {
         gap: 2px;
     }
     .ov-chart-section .time-btn {
-        padding: 3px 6px;
-        font-size: 9px;
+        padding: 4px 7px;
+        font-size: 10px;
     }
     .ov-chart-section .perf-benchmarks {
         gap: 4px;
@@ -3536,14 +3507,14 @@ body.filter-modal-open::after {
         padding: 3px 6px;
     }
     .ov-chart-section .display-mode-btn {
-        font-size: 9px;
-        width: 22px;
-        height: 22px;
-    }
-    .ov-chart-section .expand-btn {
+        font-size: 10px;
         width: 24px;
         height: 24px;
-        font-size: 12px;
+    }
+    .ov-chart-section .expand-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 13px;
     }
 
     /* ── Charts: perf only, no donut ── */
@@ -3753,12 +3724,13 @@ body.filter-modal-open::after {
     .fullscreen-chart-header {
         flex-direction: column;
         align-items: stretch;
-        padding: 10px 12px;
-        gap: 8px;
+        padding: 10px 12px 8px;
+        gap: 6px;
     }
     .fullscreen-chart-header h3 {
-        font-size: 14px;
+        font-size: 15px;
         text-align: center;
+        margin: 0;
     }
     .fullscreen-chart-header .perf-time-range {
         display: flex;
@@ -3767,8 +3739,8 @@ body.filter-modal-open::after {
         gap: 4px;
     }
     .fullscreen-chart-header .time-btn {
-        padding: 4px 8px;
-        font-size: 10px;
+        padding: 5px 10px;
+        font-size: 11px;
     }
     .fullscreen-chart-header .perf-benchmarks {
         display: flex;
@@ -3777,30 +3749,37 @@ body.filter-modal-open::after {
         gap: 4px;
     }
     .fullscreen-chart-header .benchmark-toggle-btn {
-        font-size: 10px;
-        padding: 4px 8px;
+        font-size: 11px;
+        padding: 4px 10px;
     }
     .fullscreen-chart-header .display-mode-btn {
-        font-size: 10px;
+        font-size: 11px;
+        width: 28px;
+        height: 28px;
     }
     .fullscreen-chart-controls {
         display: flex;
         justify-content: center;
-        gap: 6px;
+        gap: 8px;
     }
     .fullscreen-chart-controls .zoom-btn {
-        width: 32px;
-        height: 32px;
-        font-size: 15px;
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
     }
     .fullscreen-chart-controls .modal-close {
-        width: 32px;
-        height: 32px;
+        width: 34px;
+        height: 34px;
+        font-size: 18px;
     }
     .fullscreen-chart-body {
         flex: 1;
-        padding: 8px 4px 12px;
+        padding: 10px 6px 14px;
         min-height: 0;
+    }
+    .zoom-hint {
+        font-size: 10px;
+        padding: 4px 0 8px;
     }
 }
 
