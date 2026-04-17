@@ -165,25 +165,29 @@ async function openModal(clientId) {
         <div class="modal-body">
             <!-- Tab: Overview -->
             <div class="modal-tab-content active" id="tab-overview">
-                <!-- ═══ HERO — Portfolio Value (top) + KPI Cards (bottom) ═══ -->
+                <!-- ═══ HERO — Command Center Banner ═══ -->
                 <div class="ov-hero-block">
-                    <div class="ov-hero-top">
-                        <span class="ov-hero-label">שווי תיק כולל</span>
-                        <span class="ov-hero-value">${formatCurrency(client.portfolioValue)}</span>
-                    </div>
-                    <div class="ov-hero-sep"></div>
-                    <div class="ov-hero-kpis">
-                        <div class="ov-kpi-card">
-                            <span class="ov-kpi-label">רווח/הפסד</span>
-                            <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
+                    <div class="ov-hero-scan"></div>
+                    <div class="ov-hero-inner">
+                        <div class="ov-hero-top">
+                            <span class="ov-hero-label">שווי תיק כולל</span>
+                            <span class="ov-hero-value">${formatCurrency(client.portfolioValue)}</span>
+                            <span class="ov-hero-live"><span class="ov-hero-live-dot"></span>LIVE</span>
                         </div>
-                        <div class="ov-kpi-card">
-                            <span class="ov-kpi-label">תשואה</span>
-                            <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
-                        </div>
-                        <div class="ov-kpi-card">
-                            <span class="ov-kpi-label">P&L יומי</span>
-                            <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
+                        <div class="ov-hero-sep"></div>
+                        <div class="ov-hero-kpis">
+                            <div class="ov-kpi-card ${totalProfit >= 0 ? 'kpi-positive' : 'kpi-negative'}">
+                                <span class="ov-kpi-label">רווח/הפסד</span>
+                                <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
+                            </div>
+                            <div class="ov-kpi-card ${totalProfit >= 0 ? 'kpi-positive' : 'kpi-negative'}">
+                                <span class="ov-kpi-label">תשואה</span>
+                                <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
+                            </div>
+                            <div class="ov-kpi-card ${_rm && _rm.dailyPnl >= 0 ? 'kpi-positive' : 'kpi-negative'}">
+                                <span class="ov-kpi-label">P&L יומי</span>
+                                <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -308,7 +312,9 @@ async function openModal(clientId) {
                                 <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="% / $">%</button>
                             </div>
                         </div>
-                        <canvas id="modal-perf-chart"></canvas>
+                        <div class="perf-canvas-wrap">
+                            <canvas id="modal-perf-chart"></canvas>
+                        </div>
                     </div>
                 </div>
                 <!-- Hidden donut canvas for sectors tab data (still needed for chart init) -->
@@ -391,30 +397,19 @@ async function openModal(clientId) {
         _modalPerfBenchmarks = [];
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
 
-        // Wait for canvas to have real dimensions before rendering
+        // Render after a single rAF so the browser has committed the flex layout.
+        // renderPerformanceChart() reads canvas.offsetHeight to set an explicit CSS height
+        // before Chart.js initializes — this prevents the "black canvas" bug where Chart.js
+        // uses parentElement.clientHeight (full container) instead of the flex-allocated height.
         const _perfCanvas = document.getElementById('modal-perf-chart');
         if (_perfCanvas) {
-            const _waitForCanvas = () => {
-                return new Promise(resolve => {
-                    let tries = 0;
-                    const check = () => {
-                        tries++;
-                        if ((_perfCanvas.offsetWidth > 0 && _perfCanvas.offsetHeight > 0) || tries > 30) {
-                            resolve();
-                        } else {
-                            requestAnimationFrame(check);
-                        }
-                    };
-                    requestAnimationFrame(check);
-                });
-            };
-            _waitForCanvas().then(() => {
+            requestAnimationFrame(() => {
                 renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
                     _modalPerfChartInstance = inst;
                 });
             });
         }
-    }, 150);
+    }, 300);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──
     _loadTransactionHistory(client.id);

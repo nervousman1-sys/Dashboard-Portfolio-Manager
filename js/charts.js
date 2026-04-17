@@ -1259,6 +1259,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const container = canvas.parentElement;
     _showChartLoading(container);
 
+    // Canvas is positioned absolute inside .perf-canvas-wrap (position:relative; flex:1).
+    // Chart.js reads the wrapper's clientWidth/clientHeight which equals the flex-allocated
+    // space — no manual sizing needed. The wrapper's min-height prevents zero-size canvas.
+
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
     const isIntraday = (range === '1d' || range === '5d');
