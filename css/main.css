@@ -2619,17 +2619,21 @@ body.filter-modal-open::after {
     border: 1px solid var(--border);
     max-width: 1120px;
     width: 100%;
+    height: 96vh;
     max-height: 96vh;
-    overflow-y: auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), var(--shadow-glow);
 }
 
 .modal-header {
-    padding: 24px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .modal-header h2 {
@@ -2658,7 +2662,12 @@ body.filter-modal-open::after {
 }
 
 .modal-body {
-    padding: 24px;
+    padding: 16px 20px;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-tab-bar {
@@ -2667,6 +2676,7 @@ body.filter-modal-open::after {
     border-bottom: 1px solid var(--border);
     background: rgba(0, 0, 0, 0.4);
     overflow-x: auto;
+    flex-shrink: 0;
 }
 
 .modal-tab {
@@ -2699,7 +2709,28 @@ body.filter-modal-open::after {
 }
 
 .modal-tab-content.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Holdings / Transactions / Sectors — internal scroll for their table areas */
+#tab-holdings,
+#tab-transactions {
+    overflow-y: auto;
+}
+#tab-holdings .holdings-table-wrapper,
+#tab-transactions .holdings-table-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+#tab-sectors .sectors-layout {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .benchmark-legend {
@@ -2804,8 +2835,7 @@ body.filter-modal-open::after {
 .modal-performance-container {
     position: relative;
     width: 100%;
-    height: 280px;
-    margin-bottom: 24px;
+    /* Height is now driven by flex layout (flex:1 in .ov-chart-section) — no fixed height here */
     background: var(--bg-primary);
     display: flex;
     flex-direction: column;
@@ -2815,22 +2845,29 @@ body.filter-modal-open::after {
     overflow: hidden;
 }
 
-/* Header items (buttons, time range) don't grow — canvas takes remaining flex space */
+/* Header items (buttons, time range) don't grow */
 .modal-performance-container .perf-chart-header {
     flex-shrink: 0;
 }
 .modal-performance-container .expand-btn {
     flex-shrink: 0;
 }
-.modal-performance-container canvas {
-    /* Height is set explicitly by JS (renderPerformanceChart) to match the actual flex-allocated
-       space — this ensures Chart.js sizes correctly. We do NOT use flex:1 here because Chart.js
-       reads parentElement.clientHeight (full container) rather than the canvas's flex height,
-       which causes the chart line to render behind the header (appearing as a "black canvas"). */
-    width: 100%;
-    display: block;
-    min-height: 100px;
-    flex-shrink: 1;
+
+/* Canvas wrapper: fills remaining flex space, canvas is positioned absolute inside it.
+   Chart.js reads the wrapper's clientWidth/clientHeight (correct!) not the container's.
+   This definitively fixes the "black canvas" bug. */
+.perf-canvas-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    min-height: 120px; /* safety floor */
+}
+.perf-canvas-wrap canvas {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .modal-performance-container h3 {
@@ -2852,11 +2889,13 @@ body.filter-modal-open::after {
     flex: 1;
 }
 
-/* Full-width perf chart in overview (no donut beside it) */
+/* Full-width perf chart in overview — fills remaining flex space, no fixed height */
 .ov-chart-section .modal-performance-container {
-    height: 280px;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     margin-bottom: 0;
-    border: 1px solid rgba(0, 229, 255, 0.06);
+    border: 1px solid rgba(0, 229, 255, 0.08);
 }
 
 /* Performance chart controls */
@@ -3034,64 +3073,155 @@ body.filter-modal-open::after {
    OVERVIEW TAB — Figma-Inspired Premium Financial Terminal
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Hero Block: centered value + inline KPI row ── */
+/* ══════════════════════════════════════════════════════════════════
+   HERO BLOCK — Cyber-Noir Command Center
+   Large portfolio value dominates; KPI triptych below.
+   Visual language: terminal glow, circuit grid, scan-line pulse.
+   ══════════════════════════════════════════════════════════════════ */
+
 .ov-hero-block {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 10px;
-    background: linear-gradient(160deg, rgba(0, 229, 255, 0.04) 0%, rgba(10, 15, 30, 0.40) 100%);
-    border: 1px solid rgba(0, 229, 255, 0.08);
-    border-radius: 14px;
-    padding: 18px 24px 14px;
     position: relative;
     overflow: hidden;
+    flex-shrink: 0;
+    margin-bottom: 10px;
+    border-radius: 16px;
+    border: 1px solid rgba(0, 229, 255, 0.14);
+
+    /* Layered background: ambient radial glow + subtle dot matrix */
+    background:
+        radial-gradient(ellipse 80% 140% at 50% -10%, rgba(0, 229, 255, 0.09) 0%, transparent 65%),
+        linear-gradient(180deg, rgba(0, 229, 255, 0.03) 0%, rgba(4, 8, 18, 0.55) 100%);
+    background-color: rgba(8, 14, 28, 0.72);
 }
 
+/* Top cyan border glow line */
 .ov-hero-block::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 2px;
-    background: linear-gradient(90deg, transparent 5%, rgba(0, 229, 255, 0.35) 50%, transparent 95%);
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(0, 229, 255, 0.15) 20%,
+        rgba(0, 229, 255, 0.55) 50%,
+        rgba(0, 229, 255, 0.15) 80%,
+        transparent 100%);
 }
 
-/* Top section: label + value */
+/* Bottom subtle glow line */
+.ov-hero-block::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.10), transparent);
+}
+
+/* Scan line animation — sweeps across vertically */
+.ov-hero-scan {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    right: 0;
+    height: 40%;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        rgba(0, 229, 255, 0.025) 50%,
+        transparent 100%);
+    animation: heroScan 4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes heroScan {
+    0%   { top: -40%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+
+/* Inner wrapper above scan line */
+.ov-hero-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 22px 32px 18px;
+}
+
+/* Top section: label + value + live badge */
 .ov-hero-top {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    padding-bottom: 12px;
+    padding-bottom: 14px;
 }
 
 .ov-hero-label {
     font-size: 11px;
     font-weight: 600;
-    color: rgba(245, 245, 250, 0.50);
-    letter-spacing: 2px;
+    color: rgba(0, 229, 255, 0.55);
+    letter-spacing: 3px;
     text-transform: uppercase;
 }
 
 .ov-hero-value {
-    font-size: 34px;
+    font-size: 52px;
     font-weight: 800;
     color: #00e5ff;
-    letter-spacing: -1px;
+    letter-spacing: -2px;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 30px rgba(0, 229, 255, 0.15);
     line-height: 1;
+    /* Multi-layer text glow: inner bright + outer diffuse */
+    text-shadow:
+        0 0 12px rgba(0, 229, 255, 0.45),
+        0 0 40px rgba(0, 229, 255, 0.18),
+        0 0 80px rgba(0, 229, 255, 0.08);
+}
+
+/* "LIVE" indicator pill */
+.ov-hero-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(0, 229, 255, 0.55);
+    letter-spacing: 2px;
+    margin-top: 4px;
+    border: 1px solid rgba(0, 229, 255, 0.15);
+    border-radius: 30px;
+    padding: 2px 8px;
+    background: rgba(0, 229, 255, 0.04);
+}
+
+.ov-hero-live-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #00ff94;
+    box-shadow: 0 0 6px #00ff94;
+    animation: livePulse 1.8s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.75); }
 }
 
 /* Separator */
 .ov-hero-sep {
-    width: 60%;
+    width: 50%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent);
-    margin-bottom: 12px;
+    background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.18), transparent);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+    align-self: center;
 }
 
-/* KPI row: 3 inline items */
+/* KPI row: 3 inline metric modules */
 .ov-hero-kpis {
     display: flex;
     justify-content: center;
@@ -3103,9 +3233,15 @@ body.filter-modal-open::after {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    padding: 6px 20px;
+    gap: 4px;
+    padding: 10px 28px;
     position: relative;
+    border-radius: 10px;
+    transition: background 0.2s;
+}
+
+.ov-kpi-card:hover {
+    background: rgba(0, 229, 255, 0.04);
 }
 
 /* Vertical divider between KPI cards */
@@ -3113,29 +3249,34 @@ body.filter-modal-open::after {
     content: '';
     position: absolute;
     right: 100%;
-    top: 15%;
-    height: 70%;
+    top: 20%;
+    height: 60%;
     width: 1px;
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.07);
     transform: translateX(50%);
 }
 
 .ov-kpi-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(245, 245, 250, 0.50);
-    letter-spacing: 0.5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(245, 245, 250, 0.40);
+    letter-spacing: 1px;
+    text-transform: uppercase;
     white-space: nowrap;
 }
 
 .ov-kpi-value {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     color: rgba(245, 245, 250, 0.95);
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.5px;
     white-space: nowrap;
 }
+
+/* KPI card accent glow based on sign */
+.ov-kpi-card.kpi-positive .ov-kpi-label { color: rgba(0, 255, 148, 0.45); }
+.ov-kpi-card.kpi-negative .ov-kpi-label { color: rgba(255, 77, 77, 0.45); }
 
 /* ── Color utilities (shared) ── */
 .val-positive, .ov-kpi-value.val-positive, .ov-cell-value.val-positive { color: #00ff94 !important; text-shadow: 0 0 14px rgba(0, 255, 148, 0.14); }
@@ -3334,8 +3475,12 @@ body.filter-modal-open::after {
     transition: width 0.5s ease;
 }
 
-/* ── Full-Width Chart Section ── */
+/* ── Full-Width Chart Section: flex-grows to fill remaining modal space ── */
 .ov-chart-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     margin-top: 0;
 }
 
@@ -3346,12 +3491,17 @@ body.filter-modal-open::after {
         align-items: stretch;
     }
     .modal {
-        max-height: 100vh;
-        height: 100vh;
+        max-height: 100dvh;
+        height: 100dvh;
         max-width: 100%;
         border-radius: 0;
         border: none;
-        overflow-x: hidden;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    /* On mobile, overview tab can scroll since panels stack vertically */
+    #tab-overview {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
@@ -3387,13 +3537,16 @@ body.filter-modal-open::after {
     /* ── Body ── */
     .modal-body {
         padding: 8px 10px;
+        overflow: hidden;
     }
 
     /* ── Overview: Hero Block mobile ── */
     .ov-hero-block {
-        padding: 14px 10px 10px;
         margin-bottom: 6px;
-        border-radius: 10px;
+        border-radius: 12px;
+    }
+    .ov-hero-inner {
+        padding: 16px 12px 14px;
     }
     .ov-hero-block::before { height: 1px; }
     .ov-hero-top {
@@ -3401,29 +3554,28 @@ body.filter-modal-open::after {
         gap: 3px;
     }
     .ov-hero-label {
-        font-size: 10px;
-        letter-spacing: 1.8px;
+        font-size: 9px;
+        letter-spacing: 2px;
     }
     .ov-hero-value {
-        font-size: 26px;
-        letter-spacing: -0.5px;
+        font-size: 30px;
+        letter-spacing: -1px;
+        text-shadow:
+            0 0 10px rgba(0, 229, 255, 0.40),
+            0 0 28px rgba(0, 229, 255, 0.15);
     }
+    .ov-hero-live { font-size: 8px; padding: 2px 6px; }
     .ov-hero-sep {
         width: 70%;
         margin-bottom: 10px;
     }
-    .ov-hero-kpis {
-        gap: 0;
-    }
+    .ov-hero-kpis { gap: 0; }
     .ov-kpi-card {
-        padding: 4px 10px;
+        padding: 6px 12px;
+        flex: 1;
     }
-    .ov-kpi-label {
-        font-size: 9px;
-    }
-    .ov-kpi-value {
-        font-size: 13px;
-    }
+    .ov-kpi-label { font-size: 9px; letter-spacing: 0.5px; }
+    .ov-kpi-value { font-size: 15px; }
 
     /* ── Two-Panel Grid → stacked on mobile ── */
     .ov-panels {
@@ -3491,13 +3643,18 @@ body.filter-modal-open::after {
     .ov-curbar-pct { font-size: 11px; }
     .ov-curbar-track { height: 5px; }
 
-    /* ── Chart section mobile ── */
+    /* ── Chart section mobile: fixed height since parent scrolls ── */
+    .ov-chart-section {
+        flex: none;
+        height: 240px;
+        min-height: 240px;
+    }
     .ov-chart-section .modal-performance-container {
-        height: 260px;
+        height: 100%;
         padding: 8px 6px;
     }
-    .ov-chart-section .modal-performance-container canvas {
-        min-height: 180px;
+    .perf-canvas-wrap {
+        min-height: 160px;
     }
     .ov-chart-section .perf-chart-header {
         flex-wrap: wrap;
