@@ -2823,10 +2823,14 @@ body.filter-modal-open::after {
     flex-shrink: 0;
 }
 .modal-performance-container canvas {
-    flex: 1 1 auto;
-    min-height: 100px;
+    /* Height is set explicitly by JS (renderPerformanceChart) to match the actual flex-allocated
+       space — this ensures Chart.js sizes correctly. We do NOT use flex:1 here because Chart.js
+       reads parentElement.clientHeight (full container) rather than the canvas's flex height,
+       which causes the chart line to render behind the header (appearing as a "black canvas"). */
     width: 100%;
     display: block;
+    min-height: 100px;
+    flex-shrink: 1;
 }
 
 .modal-performance-container h3 {

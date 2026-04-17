@@ -1259,6 +1259,26 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const container = canvas.parentElement;
     _showChartLoading(container);
 
+    // Guarantee canvas has real pixel dimensions before Chart.js initializes.
+    // With responsive:true, Chart.js reads the parent container's clientHeight (280px) rather
+    // than the canvas's flex-allocated height (~190px). This makes the chart render starting
+    // at y=0 (behind the header), leaving only the transparent fill visible — "black canvas".
+    // Fix: set canvas.style.height to the actual flex-computed height so Chart.js respects it.
+    try {
+        const _actualH = canvas.offsetHeight;
+        if (_actualH > 20) {
+            canvas.style.height = _actualH + 'px';
+        } else {
+            // offsetHeight not resolved yet — calculate from container
+            const _hdr = container.querySelector('.perf-chart-header');
+            const _padV = 24; // 12px top + 12px bottom
+            const _hdrH = _hdr ? (_hdr.offsetHeight + 10) : 64;
+            const _canvasH = Math.max(100, (container.clientHeight || 280) - _padV - _hdrH);
+            canvas.style.height = _canvasH + 'px';
+        }
+        canvas.style.width = '100%';
+    } catch (_) { /* ignore sizing errors */ }
+
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
     const isIntraday = (range === '1d' || range === '5d');

@@ -391,30 +391,19 @@ async function openModal(clientId) {
         _modalPerfBenchmarks = [];
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
 
-        // Wait for canvas to have real dimensions before rendering
+        // Render after a single rAF so the browser has committed the flex layout.
+        // renderPerformanceChart() reads canvas.offsetHeight to set an explicit CSS height
+        // before Chart.js initializes — this prevents the "black canvas" bug where Chart.js
+        // uses parentElement.clientHeight (full container) instead of the flex-allocated height.
         const _perfCanvas = document.getElementById('modal-perf-chart');
         if (_perfCanvas) {
-            const _waitForCanvas = () => {
-                return new Promise(resolve => {
-                    let tries = 0;
-                    const check = () => {
-                        tries++;
-                        if ((_perfCanvas.offsetWidth > 0 && _perfCanvas.offsetHeight > 0) || tries > 30) {
-                            resolve();
-                        } else {
-                            requestAnimationFrame(check);
-                        }
-                    };
-                    requestAnimationFrame(check);
-                });
-            };
-            _waitForCanvas().then(() => {
+            requestAnimationFrame(() => {
                 renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
                     _modalPerfChartInstance = inst;
                 });
             });
         }
-    }, 150);
+    }, 300);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──
     _loadTransactionHistory(client.id);
