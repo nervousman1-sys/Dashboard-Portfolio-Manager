@@ -45,9 +45,16 @@ function _scoreToSentiment(score) {
 
 // ── Generic FMP fetch with fallback URLs ──
 async function _fmpFetch(urls) {
+    // Skip if globally rate-limited
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) return null;
+
     for (const url of urls) {
         try {
             const res = await fetch(url);
+            if (res.status === 429) {
+                if (typeof setFmpRateLimited === 'function') setFmpRateLimited();
+                return null;
+            }
             if (!res.ok) continue;
             const data = await res.json();
             if (data && (!Array.isArray(data) || data.length > 0)) return data;
@@ -257,5 +264,7 @@ function _startSentimentRefresh() {
     }, _SENTIMENT_TTL);
 }
 
-// Boot
-initSentiment().then(() => _startSentimentRefresh());
+// Boot — delayed 5s to avoid competing with price updates for FMP quota
+setTimeout(() => {
+    initSentiment().then(() => _startSentimentRefresh());
+}, 5000);

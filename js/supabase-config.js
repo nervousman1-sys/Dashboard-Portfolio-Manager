@@ -10,6 +10,29 @@ const SUPABASE_ANON_KEY = _env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI
 // Financial Modeling Prep API key (free: https://site.financialmodelingprep.com/developer)
 const FMP_API_KEY = _env.FMP_API_KEY || 'PNbEHsY2AO0v9ZkYh69P7nTvyUUckcpp';
 
+// ── GLOBAL FMP RATE-LIMIT GUARD ──
+// When FMP returns 429 (Too Many Requests), ALL further FMP calls are blocked
+// for the cooldown period. This prevents cascade failures where 20+ calls
+// all get 429'd and burn through retry budgets.
+let _fmpRateLimited = false;
+let _fmpRateLimitUntil = 0;
+
+function isFmpRateLimited() {
+    if (!_fmpRateLimited) return false;
+    if (Date.now() > _fmpRateLimitUntil) {
+        _fmpRateLimited = false;
+        console.log('[FMP] Rate-limit cooldown expired — resuming API calls');
+        return false;
+    }
+    return true;
+}
+
+function setFmpRateLimited() {
+    _fmpRateLimited = true;
+    _fmpRateLimitUntil = Date.now() + (10 * 60 * 1000); // 10 minute cooldown
+    console.warn('[FMP] 429 detected — blocking ALL FMP calls for 10 minutes');
+}
+
 // Twelve Data API key (free: https://twelvedata.com/pricing)
 const TWELVE_DATA_API_KEY = _env.TWELVE_DATA_API_KEY || '02940d45b4584a37a9e1c45940b912e7';
 

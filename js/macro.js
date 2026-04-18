@@ -82,6 +82,12 @@ function _macroEscape(str) {
 }
 
 async function _macroFetch(url, ms = 12000, retries = 2) {
+    // Block if FMP is rate-limited and this is an FMP URL
+    if (url.includes('financialmodelingprep.com') && typeof isFmpRateLimited === 'function' && isFmpRateLimited()) {
+        console.log('[Macro] FMP rate-limited — skipping:', url.split('?')[0]);
+        return new Response(JSON.stringify([]), { status: 429, statusText: 'Rate Limited (local guard)' });
+    }
+
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), ms);
 
@@ -89,13 +95,21 @@ async function _macroFetch(url, ms = 12000, retries = 2) {
         try {
             const response = await fetch(url, { signal: c.signal });
             clearTimeout(t);
+
+            // On 429: set global rate-limit flag and return immediately (no retries)
+            if (response.status === 429) {
+                if (url.includes('financialmodelingprep.com') && typeof setFmpRateLimited === 'function') {
+                    setFmpRateLimited();
+                }
+                return response;
+            }
+
             return response;
         } catch (error) {
             if (attempt === retries) {
                 clearTimeout(t);
                 throw error;
             }
-            // Exponential backoff: 500ms, 1000ms, ...
             await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt)));
         }
     }
@@ -261,6 +275,12 @@ async function _fetchFMPUSIndicators(forceRefresh) {
     if (!forceRefresh) {
         const cached = _cacheGet(_MACRO_CACHE.US_HEAD, _MACRO_TTL_IND);
         if (cached) { _macroApiStatus.fmpUS = true; return cached; }
+    }
+
+    // Skip if FMP is globally rate-limited
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) {
+        _macroApiStatus.fmpUS = '429 cooldown';
+        return null;
     }
 
     const results = {};
@@ -438,7 +458,9 @@ async function _fetchILHeadlines(forceRefresh) {
     // TODO: If FMP lacks IL data, replace this block with:
     //   https://api.tradingeconomics.com/country/indicators?c=<API_KEY>&country=israel
     //   (requires TradingEconomics subscription — set TRADING_ECONOMICS_KEY in env-config.js)
-    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY' && !_fmpCalendarBlocked) {
+    const _fmpAvailable = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY' && !_fmpCalendarBlocked
+        && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+    if (_fmpAvailable) {
         try {
             const now  = new Date();
             const from = new Date(now);
@@ -447,7 +469,9 @@ async function _fetchILHeadlines(forceRefresh) {
                 `?from=${from.toISOString().split('T')[0]}&to=${now.toISOString().split('T')[0]}` +
                 `&apikey=${FMP_API_KEY}`;
             const res = await _macroFetch(url);
-            if (res.status === 403) {
+            if (res.status === 429) {
+                console.warn('[Macro] FMP economic_calendar: 429 Rate Limited');
+            } else if (res.status === 403) {
                 _fmpCalendarBlocked = true;
                 console.warn('[Macro] FMP economic_calendar: 403 Forbidden — endpoint not available on current plan. Using verified baseline data.');
             } else if (res.ok) {
@@ -540,6 +564,7 @@ async function _fetchCalendarEvents(country, cacheKey, forceRefresh) {
     }
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY' || FMP_API_KEY === '') return null;
     if (_fmpCalendarBlocked) return null;
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) return null;
 
     try {
         const now  = new Date();
@@ -549,6 +574,10 @@ async function _fetchCalendarEvents(country, cacheKey, forceRefresh) {
             `?from=${from.toISOString().split('T')[0]}&to=${now.toISOString().split('T')[0]}` +
             `&apikey=${FMP_API_KEY}`;
         const res = await _macroFetch(url);
+        if (res.status === 429) {
+            console.warn('[Macro] Calendar 429 — using cached/baseline data');
+            return null;
+        }
         if (res.status === 403) {
             _fmpCalendarBlocked = true;
             console.warn('[Macro] FMP economic_calendar: 403 Forbidden — skipping calendar endpoint for this session.');

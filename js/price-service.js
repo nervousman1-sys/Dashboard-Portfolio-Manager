@@ -446,9 +446,12 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
         // --- Provider 3 (Israeli): FMP fallback ---
         try {
-            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+            const _fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'
+                && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+            if (_fmpOk) {
                 const fmpTicker = baseTicker + '.TA';
                 const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${fmpTicker}&apikey=${FMP_API_KEY}`);
+                if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); throw new Error('FMP 429'); }
                 const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
                 if (Array.isArray(data) && data.length > 0 && data[0].price) {
                     const q = data[0];
@@ -495,8 +498,11 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
         // --- Provider 2 (US): FMP ---
         try {
-            if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+            const _fmpOk2 = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'
+                && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+            if (_fmpOk2) {
                 const res = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_API_KEY}`);
+                if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); throw new Error('FMP 429'); }
                 const data = _parseResult(res, res.ok ? await res.json() : null, 'FMP');
                 if (Array.isArray(data) && data.length > 0 && data[0].price) {
                     const q = data[0];
@@ -563,12 +569,17 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
 async function fetchFMPPrices(tickers) {
     if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) {
+        console.log('[PriceService] FMP rate-limited — skipping batch fetch');
+        return null;
+    }
 
     console.log(`[PriceService] FMP: ${tickers.length} tickers in parallel...`);
 
     const settled = await Promise.allSettled(tickers.map(ticker =>
         fetch(`https://financialmodelingprep.com/stable/quote?symbol=${ticker}&apikey=${FMP_API_KEY}`)
             .then(res => {
+                if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); return null; }
                 if (res.status === 402 || res.status === 403 || !res.ok) return null;
                 return res.json();
             })
