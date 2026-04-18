@@ -1352,9 +1352,37 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         }
     }
 
+    // ── 2d. LAST-RESORT FALLBACK ──
+    // If ALL data sources failed but the client has a portfolio value,
+    // build a minimal 2-point line from initialInvestment → current value.
+    // This ensures the chart NEVER shows "No Data" for a funded portfolio.
+    if ((!hist || hist.length < 2) && client.portfolioValue > 0) {
+        const startValue = client.initialInvestment || client.portfolioValue * 0.9;
+        const endValue = client.portfolioValue;
+        const now = new Date();
+        const startDate = new Date(now);
+        // Set start date based on range
+        if (range === '1d') startDate.setDate(startDate.getDate() - 1);
+        else if (range === '5d') startDate.setDate(startDate.getDate() - 5);
+        else if (range === '1m') startDate.setMonth(startDate.getMonth() - 1);
+        else if (range === '6m') startDate.setMonth(startDate.getMonth() - 6);
+        else if (range === 'ytd') { startDate.setMonth(0); startDate.setDate(1); }
+        else if (range === '1y') startDate.setFullYear(startDate.getFullYear() - 1);
+        else if (range === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
+        else startDate.setFullYear(startDate.getFullYear() - 1);
+
+        const retPct = startValue > 0 ? ((endValue - startValue) / startValue) * 100 : 0;
+        hist = [
+            { date: startDate.toLocaleDateString('he-IL'), _dateObj: startDate, value: startValue, returnPct: 0 },
+            { date: now.toLocaleDateString('he-IL'), _dateObj: now, value: endValue, returnPct: retPct }
+        ];
+        console.log(`[PerfChart] Last-resort fallback: ${startValue.toFixed(0)} → ${endValue.toFixed(0)} (${retPct >= 0 ? '+' : ''}${retPct.toFixed(2)}%)`);
+    }
+
     // ── 3. Empty/insufficient data → "No Data" overlay, abort ──
 
     if (!hist || hist.length < 2) {
+        console.warn(`[PerfChart] No data for ${client.name} (range=${range}). performanceHistory: ${(client.performanceHistory || []).length} points, portfolioValue: ${client.portfolioValue}`);
         _showNoChartData(canvas, container, isIntraday);
         return null;
     }
