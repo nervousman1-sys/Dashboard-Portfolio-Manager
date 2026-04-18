@@ -312,7 +312,7 @@ async function openModal(clientId) {
                                 <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="% / $">%</button>
                             </div>
                         </div>
-                        <canvas id="modal-perf-chart"></canvas>
+                        <div class="perf-canvas-wrap"><canvas id="modal-perf-chart"></canvas></div>
                     </div>
                 </div>
                 <!-- Hidden donut canvas for sectors tab data (still needed for chart init) -->

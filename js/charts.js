@@ -1256,14 +1256,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const canvas = document.getElementById(canvasId);
     if (!canvas) return null;
 
-    // The canvas parent should be a dedicated wrapper (not the flex container with headers).
-    // For modal chart: canvas → .perf-canvas-wrap (position:relative; flex:1)
-    // For fullscreen chart: canvas → .fullscreen-chart-body (position:relative; flex:1)
-    // Chart.js `responsive:true` reads parentElement.clientHeight, so the parent must
-    // contain ONLY the canvas — no headers or buttons.
+    // container = the visual box (for loading overlay, no-data messages)
+    // Chart.js reads canvas.parentElement.clientHeight for sizing — the parent
+    // must contain ONLY the canvas. The .perf-canvas-wrap div handles this for modal charts.
     const container = canvas.closest('.modal-performance-container') || canvas.parentElement;
-    const canvasParent = canvas.parentElement;
     _showChartLoading(container);
+
+    try {
 
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
@@ -1354,7 +1353,6 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     }
 
     // ── 3. Empty/insufficient data → "No Data" overlay, abort ──
-    _hideChartLoading(container);
 
     if (!hist || hist.length < 2) {
         _showNoChartData(canvas, container, isIntraday);
@@ -1752,6 +1750,14 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     if (chartKey) charts[chartKey] = chartInstance;
     return chartInstance;
+
+    } catch (err) {
+        console.error('[PerfChart] Render error:', err);
+        _showNoChartData(canvas, container, false);
+        return null;
+    } finally {
+        _hideChartLoading(container);
+    }
 }
 
 // ========== NO-DATA OVERLAY ==========

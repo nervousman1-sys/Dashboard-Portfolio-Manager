@@ -2848,11 +2848,21 @@ body.filter-modal-open::after {
     flex-shrink: 0;
 }
 
-/* Canvas fills whatever height remains after the header */
-.modal-performance-container canvas {
+/* Wrapper between header and canvas — Chart.js reads parentElement.clientHeight,
+   so the wrapper must contain ONLY the canvas (no headers/buttons). */
+.perf-canvas-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    width: 100%;
+}
+
+/* Canvas fills the wrapper */
+.perf-canvas-wrap canvas,
+.modal-performance-container > canvas {
     display: block;
     width: 100% !important;
-    /* Height is set explicitly by JS in renderPerformanceChart() before Chart.js init */
+    height: 100% !important;
 }
 
 .modal-performance-container h3 {
