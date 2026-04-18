@@ -319,10 +319,12 @@ async function init() {
         setTimeout(startPriceUpdate, 100);
     }
 
-    // ── Phase 3: Alerts (lowest priority — 3s delay) ──
+    // ── Phase 3: Alerts (lowest priority — 10s delay) ──
+    // Staggered to avoid simultaneous FMP calls with price updates (Phase 2)
+    // and sentiment service (5s delay). Baseline data shows immediately.
     setTimeout(() => {
         checkAlerts().then(() => renderAlerts());
-    }, 3000);
+    }, 10000);
 
     // Auto-refresh every 5 minutes
     setInterval(refreshAllPrices, 300000);

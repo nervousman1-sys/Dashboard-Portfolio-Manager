@@ -63,12 +63,15 @@ async function fetchFxRates() {
         }
 
         // Fallback: FMP forex endpoint
-        if (!rate && typeof FMP_API_KEY !== 'undefined' && FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+        const _fmpFxOk = !rate && typeof FMP_API_KEY !== 'undefined' && FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'
+            && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+        if (_fmpFxOk) {
             try {
                 const res = await fetchWithTimeout(
                     `https://financialmodelingprep.com/stable/fx/USDILS?apikey=${FMP_API_KEY}`
                 );
-                if (res.ok) {
+                if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); }
+                else if (res.ok) {
                     const json = await res.json();
                     // FMP returns array: [{ ticker: "USD/ILS", bid, ask, open, low, high, ... }]
                     const entry = Array.isArray(json) ? json[0] : json;

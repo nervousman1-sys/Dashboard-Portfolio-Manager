@@ -116,7 +116,9 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     // ── Primary: FMP historical-price-full ──
     // FMP is primary for bulk fetches: 250 calls/day, no per-minute limit,
     // which works much better for large portfolios (20+ holdings).
-    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+    const _fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'
+        && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+    if (_fmpOk) {
         try {
             const url = `https://financialmodelingprep.com/stable/historical-price-full/${ticker}?apikey=${FMP_API_KEY}`;
             const res = await fetch(url);
@@ -124,18 +126,17 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
                 const json = await res.json();
                 const hist = json.historical || (Array.isArray(json) ? json : null);
                 if (hist && hist.length > 0) {
-                    // FMP returns newest-first — take outputSize, then reverse
                     const sliced = hist.length > outputSize ? hist.slice(0, outputSize) : hist;
                     const result = new Array(sliced.length);
                     for (let i = sliced.length - 1, j = 0; i >= 0; i--, j++) {
                         result[j] = { date: sliced[i].date, close: sliced[i].close };
                     }
-                    // Save to both caches
                     _sessionTickerCache[ticker] = result;
                     _saveTickerToLS(ticker, result);
                     return result;
                 }
             } else if (res.status === 429) {
+                if (typeof setFmpRateLimited === 'function') setFmpRateLimited();
                 console.warn(`[SyntheticHistory] FMP rate-limited (429) for ${ticker}`);
             }
         } catch (e) {

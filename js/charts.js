@@ -375,6 +375,7 @@ async function _fetchFMPBenchmark(symbol, range) {
         console.warn(`[Benchmark] FMP API key not configured — skipping ${symbol}`);
         return null;
     }
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) return null;
 
     // FMP has limited support for Israeli indices (.TA suffix) — attempt but expect failure.
     // The function will fall through to Twelve Data / static fallback if FMP returns nothing.
@@ -394,6 +395,7 @@ async function _fetchFMPBenchmark(symbol, range) {
             for (const url of intradayUrls) {
                 try {
                     const res = await fetch(url);
+                    if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); return null; }
                     if (!res.ok) {
                         console.warn(`[Benchmark] FMP intraday ${res.status} for ${sym} at ${url.split('?')[0]}`);
                         continue;
@@ -446,8 +448,8 @@ async function _fetchFMPBenchmark(symbol, range) {
                 const res = await fetch(url);
                 if (!res.ok) {
                     if (res.status === 429) {
-                        console.warn(`[Benchmark] FMP rate-limited (429) for ${sym} — skipping all FMP attempts`);
-                        return null; // Bail entirely on 429 — don't burn more requests
+                        if (typeof setFmpRateLimited === 'function') setFmpRateLimited();
+                        return null;
                     }
                     console.warn(`[Benchmark] FMP ${res.status} for ${sym} at ${url.split('?')[0]}`);
                     continue;
@@ -830,8 +832,9 @@ async function _fetchTickerIntraday(ticker, currency, interval, outputSize) {
     const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
 
     // ── Primary: FMP historical-chart (5min/1hour) ──
-    // Try both /api/v3/ and /stable/ — free plans may only support one.
-    if (FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY') {
+    const _fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'
+        && !(typeof isFmpRateLimited === 'function' && isFmpRateLimited());
+    if (_fmpOk) {
         const fmpInterval = interval === '5min' ? '5min' : '1hour';
         const fmpUrls = [
             `https://financialmodelingprep.com/api/v3/historical-chart/${fmpInterval}/${ticker}?apikey=${FMP_API_KEY}`,
@@ -840,6 +843,7 @@ async function _fetchTickerIntraday(ticker, currency, interval, outputSize) {
         for (const url of fmpUrls) {
             try {
                 const res = await fetch(url);
+                if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); break; }
                 if (!res.ok) continue;
                 const json = await res.json();
                 if (Array.isArray(json) && json.length > 0) {
