@@ -1359,10 +1359,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // ── 2d. LAST-RESORT FALLBACK ──
     // If ALL data sources failed but the client has a portfolio value,
     // build a minimal 2-point line from initialInvestment → current value.
-    // This ensures the chart NEVER shows "No Data" for a funded portfolio.
-    if ((!hist || hist.length < 2) && client.portfolioValue > 0) {
-        const startValue = client.initialInvestment || client.portfolioValue * 0.9;
-        const endValue = client.portfolioValue;
+    // Compute effective portfolio value from holdings if the DB field is null/0.
+    const _effectivePV = client.portfolioValue
+        || (client.holdings || []).reduce((s, h) => s + (h.value || 0), 0) + (client.cashBalance || 0)
+        || 0;
+    if ((!hist || hist.length < 2) && _effectivePV > 0) {
+        const startValue = client.initialInvestment || _effectivePV * 0.9;
+        const endValue = _effectivePV;
         const now = new Date();
         const startDate = new Date(now);
         // Set start date based on range
@@ -1386,7 +1389,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // ── 3. Empty/insufficient data → "No Data" overlay, abort ──
 
     if (!hist || hist.length < 2) {
-        console.warn(`[PerfChart] No data for ${client.name} (range=${range}). performanceHistory: ${(client.performanceHistory || []).length} points, portfolioValue: ${client.portfolioValue}`);
+        console.warn(`[PerfChart] No data for ${client.name} (range=${range}). perfHistory=${(client.performanceHistory || []).length}, portfolioValue=${client.portfolioValue}, effectivePV=${_effectivePV}, holdings=${(client.holdings||[]).length}`);
         _showNoChartData(canvas, container, isIntraday);
         return null;
     }
@@ -1598,7 +1601,10 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     console.log(`[PerfChart] Creating chart with ${portfolioPoints.length} portfolio points, ${datasets.length} total datasets`);
     const _isMobile = window.innerWidth <= 768;
     const _isFullscreen = canvasId === 'fullscreen-chart';
-    const chartInstance = new Chart(canvas, {
+
+    let chartInstance;
+    try {
+    chartInstance = new Chart(canvas, {
         type: 'line',
         data: { datasets },
         options: {
@@ -1777,6 +1783,26 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             _yAxisDragPlugin
         ]
     });
+    } catch (chartErr) {
+        // Chart.js construction failed (e.g., time adapter not loaded, plugin error).
+        // Retry with a minimal config — no time scale, no zoom plugin.
+        console.error('[PerfChart] Chart.js construction failed, retrying with minimal config:', chartErr?.message);
+        _destroyChartOnCanvas(canvas);
+        _clearCanvas(canvas);
+        chartInstance = new Chart(canvas, {
+            type: 'line',
+            data: { datasets: [datasets[0]] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                scales: {
+                    x: { display: true, ticks: { maxTicksLimit: 6, color: '#94a3b8', font: { size: 10 } } },
+                    y: { position: 'right', ticks: { color: '#94a3b8', font: { size: 10 } } }
+                }
+            }
+        });
+    }
 
     // Force a resize after first paint — fixes first-load rendering when modal is still
     // animating or canvas has not yet received final layout dimensions from CSS flex.
