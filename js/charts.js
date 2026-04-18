@@ -1264,13 +1264,20 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     try {
 
+    // ── DIAGNOSTIC LOG ──
+    console.log(`[PerfChart] START render for "${client.name}" | range=${range} | canvasId=${canvasId} | portfolioValue=${client.portfolioValue} | holdings=${(client.holdings||[]).length} | perfHistory=${(client.performanceHistory||[]).length}`);
+
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
     const isIntraday = (range === '1d' || range === '5d');
 
     // 2a. Intraday: live 5min/1h data from FMP/Twelve Data
     if (isIntraday) {
-        hist = await _fetchIntradayPortfolioData(client, range);
+        try {
+            hist = await _fetchIntradayPortfolioData(client, range);
+        } catch (e) {
+            console.warn('[PerfChart] Intraday fetch failed:', e.message);
+        }
     }
 
     // 2a-fallback. If intraday APIs failed (rate-limited, no key, market closed),
@@ -1307,48 +1314,45 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // 2b. Longer ranges: Supabase performance_history (recorded daily snapshots)
     if (!hist) {
-        // If history is empty, try to seed an initial snapshot
-        if (!client.performanceHistory || client.performanceHistory.length === 0) {
-            if (typeof supabaseConnected !== 'undefined' && supabaseConnected && client.portfolioValue > 0) {
-                await supaRecordPerformanceSnapshot(client.id);
-                const updated = await supaFetchClient(client.id);
-                if (updated && updated.performanceHistory) {
-                    client.performanceHistory = updated.performanceHistory;
-                    const idx = clients.findIndex(c => c.id === clientId);
-                    if (idx !== -1) clients[idx].performanceHistory = updated.performanceHistory;
+        try {
+            // If history is empty, try to seed an initial snapshot
+            if (!client.performanceHistory || client.performanceHistory.length === 0) {
+                if (typeof supabaseConnected !== 'undefined' && supabaseConnected && client.portfolioValue > 0) {
+                    await supaRecordPerformanceSnapshot(client.id);
+                    const updated = await supaFetchClient(client.id);
+                    if (updated && updated.performanceHistory) {
+                        client.performanceHistory = updated.performanceHistory;
+                        const idx = clients.findIndex(c => c.id === clientId);
+                        if (idx !== -1) clients[idx].performanceHistory = updated.performanceHistory;
+                    }
                 }
             }
+            hist = filterHistoryByRange(client.performanceHistory || [], range);
+        } catch (e) {
+            console.warn('[PerfChart] Supabase history fetch failed:', e.message);
+            hist = [];
         }
-        hist = filterHistoryByRange(client.performanceHistory || [], range);
     }
 
-    // 2c. Synthetic fallback: if real history is insufficient for the selected range,
-    //     reconstruct historical performance from daily closing prices.
-    //     This enables meaningful charts for new/recent portfolios.
-    //
-    //     Threshold: real history must have enough points relative to the range.
-    //     A portfolio created 3 days ago shouldn't show a 3-point "1Y" chart —
-    //     synthetic history with ~250 points is far more useful.
-    //
-    //     For 1D/5D: intraday APIs are the primary source. If they fail, we accept
-    //     even 2 performance_history points (better than "No Data"). Synthetic daily
-    //     history is also attempted as a last resort for 5D.
+    // 2c. Synthetic fallback
     const _minPointsForRange = { '1d': 2, '5d': 3, '1m': 10, '3m': 25, '6m': 50, 'ytd': 30, '1y': 60, '5y': 400, 'max': 200, 'all': 10 };
     const minPoints = _minPointsForRange[range] || 10;
     const histTooSparse = !hist || hist.length < minPoints;
 
-    // Synthetic fallback: available for all ranges except 1D (too granular for daily data).
-    // 5D can use synthetic daily data as a meaningful fallback.
     if (histTooSparse && range !== '1d') {
-        const hasEligibleHoldings = client.holdings && client.holdings.some(
-            h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
-        );
-        if (hasEligibleHoldings && typeof fetchSyntheticHistory === 'function') {
-            const synth = await fetchSyntheticHistory(client, range);
-            if (synth && synth.length >= 2) {
-                hist = synth;
-                console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points, range=${range})`);
+        try {
+            const hasEligibleHoldings = client.holdings && client.holdings.some(
+                h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
+            );
+            if (hasEligibleHoldings && typeof fetchSyntheticHistory === 'function') {
+                const synth = await fetchSyntheticHistory(client, range);
+                if (synth && synth.length >= 2) {
+                    hist = synth;
+                    console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points, range=${range})`);
+                }
             }
+        } catch (e) {
+            console.warn('[PerfChart] Synthetic history failed:', e.message);
         }
     }
 
@@ -1586,6 +1590,12 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     else timeUnit = 'year';                            // 10Y+  → show years
 
     // ── 10. Construct Chart.js instance — complete options object ──
+    if (typeof Chart === 'undefined') {
+        console.error('[PerfChart] Chart.js not loaded — cannot render');
+        _showNoChartData(canvas, container, isIntraday);
+        return null;
+    }
+    console.log(`[PerfChart] Creating chart with ${portfolioPoints.length} portfolio points, ${datasets.length} total datasets`);
     const _isMobile = window.innerWidth <= 768;
     const _isFullscreen = canvasId === 'fullscreen-chart';
     const chartInstance = new Chart(canvas, {
@@ -1780,7 +1790,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     return chartInstance;
 
     } catch (err) {
-        console.error('[PerfChart] Render error:', err);
+        console.error('[PerfChart] Render error:', err?.message, err?.stack);
         _showNoChartData(canvas, container, false);
         return null;
     } finally {
