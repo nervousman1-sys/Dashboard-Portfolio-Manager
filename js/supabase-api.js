@@ -157,7 +157,7 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
             console.warn('supaAddClient: cash_usd column missing — retrying without currency columns');
             delete insertPayload.cash_usd;
             delete insertPayload.cash_ils;
-            insertPayload.cash_balance = totalCash;
+            insertPayload.cash_balance = totalCashRaw;
             const retry = await supabaseClient
                 .from('portfolios')
                 .insert(insertPayload)
