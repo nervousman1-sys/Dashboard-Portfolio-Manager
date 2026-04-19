@@ -2496,11 +2496,17 @@ body.filter-modal-open::after {
     display: inline-block;
 }
 .alloc-price {
-    min-width: 52px;
+    min-width: 70px;
     text-align: right;
     color: var(--text-muted);
     font-size: 9px;
     display: inline-block;
+    padding-inline-start: 4px;
+}
+.allocation-row.cash-row .alloc-price {
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 700;
 }
 
 /* ── Card Footer (template-matched) ── */
@@ -3763,22 +3769,30 @@ body.filter-modal-open::after {
     .sector-table th { padding: 4px 6px; font-size: 9px; }
     .sector-table td { padding: 4px 6px; }
 
-    /* ── Holdings tab — show all data without horizontal scroll ── */
+    /* ── Holdings tab — horizontally scrollable so we can keep purchase price + 52W high/low visible ── */
     .holdings-table-wrapper {
-        overflow-x: hidden !important;
+        overflow-x: auto !important;
         overflow-y: auto;
         max-width: 100vw !important;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+    }
+    .holdings-table-wrapper::after {
+        content: '';
+        display: block;
+        height: 4px;
     }
     .holdings-table {
-        min-width: 0 !important;
-        max-width: 100% !important;
-        width: 100% !important;
-        table-layout: fixed !important;
+        min-width: 720px !important;
+        max-width: none !important;
+        width: max-content !important;
+        table-layout: auto !important;
     }
     .holdings-table th,
     .holdings-table td {
-        padding: 5px 2px !important;
-        font-size: 8px !important;
+        padding: 6px 6px !important;
+        font-size: 10px !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -3791,32 +3805,33 @@ body.filter-modal-open::after {
         min-width: 0 !important;
         overflow: hidden !important;
     }
-    /* Hide: buy price(2), yearHigh(4), yearLow(5), daily change(8), return(10), actions(11) */
-    #tab-holdings .holdings-table th:nth-child(2),
-    #tab-holdings .holdings-table td:nth-child(2),
-    #tab-holdings .holdings-table th:nth-child(4),
-    #tab-holdings .holdings-table td:nth-child(4),
-    #tab-holdings .holdings-table th:nth-child(5),
-    #tab-holdings .holdings-table td:nth-child(5),
-    #tab-holdings .holdings-table th:nth-child(8),
-    #tab-holdings .holdings-table td:nth-child(8),
-    #tab-holdings .holdings-table th:nth-child(10),
-    #tab-holdings .holdings-table td:nth-child(10),
+    /* Only the actions column (11) is hidden on mobile — manage holdings via the row dropdown elsewhere.
+       Daily change (8) and return % (10) are shown so users can read full performance.
+       Purchase price (2), 52W high (4), 52W low (5) are now visible per spec. */
     #tab-holdings .holdings-table th:nth-child(11),
     #tab-holdings .holdings-table td:nth-child(11) {
         display: none !important;
     }
-    /* Visible 5 columns: 1=נכס 3=מחיר נוכחי 6=כמות 7=שווי כולל 9=רווח/הפסד */
-    #tab-holdings .holdings-table th:nth-child(1),
-    #tab-holdings .holdings-table td:nth-child(1) { width: 26% !important; }
-    #tab-holdings .holdings-table th:nth-child(3),
-    #tab-holdings .holdings-table td:nth-child(3) { width: 22% !important; }
-    #tab-holdings .holdings-table th:nth-child(6),
-    #tab-holdings .holdings-table td:nth-child(6) { width: 14% !important; }
-    #tab-holdings .holdings-table th:nth-child(7),
-    #tab-holdings .holdings-table td:nth-child(7) { width: 20% !important; }
-    #tab-holdings .holdings-table th:nth-child(9),
-    #tab-holdings .holdings-table td:nth-child(9) { width: 18% !important; }
+    /* First column sticks to the right edge (RTL start) so the asset name stays anchored while scrolling */
+    #tab-holdings .holdings-table th:nth-child(1) {
+        position: sticky;
+        right: 0;
+        background: var(--bg-primary);
+        z-index: 3;
+        box-shadow: -1px 0 0 var(--border);
+        min-width: 110px;
+    }
+    #tab-holdings .holdings-table td:nth-child(1) {
+        position: sticky;
+        right: 0;
+        background: var(--bg-surface);
+        z-index: 2;
+        box-shadow: -1px 0 0 var(--border);
+        min-width: 110px;
+    }
+    #tab-holdings .holdings-table tr:hover td:nth-child(1) {
+        background-color: #1a2236;
+    }
     .add-asset-btn {
         font-size: 10px;
         padding: 5px 10px;
@@ -3900,6 +3915,7 @@ body.filter-modal-open::after {
     width: 95%;
     max-width: 1200px;
     height: 85vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -3914,6 +3930,9 @@ body.filter-modal-open::after {
     padding: 16px 24px;
     border-bottom: 1px solid var(--border);
     gap: 8px;
+    flex-shrink: 0;
+    max-height: 50vh;
+    overflow-y: auto;
 }
 
 .fs-title-row {
@@ -3976,9 +3995,11 @@ body.filter-modal-open::after {
 }
 
 .fullscreen-chart-body {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     padding: 20px;
     position: relative;
+    overflow: hidden;
 }
 
 .expand-btn {

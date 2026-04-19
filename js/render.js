@@ -5,6 +5,20 @@ let _cachedRealizedPnl = null;
 let _cachedDivYield = null;
 let _realizedPnlLoading = false;
 
+// Concise label for a bond holding — security number / ticker, never the full name
+function _conciseBondLabel(h) {
+    const t = (h.ticker || '').trim();
+    const isGenerated = /^BOND_\d/i.test(t);
+    if (t && !isGenerated) {
+        if (/^\d{4,9}$/.test(t)) return t;                 // Israeli security number
+        if (t.length <= 10) return t.toUpperCase();        // short symbol (TLT, VGLT, IL_CPI_1)
+    }
+    const name = (h.name || '').trim();
+    const lastWord = name.split(/\s+/).pop();              // e.g. "Galil 0523" → "0523"
+    if (lastWord && lastWord.length <= 10) return lastWord;
+    return name.length > 10 ? name.slice(0, 10) + '…' : (name || 'אג"ח');
+}
+
 // Returns the currently filtered client list (mirrors filter logic in filters.js)
 function _getFilteredClients() {
     if (typeof activeFilters === 'undefined' || typeof clients === 'undefined') return [];
@@ -1249,15 +1263,16 @@ function renderClientCards() {
             assetsHTML += `<div style="font-size:9px;color:var(--text-muted);padding:4px 0 1px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.04);letter-spacing:0.5px">אג״ח</div>`;
             bondHoldings.slice(0, 2).forEach(h => {
                 const bondCurrSym = h.currency === 'ILS' ? '₪' : '$';
+                const bondLabel = _conciseBondLabel(h);
                 assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-purple)"></span>
-                            ${h.name.length > 18 ? h.name.slice(0, 18) + '…' : h.name}
+                            ${bondLabel}
                         </span>
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
-                            <span class="alloc-chg" style="visibility:hidden">—</span>
+                            <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
                             <span class="alloc-price">${bondCurrSym}${formatNumber(h.price)}</span>
                         </span>
                     </div>`;
@@ -1277,31 +1292,38 @@ function renderClientCards() {
         const _cashUsdPctVal = client.portfolioValue > 0 ? (_cashUsd / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) > 0 ? _cashUsd : 0) : 0;
         const _cashIlsPctVal = client.portfolioValue > 0 ? (_cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) > 0 ? _cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) : 0) : 0;
         const cashHTML = `
-            <div class="allocation-row">
+            <div class="allocation-row cash-row">
                 <span class="allocation-label">
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (USD)
                 </span>
                 <span class="allocation-value">
-                    <span class="alloc-pct" style="visibility:hidden">—</span>
-                    <span class="alloc-chg" style="visibility:hidden">—</span>
-                    <span class="alloc-price" style="color:var(--text-primary);font-size:11px;font-weight:700;min-width:70px">${formatCurrency(_cashUsd, 'USD')}</span>
+                    <span class="alloc-pct" aria-hidden="true" style="visibility:hidden">0%</span>
+                    <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
+                    <span class="alloc-price">${formatCurrency(_cashUsd, 'USD')}</span>
                 </span>
             </div>
-            <div class="allocation-row">
+            <div class="allocation-row cash-row">
                 <span class="allocation-label">
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (ILS)
                 </span>
                 <span class="allocation-value">
-                    <span class="alloc-pct" style="visibility:hidden">—</span>
-                    <span class="alloc-chg" style="visibility:hidden">—</span>
-                    <span class="alloc-price" style="color:var(--text-primary);font-size:11px;font-weight:700;min-width:70px">${formatCurrency(_cashIls, 'ILS')}</span>
+                    <span class="alloc-pct" aria-hidden="true" style="visibility:hidden">0%</span>
+                    <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
+                    <span class="alloc-price">${formatCurrency(_cashIls, 'ILS')}</span>
                 </span>
             </div>`;
 
-        const totalStockPct = stockHoldings.reduce((s, h) => s + h.allocationPct, 0);
-        const totalBondPct = bondHoldings.reduce((s, h) => s + h.allocationPct, 0);
+        // Compute donut percentages directly from raw values so that newly created
+        // portfolios (where allocation_pct hasn't been recalculated yet) still render
+        // the correct stock/bond split instead of falling through to the empty ring.
+        const _donutFx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+        const _stockValueUsd = stockHoldings.reduce((s, h) => s + ((h.value || h.shares * h.price) || 0) * _donutFx(h.currency), 0);
+        const _bondValueUsd  = bondHoldings.reduce((s, h)  => s + ((h.value || h.shares * h.price) || 0) * _donutFx(h.currency), 0);
+        const _assetTotalUsd = _stockValueUsd + _bondValueUsd;
+        const totalStockPct = _assetTotalUsd > 0 ? (_stockValueUsd / _assetTotalUsd * 100) : 0;
+        const totalBondPct  = _assetTotalUsd > 0 ? (_bondValueUsd  / _assetTotalUsd * 100) : 0;
 
         // Unified FX-aware return calculation
         const _pr = calcPortfolioReturn(client);
