@@ -3791,28 +3791,32 @@ body.filter-modal-open::after {
         min-width: 0 !important;
         overflow: hidden !important;
     }
-    /* Hide: buy price (2), daily change (6), return (8), actions (9) */
+    /* Hide: buy price(2), yearHigh(4), yearLow(5), daily change(8), return(10), actions(11) */
     #tab-holdings .holdings-table th:nth-child(2),
     #tab-holdings .holdings-table td:nth-child(2),
-    #tab-holdings .holdings-table th:nth-child(6),
-    #tab-holdings .holdings-table td:nth-child(6),
+    #tab-holdings .holdings-table th:nth-child(4),
+    #tab-holdings .holdings-table td:nth-child(4),
+    #tab-holdings .holdings-table th:nth-child(5),
+    #tab-holdings .holdings-table td:nth-child(5),
     #tab-holdings .holdings-table th:nth-child(8),
     #tab-holdings .holdings-table td:nth-child(8),
-    #tab-holdings .holdings-table th:nth-child(9),
-    #tab-holdings .holdings-table td:nth-child(9) {
+    #tab-holdings .holdings-table th:nth-child(10),
+    #tab-holdings .holdings-table td:nth-child(10),
+    #tab-holdings .holdings-table th:nth-child(11),
+    #tab-holdings .holdings-table td:nth-child(11) {
         display: none !important;
     }
-    /* Visible 5 columns: 1=נכס 3=מחיר נוכחי 4=כמות 5=שווי כולל 7=רווח/הפסד */
+    /* Visible 5 columns: 1=נכס 3=מחיר נוכחי 6=כמות 7=שווי כולל 9=רווח/הפסד */
     #tab-holdings .holdings-table th:nth-child(1),
     #tab-holdings .holdings-table td:nth-child(1) { width: 26% !important; }
     #tab-holdings .holdings-table th:nth-child(3),
     #tab-holdings .holdings-table td:nth-child(3) { width: 22% !important; }
-    #tab-holdings .holdings-table th:nth-child(4),
-    #tab-holdings .holdings-table td:nth-child(4) { width: 14% !important; }
-    #tab-holdings .holdings-table th:nth-child(5),
-    #tab-holdings .holdings-table td:nth-child(5) { width: 20% !important; }
+    #tab-holdings .holdings-table th:nth-child(6),
+    #tab-holdings .holdings-table td:nth-child(6) { width: 14% !important; }
     #tab-holdings .holdings-table th:nth-child(7),
-    #tab-holdings .holdings-table td:nth-child(7) { width: 18% !important; }
+    #tab-holdings .holdings-table td:nth-child(7) { width: 20% !important; }
+    #tab-holdings .holdings-table th:nth-child(9),
+    #tab-holdings .holdings-table td:nth-child(9) { width: 18% !important; }
     .add-asset-btn {
         font-size: 10px;
         padding: 5px 10px;
@@ -4146,7 +4150,7 @@ body.filter-modal-open::after {
     border-collapse: separate;  /* separate mode = overflow:visible works on cells */
     border-spacing: 0;          /* visually identical to collapse */
     font-size: 13px;
-    min-width: 820px;
+    min-width: 960px;
 }
 
 .holdings-table th {
@@ -5370,7 +5374,9 @@ body.filter-modal-open::after {
     }
 
     .portfolio-section-header {
-        padding: 12px 16px 4px;
+        padding: 12px 16px 10px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     /* Show grid/list toggle on mobile */

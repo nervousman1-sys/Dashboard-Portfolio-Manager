@@ -1273,20 +1273,30 @@ function renderClientCards() {
         if (_cashUsd === 0 && _cashIls === 0 && (client.cashBalance || 0) > 0) {
             _cashUsd = client.cashBalance;
         }
+        const _cashUsdPctVal = client.portfolioValue > 0 ? (_cashUsd / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) > 0 ? _cashUsd : 0) : 0;
+        const _cashIlsPctVal = client.portfolioValue > 0 ? (_cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) > 0 ? _cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7) : 0) : 0;
         const cashHTML = `
             <div class="allocation-row">
                 <span class="allocation-label">
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (USD)
                 </span>
-                <span class="allocation-value">${formatCurrency(_cashUsd, 'USD')}</span>
+                <span class="allocation-value">
+                    <span class="alloc-pct" style="visibility:hidden">—</span>
+                    <span class="alloc-chg" style="visibility:hidden">—</span>
+                    <span class="alloc-price">${formatCurrency(_cashUsd, 'USD')}</span>
+                </span>
             </div>
             <div class="allocation-row">
                 <span class="allocation-label">
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (ILS)
                 </span>
-                <span class="allocation-value">${formatCurrency(_cashIls, 'ILS')}</span>
+                <span class="allocation-value">
+                    <span class="alloc-pct" style="visibility:hidden">—</span>
+                    <span class="alloc-chg" style="visibility:hidden">—</span>
+                    <span class="alloc-price">${formatCurrency(_cashIls, 'ILS')}</span>
+                </span>
             </div>`;
 
         const totalStockPct = stockHoldings.reduce((s, h) => s + h.allocationPct, 0);
