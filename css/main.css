@@ -1568,23 +1568,27 @@ body.filter-modal-open::after {
         min-width: 0;
         width: 92vw;
         max-width: none;
-        padding: 20px 16px;
-        gap: 12px;
+        padding: 18px 14px;
+        gap: 10px;
     }
     .additional-filters-inline.open::before {
         font-size: 14px;
         padding-bottom: 8px;
     }
     .additional-filters-inline.open .filter-group {
-        gap: 6px;
+        gap: 5px;
+        flex-wrap: wrap;
     }
     .additional-filters-inline.open .filter-group label {
-        font-size: 11px;
+        font-size: 10px;
         white-space: nowrap;
+        width: 100%;
+        margin-bottom: -2px;
     }
     .additional-filters-inline.open .filter-btn {
-        padding: 6px 10px;
-        font-size: 10px;
+        padding: 5px 8px;
+        font-size: 9px;
+        white-space: nowrap;
     }
 }
 
@@ -3739,19 +3743,21 @@ body.filter-modal-open::after {
     }
     .holdings-table th,
     .holdings-table td {
-        padding: 4px 3px;
+        padding: 4px 2px;
         font-size: 9px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* Hide less-critical columns on mobile: buy price (2), daily change (6), return % (8) */
+    /* Hide less-critical columns on mobile: buy price (2), daily change (6), return % (8), actions (9) */
     #tab-holdings .holdings-table th:nth-child(2),
     #tab-holdings .holdings-table td:nth-child(2),
     #tab-holdings .holdings-table th:nth-child(6),
     #tab-holdings .holdings-table td:nth-child(6),
     #tab-holdings .holdings-table th:nth-child(8),
-    #tab-holdings .holdings-table td:nth-child(8) {
+    #tab-holdings .holdings-table td:nth-child(8),
+    #tab-holdings .holdings-table th:nth-child(9),
+    #tab-holdings .holdings-table td:nth-child(9) {
         display: none;
     }
     .add-asset-btn {
@@ -3769,10 +3775,37 @@ body.filter-modal-open::after {
         table-layout: fixed;
         width: 100%;
     }
-    /* Hide realized P&L column on mobile for transactions */
+    /* Hide realized P&L column (7) on mobile for transactions */
     #tab-transactions .holdings-table th:nth-child(7),
     #tab-transactions .holdings-table td:nth-child(7) {
         display: none;
+    }
+
+    /* ── Modal header: show action buttons as a scrollable row below name ── */
+    .modal-header {
+        flex-wrap: wrap;
+    }
+    .modal-header > div:last-child {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        justify-content: flex-start;
+        gap: 6px;
+        padding: 4px 0 2px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        margin-top: 4px;
+    }
+    .modal-header > div:last-child .filter-btn {
+        display: inline-flex !important;
+        font-size: 9px;
+        padding: 4px 8px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .modal-header > div:last-child .modal-close {
+        position: absolute;
+        top: 8px;
+        left: 8px;
     }
 }
 
@@ -5347,33 +5380,55 @@ body.filter-modal-open::after {
     .full-list-page-inner {
         padding: 16px 12px;
     }
-    .full-list-title-row { flex-direction: column; gap: 12px; align-items: flex-start; }
-    .full-list-filters {
+    .full-list-title-row {
         flex-direction: row;
-        flex-wrap: nowrap;
         align-items: center;
-        gap: 6px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 4px;
+        gap: 8px;
+        padding-bottom: 12px;
     }
+    .full-list-title-row .portfolio-section-title-group {
+        flex: 1;
+    }
+    /* Close button → compact X on mobile */
+    .full-list-close-btn {
+        padding: 6px;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        justify-content: center;
+        font-size: 0; /* hide text */
+    }
+    .full-list-close-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+    .full-list-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    /* Search on top — full width */
+    .full-list-search-wrap {
+        order: -1;
+        width: 100%;
+    }
+    .full-list-search {
+        max-width: 100%;
+        font-size: 13px;
+        padding: 10px 14px;
+    }
+    /* Filter groups side by side on single row */
     .full-list-filters .filter-group {
+        display: flex;
         gap: 4px;
         flex-shrink: 0;
     }
     .full-list-filters .filter-btn {
-        padding: 5px 8px;
+        padding: 6px 10px;
         font-size: 10px;
         white-space: nowrap;
-    }
-    .full-list-search-wrap {
-        flex: 1;
-        min-width: 0;
-    }
-    .full-list-search {
-        max-width: 100%;
-        font-size: 12px;
-        padding: 8px 12px;
+        flex: 1 1 0;
+        text-align: center;
     }
 
     .card-body {
