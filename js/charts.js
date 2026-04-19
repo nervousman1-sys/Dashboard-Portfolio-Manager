@@ -1495,6 +1495,11 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         return { x, y: p.value };
     });
 
+    // Device/context flags — used by dataset construction AND Chart.js options.
+    // Must be defined before datasets[] to avoid TDZ ReferenceError.
+    const _isMobile = window.innerWidth <= 768;
+    const _isFullscreen = canvasId === 'fullscreen-chart';
+
     // Chart color based on actual portfolio return, not history endpoints
     const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const mainColor = isPositive ? COLORS.profit : COLORS.loss;
@@ -1603,8 +1608,6 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         return null;
     }
     console.log(`[PerfChart] Creating chart with ${portfolioPoints.length} portfolio points, ${datasets.length} total datasets`);
-    const _isMobile = window.innerWidth <= 768;
-    const _isFullscreen = canvasId === 'fullscreen-chart';
 
     let chartInstance;
     try {
