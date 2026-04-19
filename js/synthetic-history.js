@@ -147,16 +147,22 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     // ── Fallback: Twelve Data time_series ──
     // Secondary because Twelve Data free tier only allows 8 calls/min,
     // which chokes on portfolios with >8 holdings.
-    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+    if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+        && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
         try {
             const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=1day&outputsize=${outputSize}&apikey=${TWELVE_DATA_API_KEY}`;
             const res = await fetch(url);
-            if (res.ok && res.status !== 429) {
+            if (res.status === 401 || res.status === 429) {
+                console.warn(`[SyntheticHistory] Twelve Data ${res.status} for ${ticker} — marking exhausted`);
+                if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
+            } else if (res.ok) {
                 const json = await res.json();
 
-                // Handle JSON-body rate limit (Twelve Data returns 200 with error in body)
-                if (json.code === 429 || (json.status === 'error' && json.message && json.message.includes('limit'))) {
-                    console.warn(`[SyntheticHistory] Twelve Data rate-limited for ${ticker}: ${json.message}`);
+                // Handle JSON-body rate limit / credits exhausted
+                if (json.code === 429 || json.code === 401
+                    || (json.status === 'error' && json.message && (json.message.includes('limit') || json.message.includes('exhausted') || json.message.includes('credits')))) {
+                    console.warn(`[SyntheticHistory] Twelve Data exhausted for ${ticker}: ${json.message}`);
+                    if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
                 } else if (json.values && json.values.length > 0) {
                     // Twelve Data returns newest-first — reverse to chronological
                     const values = json.values;

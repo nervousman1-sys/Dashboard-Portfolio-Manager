@@ -136,6 +136,11 @@ function normalizePrice(price, symbol, apiCurrency) {
 // ========== TWELVE DATA: single chunk fetch (up to 8 symbols batched in one HTTP call) ==========
 
 async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
+    // Skip if credits exhausted for the session
+    if (typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted()) {
+        return { results: {}, rateLimited: true };
+    }
+
     const symbols = chunk.map((_sym, i) => {
         const h = holdingsMap[originalTickers[i]];
         return (h && h.currency === 'ILS') ? `${originalTickers[i]}:TASE` : chunk[i];
@@ -146,8 +151,9 @@ async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
         `https://api.twelvedata.com/quote?symbol=${symbolStr}&apikey=${TWELVE_DATA_API_KEY}`
     );
 
-    if (res.status === 429) {
-        console.warn('[PriceService] Twelve Data: 429 rate limit');
+    if (res.status === 401 || res.status === 429) {
+        console.warn(`[PriceService] Twelve Data: ${res.status} — marking exhausted`);
+        if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
         return { results: {}, rateLimited: true };
     }
     if (!res.ok) {
@@ -157,8 +163,10 @@ async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
 
     const data = await res.json();
 
-    if (data.code === 429 || (data.status === 'error' && data.message && data.message.includes('limit'))) {
-        console.warn(`[PriceService] Twelve Data: API limit — ${data.message}`);
+    if (data.code === 429 || data.code === 401
+        || (data.status === 'error' && data.message && (data.message.includes('limit') || data.message.includes('exhausted') || data.message.includes('credits')))) {
+        console.warn(`[PriceService] Twelve Data: credits exhausted — ${data.message}`);
+        if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
         return { results: {}, rateLimited: true };
     }
 
@@ -422,8 +430,13 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
         // --- Provider 2 (Israeli): Twelve Data fallback ---
         try {
-            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+                && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
                 const res = await fetch(`https://api.twelvedata.com/quote?symbol=${tdSymbol}&apikey=${TWELVE_DATA_API_KEY}`);
+                if (res.status === 401 || res.status === 429) {
+                    if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
+                    throw new Error(`TwelveData ${res.status}`);
+                }
                 const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
                 if (data && data.status !== 'error' && data.close) {
                     let price = parseFloat(data.close);
@@ -479,8 +492,13 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
 
         // --- Provider 1 (US): Twelve Data ---
         try {
-            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+            if (TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+                && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
                 const res = await fetch(`https://api.twelvedata.com/quote?symbol=${sym}&apikey=${TWELVE_DATA_API_KEY}`);
+                if (res.status === 401 || res.status === 429) {
+                    if (typeof setTwelveDataExhausted === 'function') setTwelveDataExhausted();
+                    throw new Error(`TwelveData ${res.status}`);
+                }
                 const data = _parseResult(res, res.ok ? await res.json() : null, 'TwelveData');
                 if (data && data.status !== 'error' && data.close) {
                     const result = {
@@ -817,7 +835,8 @@ async function updatePricesFromAPI(onUpdate) {
     }
 
     // 2b. International stocks → Twelve Data first chunk (up to 8 symbols)
-    if (intlStockTickers.length > 0 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+    if (intlStockTickers.length > 0 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+        && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
         if (israeliStockTickers.length === 0) _updateStatus(`מעדכן ${intlStockTickers.length} מניות בינלאומיות...`);
         const intlSymbols = intlStockTickers.slice(0, 8);
         const tdPromise = _fetchTwelveDataChunk(intlSymbols, intlSymbols, holdingsMap).then(first => {
@@ -889,7 +908,8 @@ async function _backgroundPriceCompletion(intlTickers, intlSymbols, holdingsMap,
         const sources = Object.keys(collectedPrices).length > 0 ? ['Yahoo Finance', 'Twelve Data'] : [];
 
         // 3. Remaining Twelve Data chunks for international tickers (if >8)
-        if (intlSymbols.length > 8 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
+        if (intlSymbols.length > 8 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+            && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
             for (let i = 8; i < intlSymbols.length; i += 8) {
                 await new Promise(r => setTimeout(r, 1200));
 

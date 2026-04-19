@@ -36,6 +36,19 @@ function setFmpRateLimited() {
 // Twelve Data API key (free: https://twelvedata.com/pricing)
 const TWELVE_DATA_API_KEY = _env.TWELVE_DATA_API_KEY || '02940d45b4584a37a9e1c45940b912e7';
 
+// ── GLOBAL TWELVE DATA EXHAUSTION GUARD ──
+// When Twelve Data returns 401 or 429, or body contains "credits exhausted",
+// block all further calls for the session (credits won't reset mid-session).
+let _twelveDataExhausted = false;
+
+function isTwelveDataExhausted() { return _twelveDataExhausted; }
+
+function setTwelveDataExhausted() {
+    if (_twelveDataExhausted) return;
+    _twelveDataExhausted = true;
+    console.warn('[TwelveData] Credits exhausted — blocking ALL Twelve Data calls for this session');
+}
+
 // Finnhub API key (free: https://finnhub.io/register — 60 calls/min, all US stocks)
 const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01qkvh5q0aag';
 
