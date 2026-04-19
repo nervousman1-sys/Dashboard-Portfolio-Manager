@@ -2447,6 +2447,7 @@ body.filter-modal-open::after {
     padding: 4px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
     font-size: 11px;
+    gap: 4px;
 }
 
 .allocation-row:last-child {
@@ -2458,12 +2459,18 @@ body.filter-modal-open::after {
     align-items: center;
     gap: 6px;
     font-weight: 600;
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .allocation-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .allocation-value {
@@ -2475,21 +2482,25 @@ body.filter-modal-open::after {
     gap: 6px;
     font-variant-numeric: tabular-nums;
     direction: ltr;
+    flex-shrink: 0;
 }
 .alloc-pct {
-    min-width: 40px;
+    min-width: 38px;
     text-align: right;
+    display: inline-block;
 }
 .alloc-chg {
-    min-width: 44px;
+    min-width: 42px;
     text-align: right;
     font-size: 10px;
+    display: inline-block;
 }
 .alloc-price {
-    min-width: 50px;
+    min-width: 52px;
     text-align: right;
     color: var(--text-muted);
     font-size: 9px;
+    display: inline-block;
 }
 
 /* ── Card Footer (template-matched) ── */
@@ -3754,43 +3765,44 @@ body.filter-modal-open::after {
 
     /* ── Holdings tab — show all data without horizontal scroll ── */
     .holdings-table-wrapper {
-        overflow-x: hidden;
+        overflow-x: hidden !important;
+        overflow-y: auto;
     }
     .holdings-table {
-        min-width: 0;
-        width: 100%;
-        table-layout: fixed;
+        min-width: 0 !important;
+        width: 100% !important;
+        table-layout: fixed !important;
     }
     .holdings-table th,
     .holdings-table td {
-        padding: 4px 2px;
-        font-size: 8px;
+        padding: 5px 2px !important;
+        font-size: 8px !important;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* Hide: buy price (2), daily change (6), actions (9) */
+    /* Hide: buy price (2), daily change (6), return (8), actions (9) */
     #tab-holdings .holdings-table th:nth-child(2),
     #tab-holdings .holdings-table td:nth-child(2),
     #tab-holdings .holdings-table th:nth-child(6),
     #tab-holdings .holdings-table td:nth-child(6),
+    #tab-holdings .holdings-table th:nth-child(8),
+    #tab-holdings .holdings-table td:nth-child(8),
     #tab-holdings .holdings-table th:nth-child(9),
     #tab-holdings .holdings-table td:nth-child(9) {
-        display: none;
+        display: none !important;
     }
-    /* Visible columns: 1=נכס 3=מחיר נוכחי 4=כמות 5=שווי כולל 7=רווח/הפסד 8=תשואה */
+    /* Visible 5 columns: 1=נכס 3=מחיר נוכחי 4=כמות 5=שווי כולל 7=רווח/הפסד */
     #tab-holdings .holdings-table th:nth-child(1),
-    #tab-holdings .holdings-table td:nth-child(1) { width: 22%; }
+    #tab-holdings .holdings-table td:nth-child(1) { width: 26%; }
     #tab-holdings .holdings-table th:nth-child(3),
-    #tab-holdings .holdings-table td:nth-child(3) { width: 18%; }
+    #tab-holdings .holdings-table td:nth-child(3) { width: 22%; }
     #tab-holdings .holdings-table th:nth-child(4),
-    #tab-holdings .holdings-table td:nth-child(4) { width: 12%; }
+    #tab-holdings .holdings-table td:nth-child(4) { width: 14%; }
     #tab-holdings .holdings-table th:nth-child(5),
-    #tab-holdings .holdings-table td:nth-child(5) { width: 18%; }
+    #tab-holdings .holdings-table td:nth-child(5) { width: 20%; }
     #tab-holdings .holdings-table th:nth-child(7),
-    #tab-holdings .holdings-table td:nth-child(7) { width: 17%; }
-    #tab-holdings .holdings-table th:nth-child(8),
-    #tab-holdings .holdings-table td:nth-child(8) { width: 13%; }
+    #tab-holdings .holdings-table td:nth-child(7) { width: 18%; }
     .add-asset-btn {
         font-size: 10px;
         padding: 5px 10px;

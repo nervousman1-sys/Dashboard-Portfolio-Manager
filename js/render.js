@@ -1227,11 +1227,12 @@ function renderClientCards() {
                 const heName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
                 const cardStockName = heName || h.ticker;
                 const currSym = h.currency === 'ILS' ? '₪' : '$';
+                const displayName = cardStockName.length > 12 ? cardStockName.slice(0, 12) + '…' : cardStockName;
                 assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-blue)"></span>
-                            ${cardStockName}${heName ? ` <span style="color:var(--text-muted);font-size:10px">${h.ticker}</span>` : ''}
+                            ${displayName}
                         </span>
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
@@ -1251,10 +1252,11 @@ function renderClientCards() {
                     <div class="allocation-row">
                         <span class="allocation-label">
                             <span class="allocation-dot" style="background: var(--accent-purple)"></span>
-                            ${h.name.length > 20 ? h.name.slice(0, 20) + '...' : h.name}
+                            ${h.name.length > 18 ? h.name.slice(0, 18) + '…' : h.name}
                         </span>
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
+                            <span class="alloc-chg"></span>
                             <span class="alloc-price">${bondCurrSym}${formatNumber(h.price)}</span>
                         </span>
                     </div>`;
