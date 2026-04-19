@@ -1601,7 +1601,7 @@ function addHoldingRow(prefill = null) {
             <div class="row-ticker-wrapper">
                 <input type="hidden" class="row-ticker-symbol" value="${prefill?.ticker || ''}" />
                 <div class="row-ticker-badge" style="display:${prefill?.ticker ? 'flex' : 'none'}">${prefill?.ticker || ''}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button></div>
-                <input type="text" class="row-ticker-search" placeholder="חפש שם או סימול..."
+                <input type="text" class="row-ticker-search" placeholder=""
                        style="direction:ltr;text-align:left;${prefill?.ticker ? 'display:none' : ''}"
                        oninput="onRowTickerSearch('${rowId}')" autocomplete="off" />
                 <div class="row-ticker-dropdown" id="dropdown_${rowId}"></div>
