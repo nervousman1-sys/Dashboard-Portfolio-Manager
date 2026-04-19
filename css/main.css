@@ -2470,6 +2470,17 @@ body.filter-modal-open::after {
     font-weight: 700;
     color: var(--text-primary);
     font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    direction: ltr;
+}
+.allocation-value small {
+    display: inline-block;
+    min-width: 42px;
+    text-align: left;
 }
 
 /* ── Card Footer (template-matched) ── */
@@ -3732,30 +3743,31 @@ body.filter-modal-open::after {
     .sector-table th { padding: 4px 6px; font-size: 9px; }
     .sector-table td { padding: 4px 6px; }
 
-    /* ── Holdings tab — fit on screen without horizontal scroll ── */
+    /* ── Holdings tab — show all data without horizontal scroll ── */
     .holdings-table-wrapper {
         overflow-x: hidden;
     }
     .holdings-table {
         min-width: 0;
-        table-layout: fixed;
         width: 100%;
     }
     .holdings-table th,
     .holdings-table td {
-        padding: 4px 2px;
-        font-size: 9px;
+        padding: 4px 1px;
+        font-size: 8px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 58px;
     }
-    /* Hide less-critical columns on mobile: buy price (2), daily change (6), return % (8), actions (9) */
+    /* Asset name column wider */
+    #tab-holdings .holdings-table th:nth-child(1),
+    #tab-holdings .holdings-table td:nth-child(1) {
+        max-width: 70px;
+    }
+    /* Hide buy price (2) and actions (9) only */
     #tab-holdings .holdings-table th:nth-child(2),
     #tab-holdings .holdings-table td:nth-child(2),
-    #tab-holdings .holdings-table th:nth-child(6),
-    #tab-holdings .holdings-table td:nth-child(6),
-    #tab-holdings .holdings-table th:nth-child(8),
-    #tab-holdings .holdings-table td:nth-child(8),
     #tab-holdings .holdings-table th:nth-child(9),
     #tab-holdings .holdings-table td:nth-child(9) {
         display: none;
@@ -3766,16 +3778,19 @@ body.filter-modal-open::after {
         margin-bottom: 6px;
     }
 
-    /* ── Transactions tab — fit on screen without horizontal scroll ── */
+    /* ── Transactions tab — fit on screen ── */
     #tab-transactions .holdings-table-wrapper {
         overflow-x: hidden;
     }
     #tab-transactions .holdings-table {
         min-width: 0;
-        table-layout: fixed;
         width: 100%;
     }
-    /* Hide realized P&L column (7) on mobile for transactions */
+    #tab-transactions .holdings-table th,
+    #tab-transactions .holdings-table td {
+        max-width: 60px;
+    }
+    /* Hide realized P&L column (7) */
     #tab-transactions .holdings-table th:nth-child(7),
     #tab-transactions .holdings-table td:nth-child(7) {
         display: none;
@@ -3946,41 +3961,64 @@ body.filter-modal-open::after {
         align-items: stretch;
         padding: 10px 12px 8px;
         gap: 6px;
+        position: relative;
     }
     .fullscreen-chart-header h3 {
-        font-size: 15px;
-        text-align: center;
-        margin: 0;
+        display: none;
     }
+    /* Row 1: zoom controls (centered) + X (top-left absolute) */
+    .fullscreen-chart-controls {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        order: 1;
+    }
+    .fullscreen-chart-controls .modal-close {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+    }
+    /* Row 2: time range */
     .fullscreen-chart-header .perf-time-range {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: center;
         gap: 4px;
+        order: 2;
     }
     .fullscreen-chart-header .time-btn {
         padding: 5px 10px;
         font-size: 11px;
     }
+    /* Row 3: benchmark toggle + options on same row, right-aligned */
     .fullscreen-chart-header .perf-benchmarks {
         display: flex;
         flex-wrap: wrap;
-        justify-content: center;
+        justify-content: flex-end;
         gap: 4px;
+        order: 3;
+        direction: rtl;
     }
     .fullscreen-chart-header .benchmark-toggle-btn {
-        font-size: 11px;
-        padding: 4px 10px;
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    .fullscreen-chart-header .benchmark-options {
+        flex-wrap: nowrap !important;
+        gap: 3px !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .fullscreen-chart-header .benchmark-btn {
+        font-size: 9px !important;
+        padding: 3px 6px !important;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
     .fullscreen-chart-header .display-mode-btn {
         font-size: 11px;
         width: 28px;
         height: 28px;
-    }
-    .fullscreen-chart-controls {
-        display: flex;
-        justify-content: center;
-        gap: 8px;
     }
     .fullscreen-chart-controls .zoom-btn {
         width: 36px;
@@ -5097,11 +5135,25 @@ body.filter-modal-open::after {
         gap: 6px;
     }
 
-    /* ═══ Mobile: hide risk strip + spacers from first fold ═══ */
-    .hero-above-fold .risk-mini-summary,
+    /* ═══ Mobile: hide spacers from first fold ═══ */
     .hero-above-fold .top-fold-spacer,
     .hero-above-fold .fold-spacer {
         display: none;
+    }
+
+    /* ═══ Mobile: Risk strip — show as compact row ═══ */
+    .hero-above-fold .risk-mini-summary {
+        display: flex;
+        gap: 8px;
+        padding: 6px 12px;
+        flex-wrap: nowrap;
+        justify-content: center;
+        font-size: 10px;
+        overflow-x: auto;
+    }
+    .risk-inline-item {
+        flex-shrink: 0;
+        font-size: 10px;
     }
 
     /* ═══ Mobile: Exposure section — show stacked ═══ */
