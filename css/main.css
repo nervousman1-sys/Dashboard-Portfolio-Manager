@@ -1565,11 +1565,26 @@ body.filter-modal-open::after {
 }
 @media (max-width: 768px) {
     .additional-filters-inline.open {
+        min-width: 0;
+        width: 92vw;
         max-width: none;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        flex-wrap: nowrap;
-        padding-bottom: 4px;
+        padding: 20px 16px;
+        gap: 12px;
+    }
+    .additional-filters-inline.open::before {
+        font-size: 14px;
+        padding-bottom: 8px;
+    }
+    .additional-filters-inline.open .filter-group {
+        gap: 6px;
+    }
+    .additional-filters-inline.open .filter-group label {
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .additional-filters-inline.open .filter-btn {
+        padding: 6px 10px;
+        font-size: 10px;
     }
 }
 
@@ -3713,16 +3728,51 @@ body.filter-modal-open::after {
     .sector-table th { padding: 4px 6px; font-size: 9px; }
     .sector-table td { padding: 4px 6px; }
 
-    /* ── Holdings tab ── */
+    /* ── Holdings tab — fit on screen without horizontal scroll ── */
+    .holdings-table-wrapper {
+        overflow-x: hidden;
+    }
+    .holdings-table {
+        min-width: 0;
+        table-layout: fixed;
+        width: 100%;
+    }
     .holdings-table th,
     .holdings-table td {
         padding: 4px 3px;
         font-size: 9px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Hide less-critical columns on mobile: buy price (2), daily change (6), return % (8) */
+    #tab-holdings .holdings-table th:nth-child(2),
+    #tab-holdings .holdings-table td:nth-child(2),
+    #tab-holdings .holdings-table th:nth-child(6),
+    #tab-holdings .holdings-table td:nth-child(6),
+    #tab-holdings .holdings-table th:nth-child(8),
+    #tab-holdings .holdings-table td:nth-child(8) {
+        display: none;
     }
     .add-asset-btn {
         font-size: 10px;
         padding: 5px 10px;
         margin-bottom: 6px;
+    }
+
+    /* ── Transactions tab — fit on screen without horizontal scroll ── */
+    #tab-transactions .holdings-table-wrapper {
+        overflow-x: hidden;
+    }
+    #tab-transactions .holdings-table {
+        min-width: 0;
+        table-layout: fixed;
+        width: 100%;
+    }
+    /* Hide realized P&L column on mobile for transactions */
+    #tab-transactions .holdings-table th:nth-child(7),
+    #tab-transactions .holdings-table td:nth-child(7) {
+        display: none;
     }
 }
 
@@ -5014,13 +5064,20 @@ body.filter-modal-open::after {
         gap: 6px;
     }
 
-    /* ═══ Mobile: hide exposure + risk strip from first fold ═══
-       Match reference phone layout where these are not in the above-fold. */
-    .hero-above-fold .exposure-section,
+    /* ═══ Mobile: hide risk strip + spacers from first fold ═══ */
     .hero-above-fold .risk-mini-summary,
     .hero-above-fold .top-fold-spacer,
     .hero-above-fold .fold-spacer {
         display: none;
+    }
+
+    /* ═══ Mobile: Exposure section — show stacked ═══ */
+    .hero-above-fold .exposure-section {
+        display: block;
+        margin: 8px 0;
+    }
+    .hero-above-fold .exposure-section .section-title {
+        font-size: 14px;
     }
 
     .bottom-fold-group {
@@ -5291,8 +5348,33 @@ body.filter-modal-open::after {
         padding: 16px 12px;
     }
     .full-list-title-row { flex-direction: column; gap: 12px; align-items: flex-start; }
-    .full-list-filters { flex-direction: column; align-items: flex-start; gap: 10px; }
-    .full-list-search { max-width: 100%; }
+    .full-list-filters {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+    .full-list-filters .filter-group {
+        gap: 4px;
+        flex-shrink: 0;
+    }
+    .full-list-filters .filter-btn {
+        padding: 5px 8px;
+        font-size: 10px;
+        white-space: nowrap;
+    }
+    .full-list-search-wrap {
+        flex: 1;
+        min-width: 0;
+    }
+    .full-list-search {
+        max-width: 100%;
+        font-size: 12px;
+        padding: 8px 12px;
+    }
 
     .card-body {
         flex-direction: column;
