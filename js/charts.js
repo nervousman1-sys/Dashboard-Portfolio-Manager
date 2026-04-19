@@ -2021,17 +2021,18 @@ function openFullscreenChart(clientId) {
     // Build header with controls
     const headerEl = document.querySelector('.fullscreen-chart-header');
     if (headerEl) {
+        const _isMobile = window.innerWidth <= 768;
         headerEl.innerHTML = `
-            <div class="fs-title-row">
-                <h3 id="fullscreenTitle">מעקב תשואה - ${client.name}</h3>
-                <button class="modal-close fs-close-btn" onclick="closeFullscreen()" title="סגור">&times;</button>
+            <div class="fs-title-row" style="display:flex;justify-content:space-between;align-items:center;width:100%">
+                <h3 id="fullscreenTitle" style="${_isMobile ? 'font-size:13px;' : 'font-size:18px;'}font-weight:700;flex:1;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מעקב תשואה - ${client.name}</h3>
+                <button class="modal-close fs-close-btn" onclick="closeFullscreen()" title="סגור" style="flex-shrink:0;width:32px;height:32px;font-size:20px;display:flex;align-items:center;justify-content:center">&times;</button>
             </div>
-            <div class="perf-time-range fs-time-range">
+            <div class="perf-time-range fs-time-range" style="display:flex;flex-wrap:nowrap;justify-content:center;gap:${_isMobile ? '3px' : '6px'}">
                 ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
-                    `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${r.toUpperCase()}</button>`
+                    `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)" style="${_isMobile ? 'padding:4px 8px;font-size:10px' : ''}">${r.toUpperCase()}</button>`
                 ).join('')}
             </div>
-            <div class="perf-benchmarks fs-benchmarks">
+            <div class="perf-benchmarks fs-benchmarks" style="display:flex;flex-wrap:nowrap;gap:4px;align-items:center;${_isMobile ? 'justify-content:flex-end;direction:rtl' : ''}">
                 <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
                 <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'}">
                 ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
@@ -2040,7 +2041,7 @@ function openFullscreenChart(clientId) {
                 </div>
                 <button class="display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}" onclick="toggleChartDisplayMode(this)" title="% / $">${_chartDisplayMode === 'percent' ? '%' : '$'}</button>
             </div>
-            <div class="fullscreen-chart-controls">
+            <div class="fullscreen-chart-controls" style="display:flex;justify-content:center;gap:6px;align-items:center">
                 <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
                 <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">-</button>
                 <button class="zoom-btn" onclick="fullscreenAutoScale()" title="התאמה אוטומטית">⇕</button>

@@ -91,6 +91,8 @@ async function openModal(clientId) {
             </td>
             <td>${formatPrice(purchasePrice)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${formatPrice(h.price)} ${currSymbol}</span>` : `${formatPrice(h.price)} ${currSymbol}`}</td>
+            <td>${h.yearHigh ? `${formatPrice(h.yearHigh)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td>${h.yearLow ? `${formatPrice(h.yearLow)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
@@ -110,6 +112,8 @@ async function openModal(clientId) {
     const totalReturnPctHoldings = _pReturn.totalCost > 0 ? (totalHoldingsPnL / _pReturn.totalCost * 100) : 0;
     const holdingsFooter = `<tr class="holdings-footer-row">
         <td style="font-weight:700;color:var(--text-primary)">סה"כ</td>
+        <td></td>
+        <td></td>
         <td></td>
         <td></td>
         <td></td>
@@ -323,7 +327,7 @@ async function openModal(clientId) {
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
                 <div class="holdings-table-wrapper">
                 <table class="holdings-table">
-                    <thead><tr><th>נכס</th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">שינוי יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה</th><th>פעולות</th></tr></thead>
+                    <thead><tr><th>נכס</th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-price">שנתי גבוה</th><th class="col-price">שנתי נמוך</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">שינוי יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה</th><th>פעולות</th></tr></thead>
                     <tbody>${holdingsRows}${holdingsFooter}</tbody>
                 </table>
                 </div>

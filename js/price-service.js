@@ -185,13 +185,26 @@ async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
             prevClose = Math.round((prevClose / 100) * 100) / 100;
         }
 
-        return {
+        const result = {
             price: norm.price,
             previousClose: prevClose,
             change: +(norm.price - prevClose).toFixed(2),
             changePct: prevClose ? +((norm.price - prevClose) / prevClose * 100).toFixed(2) : 0,
             currency: norm.currency
         };
+        // Extract 52-week high/low if available from Twelve Data quote
+        if (q.fifty_two_week) {
+            let h52 = parseFloat(q.fifty_two_week.high);
+            let l52 = parseFloat(q.fifty_two_week.low);
+            // Normalize Agorot → NIS if needed
+            if (norm.currency === 'ILS' && rawCurrency !== 'ILS') {
+                h52 = Math.round((h52 / 100) * 100) / 100;
+                l52 = Math.round((l52 / 100) * 100) / 100;
+            }
+            if (!isNaN(h52)) result.yearHigh = h52;
+            if (!isNaN(l52)) result.yearLow = l52;
+        }
+        return result;
     }
 
     if (symbols.length === 1) {
@@ -508,6 +521,10 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                         changePct: parseFloat(data.previous_close) ? +((parseFloat(data.close) - parseFloat(data.previous_close)) / parseFloat(data.previous_close) * 100).toFixed(2) : 0,
                         currency: data.currency || 'USD'
                     };
+                    if (data.fifty_two_week) {
+                        if (!isNaN(parseFloat(data.fifty_two_week.high))) result.yearHigh = parseFloat(data.fifty_two_week.high);
+                        if (!isNaN(parseFloat(data.fifty_two_week.low))) result.yearLow = parseFloat(data.fifty_two_week.low);
+                    }
                     if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                     return result;
                 }
@@ -531,6 +548,8 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                         changePct: (q.previousClose || q.price) ? +((q.price - (q.previousClose || q.price)) / (q.previousClose || q.price) * 100).toFixed(2) : 0,
                         currency: 'USD'
                     };
+                    if (q.yearHigh) result.yearHigh = q.yearHigh;
+                    if (q.yearLow) result.yearLow = q.yearLow;
                     if (typeof priceCache !== 'undefined') priceCache[sym] = result;
                     return result;
                 }
@@ -738,6 +757,8 @@ function _applyPricesToClientsInMemory(priceMap) {
                     h.price = newPrice;
                     h.value = h.shares * newPrice;
                     h._livePriceResolved = true;
+                    if (entry.yearHigh) h.yearHigh = entry.yearHigh;
+                    if (entry.yearLow) h.yearLow = entry.yearLow;
                     clientChanged = true;
                 }
             }
