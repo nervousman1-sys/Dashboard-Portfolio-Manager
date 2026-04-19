@@ -1234,9 +1234,9 @@ function renderClientCards() {
                             ${cardStockName}${heName ? ` <span style="color:var(--text-muted);font-size:10px">${h.ticker}</span>` : ''}
                         </span>
                         <span class="allocation-value">
-                            ${h.allocationPct.toFixed(1)}%
-                            <small class="price-change ${changeClass}" style="font-size:10px; margin-right:4px">${changeSign}${change.toFixed(1)}%</small>
-                            <small style="color:var(--text-muted);font-size:9px">${currSym}${formatNumber(h.price)}</small>
+                            <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
+                            <span class="alloc-chg price-change ${changeClass}">${changeSign}${change.toFixed(1)}%</span>
+                            <span class="alloc-price">${currSym}${formatNumber(h.price)}</span>
                         </span>
                     </div>`;
             });
@@ -1253,7 +1253,10 @@ function renderClientCards() {
                             <span class="allocation-dot" style="background: var(--accent-purple)"></span>
                             ${h.name.length > 20 ? h.name.slice(0, 20) + '...' : h.name}
                         </span>
-                        <span class="allocation-value">${h.allocationPct.toFixed(1)}% <small style="color:var(--text-muted);font-size:9px">${bondCurrSym}${formatNumber(h.price)}</small></span>
+                        <span class="allocation-value">
+                            <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
+                            <span class="alloc-price">${bondCurrSym}${formatNumber(h.price)}</span>
+                        </span>
                     </div>`;
             });
             if (bondHoldings.length > 2) {

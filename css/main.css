@@ -2470,17 +2470,26 @@ body.filter-modal-open::after {
     font-weight: 700;
     color: var(--text-primary);
     font-size: 11px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0;
+    gap: 6px;
     font-variant-numeric: tabular-nums;
-    text-align: left;
     direction: ltr;
 }
-.allocation-value small {
-    display: inline-block;
-    min-width: 42px;
-    text-align: left;
+.alloc-pct {
+    min-width: 40px;
+    text-align: right;
+}
+.alloc-chg {
+    min-width: 44px;
+    text-align: right;
+    font-size: 10px;
+}
+.alloc-price {
+    min-width: 50px;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 9px;
 }
 
 /* ── Card Footer (template-matched) ── */
@@ -3750,28 +3759,38 @@ body.filter-modal-open::after {
     .holdings-table {
         min-width: 0;
         width: 100%;
+        table-layout: fixed;
     }
     .holdings-table th,
     .holdings-table td {
-        padding: 4px 1px;
+        padding: 4px 2px;
         font-size: 8px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 58px;
     }
-    /* Asset name column wider */
-    #tab-holdings .holdings-table th:nth-child(1),
-    #tab-holdings .holdings-table td:nth-child(1) {
-        max-width: 70px;
-    }
-    /* Hide buy price (2) and actions (9) only */
+    /* Hide: buy price (2), daily change (6), actions (9) */
     #tab-holdings .holdings-table th:nth-child(2),
     #tab-holdings .holdings-table td:nth-child(2),
+    #tab-holdings .holdings-table th:nth-child(6),
+    #tab-holdings .holdings-table td:nth-child(6),
     #tab-holdings .holdings-table th:nth-child(9),
     #tab-holdings .holdings-table td:nth-child(9) {
         display: none;
     }
+    /* Visible columns: 1=נכס 3=מחיר נוכחי 4=כמות 5=שווי כולל 7=רווח/הפסד 8=תשואה */
+    #tab-holdings .holdings-table th:nth-child(1),
+    #tab-holdings .holdings-table td:nth-child(1) { width: 22%; }
+    #tab-holdings .holdings-table th:nth-child(3),
+    #tab-holdings .holdings-table td:nth-child(3) { width: 18%; }
+    #tab-holdings .holdings-table th:nth-child(4),
+    #tab-holdings .holdings-table td:nth-child(4) { width: 12%; }
+    #tab-holdings .holdings-table th:nth-child(5),
+    #tab-holdings .holdings-table td:nth-child(5) { width: 18%; }
+    #tab-holdings .holdings-table th:nth-child(7),
+    #tab-holdings .holdings-table td:nth-child(7) { width: 17%; }
+    #tab-holdings .holdings-table th:nth-child(8),
+    #tab-holdings .holdings-table td:nth-child(8) { width: 13%; }
     .add-asset-btn {
         font-size: 10px;
         padding: 5px 10px;
@@ -3858,15 +3877,37 @@ body.filter-modal-open::after {
 
 .fullscreen-chart-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     padding: 16px 24px;
     border-bottom: 1px solid var(--border);
+    gap: 8px;
 }
 
-.fullscreen-chart-header h3 {
+.fs-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.fs-title-row h3 {
     font-size: 18px;
     font-weight: 700;
+    flex: 1;
+}
+
+.fs-close-btn {
+    /* On desktop, positioned normally in title row */
+}
+
+.fs-time-range {
+    margin-top: 0;
+}
+
+.fs-benchmarks {
+    margin-top: 0;
 }
 
 .fullscreen-chart-controls {
@@ -3959,49 +4000,49 @@ body.filter-modal-open::after {
     .fullscreen-chart-header {
         flex-direction: column;
         align-items: stretch;
-        padding: 10px 12px 8px;
-        gap: 6px;
-        position: relative;
+        padding: 8px 12px 6px;
+        gap: 4px;
     }
-    .fullscreen-chart-header h3 {
+    /* Row 1: title hidden, X top-left */
+    .fs-title-row {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+    }
+    .fs-title-row h3 {
         display: none;
     }
-    /* Row 1: zoom controls (centered) + X (top-left absolute) */
-    .fullscreen-chart-controls {
-        display: flex;
-        justify-content: center;
-        gap: 8px;
-        order: 1;
-    }
-    .fullscreen-chart-controls .modal-close {
+    .fs-close-btn {
         position: absolute;
-        top: 10px;
-        left: 10px;
+        top: 8px;
+        left: 8px;
+        z-index: 10;
     }
-    /* Row 2: time range */
-    .fullscreen-chart-header .perf-time-range {
+    /* Row 2: time range centered */
+    .fullscreen-chart-header .fs-time-range {
         display: flex;
         flex-wrap: nowrap;
         justify-content: center;
-        gap: 4px;
+        gap: 3px;
         order: 2;
     }
     .fullscreen-chart-header .time-btn {
-        padding: 5px 10px;
-        font-size: 11px;
+        padding: 4px 8px;
+        font-size: 10px;
     }
-    /* Row 3: benchmark toggle + options on same row, right-aligned */
-    .fullscreen-chart-header .perf-benchmarks {
+    /* Row 3: benchmarks right-aligned */
+    .fullscreen-chart-header .fs-benchmarks {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: flex-end;
         gap: 4px;
         order: 3;
         direction: rtl;
+        align-items: center;
     }
     .fullscreen-chart-header .benchmark-toggle-btn {
         font-size: 10px;
-        padding: 4px 8px;
+        padding: 3px 8px;
     }
     .fullscreen-chart-header .benchmark-options {
         flex-wrap: nowrap !important;
@@ -4016,9 +4057,28 @@ body.filter-modal-open::after {
         flex-shrink: 0;
     }
     .fullscreen-chart-header .display-mode-btn {
+        font-size: 10px;
+        width: 26px;
+        height: 26px;
+    }
+    /* Row 4: zoom controls centered */
+    .fullscreen-chart-controls {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        order: 4;
+    }
+    .fullscreen-chart-controls .zoom-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+    .fullscreen-chart-controls .zoom-btn.reset {
         font-size: 11px;
-        width: 28px;
-        height: 28px;
+    }
+    /* Chart body — disable touch-zoom quirks */
+    .fullscreen-chart-body {
+        touch-action: pan-x pan-y;
     }
     .fullscreen-chart-controls .zoom-btn {
         width: 36px;
@@ -5637,6 +5697,35 @@ body.filter-modal-open::after {
     font-family: inherit;
     font-size: 14px;
     z-index: 9999;
+}
+
+@media (max-width: 768px) {
+    .report-view {
+        padding: 16px;
+        padding-top: 60px;
+    }
+    .report-view.active {
+        position: fixed;
+        inset: 0;
+        z-index: 9998;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .report-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    .report-header h1 { font-size: 18px; }
+    .report-header p { font-size: 12px; }
+    .report-table { font-size: 11px; }
+    .report-table th,
+    .report-table td { padding: 6px 4px; }
+    .report-back-btn {
+        top: 12px;
+        left: 12px;
+        padding: 8px 14px;
+        font-size: 12px;
+    }
 }
 
 @media print {
