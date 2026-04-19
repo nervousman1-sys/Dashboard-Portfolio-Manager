@@ -1245,7 +1245,8 @@ function renderClientCards() {
                 assetsHTML += `<div class="allocation-row" style="color:var(--text-muted);font-size:11px">+${stockHoldings.length - 3} מניות נוספות</div>`;
             }
         }
-        if (showBonds) {
+        if (showBonds && bondHoldings.length > 0) {
+            assetsHTML += `<div style="font-size:9px;color:var(--text-muted);padding:4px 0 1px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.04);letter-spacing:0.5px">אג״ח</div>`;
             bondHoldings.slice(0, 2).forEach(h => {
                 const bondCurrSym = h.currency === 'ILS' ? '₪' : '$';
                 assetsHTML += `
@@ -1284,7 +1285,7 @@ function renderClientCards() {
                 <span class="allocation-value">
                     <span class="alloc-pct" style="visibility:hidden">—</span>
                     <span class="alloc-chg" style="visibility:hidden">—</span>
-                    <span class="alloc-price">${formatCurrency(_cashUsd, 'USD')}</span>
+                    <span class="alloc-price" style="color:var(--text-primary);font-size:11px;font-weight:700;min-width:70px">${formatCurrency(_cashUsd, 'USD')}</span>
                 </span>
             </div>
             <div class="allocation-row">
@@ -1295,7 +1296,7 @@ function renderClientCards() {
                 <span class="allocation-value">
                     <span class="alloc-pct" style="visibility:hidden">—</span>
                     <span class="alloc-chg" style="visibility:hidden">—</span>
-                    <span class="alloc-price">${formatCurrency(_cashIls, 'ILS')}</span>
+                    <span class="alloc-price" style="color:var(--text-primary);font-size:11px;font-weight:700;min-width:70px">${formatCurrency(_cashIls, 'ILS')}</span>
                 </span>
             </div>`;
 
