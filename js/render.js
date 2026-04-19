@@ -1256,7 +1256,7 @@ function renderClientCards() {
                         </span>
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
-                            <span class="alloc-chg"></span>
+                            <span class="alloc-chg" style="visibility:hidden">—</span>
                             <span class="alloc-price">${bondCurrSym}${formatNumber(h.price)}</span>
                         </span>
                     </div>`;
