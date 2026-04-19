@@ -540,12 +540,25 @@ function generateReport(clientId) {
     // Close modal
     document.getElementById('modalOverlay').classList.remove('active');
 
-    // Hide main UI
+    // Hide ALL UI — report is the only visible element
     document.querySelector('.header').style.display = 'none';
     document.querySelector('.summary-bar').style.display = 'none';
-    document.querySelector('.filters').style.display = 'none';
+    const filtersEl = document.querySelector('.filters');
+    if (filtersEl) filtersEl.style.display = 'none';
+    const filtersRow = document.querySelector('.filters-search-row');
+    if (filtersRow) filtersRow.style.display = 'none';
     document.getElementById('exposureSection').style.display = 'none';
     document.getElementById('clientsGrid').style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) heroFold.style.display = 'none';
+    const portfolioHeader = document.querySelector('.portfolio-section-header');
+    if (portfolioHeader) portfolioHeader.style.display = 'none';
+    const quickWatch = document.querySelector('.quick-watch-bar');
+    if (quickWatch) quickWatch.style.display = 'none';
+    const mobileNav = document.getElementById('mobileBottomNav');
+    if (mobileNav) mobileNav.style.display = 'none';
+    const sidebar = document.getElementById('appSidebar');
+    if (sidebar) sidebar.style.display = 'none';
 
     const reportView = document.getElementById('reportView');
     reportView.classList.add('active');
@@ -589,9 +602,22 @@ function closeReport() {
     document.getElementById('reportView').innerHTML = '';
     document.querySelector('.header').style.display = '';
     document.querySelector('.summary-bar').style.display = '';
-    document.querySelector('.filters').style.display = '';
+    const filtersEl = document.querySelector('.filters');
+    if (filtersEl) filtersEl.style.display = '';
+    const filtersRow = document.querySelector('.filters-search-row');
+    if (filtersRow) filtersRow.style.display = '';
     document.getElementById('exposureSection').style.display = '';
     document.getElementById('clientsGrid').style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) heroFold.style.display = '';
+    const portfolioHeader = document.querySelector('.portfolio-section-header');
+    if (portfolioHeader) portfolioHeader.style.display = '';
+    const quickWatch = document.querySelector('.quick-watch-bar');
+    if (quickWatch) quickWatch.style.display = '';
+    const mobileNav = document.getElementById('mobileBottomNav');
+    if (mobileNav) mobileNav.style.display = '';
+    const sidebar = document.getElementById('appSidebar');
+    if (sidebar) sidebar.style.display = '';
 }
 
 // ========== PORTFOLIO & ASSET MANAGEMENT ==========
