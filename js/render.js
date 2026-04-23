@@ -1297,22 +1297,14 @@ function renderClientCards() {
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (USD)
                 </span>
-                <span class="allocation-value">
-                    <span class="alloc-pct" aria-hidden="true" style="visibility:hidden">0%</span>
-                    <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
-                    <span class="alloc-price">${formatCurrency(_cashUsd, 'USD')}</span>
-                </span>
+                <span class="cash-amount">${formatCurrency(_cashUsd, 'USD')}</span>
             </div>
             <div class="allocation-row cash-row">
                 <span class="allocation-label">
                     <span class="allocation-dot" style="background:var(--accent-green)"></span>
                     מזומן (ILS)
                 </span>
-                <span class="allocation-value">
-                    <span class="alloc-pct" aria-hidden="true" style="visibility:hidden">0%</span>
-                    <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
-                    <span class="alloc-price">${formatCurrency(_cashIls, 'ILS')}</span>
-                </span>
+                <span class="cash-amount">${formatCurrency(_cashIls, 'ILS')}</span>
             </div>`;
 
         // Compute donut percentages directly from raw values so that newly created

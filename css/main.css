@@ -2509,6 +2509,37 @@ body.filter-modal-open::after {
     font-weight: 700;
 }
 
+/* ── Cash Row — explicit RTL flex layout (label right, amount far left) ── */
+.allocation-row.cash-row {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    direction: rtl;
+    gap: 8px;
+}
+.allocation-row.cash-row .allocation-label {
+    white-space: nowrap;
+    flex-shrink: 0;
+    overflow: visible;
+    text-overflow: clip;
+    min-width: 0;
+    max-width: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.allocation-row.cash-row .cash-amount {
+    margin-inline-start: auto;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 12px;
+    direction: ltr;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 /* ── Card Footer (template-matched) ── */
 .card-footer {
     padding: 14px 16px;
@@ -3784,7 +3815,7 @@ body.filter-modal-open::after {
         height: 4px;
     }
     .holdings-table {
-        min-width: 720px !important;
+        min-width: 800px !important;
         max-width: none !important;
         width: max-content !important;
         table-layout: auto !important;
