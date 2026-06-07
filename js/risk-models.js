@@ -40,7 +40,7 @@ const RISK_MODEL = {
     MARKET_LABEL: 'S&P 500',
     LOOKBACK_DAYS: 260,            // ~1 trading year of daily closes
     TRADING_DAYS: 252,            // annualization factor
-    RF_FALLBACK: 0.0435,          // 4.35% — used only if DGS3MO proxy is unreachable
+    RF_FALLBACK: 0.038,           // ~3.8% — used only if DGS3MO proxy + CORS are unreachable
     RF_SERIES: 'DGS3MO',          // FRED series: 3-Month Treasury (secondary market rate)
     // Jensen alpha thresholds (annualized) for the recommendation engine
     ALPHA_BUY: 0.02,             // α ≥ +2%  → undervalued (above SML) → recommend
@@ -148,32 +148,54 @@ async function getRiskFreeRate(forceRefresh = false) {
         return _cachedRf;
     }
 
+    const accept = (pct) => {
+        if (pct !== null && isFinite(pct) && pct >= 0 && pct < 25) {
+            _cachedRf = pct / 100;
+            _cachedRfTs = Date.now();
+            console.log(`[RiskModel] Risk-free rate (DGS3MO) = ${pct}%`);
+            return true;
+        }
+        return false;
+    };
+
+    // Path 1: same-origin serverless proxy (Vercel)
     try {
         const res = await fetch(`/api/fred?series_id=${RISK_MODEL.RF_SERIES}&latest=1`, {
             headers: { 'Accept': 'application/json' }
         });
         if (res.ok) {
             const json = await res.json();
-            // Proxy returns { value: <percent>, date: 'YYYY-MM-DD' } or FRED-native shape
             let pct = null;
             if (json && isFinite(json.value)) pct = parseFloat(json.value);
             else if (json && Array.isArray(json.observations)) {
                 const valid = json.observations.filter(o => o.value !== '.' && o.value !== '');
                 if (valid.length) pct = parseFloat(valid[valid.length - 1].value);
             }
-            if (pct !== null && isFinite(pct) && pct >= 0 && pct < 25) {
-                _cachedRf = pct / 100;
-                _cachedRfTs = Date.now();
-                console.log(`[RiskModel] Risk-free rate (DGS3MO) = ${pct}%`);
-                return _cachedRf;
-            }
-        } else {
-            console.warn(`[RiskModel] /api/fred returned HTTP ${res.status} — using fallback Rf`);
+            if (accept(pct)) return _cachedRf;
         }
-    } catch (e) {
-        console.warn('[RiskModel] Rf proxy unreachable — using fallback:', e.message);
+    } catch { /* try CORS fallback */ }
+
+    // Path 2: direct FRED via public CORS proxy (works locally / pre-deploy)
+    const key = (typeof FRED_API_KEY !== 'undefined') ? FRED_API_KEY : '';
+    if (key) {
+        const fredUrl = `https://api.stlouisfed.org/fred/series/observations` +
+            `?series_id=${RISK_MODEL.RF_SERIES}&api_key=${key}&file_type=json&sort_order=desc&limit=1`;
+        const wrappers = [
+            (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+            (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        ];
+        for (const wrap of wrappers) {
+            try {
+                const res = await fetch(wrap(fredUrl));
+                if (!res.ok) continue;
+                const json = await res.json();
+                const obs = (json?.observations || []).filter(o => o.value !== '.' && o.value !== '');
+                if (obs.length && accept(parseFloat(obs[0].value))) return _cachedRf;
+            } catch { /* try next */ }
+        }
     }
 
+    console.warn('[RiskModel] Rf unreachable (proxy + CORS) — using fallback');
     _cachedRf = RISK_MODEL.RF_FALLBACK;
     _cachedRfTs = Date.now();
     return _cachedRf;
@@ -543,11 +565,160 @@ function rmRecColor(rec) {
     }
 }
 
+// ========== PER-PORTFOLIO ADVISORY (CML/SML review + actions) ==========
+// Produces a structured, human-readable verdict for ONE portfolio:
+//   • Does it sit on / above / below the CML (return per unit of total risk)?
+//   • Which holdings fit the SML (fairly/under-priced) and which don't (over-priced)?
+//   • What to REDUCE/SELL and what to BUY/ADD so the portfolio conforms to the models.
+
+function _rmAvgPairwiseCorr(tickers, model) {
+    const idx = {};
+    (model.correlation?.tickers || []).forEach((t, i) => { idx[t] = i; });
+    let sum = 0, n = 0;
+    for (let i = 0; i < tickers.length; i++) {
+        for (let j = i + 1; j < tickers.length; j++) {
+            const a = idx[tickers[i]], b = idx[tickers[j]];
+            if (a != null && b != null) { sum += model.correlation.matrix[a][b]; n++; }
+        }
+    }
+    return n ? sum / n : null;
+}
+
+function buildPortfolioAdvisory(client, model) {
+    if (!model || !model.portfolios) return null;
+    const p = model.portfolios.find(x => x.id === client.id);
+    if (!p) return null;
+
+    const total = p.totalValue || 0;
+    const positions = (client.holdings || [])
+        .filter(h => _rmIsRiskyHolding(h) && model.assets[h.ticker] && model.assets[h.ticker].hasData)
+        .map(h => {
+            const a = model.assets[h.ticker];
+            const v = h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0);
+            return {
+                ticker: h.ticker, name: a.name, sector: a.sector,
+                weight: total > 0 ? v / total : 0, value: v,
+                beta: a.beta, expReturn: a.expReturn, alpha: a.alpha,
+                recommendation: a.recommendation, corrToMarket: a.corrToMarket,
+            };
+        })
+        .sort((x, y) => y.weight - x.weight);
+
+    if (positions.length === 0) {
+        return { hasRisky: false, p };
+    }
+
+    const cmlStatus = p.aboveCML ? (p.alpha >= 0.01 ? 'above' : 'on') : 'below';
+    const fit = positions.filter(x => x.recommendation === 'buy');
+    const notFit = positions.filter(x => x.recommendation === 'avoid');
+    const neutral = positions.filter(x => x.recommendation === 'neutral');
+
+    const topWeight = positions[0].weight;
+    const concentrated = topWeight > 0.35 || positions.length < 4;
+    const avgCorr = _rmAvgPairwiseCorr(positions.map(x => x.ticker), model);
+    const highCorr = avgCorr != null && avgCorr > 0.6;
+
+    // What to REDUCE — holdings below the SML (over-priced), worst first by impact
+    const reduce = notFit.slice()
+        .sort((a, b) => (b.weight * -b.alpha) - (a.weight * -a.alpha))
+        .map(x => ({ ticker: x.ticker, name: x.name, weight: x.weight, alpha: x.alpha, beta: x.beta }));
+
+    // What to ADD — high-alpha assets (above SML) not already held, best first
+    const held = new Set(positions.map(x => x.ticker));
+    const candidates = Object.values(model.assets)
+        .filter(a => a.hasData && a.recommendation === 'buy' && !held.has(a.ticker))
+        .sort((a, b) => b.alpha - a.alpha)
+        .slice(0, 3)
+        .map(a => ({ ticker: a.ticker, name: a.name, alpha: a.alpha, beta: a.beta }));
+
+    return {
+        hasRisky: true, p, cmlStatus,
+        fit, notFit, neutral, reduce, candidates,
+        topWeight, avgCorr, concentrated, highCorr,
+        rf: model.rf, rm: model.rm, marketSharpe: model.marketSharpe,
+        marketSymbol: model.marketSymbol, marketLabel: model.marketLabel,
+    };
+}
+
+// Renders the advisory object to HTML. `compact` trims it for the portfolio modal.
+function renderAdvisoryHTML(adv, opts = {}) {
+    if (!adv) return '<div class="adv-empty">אין מספיק נתונים לניתוח CML/SML עבור תיק זה.</div>';
+    const compact = !!opts.compact;
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    if (!adv.hasRisky) {
+        return `<div class="adv-block"><div class="adv-verdict adv-low">
+            <span class="adv-verdict-dot"></span>תיק מזומן/אג"ח — סיכון נמוך (β≈0), אין חשיפה מנייתית לניתוח SML.</div>
+            <p class="adv-note">כדי שהתיק יעמוד על קו ה-CML עם תשואה גבוהה יותר, יש לשלב חשיפה למדד השוק (${esc(adv.marketLabel || 'S&P 500')}) בהתאם לרמת הסיכון הרצויה.</p></div>`;
+    }
+
+    const p = adv.p;
+    const list = (arr) => arr.length
+        ? arr.map(x => `<span class="adv-chip" title="β=${rmFmtNum(x.beta,2)} · α=${rmFmtPct(x.alpha,1)}">${esc(x.ticker)}</span>`).join(' ')
+        : '<span class="adv-dim">—</span>';
+
+    // CML verdict text
+    let cmlClass, cmlTitle, cmlText;
+    if (adv.cmlStatus === 'above') {
+        cmlClass = 'adv-good'; cmlTitle = 'התיק מעל קו ה-CML ✓';
+        cmlText = `יחס התשואה-לסיכון של התיק עדיף לשוק: Sharpe ${rmFmtNum(p.sharpe,2)} מול ${rmFmtNum(adv.marketSharpe,2)} של השוק. התיק יעיל מבחינת המודל.`;
+    } else if (adv.cmlStatus === 'on') {
+        cmlClass = 'adv-ok'; cmlTitle = 'התיק בקירוב על קו ה-CML';
+        cmlText = `התיק נע סביב קו השוק — יחס תשואה/סיכון דומה לשוק (Sharpe ${rmFmtNum(p.sharpe,2)}).`;
+    } else {
+        cmlClass = 'adv-bad'; cmlTitle = 'התיק מתחת לקו ה-CML ✗';
+        cmlText = `התיק לוקח סיכון כולל (σ=${rmFmtPct(p.vol,1)}) שאינו מתוגמל מספיק בתשואה הצפויה (${rmFmtPct(p.expReturn,1)}). לפי המודל ניתן להשיג את אותה תשואה בסיכון נמוך יותר.`;
+    }
+
+    // Actions
+    const reduceHTML = adv.reduce.length
+        ? adv.reduce.map(x => `<li><b>${esc(x.ticker)}</b> — צמצם/מכור: α=${rmFmtPct(x.alpha,1)} (מתחת ל-SML, מתומחר ביתר), משקל ${(x.weight*100).toFixed(0)}%</li>`).join('')
+        : '<li class="adv-dim">אין נכסים מתחת ל-SML — אין מה למכור מטעמי תמחור.</li>';
+
+    const addItems = [];
+    addItems.push(`<li><b>${esc(adv.marketLabel)}</b> (${esc(adv.marketSymbol)}) — אבן הבניין של ה-CML: שילוב מדד השוק + אג"ח קצר מקרב את התיק לקו היעיל.</li>`);
+    if (adv.candidates.length) {
+        adv.candidates.forEach(c => addItems.push(`<li><b>${esc(c.ticker)}</b> — מעל ה-SML (α=${rmFmtPct(c.alpha,1)}, β=${rmFmtNum(c.beta,2)}): מתומחר בחסר, מועמד טוב להוספה.</li>`));
+    }
+    if (adv.concentrated) addItems.push(`<li>פיזור: התיק מרוכז (משקל מקסימלי ${(adv.topWeight*100).toFixed(0)}%) — הוסף נכסים נוספים להקטנת סיכון ספציפי.</li>`);
+    if (adv.highCorr) addItems.push(`<li>קורלציה גבוהה בין האחזקות (ρ̄=${rmFmtNum(adv.avgCorr,2)}) — הוסף נכסים בקורלציה נמוכה/שלילית לפיזור הסיכון.</li>`);
+
+    return `
+    <div class="adv-block">
+        <div class="adv-verdict ${cmlClass}"><span class="adv-verdict-dot"></span>${cmlTitle}</div>
+        <p class="adv-note">${cmlText}</p>
+        <div class="adv-metaline">
+            <span>β=<b>${rmFmtNum(p.beta,2)}</b></span>
+            <span>תשואה צפויה=<b>${rmFmtPct(p.expReturn,1)}</b></span>
+            <span>σ=<b>${rmFmtPct(p.vol,1)}</b></span>
+            <span>Sharpe=<b>${rmFmtNum(p.sharpe,2)}</b></span>
+            <span>רמת סיכון=<b>${p.riskLabel} (${p.riskScore})</b></span>
+        </div>
+        <div class="adv-fitrow">
+            <div class="adv-fit"><span class="adv-fit-h adv-fit-good">מתאימים לתיק (מעל/על SML)</span>${list(adv.fit.concat(adv.neutral))}</div>
+            <div class="adv-fit"><span class="adv-fit-h adv-fit-bad">לא מתאימים (מתחת ל-SML)</span>${list(adv.notFit)}</div>
+        </div>
+        ${compact ? '' : `
+        <div class="adv-actions">
+            <div class="adv-action-col">
+                <div class="adv-action-h">מה לשנות / למכור</div>
+                <ul>${reduceHTML}</ul>
+            </div>
+            <div class="adv-action-col">
+                <div class="adv-action-h">מה לקנות / להוסיף</div>
+                <ul>${addItems.join('')}</ul>
+            </div>
+        </div>`}
+    </div>`;
+}
+
 // Expose for non-module consumers / debugging
 if (typeof window !== 'undefined') {
     window.buildRiskModel = buildRiskModel;
     window.applyModelRiskToClients = applyModelRiskToClients;
     window.getRiskFreeRate = getRiskFreeRate;
     window.classifyRisk = classifyRisk;
+    window.buildPortfolioAdvisory = buildPortfolioAdvisory;
+    window.renderAdvisoryHTML = renderAdvisoryHTML;
     window.RISK_MODEL = RISK_MODEL;
 }

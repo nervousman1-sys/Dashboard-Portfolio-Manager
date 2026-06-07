@@ -34,7 +34,7 @@ const STATIC_ASSETS = [
 ];
 
 // Hosts that should never be cached (APIs, auth, realtime)
-const API_HOSTS = ['supabase.co', 'supabase.io', 'twelvedata.com', 'financialmodelingprep.com', 'finnhub.io', 'yahoo', 'tradingeconomics', 'stlouisfed.org', 'boi.gov.il', 'allorigins.win'];
+const API_HOSTS = ['supabase.co', 'supabase.io', 'twelvedata.com', 'financialmodelingprep.com', 'finnhub.io', 'yahoo', 'tradingeconomics', 'stlouisfed.org', 'boi.gov.il', 'allorigins.win', 'corsproxy.io'];
 
 // Install - pre-cache static assets
 self.addEventListener('install', (event) => {

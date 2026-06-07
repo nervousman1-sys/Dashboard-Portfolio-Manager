@@ -2,6 +2,31 @@
 
 // Transaction history is now fetched from Supabase (supaFetchTransactions)
 
+// Fills the per-portfolio CML/SML advisory panel in the client modal overview.
+// Reuses the cached risk model when available; otherwise builds it on demand.
+async function _fillModalAdvisory(clientId) {
+    const body = document.getElementById('modalAdvisoryBody');
+    if (!body) return;
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+    if (typeof buildPortfolioAdvisory !== 'function' || typeof buildRiskModel !== 'function') {
+        body.innerHTML = '<div class="adv-empty">מנוע ה-CML/SML אינו זמין.</div>';
+        return;
+    }
+    try {
+        let model = window._lastRiskModel;
+        if (!model || !model.portfolios) model = await buildRiskModel(clients);
+        window._lastRiskModel = model;
+        // Guard against the modal being closed/switched while the model built
+        const stillOpen = document.getElementById('modalAdvisoryBody');
+        if (!stillOpen) return;
+        const adv = buildPortfolioAdvisory(client, model);
+        stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: false });
+    } catch (e) {
+        body.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח CML/SML כרגע.</div>';
+    }
+}
+
 function switchModalTab(tabName) {
     document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.modal-tab-content').forEach(t => t.classList.remove('active'));
@@ -285,6 +310,15 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
+                <!-- ═══ CML/SML ADVISORY — per-portfolio review & recommendations ═══ -->
+                <div class="ov-advisory glass-card" id="modalAdvisory">
+                    <div class="ov-advisory-head">
+                        <span>סקירת CML / SML והמלצות</span>
+                        <span class="ov-advisory-sub">האם התיק עומד במודלים · מה מתאים · מה לשנות ולקנות</span>
+                    </div>
+                    <div id="modalAdvisoryBody"><div class="adv-empty">מחשב ניתוח CML/SML…</div></div>
+                </div>
+
                 <!-- ═══ CURRENCY EXPOSURE — full-width row ═══ -->
                 <div class="ov-currency-bar">
                     <div class="ov-curbar-side">
@@ -425,6 +459,9 @@ async function openModal(clientId) {
                 });
             });
         }
+
+        // CML/SML advisory panel — built async (reuses cached model when available)
+        if (typeof _fillModalAdvisory === 'function') _fillModalAdvisory(client.id);
     }, 300);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──

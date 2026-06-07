@@ -7479,3 +7479,49 @@ body.full-list-open { overflow: hidden; }
     color: var(--rec); background: color-mix(in srgb, var(--rec) 16%, transparent);
     border: 1px solid color-mix(in srgb, var(--rec) 45%, transparent);
 }
+
+/* ── Per-portfolio CML/SML advisory ── */
+.risk-section-head { margin: 26px 2px 14px; }
+.risk-section-head h3 { font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px; }
+.adv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.adv-portfolio { padding: 16px 18px; }
+.adv-portfolio-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.adv-portfolio-name { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+.adv-block { display: flex; flex-direction: column; gap: 10px; }
+.adv-verdict { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; }
+.adv-verdict-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.adv-good { color: var(--risk-low); }
+.adv-ok { color: var(--accent-blue); }
+.adv-bad { color: var(--risk-high); }
+.adv-low { color: var(--accent-purple); }
+.adv-note { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin: 0; }
+.adv-metaline { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-muted);
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.adv-metaline b { color: var(--text-primary); }
+.adv-fitrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.adv-fit { display: flex; flex-direction: column; gap: 6px; }
+.adv-fit-h { font-size: 11px; font-weight: 700; }
+.adv-fit-good { color: var(--risk-low); }
+.adv-fit-bad { color: var(--risk-high); }
+.adv-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9px;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-secondary); margin: 1px; }
+.adv-dim { color: var(--text-muted); font-size: 12px; }
+.adv-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+.adv-action-col { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.adv-action-h { font-size: 12px; font-weight: 800; color: var(--accent-blue); margin-bottom: 6px; }
+.adv-action-col ul { margin: 0; padding-inline-start: 16px; display: flex; flex-direction: column; gap: 5px; }
+.adv-action-col li { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.adv-action-col li b { color: var(--text-primary); }
+.adv-empty { font-size: 13px; color: var(--text-muted); padding: 10px 0; }
+@media (max-width: 900px) {
+    .adv-grid { grid-template-columns: 1fr; }
+    .adv-fitrow, .adv-actions { grid-template-columns: 1fr; }
+}
+
+/* Modal CML/SML advisory panel */
+.ov-advisory { padding: 16px 18px; margin: 14px 0; }
+.ov-advisory-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.ov-advisory-head > span:first-child { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+.ov-advisory-sub { font-size: 11.5px; color: var(--text-muted); }

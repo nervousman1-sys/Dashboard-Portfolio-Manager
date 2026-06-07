@@ -70,7 +70,7 @@ const _MACRO_CACHE = {
     IL_CAL:  'macro_il_calendar_v4',
     LAST_TS: 'macro_lastSeenTimestamp'
 };
-const _MACRO_TTL_IND = 6 * 60 * 60 * 1000; // 6 hours (aggressive caching to avoid rate limits)
+const _MACRO_TTL_IND = 2 * 60 * 60 * 1000; // 2 hours — keep macro fresh (FRED via proxy/CORS is cheap)
 
 let _macroApiStatus = { fred: null, fmpUS: null, fmpIL: null, boiIL: null };
 
@@ -192,9 +192,61 @@ const _FRED_SERIES = [
     { key: 'unemployment', id: 'UNRATE',          units: 'lin', label: 'שיעור אבטלה',               unit: '%' },
 ];
 
-// Fetches all US indicators in ONE round-trip via the /api/fred serverless proxy.
-// FRED blocks browser CORS, so the proxy is required; it also batches all series
-// server-side. Falls back gracefully (returns null) so the caller can try FMP.
+// Public CORS proxies — let the browser read FRED directly when the same-origin
+// /api/fred serverless function isn't available (local dev, or before deploy).
+const _FRED_CORS_WRAPPERS = [
+    // corsproxy.io is browser-oriented (validates Origin) and most reliable from a
+    // real browser; allorigins is the secondary fallback.
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+
+// Path 1: same-origin serverless proxy (one batched round-trip). Vercel only.
+async function _fredFetchViaProxy() {
+    try {
+        const batch = _FRED_SERIES.map(s => `${s.id}:${s.units}`).join(',');
+        const res = await _macroFetch(`/api/fred?batch=${encodeURIComponent(batch)}&limit=2`, 9000, 0);
+        if (!res || !res.ok) return null;
+        const data = await res.json();
+        // Must look like a keyed FRED object, not the SPA index.html fallback
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+        const hasAny = _FRED_SERIES.some(s => data[s.id] && data[s.id].value != null);
+        return hasAny ? data : null;
+    } catch { return null; }
+}
+
+// Path 2: direct FRED through a public CORS proxy (per series, parallel).
+async function _fredFetchViaCors() {
+    const key = (typeof FRED_API_KEY !== 'undefined') ? FRED_API_KEY : '';
+    if (!key) return null;
+    const out = {};
+    await Promise.all(_FRED_SERIES.map(async (s) => {
+        const fredUrl = `https://api.stlouisfed.org/fred/series/observations` +
+            `?series_id=${s.id}&api_key=${key}&file_type=json&sort_order=desc&limit=2&units=${s.units}`;
+        for (const wrap of _FRED_CORS_WRAPPERS) {
+            try {
+                const res = await fetch(wrap(fredUrl));
+                if (!res.ok) continue;
+                const data = await res.json();
+                const obs = (data?.observations || []).filter(o => o.value !== '.' && o.value !== '');
+                if (obs.length) {
+                    out[s.id] = {
+                        value: parseFloat(obs[0].value),
+                        previous: obs[1] ? parseFloat(obs[1].value) : null,
+                        date: obs[0].date,
+                        prevDate: obs[1] ? obs[1].date : null,
+                    };
+                    return; // got this series — stop trying proxies
+                }
+            } catch { /* try next proxy */ }
+        }
+    }));
+    return Object.keys(out).length ? out : null;
+}
+
+// Fetches all US indicators live from FRED — serverless proxy first, public CORS
+// proxy as fallback so data is current EVERYWHERE (local + production), not the
+// stale hardcoded baseline. Returns null (→ caller tries FMP) if both paths fail.
 async function _fetchFREDIndicators(forceRefresh) {
     if (!forceRefresh) {
         const cached = _cacheGet(_MACRO_CACHE.US_HEAD, _MACRO_TTL_IND);
@@ -205,42 +257,36 @@ async function _fetchFREDIndicators(forceRefresh) {
         }
     }
 
-    try {
-        const batch = _FRED_SERIES.map(s => `${s.id}:${s.units}`).join(',');
-        const res = await _macroFetch(`/api/fred?batch=${encodeURIComponent(batch)}&limit=2`);
-        if (!res.ok) {
-            console.warn(`[FRED] proxy HTTP ${res.status}`);
-            _macroApiStatus.fred = `proxy ${res.status}`;
-            return null;
-        }
-        const data = await res.json();
-
-        const results = {};
-        for (const s of _FRED_SERIES) {
-            const entry = data[s.id];
-            if (!entry || entry.value === null || entry.value === undefined || isNaN(entry.value)) continue;
-            const val = parseFloat(entry.value);
-            const prevVal = (entry.previous !== null && entry.previous !== undefined) ? parseFloat(entry.previous) : null;
-            const trend = (prevVal !== null && !isNaN(prevVal))
-                ? (val > prevVal ? 'up' : val < prevVal ? 'down' : 'flat')
-                : 'flat';
-            results[s.key] = {
-                value: val, previous: prevVal, trend,
-                date: entry.date, prevDate: entry.prevDate || null,
-                label: s.label, unit: s.unit
-            };
-        }
-
-        const count = Object.keys(results).length;
-        _macroApiStatus.fred = count > 0 ? true : 'No data';
-        console.log(`[Macro] FRED US (proxy): ${count}/${_FRED_SERIES.length} indicators`);
-        if (count > 0) { _cacheSet(_MACRO_CACHE.US_HEAD, results); return results; }
-        return null;
-    } catch (e) {
-        console.warn('[FRED] proxy failed:', e.message);
-        _macroApiStatus.fred = 'proxy err';
+    let data = await _fredFetchViaProxy();
+    let via = 'proxy';
+    if (!data) { data = await _fredFetchViaCors(); via = 'cors'; }
+    if (!data) {
+        _macroApiStatus.fred = 'unreachable';
+        console.warn('[FRED] both proxy and CORS fallback failed');
         return null;
     }
+
+    const results = {};
+    for (const s of _FRED_SERIES) {
+        const entry = data[s.id];
+        if (!entry || entry.value === null || entry.value === undefined || isNaN(entry.value)) continue;
+        const val = parseFloat(entry.value);
+        const prevVal = (entry.previous !== null && entry.previous !== undefined) ? parseFloat(entry.previous) : null;
+        const trend = (prevVal !== null && !isNaN(prevVal))
+            ? (val > prevVal ? 'up' : val < prevVal ? 'down' : 'flat')
+            : 'flat';
+        results[s.key] = {
+            value: val, previous: prevVal, trend,
+            date: entry.date, prevDate: entry.prevDate || null,
+            label: s.label, unit: s.unit
+        };
+    }
+
+    const count = Object.keys(results).length;
+    _macroApiStatus.fred = count > 0 ? true : 'No data';
+    console.log(`[Macro] FRED US (${via}): ${count}/${_FRED_SERIES.length} indicators`);
+    if (count > 0) { _cacheSet(_MACRO_CACHE.US_HEAD, results); return results; }
+    return null;
 }
 
 // ========== 2. FMP US Indicators (primary — no CORS issues) ==========
@@ -336,17 +382,15 @@ async function _fetchUSHeadlines(forceRefresh) {
         } catch (e) { console.warn('[Macro] FMP overlay failed:', e.message); }
     }
 
-    // Merge: live data overrides baseline where available and newer
+    // Merge: live data ALWAYS overrides the hardcoded baseline where present.
+    // (Do NOT gate on a date comparison: FRED's observation date is the reference
+    // PERIOD, e.g. Feb 2026, while the baseline date is the PUBLISH date, e.g. Mar
+    // 2026 — comparing them wrongly rejected fresh live data and showed stale values.)
     const merged = { ...baseline };
     if (liveData) {
         for (const [key, val] of Object.entries(liveData)) {
-            if (val && val.value !== null && val.value !== undefined) {
-                // Only override if live data is same date or newer
-                const baseDate = baseline[key]?.date ? new Date(baseline[key].date) : new Date(0);
-                const liveDate = val.date ? new Date(val.date) : new Date(0);
-                if (liveDate >= baseDate) {
-                    merged[key] = val;
-                }
+            if (val && val.value !== null && val.value !== undefined && !isNaN(val.value)) {
+                merged[key] = val;
             }
         }
     }
@@ -818,6 +862,15 @@ function toggleAlerts() {
     _renderMacroPage();
     document.getElementById('macroPage').classList.add('active');
     if (typeof updateURLState === 'function') updateURLState({ view: 'macro' });
+
+    // Always pull the freshest macro data in the background when the page opens,
+    // then re-render in place — so the user never stares at stale cached values.
+    checkAlerts(true).then(() => {
+        if (document.getElementById('macroPage')?.classList.contains('active')) {
+            _renderMacroPage();
+            renderAlerts();
+        }
+    }).catch(() => { /* keep cached render */ });
 }
 
 // ── API Status Bar ──
