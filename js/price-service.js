@@ -642,6 +642,52 @@ async function fetchFMPPrices(tickers) {
     return Object.keys(results).length > 0 ? results : null;
 }
 
+// ========== FMP BATCH QUOTE (single call for many symbols — FAST) ==========
+// The legacy /api/v3/quote/SYM1,SYM2,... endpoint returns an array of quotes for
+// a comma-separated symbol list in ONE request. This is the fastest way to price
+// a whole international book and barely touches the 250/day FMP budget (one call
+// per ~40 symbols), avoiding Twelve Data's 8-calls/minute bottleneck.
+
+async function fetchFMPBatchQuote(tickers) {
+    if (!FMP_API_KEY || FMP_API_KEY === 'YOUR_FMP_API_KEY') return null;
+    if (typeof isFmpRateLimited === 'function' && isFmpRateLimited()) {
+        console.log('[PriceService] FMP rate-limited — skipping batch quote');
+        return null;
+    }
+    if (!tickers || tickers.length === 0) return null;
+
+    const CHUNK = 40; // keep URLs well under length limits
+    const results = {};
+    for (let i = 0; i < tickers.length; i += CHUNK) {
+        const chunk = tickers.slice(i, i + CHUNK);
+        try {
+            const url = `https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`;
+            const res = await fetch(url);
+            if (res.status === 429) { if (typeof setFmpRateLimited === 'function') setFmpRateLimited(); break; }
+            if (res.status === 402 || res.status === 403 || !res.ok) continue;
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                for (const q of data) {
+                    if (q && q.symbol && q.price > 0) {
+                        results[q.symbol] = {
+                            price: q.price,
+                            previousClose: q.previousClose || q.price,
+                            change: q.change || 0,
+                            changePct: q.changesPercentage || 0,
+                            currency: 'USD',
+                            yearHigh: q.yearHigh, yearLow: q.yearLow,
+                        };
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[PriceService] FMP batch chunk failed:', e.message);
+        }
+    }
+    console.log(`[PriceService] FMP batch: got ${Object.keys(results).length}/${tickers.length}`);
+    return Object.keys(results).length > 0 ? results : null;
+}
+
 // ========== FINNHUB FALLBACK (all tickers in parallel) ==========
 
 async function fetchFinnhubPrices(tickers) {
@@ -727,9 +773,15 @@ function _recalcPortfolioWithFx(client) {
     client.stockPct = stockPct;
     client.bondPct = bondPct;
 
-    if (stockPct > 70) { client.risk = 'high'; client.riskLabel = 'גבוה'; }
-    else if (stockPct >= 40) { client.risk = 'medium'; client.riskLabel = 'בינוני'; }
-    else { client.risk = 'low'; client.riskLabel = 'נמוך'; }
+    // Provisional risk (instant, allocation-based). Once the CML/SML engine
+    // (risk-models.js) has classified this portfolio, it owns `client.risk` and
+    // sets `client.riskScore` — so we must NOT overwrite the model's verdict here
+    // on routine price ticks.
+    if (client.riskScore == null) {
+        if (stockPct > 70) { client.risk = 'high'; client.riskLabel = 'גבוה'; }
+        else if (stockPct >= 40) { client.risk = 'medium'; client.riskLabel = 'בינוני'; }
+        else { client.risk = 'low'; client.riskLabel = 'נמוך'; }
+    }
 }
 
 // ========== IN-MEMORY PRICE APPLICATION ==========
@@ -855,20 +907,21 @@ async function updatePricesFromAPI(onUpdate) {
         fastPromises.push(yahooPromise);
     }
 
-    // 2b. International stocks → Twelve Data first chunk (up to 8 symbols)
-    if (intlStockTickers.length > 0 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
-        && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
+    // 2b. International stocks → FMP batch quote (ONE fast call covers the whole
+    //     book). This replaces the old Twelve Data first-chunk path, which was
+    //     capped at 8 symbols and throttled at 8 calls/min. Twelve Data is kept
+    //     as a background fallback only for tickers FMP couldn't price.
+    if (intlStockTickers.length > 0) {
         if (israeliStockTickers.length === 0) _updateStatus(`מעדכן ${intlStockTickers.length} מניות בינלאומיות...`);
-        const intlSymbols = intlStockTickers.slice(0, 8);
-        const tdPromise = _fetchTwelveDataChunk(intlSymbols, intlSymbols, holdingsMap).then(first => {
-            if (first.results && Object.keys(first.results).length > 0) {
-                Object.assign(collectedPrices, first.results);
-                Object.assign(priceCache, first.results);
-                if (_applyPricesToClientsInMemory(first.results) && onUpdate) onUpdate();
-                console.log(`[PriceService] Intl first batch: ${Object.keys(first.results).length} from Twelve Data`);
+        const fmpBatchPromise = fetchFMPBatchQuote(intlStockTickers).then(prices => {
+            if (prices && Object.keys(prices).length > 0) {
+                Object.assign(collectedPrices, prices);
+                Object.assign(priceCache, prices);
+                if (_applyPricesToClientsInMemory(prices) && onUpdate) onUpdate();
+                console.log(`[PriceService] Intl fast batch: ${Object.keys(prices).length}/${intlStockTickers.length} from FMP`);
             }
-        }).catch(e => console.warn('[PriceService] First intl chunk failed:', e.message));
-        fastPromises.push(tdPromise);
+        }).catch(e => console.warn('[PriceService] FMP batch fast path failed:', e.message));
+        fastPromises.push(fmpBatchPromise);
     }
 
     // Wait for BOTH fast paths to resolve (parallel → faster than sequential)
@@ -926,16 +979,19 @@ async function _backgroundPriceCompletion(intlTickers, intlSymbols, holdingsMap,
     }
 
     try {
-        const sources = Object.keys(collectedPrices).length > 0 ? ['Yahoo Finance', 'Twelve Data'] : [];
+        const sources = Object.keys(collectedPrices).length > 0 ? ['FMP / Yahoo'] : [];
 
-        // 3. Remaining Twelve Data chunks for international tickers (if >8)
-        if (intlSymbols.length > 8 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
+        // 3. Twelve Data — only for international tickers the FMP fast batch missed.
+        //    (Previously this re-fetched everything; now FMP covers the bulk and
+        //    Twelve Data's scarce 8/min credits are spent only on the remainder.)
+        const tdMissing = intlTickers.filter(t => !collectedPrices[t]);
+        if (tdMissing.length > 0 && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY'
             && !(typeof isTwelveDataExhausted === 'function' && isTwelveDataExhausted())) {
-            for (let i = 8; i < intlSymbols.length; i += 8) {
-                await new Promise(r => setTimeout(r, 1200));
+            for (let i = 0; i < tdMissing.length; i += 8) {
+                if (i > 0) await new Promise(r => setTimeout(r, 1200));
 
-                const chunkSymbols = intlSymbols.slice(i, i + 8);
-                const chunkTickers = intlTickers.slice(i, i + 8);
+                const chunkSymbols = tdMissing.slice(i, i + 8);
+                const chunkTickers = chunkSymbols;
 
                 try {
                     const result = await _fetchTwelveDataChunk(chunkSymbols, chunkTickers, holdingsMap);

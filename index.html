@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=33.0">
+    <link rel="stylesheet" href="css/main.css?v=34.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -105,6 +105,21 @@
                     </span>
                     <span class="sidebar-label">ניהול תיקים</span>
                 </a>
+                <!-- CML / SML Risk Analysis -->
+                <a class="sidebar-item" data-nav="riskmodel" onclick="navigateTo('riskmodel')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <line x1="3" y1="3" x2="3" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="7" />
+                            <circle cx="9" cy="15" r="1.6" />
+                            <circle cx="14" cy="11" r="1.6" />
+                            <circle cx="18" cy="9" r="1.6" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח CML/SML</span>
+                </a>
                 <!-- Macro Indicators -->
                 <a class="sidebar-item" data-nav="macro" onclick="navigateTo('macro')">
                     <span class="sidebar-item-icon">
@@ -117,56 +132,6 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">נתוני מאקרו</span>
-                </a>
-                <!-- Markets (placeholder) -->
-                <a class="sidebar-item" data-nav="markets" onclick="navigateTo('markets')">
-                    <span class="sidebar-item-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                            <polyline points="16 7 22 7 22 13" />
-                        </svg>
-                    </span>
-                    <span class="sidebar-label">שווקים</span>
-                </a>
-                <!-- Capital Flows (placeholder) -->
-                <a class="sidebar-item" data-nav="flows" onclick="navigateTo('flows')">
-                    <span class="sidebar-item-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <polyline points="17 1 21 5 17 9" />
-                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                            <polyline points="7 23 3 19 7 15" />
-                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                        </svg>
-                    </span>
-                    <span class="sidebar-label">תנועות הון</span>
-                </a>
-                <!-- Financial News (placeholder) -->
-                <a class="sidebar-item" data-nav="news" onclick="navigateTo('news')">
-                    <span class="sidebar-item-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <path
-                                d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
-                            <path d="M18 14h-8" />
-                            <path d="M15 18h-5" />
-                            <path d="M10 6h8v4h-8V6Z" />
-                        </svg>
-                    </span>
-                    <span class="sidebar-label">חדשות</span>
-                </a>
-                <!-- Settings (placeholder) -->
-                <a class="sidebar-item" data-nav="settings" onclick="navigateTo('settings')">
-                    <span class="sidebar-item-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <path
-                                d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                            <circle cx="12" cy="12" r="3" />
-                        </svg>
-                    </span>
-                    <span class="sidebar-label">הגדרות</span>
                 </a>
             </nav>
 
@@ -259,13 +224,14 @@
                         </svg>
                         <span>הוסף תיק</span>
                     </button>
-                    <button class="header-action-btn" onclick="navigateTo('markets')" title="שווקים">
+                    <button class="header-action-btn" onclick="navigateTo('riskmodel')" title="ניתוח CML/SML">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                            <polyline points="16 7 22 7 22 13" />
+                            <line x1="3" y1="3" x2="3" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="7" />
                         </svg>
-                        <span>שווקים</span>
+                        <span>ניתוח CML/SML</span>
                     </button>
                     <button class="header-action-btn" onclick="window.print && window.print()" title="הפקת דוח">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -346,6 +312,9 @@
             </div>
 
             <div class="macro-page" id="macroPage"></div>
+
+            <!-- ═══ CML / SML Risk Analysis Page ═══ -->
+            <div class="riskmodel-page" id="riskmodelPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -591,12 +560,14 @@
     <script src="js/clients.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/synthetic-history.js"></script>
+    <script src="js/risk-models.js"></script>
     <script src="js/render.js"></script>
     <script src="js/filters.js"></script>
     <script src="js/file-parser.js"></script>
     <script src="js/modals.js"></script>
     <script src="js/portfolio.js"></script>
     <script src="js/macro.js"></script>
+    <script src="js/risk-analysis-view.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/init.js"></script>

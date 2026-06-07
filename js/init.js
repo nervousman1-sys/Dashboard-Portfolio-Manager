@@ -192,6 +192,11 @@ async function refreshAllPrices() {
 
     onRefreshUpdate();
 
+    // Recompute CML/SML auto-risk in the background once fresh prices are in
+    if (typeof applyModelRiskToClients === 'function') {
+        applyModelRiskToClients({ force: true });
+    }
+
     // Alerts in background
     checkAlerts().then(() => renderAlerts());
 }
@@ -307,10 +312,22 @@ async function init() {
                 `עודכן: ${now.toLocaleTimeString('he-IL')}`;
         };
 
-        updatePricesFromAPI(onPriceUpdate).catch(err => {
-            console.warn('Background price update failed:', err.message);
-            document.getElementById('lastUpdate').textContent = 'מחירים מהמטמון';
-        });
+        updatePricesFromAPI(onPriceUpdate)
+            .then(() => {
+                // Once live prices are applied, run the CML/SML model in the
+                // background to upgrade each portfolio's risk from the provisional
+                // heuristic to the model-based classification.
+                if (typeof applyModelRiskToClients === 'function') {
+                    setTimeout(() => applyModelRiskToClients(), 1500);
+                }
+            })
+            .catch(err => {
+                console.warn('Background price update failed:', err.message);
+                document.getElementById('lastUpdate').textContent = 'מחירים מהמטמון';
+                if (typeof applyModelRiskToClients === 'function') {
+                    setTimeout(() => applyModelRiskToClients(), 1500);
+                }
+            });
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -642,6 +659,8 @@ function restoreStateFromURL() {
 
     if (view === 'macro') {
         toggleAlerts();
+    } else if (view === 'riskmodel') {
+        if (typeof openRiskAnalysis === 'function') openRiskAnalysis();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     } else if (clientId) {
@@ -682,6 +701,11 @@ window.addEventListener('popstate', function(e) {
     }
     if (macroOpen && view !== 'macro') {
         if (typeof closeMacroPage === 'function') closeMacroPage();
+        return;
+    }
+    const riskOpen = document.getElementById('riskmodelPage')?.classList.contains('active');
+    if (riskOpen && view !== 'riskmodel') {
+        if (typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
         return;
     }
 

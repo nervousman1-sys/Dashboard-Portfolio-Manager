@@ -192,16 +192,10 @@ const _FRED_SERIES = [
     { key: 'unemployment', id: 'UNRATE',          units: 'lin', label: 'שיעור אבטלה',               unit: '%' },
 ];
 
+// Fetches all US indicators in ONE round-trip via the /api/fred serverless proxy.
+// FRED blocks browser CORS, so the proxy is required; it also batches all series
+// server-side. Falls back gracefully (returns null) so the caller can try FMP.
 async function _fetchFREDIndicators(forceRefresh) {
-    const key = (typeof FRED_API_KEY !== 'undefined') ? FRED_API_KEY : '';
-    if (!key || key === '') {
-        console.warn('[FRED] No API key — set FRED_API_KEY in env-config.js');
-        _macroApiStatus.fred = 'No FRED key';
-        return null;
-    }
-
-    console.log('[FRED] API key present, fetching indicators...');
-
     if (!forceRefresh) {
         const cached = _cacheGet(_MACRO_CACHE.US_HEAD, _MACRO_TTL_IND);
         if (cached) {
@@ -211,43 +205,42 @@ async function _fetchFREDIndicators(forceRefresh) {
         }
     }
 
-    const results = {};
-    await Promise.all(_FRED_SERIES.map(async (s) => {
-        try {
-            const url = `https://api.stlouisfed.org/fred/series/observations` +
-                `?series_id=${s.id}&api_key=${key}&file_type=json` +
-                `&sort_order=desc&limit=2&units=${s.units}`;
-            const res = await _macroFetch(url);
-            if (!res.ok) { console.warn(`[FRED] ${s.key} HTTP ${res.status}`); return; }
+    try {
+        const batch = _FRED_SERIES.map(s => `${s.id}:${s.units}`).join(',');
+        const res = await _macroFetch(`/api/fred?batch=${encodeURIComponent(batch)}&limit=2`);
+        if (!res.ok) {
+            console.warn(`[FRED] proxy HTTP ${res.status}`);
+            _macroApiStatus.fred = `proxy ${res.status}`;
+            return null;
+        }
+        const data = await res.json();
 
-            const data = await res.json();
-            const obs  = (data?.observations || []).filter(o => o.value !== '.' && o.value !== '');
-            if (obs.length === 0) { console.warn(`[FRED] ${s.key} — no valid observations`); return; }
-
-            const latest  = obs[0];
-            const prev    = obs.length > 1 ? obs[1] : null;
-            const val     = parseFloat(latest.value);
-            const prevVal = prev ? parseFloat(prev.value) : null;
-            if (isNaN(val)) { console.warn(`[FRED] ${s.key} — bad value: ${latest.value}`); return; }
-
+        const results = {};
+        for (const s of _FRED_SERIES) {
+            const entry = data[s.id];
+            if (!entry || entry.value === null || entry.value === undefined || isNaN(entry.value)) continue;
+            const val = parseFloat(entry.value);
+            const prevVal = (entry.previous !== null && entry.previous !== undefined) ? parseFloat(entry.previous) : null;
             const trend = (prevVal !== null && !isNaN(prevVal))
                 ? (val > prevVal ? 'up' : val < prevVal ? 'down' : 'flat')
                 : 'flat';
-
             results[s.key] = {
                 value: val, previous: prevVal, trend,
-                date: latest.date, prevDate: prev?.date || null,
+                date: entry.date, prevDate: entry.prevDate || null,
                 label: s.label, unit: s.unit
             };
-            console.log(`[FRED] ✓ ${s.key}: ${val}${s.unit} (${latest.date})`);
-        } catch (e) { console.warn(`[FRED] ${s.key} failed:`, e.message); }
-    }));
+        }
 
-    const count = Object.keys(results).length;
-    _macroApiStatus.fred = count > 0 ? true : 'No data';
-    console.log(`[Macro] FRED US: ${count}/${_FRED_SERIES.length} indicators`);
-    if (count > 0) _cacheSet(_MACRO_CACHE.US_HEAD, results);
-    return count > 0 ? results : null;
+        const count = Object.keys(results).length;
+        _macroApiStatus.fred = count > 0 ? true : 'No data';
+        console.log(`[Macro] FRED US (proxy): ${count}/${_FRED_SERIES.length} indicators`);
+        if (count > 0) { _cacheSet(_MACRO_CACHE.US_HEAD, results); return results; }
+        return null;
+    } catch (e) {
+        console.warn('[FRED] proxy failed:', e.message);
+        _macroApiStatus.fred = 'proxy err';
+        return null;
+    }
 }
 
 // ========== 2. FMP US Indicators (primary — no CORS issues) ==========
@@ -326,18 +319,21 @@ async function _fetchUSHeadlines(forceRefresh) {
         if (val.value !== null) baseline[key] = { ...val };
     }
 
-    // Layer 2: Try live API overlay (FMP → FRED)
+    // Layer 2: Try live API overlay (FRED proxy → FMP fallback).
+    // FRED via the serverless proxy is the reliable primary; FMP's v4 /economic
+    // endpoint is restricted on the free tier and frequently fails, so it's the
+    // fallback only.
     let liveData = null;
     try {
-        liveData = await _fetchFMPUSIndicators(forceRefresh);
-        if (liveData) console.log('[Macro] ✓ US live overlay via FMP');
-    } catch (e) { console.warn('[Macro] FMP overlay failed:', e.message); }
+        liveData = await _fetchFREDIndicators(forceRefresh);
+        if (liveData) console.log('[Macro] ✓ US live overlay via FRED (proxy)');
+    } catch (e) { console.warn('[Macro] FRED overlay failed:', e.message); }
 
     if (!liveData) {
         try {
-            liveData = await _fetchFREDIndicators(forceRefresh);
-            if (liveData) console.log('[Macro] ✓ US live overlay via FRED');
-        } catch (e) { console.warn('[Macro] FRED overlay failed:', e.message); }
+            liveData = await _fetchFMPUSIndicators(forceRefresh);
+            if (liveData) console.log('[Macro] ✓ US live overlay via FMP');
+        } catch (e) { console.warn('[Macro] FMP overlay failed:', e.message); }
     }
 
     // Merge: live data overrides baseline where available and newer

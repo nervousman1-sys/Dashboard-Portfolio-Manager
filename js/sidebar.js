@@ -62,9 +62,11 @@ function navigateTo(section) {
     // Close mobile sidebar first (if open)
     _closeMobileSidebar();
 
-    // Determine if we need to close macro page first
+    // Determine if we need to close overlay pages first
     const macroPage = document.getElementById('macroPage');
     const macroIsActive = macroPage && macroPage.classList.contains('active');
+    const riskPage = document.getElementById('riskmodelPage');
+    const riskIsActive = riskPage && riskPage.classList.contains('active');
 
     switch (section) {
         case 'dashboard':
@@ -72,6 +74,9 @@ function navigateTo(section) {
             // Both point to main dashboard — portfolio grid IS the dashboard
             if (macroIsActive && typeof closeMacroPage === 'function') {
                 closeMacroPage();
+            }
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
             }
             // Scroll to portfolio grid if coming from "portfolio" link
             if (section === 'portfolio') {
@@ -84,21 +89,22 @@ function navigateTo(section) {
 
         case 'macro':
             // Open macro indicators page
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
+            }
             if (!macroIsActive && typeof toggleAlerts === 'function') {
                 toggleAlerts();
             }
             break;
 
-        case 'markets':
-        case 'flows':
-        case 'news':
-        case 'analysis':
-        case 'settings':
-            // Future sections — close macro if active, show placeholder
+        case 'riskmodel':
+            // Open CML/SML risk analysis page
             if (macroIsActive && typeof closeMacroPage === 'function') {
                 closeMacroPage();
             }
-            // These sections are not yet implemented — stay on dashboard
+            if (typeof openRiskAnalysis === 'function') {
+                openRiskAnalysis();
+            }
             break;
 
         default:
@@ -151,6 +157,19 @@ function _setActiveNav(section) {
     });
 
     observer.observe(macroPage, { attributes: true, attributeFilter: ['class'] });
+
+    // Sync risk-analysis page open/close with sidebar active state
+    const riskPage = document.getElementById('riskmodelPage');
+    if (riskPage) {
+        const riskObserver = new MutationObserver(() => {
+            if (riskPage.classList.contains('active')) {
+                _setActiveNav('riskmodel');
+            } else if (_currentNav === 'riskmodel') {
+                _setActiveNav('dashboard');
+            }
+        });
+        riskObserver.observe(riskPage, { attributes: true, attributeFilter: ['class'] });
+    }
 })();
 
 // ── Keyboard: Escape closes mobile sidebar ──

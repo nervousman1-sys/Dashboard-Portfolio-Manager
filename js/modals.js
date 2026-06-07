@@ -78,6 +78,17 @@ async function openModal(clientId) {
         const primaryName = heName || (h.type === 'stock' ? h.ticker : h.name);
         const secondaryName = heName ? (h.type === 'stock' ? h.ticker : '') : '';
         const subName = secondaryName ? `<span style="font-size:10px;color:var(--text-muted)">${secondaryName}</span>` : '';
+        // CML/SML recommendation chip — from the risk model (Jensen's alpha)
+        const _recChip = (() => {
+            const m = window._lastRiskModel;
+            if (!m || !m.assets || h.type !== 'stock') return '';
+            const a = m.assets[h.ticker];
+            if (!a || !a.hasData || a.recommendation === 'unknown') return '';
+            const color = (typeof rmRecColor === 'function') ? rmRecColor(a.recommendation) : '#64748b';
+            const label = (typeof rmRecLabel === 'function') ? rmRecLabel(a.recommendation) : '';
+            const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;
+            return `<span class="rec-chip" style="--rec:${color}" title="${tip}">${label}</span>`;
+        })();
         const _hFx = _fxR(h.currency);
         totalHoldingsValue += h.value * _hFx;
         totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
@@ -86,7 +97,10 @@ async function openModal(clientId) {
                 <div style="display:flex;flex-direction:column;gap:2px">
                     <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
                     ${subName}
-                    <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
+                    <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                        <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
+                        ${_recChip}
+                    </span>
                 </div>
             </td>
             <td>${formatPrice(purchasePrice)} ${currSymbol}</td>
