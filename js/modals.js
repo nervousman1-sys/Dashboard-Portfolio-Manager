@@ -336,37 +336,8 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
-                <!-- ═══ FULL-WIDTH PERFORMANCE CHART ═══ -->
-                <div class="ov-chart-section">
-                    <div class="modal-performance-container chart-wrapper-relative">
-                        <button class="expand-btn" onclick="openFullscreenChart(currentModalClientId)" title="הגדל גרף">&#x26F6;</button>
-                        <div class="perf-chart-header">
-                            <div class="perf-time-range">
-                                <button class="time-btn" onclick="setModalPerfRange('1d', this)">1D</button>
-                                <button class="time-btn" onclick="setModalPerfRange('5d', this)">5D</button>
-                                <button class="time-btn" onclick="setModalPerfRange('1m', this)">1M</button>
-                                <button class="time-btn" onclick="setModalPerfRange('6m', this)">6M</button>
-                                <button class="time-btn" onclick="setModalPerfRange('ytd', this)">YTD</button>
-                                <button class="time-btn active" onclick="setModalPerfRange('1y', this)">1Y</button>
-                                <button class="time-btn" onclick="setModalPerfRange('5y', this)">5Y</button>
-                                <button class="time-btn" onclick="setModalPerfRange('max', this)">Max</button>
-                            </div>
-                            <div class="perf-benchmarks">
-                                <button class="benchmark-toggle-btn" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
-                                <div class="benchmark-options" style="display:none">
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('SPY', this)">S&P 500</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('QQQ', this)">Nasdaq 100</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('DIA', this)">Dow Jones</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('IWM', this)">Russell 2000</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('TA125.TA', this)">TA-125</button>
-                                    <button class="benchmark-btn" onclick="toggleModalBenchmark('TA35.TA', this)">TA-35</button>
-                                </div>
-                                <button class="display-mode-btn active-percent" onclick="toggleChartDisplayMode(this)" title="% / $">%</button>
-                            </div>
-                        </div>
-                        <div class="perf-canvas-wrap"><canvas id="modal-perf-chart"></canvas></div>
-                    </div>
-                </div>
+                <!-- Performance chart intentionally lives OUTSIDE the modal — open it
+                     from the portfolio card's expand button on the dashboard. -->
                 <!-- Hidden donut canvas for sectors tab data (still needed for chart init) -->
                 <div style="display:none"><canvas id="modal-chart"></canvas></div>
             </div>
@@ -442,23 +413,9 @@ async function openModal(clientId) {
             }
         }
 
-        // Performance chart — uses unified renderer from charts.js
-        _modalPerfRange = '1y';
-        _modalPerfBenchmarks = [];
+        // Performance chart removed from the modal by design — it's opened from the
+        // dashboard card's expand button (openFullscreenChart) instead.
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
-
-        // Render after a single rAF so the browser has committed the flex layout.
-        // renderPerformanceChart() reads canvas.offsetHeight to set an explicit CSS height
-        // before Chart.js initializes — this prevents the "black canvas" bug where Chart.js
-        // uses parentElement.clientHeight (full container) instead of the flex-allocated height.
-        const _perfCanvas = document.getElementById('modal-perf-chart');
-        if (_perfCanvas) {
-            requestAnimationFrame(() => {
-                renderPerformanceChart('modal-perf-chart', client.id, '1y', []).then(inst => {
-                    _modalPerfChartInstance = inst;
-                });
-            });
-        }
 
         // CML/SML advisory panel — built async (reuses cached model when available)
         if (typeof _fillModalAdvisory === 'function') _fillModalAdvisory(client.id);

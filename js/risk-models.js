@@ -779,7 +779,10 @@ function renderAdvisoryHTML(adv, opts = {}) {
     <div class="adv-block">
         <div class="adv-scorebar">
             <div class="adv-score-ring" style="--c:${scoreColor};--c-pct:${score}">
-                <span class="adv-score-num">${score}</span><span class="adv-score-den">/100</span>
+                <div class="adv-score-inner">
+                    <span class="adv-score-num">${score}</span>
+                    <span class="adv-score-den">מתוך 100</span>
+                </div>
             </div>
             <div class="adv-score-meta">
                 <div class="adv-score-title" style="color:${scoreColor}">עמידה במודל: ${esc(adv.complianceLabel || '')}</div>

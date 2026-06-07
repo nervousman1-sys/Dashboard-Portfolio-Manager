@@ -521,7 +521,15 @@ async function _renderCardSparkline(client, renderKey) {
     // Chart color based on actual portfolio return, not history endpoints
     const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const lineColor = isPositive ? '#00ff94' : '#ff4d4d';
-    const bgColor = isPositive ? 'rgba(0,255,148,0.08)' : 'rgba(255,77,77,0.08)';
+
+    // Soft fading gradient fill — keeps every card's sparkline visually consistent
+    // (a thin line + soft glow) instead of a solid block whose height depends on the
+    // data shape. Fixes the "red loss chart looks taller than the others" issue.
+    const _ctx2d = perfCtx.getContext('2d');
+    const _h = perfCtx.parentElement ? (perfCtx.parentElement.clientHeight || 75) : 75;
+    const bgColor = _ctx2d.createLinearGradient(0, 0, 0, _h);
+    bgColor.addColorStop(0, isPositive ? 'rgba(0,255,148,0.20)' : 'rgba(255,77,77,0.20)');
+    bgColor.addColorStop(1, 'rgba(0,0,0,0)');
 
     charts[`perf-${client.id}`] = new Chart(perfCtx, {
         type: 'line',
