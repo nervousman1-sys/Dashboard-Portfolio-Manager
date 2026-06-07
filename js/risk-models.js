@@ -434,7 +434,7 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
 
     // Portfolio variance via covariance matrix of the RISKY positions.
     // σ_ij = ρ_ij · σ_i · σ_j ; weights are the risky positions' share of total book.
-    let variance = 0;
+    let variance = 0, corrSum = 0, corrCount = 0;
     for (let i = 0; i < riskyPositions.length; i++) {
         const pi = riskyPositions[i];
         const wi = pi.value / totalValue;
@@ -448,6 +448,7 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
             else {
                 const { ra, rb } = _rmAlignedReturns(closeMaps[pi.ticker], closeMaps[pj.ticker]);
                 rho = ra.length > RISK_MODEL.MIN_POINTS ? _rmCorrelation(ra, rb) : 0;
+                if (i < j) { corrSum += rho; corrCount++; }
             }
             variance += wi * wj * si * sj * rho;
         }
@@ -457,14 +458,48 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
     const cmlReturn = rf + (marketVol > 0 ? (rm - rf) / marketVol : 0) * vol; // CML at σp
     const alpha = expReturn - cmlReturn; // distance above/below the CML
     const riskyPct = (1 - rfWeight) * 100;
+    const avgCorr = corrCount > 0 ? corrSum / corrCount : null;
 
     const { risk, riskLabel, riskScore } = classifyRisk(beta, vol, marketVol);
+
+    // ── MODEL COMPLIANCE SCORE (0–100): how well the portfolio conforms to CML/SML ──
+    const clamp = (x) => Math.max(0, Math.min(100, Math.round(x)));
+    const riskyWeightTotal = riskyPositions.reduce((s, p) => s + p.value, 0) / totalValue;
+
+    // CML sub-score: portfolio Sharpe relative to the market Sharpe (the CML slope)
+    const mSharpe = marketVol > 0 ? (rm - rf) / marketVol : 0;
+    let cmlScore;
+    if (mSharpe > 0) cmlScore = clamp((sharpe / mSharpe) * 100);
+    else cmlScore = sharpe > 0 ? 100 : 0;
+
+    // SML sub-score: value-weighted "fairness" of holdings (α≥0 good, far below = bad)
+    let qSum = 0, wSum = 0;
+    for (const p of riskyPositions) {
+        const w = p.value / totalValue;
+        const a = p.a.alpha != null ? p.a.alpha : 0;
+        const q = Math.max(0, Math.min(1, 0.5 + a / 0.20)); // α=+10% → 1.0, α=−10% → 0
+        qSum += w * q; wSum += w;
+    }
+    const smlScore = wSum > 0 ? clamp(100 * qSum / wSum) : 50;
+
+    // Diversification sub-score: penalize concentration + high average correlation
+    let hhi = 0;
+    for (const p of riskyPositions) { const w = riskyWeightTotal > 0 ? (p.value / totalValue) / riskyWeightTotal : 0; hhi += w * w; }
+    const topWeight = riskyPositions.length ? Math.max(...riskyPositions.map(p => p.value / totalValue)) : 0;
+    const concScore = clamp(100 - Math.max(0, topWeight - 0.25) / 0.75 * 100);      // top holding >25% penalized
+    const corrScore = avgCorr == null ? 70 : clamp(100 - Math.max(0, avgCorr - 0.3) / 0.7 * 100);
+    const divScore = clamp(0.6 * concScore + 0.4 * corrScore);
+
+    const complianceScore = clamp(0.40 * cmlScore + 0.40 * smlScore + 0.20 * divScore);
+    const complianceLabel = complianceScore >= 75 ? 'עומד היטב' : complianceScore >= 50 ? 'עמידה חלקית' : 'לא עומד';
 
     return {
         ...base, hasData: true,
         beta, expReturn, vol, sharpe, alpha,
         riskyPct, aboveCML: expReturn >= cmlReturn,
         riskScore, risk, riskLabel,
+        avgCorr, topWeight, hhi,
+        complianceScore, complianceLabel, cmlScore, smlScore, divScore,
     };
 }
 
@@ -522,6 +557,8 @@ async function applyModelRiskToClients(opts = {}) {
             c.modelSharpe = p.sharpe;
             c.modelAlpha = p.alpha;
             c.aboveCML = p.aboveCML;
+            c.complianceScore = p.complianceScore;
+            c.complianceLabel = p.complianceLabel;
         }
         window._lastRiskModel = model;
         if (typeof refreshDashboard === 'function') refreshDashboard();
@@ -613,10 +650,10 @@ function buildPortfolioAdvisory(client, model) {
     const notFit = positions.filter(x => x.recommendation === 'avoid');
     const neutral = positions.filter(x => x.recommendation === 'neutral');
 
-    const topWeight = positions[0].weight;
-    const concentrated = topWeight > 0.35 || positions.length < 4;
-    const avgCorr = _rmAvgPairwiseCorr(positions.map(x => x.ticker), model);
-    const highCorr = avgCorr != null && avgCorr > 0.6;
+    const topWeight = p.topWeight != null ? p.topWeight : positions[0].weight;
+    const avgCorr = p.avgCorr != null ? p.avgCorr : _rmAvgPairwiseCorr(positions.map(x => x.ticker), model);
+    const concentrated = topWeight > 0.30 || positions.length < 4;
+    const highCorr = avgCorr != null && avgCorr > 0.55;
 
     // What to REDUCE — holdings below the SML (over-priced), worst first by impact
     const reduce = notFit.slice()
@@ -631,10 +668,65 @@ function buildPortfolioAdvisory(client, model) {
         .slice(0, 3)
         .map(a => ({ ticker: a.ticker, name: a.name, alpha: a.alpha, beta: a.beta }));
 
+    // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
+    const actions = [];
+    const pct = (w) => Math.round(w * 100);
+
+    // 1. Sell/trim each over-priced (below-SML) holding — highest priority
+    reduce.forEach((x) => {
+        const target = x.weight > 0.08 ? '≤5%' : 'מכירה מלאה';
+        actions.push({
+            priority: 1, kind: 'sell',
+            text: `מכור/צמצם <b>${x.ticker}</b> — מתחת ל-SML (α=${rmFmtPct(x.alpha, 1)}, מתומחר ביתר). הקטן מ-${pct(x.weight)}% ל-${target}.`
+        });
+    });
+
+    // 2. CML efficiency gap — add the market index building block
+    if (p.cmlScore != null && p.cmlScore < 70) {
+        const addW = p.cmlScore < 40 ? '25–30%' : '15–20%';
+        actions.push({
+            priority: 2, kind: 'buy',
+            text: `הוסף <b>${model.marketLabel} (${model.marketSymbol})</b> כ-${addW} מהתיק — מקרב את התיק לקו ה-CML (Sharpe ${rmFmtNum(p.sharpe, 2)} מול ${rmFmtNum(model.marketSharpe, 2)} של השוק) ומפזר סיכון ספציפי.`
+        });
+    }
+
+    // 3. Diversification — concentration / correlation
+    if (concentrated) {
+        actions.push({
+            priority: 3, kind: 'diversify',
+            text: `פזר ריכוזיות: האחזקה הגדולה (<b>${positions[0].ticker}</b>, ${pct(topWeight)}%) חורגת — הקטן ל-≤25% והוסף 2–3 נכסים נוספים.`
+        });
+    }
+    if (highCorr) {
+        actions.push({
+            priority: 3, kind: 'diversify',
+            text: `הקורלציה הממוצעת בין האחזקות גבוהה (ρ̄=${rmFmtNum(avgCorr, 2)}) — הוסף נכסים בקורלציה נמוכה/שלילית להקטנת σ ללא פגיעה בתשואה.`
+        });
+    }
+
+    // 4. Quality upgrades — swap toward higher-alpha names
+    candidates.forEach((c) => {
+        actions.push({
+            priority: 4, kind: 'buy',
+            text: `שקול הוספת <b>${c.ticker}</b> — מעל ה-SML (α=${rmFmtPct(c.alpha, 1)}, β=${rmFmtNum(c.beta, 2)}), מועמד איכותי.`
+        });
+    });
+
+    // 5. If already compliant — maintenance note
+    if (actions.length === 0) {
+        actions.push({
+            priority: 5, kind: 'hold',
+            text: `התיק עומד היטב במודל — שמור על ההרכב, אזן תקופתית כדי לשמר את ה-β והפיזור.`
+        });
+    }
+    actions.sort((a, b) => a.priority - b.priority);
+
     return {
         hasRisky: true, p, cmlStatus,
-        fit, notFit, neutral, reduce, candidates,
+        fit, notFit, neutral, reduce, candidates, actions,
         topWeight, avgCorr, concentrated, highCorr,
+        complianceScore: p.complianceScore, complianceLabel: p.complianceLabel,
+        cmlScore: p.cmlScore, smlScore: p.smlScore, divScore: p.divScore,
         rf: model.rf, rm: model.rm, marketSharpe: model.marketSharpe,
         marketSymbol: model.marketSymbol, marketLabel: model.marketLabel,
     };
@@ -643,7 +735,6 @@ function buildPortfolioAdvisory(client, model) {
 // Renders the advisory object to HTML. `compact` trims it for the portfolio modal.
 function renderAdvisoryHTML(adv, opts = {}) {
     if (!adv) return '<div class="adv-empty">אין מספיק נתונים לניתוח CML/SML עבור תיק זה.</div>';
-    const compact = !!opts.compact;
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     if (!adv.hasRisky) {
@@ -653,6 +744,8 @@ function renderAdvisoryHTML(adv, opts = {}) {
     }
 
     const p = adv.p;
+    const score = adv.complianceScore != null ? adv.complianceScore : 0;
+    const scoreColor = score >= 75 ? 'var(--risk-low)' : score >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
     const list = (arr) => arr.length
         ? arr.map(x => `<span class="adv-chip" title="β=${rmFmtNum(x.beta,2)} · α=${rmFmtPct(x.alpha,1)}">${esc(x.ticker)}</span>`).join(' ')
         : '<span class="adv-dim">—</span>';
@@ -661,30 +754,41 @@ function renderAdvisoryHTML(adv, opts = {}) {
     let cmlClass, cmlTitle, cmlText;
     if (adv.cmlStatus === 'above') {
         cmlClass = 'adv-good'; cmlTitle = 'התיק מעל קו ה-CML ✓';
-        cmlText = `יחס התשואה-לסיכון של התיק עדיף לשוק: Sharpe ${rmFmtNum(p.sharpe,2)} מול ${rmFmtNum(adv.marketSharpe,2)} של השוק. התיק יעיל מבחינת המודל.`;
+        cmlText = `יחס התשואה-לסיכון עדיף לשוק: Sharpe ${rmFmtNum(p.sharpe,2)} מול ${rmFmtNum(adv.marketSharpe,2)} של השוק.`;
     } else if (adv.cmlStatus === 'on') {
         cmlClass = 'adv-ok'; cmlTitle = 'התיק בקירוב על קו ה-CML';
-        cmlText = `התיק נע סביב קו השוק — יחס תשואה/סיכון דומה לשוק (Sharpe ${rmFmtNum(p.sharpe,2)}).`;
+        cmlText = `יחס תשואה/סיכון דומה לשוק (Sharpe ${rmFmtNum(p.sharpe,2)}).`;
     } else {
         cmlClass = 'adv-bad'; cmlTitle = 'התיק מתחת לקו ה-CML ✗';
-        cmlText = `התיק לוקח סיכון כולל (σ=${rmFmtPct(p.vol,1)}) שאינו מתוגמל מספיק בתשואה הצפויה (${rmFmtPct(p.expReturn,1)}). לפי המודל ניתן להשיג את אותה תשואה בסיכון נמוך יותר.`;
+        cmlText = `התיק נושא סיכון כולל (σ=${rmFmtPct(p.vol,1)}) שאינו מתוגמל מספיק (תשואה צפויה ${rmFmtPct(p.expReturn,1)}). ניתן להשיג תשואה דומה בסיכון נמוך יותר.`;
     }
 
-    // Actions
-    const reduceHTML = adv.reduce.length
-        ? adv.reduce.map(x => `<li><b>${esc(x.ticker)}</b> — צמצם/מכור: α=${rmFmtPct(x.alpha,1)} (מתחת ל-SML, מתומחר ביתר), משקל ${(x.weight*100).toFixed(0)}%</li>`).join('')
-        : '<li class="adv-dim">אין נכסים מתחת ל-SML — אין מה למכור מטעמי תמחור.</li>';
+    const subBar = (label, val) => {
+        const c = val >= 75 ? 'var(--risk-low)' : val >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+        return `<div class="adv-sub"><span class="adv-sub-label">${label}</span>
+            <div class="adv-sub-track"><div class="adv-sub-fill" style="width:${val}%;background:${c}"></div></div>
+            <span class="adv-sub-val">${val}</span></div>`;
+    };
 
-    const addItems = [];
-    addItems.push(`<li><b>${esc(adv.marketLabel)}</b> (${esc(adv.marketSymbol)}) — אבן הבניין של ה-CML: שילוב מדד השוק + אג"ח קצר מקרב את התיק לקו היעיל.</li>`);
-    if (adv.candidates.length) {
-        adv.candidates.forEach(c => addItems.push(`<li><b>${esc(c.ticker)}</b> — מעל ה-SML (α=${rmFmtPct(c.alpha,1)}, β=${rmFmtNum(c.beta,2)}): מתומחר בחסר, מועמד טוב להוספה.</li>`));
-    }
-    if (adv.concentrated) addItems.push(`<li>פיזור: התיק מרוכז (משקל מקסימלי ${(adv.topWeight*100).toFixed(0)}%) — הוסף נכסים נוספים להקטנת סיכון ספציפי.</li>`);
-    if (adv.highCorr) addItems.push(`<li>קורלציה גבוהה בין האחזקות (ρ̄=${rmFmtNum(adv.avgCorr,2)}) — הוסף נכסים בקורלציה נמוכה/שלילית לפיזור הסיכון.</li>`);
+    const kindIcon = (k) => k === 'sell' ? '🔻' : k === 'buy' ? '🟢' : k === 'diversify' ? '🧩' : k === 'hold' ? '✓' : '•';
+    const actionsHTML = (adv.actions || []).map(a =>
+        `<li class="adv-act adv-act-${a.kind}"><span class="adv-act-ic">${kindIcon(a.kind)}</span><span>${a.text}</span></li>`
+    ).join('');
 
     return `
     <div class="adv-block">
+        <div class="adv-scorebar">
+            <div class="adv-score-ring" style="--c:${scoreColor};--c-pct:${score}">
+                <span class="adv-score-num">${score}</span><span class="adv-score-den">/100</span>
+            </div>
+            <div class="adv-score-meta">
+                <div class="adv-score-title" style="color:${scoreColor}">עמידה במודל: ${esc(adv.complianceLabel || '')}</div>
+                ${subBar('CML (יעילות)', adv.cmlScore != null ? adv.cmlScore : 0)}
+                ${subBar('SML (איכות נכסים)', adv.smlScore != null ? adv.smlScore : 0)}
+                ${subBar('פיזור', adv.divScore != null ? adv.divScore : 0)}
+            </div>
+        </div>
+
         <div class="adv-verdict ${cmlClass}"><span class="adv-verdict-dot"></span>${cmlTitle}</div>
         <p class="adv-note">${cmlText}</p>
         <div class="adv-metaline">
@@ -692,23 +796,16 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <span>תשואה צפויה=<b>${rmFmtPct(p.expReturn,1)}</b></span>
             <span>σ=<b>${rmFmtPct(p.vol,1)}</b></span>
             <span>Sharpe=<b>${rmFmtNum(p.sharpe,2)}</b></span>
-            <span>רמת סיכון=<b>${p.riskLabel} (${p.riskScore})</b></span>
+            <span>רמת סיכון=<b>${p.riskLabel}</b></span>
         </div>
         <div class="adv-fitrow">
-            <div class="adv-fit"><span class="adv-fit-h adv-fit-good">מתאימים לתיק (מעל/על SML)</span>${list(adv.fit.concat(adv.neutral))}</div>
+            <div class="adv-fit"><span class="adv-fit-h adv-fit-good">מתאימים (מעל/על SML)</span>${list(adv.fit.concat(adv.neutral))}</div>
             <div class="adv-fit"><span class="adv-fit-h adv-fit-bad">לא מתאימים (מתחת ל-SML)</span>${list(adv.notFit)}</div>
         </div>
-        ${compact ? '' : `
-        <div class="adv-actions">
-            <div class="adv-action-col">
-                <div class="adv-action-h">מה לשנות / למכור</div>
-                <ul>${reduceHTML}</ul>
-            </div>
-            <div class="adv-action-col">
-                <div class="adv-action-h">מה לקנות / להוסיף</div>
-                <ul>${addItems.join('')}</ul>
-            </div>
-        </div>`}
+        <div class="adv-plan">
+            <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
+            <ol class="adv-act-list">${actionsHTML}</ol>
+        </div>
     </div>`;
 }
 

@@ -7525,3 +7525,28 @@ body.full-list-open { overflow: hidden; }
     border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .ov-advisory-head > span:first-child { font-size: 15px; font-weight: 800; color: var(--text-primary); }
 .ov-advisory-sub { font-size: 11.5px; color: var(--text-muted); }
+
+/* ── Advisory: compliance score + action plan ── */
+.adv-scorebar { display: flex; gap: 16px; align-items: center; background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.adv-score-ring { flex: 0 0 auto; width: 74px; height: 74px; border-radius: 50%;
+    display: flex; align-items: baseline; justify-content: center; gap: 1px;
+    background: radial-gradient(closest-side, var(--bg-secondary) 78%, transparent 79%),
+                conic-gradient(var(--c) calc(var(--c-pct, 0) * 1%), rgba(255,255,255,0.08) 0);
+    border: 2px solid color-mix(in srgb, var(--c) 50%, transparent); }
+.adv-score-num { font-size: 26px; font-weight: 900; color: var(--c); }
+.adv-score-den { font-size: 11px; color: var(--text-muted); }
+.adv-score-meta { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.adv-score-title { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+.adv-sub { display: grid; grid-template-columns: 110px 1fr 28px; gap: 8px; align-items: center; }
+.adv-sub-label { font-size: 11px; color: var(--text-muted); }
+.adv-sub-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+.adv-sub-fill { height: 100%; border-radius: 4px; }
+.adv-sub-val { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-align: left; }
+.adv-plan { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.adv-act-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: act; }
+.adv-act { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+.adv-act-ic { flex: 0 0 auto; font-size: 12px; line-height: 1.4; }
+.adv-act b { color: var(--text-primary); }
+.adv-act-sell { color: #ffb4b4; }
+.adv-act-buy { color: #b8f5d0; }
