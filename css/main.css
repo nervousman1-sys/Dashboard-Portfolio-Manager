@@ -7550,3 +7550,13 @@ body.full-list-open { overflow: hidden; }
 .adv-act b { color: var(--text-primary); }
 .adv-act-sell { color: #ffb4b4; }
 .adv-act-buy { color: #b8f5d0; }
+
+/* Per-card model-compliance chip/button */
+.card-model-btn {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 11px;
+    color: var(--mc); background: color-mix(in srgb, var(--mc) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mc) 45%, transparent);
+    transition: background .15s, transform .1s;
+}
+.card-model-btn:hover { background: color-mix(in srgb, var(--mc) 26%, transparent); transform: translateY(-1px); }
