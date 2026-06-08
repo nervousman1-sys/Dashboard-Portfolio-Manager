@@ -525,6 +525,14 @@ async function _renderCardSparkline(client, renderKey) {
     // Line-only sparkline (no area fill) — guarantees every card's chart occupies
     // the same vertical band regardless of trend shape, so a losing (red) portfolio
     // no longer looks like a taller solid block than the gainers.
+    // Explicit padded Y-range keeps EVERY line in the central band of the box, so
+    // no single card's line spans the full height and looks "taller" than the rest.
+    const _vals = hist.map(p => p.value).filter(v => isFinite(v));
+    const _mn = Math.min(..._vals), _mx = Math.max(..._vals);
+    const _rng = (_mx - _mn) || Math.abs(_mx) || 1;
+    const _yMin = _mn - _rng * 0.8;
+    const _yMax = _mx + _rng * 0.8;
+
     charts[`perf-${client.id}`] = new Chart(perfCtx, {
         type: 'line',
         data: {
@@ -546,7 +554,7 @@ async function _renderCardSparkline(client, renderKey) {
             layout: { padding: { top: 6, bottom: 6 } },
             scales: {
                 x: { display: false },
-                y: { display: false, beginAtZero: false, grace: '25%' }
+                y: { display: false, beginAtZero: false, min: _yMin, max: _yMax }
             },
             plugins: {
                 legend: { display: false },

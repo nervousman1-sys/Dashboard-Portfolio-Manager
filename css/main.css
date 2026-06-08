@@ -2483,29 +2483,29 @@ body.filter-modal-open::after {
     font-size: 11px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     font-variant-numeric: tabular-nums;
     direction: ltr;
     flex-shrink: 0;
 }
 .alloc-pct {
-    min-width: 38px;
+    min-width: 32px;
     text-align: right;
     display: inline-block;
 }
 .alloc-chg {
-    min-width: 42px;
+    min-width: 36px;
     text-align: right;
     font-size: 10px;
     display: inline-block;
 }
 .alloc-price {
-    min-width: 70px;
+    min-width: 52px;
     text-align: right;
     color: var(--text-muted);
     font-size: 9px;
     display: inline-block;
-    padding-inline-start: 4px;
+    padding-inline-start: 2px;
 }
 .allocation-row.cash-row .alloc-price {
     color: var(--text-primary);
@@ -7589,3 +7589,33 @@ body.full-list-open { overflow: hidden; }
 .adv-cand-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 11px; color: rgba(245,245,250,0.7); }
 .adv-cand-stats b { color: rgba(245,245,250,0.95); font-weight: 800; }
 .adv-cand-stats b.pos { color: var(--risk-low); }
+
+/* ════════ Compact modal overview — fit everything on one screen (no scroll) ════════ */
+#tab-overview .ov-hero-value { font-size: 26px; }
+#tab-overview .ov-hero-inner { padding: 9px 28px 9px; }
+#tab-overview .ov-hero-top { padding-bottom: 5px; gap: 1px; }
+#tab-overview .ov-hero-label { font-size: 10px; letter-spacing: 2px; }
+#tab-overview .ov-hero-block { margin-bottom: 8px; }
+#tab-overview .ov-hero-kpis { gap: 8px; }
+#tab-overview .ov-panels { gap: 10px; }
+#tab-overview .ov-panel { padding: 8px 11px 6px; }
+#tab-overview .ov-panel-title { margin-bottom: 7px; font-size: 11px; }
+#tab-overview .ov-cell { padding: 5px 4px; }
+#tab-overview .ov-cell-value { font-size: 15px; }
+#tab-overview .ov-cell-label { font-size: 10px; margin-bottom: 2px; }
+#tab-overview .ov-currency-bar { margin-bottom: 6px; padding: 5px 12px; }
+
+/* Compact advisory inside the modal (full version stays on the analysis page) */
+.ov-advisory { padding: 12px 14px; margin: 10px 0 4px; }
+.ov-advisory-head { margin-bottom: 9px; padding-bottom: 8px; }
+.ov-advisory .adv-block { gap: 8px; }
+.ov-advisory .adv-scorebar { padding: 11px 13px; gap: 14px; }
+.ov-advisory .adv-score-ring { width: 72px; height: 72px; }
+.ov-advisory .adv-score-ring::before { inset: 7px; }
+.ov-advisory .adv-score-num { font-size: 23px; }
+.ov-advisory .adv-score-title { font-size: 13px; }
+.ov-advisory .adv-sub { grid-template-columns: 108px 1fr 26px; }
+.ov-advisory .adv-plan { padding: 10px 12px; }
+.ov-advisory .adv-act-list { gap: 6px; }
+.ov-advisory .adv-act { font-size: 12px; line-height: 1.45; }
+.ov-advisory .adv-note { font-size: 12px; }

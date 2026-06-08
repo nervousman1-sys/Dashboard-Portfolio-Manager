@@ -849,6 +849,7 @@ function buildPortfolioAdvisory(client, model) {
 // Renders the advisory object to HTML. `compact` trims it for the portfolio modal.
 function renderAdvisoryHTML(adv, opts = {}) {
     if (!adv) return '<div class="adv-empty">אין מספיק נתונים לניתוח CML/SML עבור תיק זה.</div>';
+    const compact = !!opts.compact; // modal view — trims to fit one screen (no candidate grid)
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     if (!adv.hasRisky) {
@@ -923,7 +924,7 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
             <ol class="adv-act-list">${actionsHTML}</ol>
         </div>
-        ${_rmRenderCandidates(adv)}
+        ${compact ? '' : _rmRenderCandidates(adv)}
     </div>`;
 }
 
