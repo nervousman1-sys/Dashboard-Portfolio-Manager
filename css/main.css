@@ -7653,3 +7653,13 @@ body.full-list-open { overflow: hidden; }
 .adv-cands-details > summary:hover { background: rgba(0,229,255,0.12); }
 .adv-cands-details[open] > summary { border-radius: 9px 9px 0 0; }
 .adv-cands-details .adv-cands { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* ════════ Client-modal CML/SML tab ════════ */
+#tab-cmlsml { padding-bottom: 10px; }
+.mcs-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.mcs-chart-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.mcs-chart-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.mcs-chart-head h4 { margin: 0; font-size: 14px; font-weight: 800; color: var(--text-primary); }
+.mcs-chart-head span { font-size: 11px; color: rgba(245,245,250,0.6); }
+.mcs-canvas-wrap { position: relative; height: 300px; width: 100%; }
+@media (max-width: 900px) { .mcs-charts { grid-template-columns: 1fr; } .mcs-canvas-wrap { height: 260px; } }

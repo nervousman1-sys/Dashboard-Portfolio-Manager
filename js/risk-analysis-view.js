@@ -481,6 +481,109 @@ function _riskEsc(s) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// ════════ PER-PORTFOLIO CML/SML (client modal tab) ════════
+const _modalRiskCharts = {};
+
+async function _renderModalRiskCharts(clientId) {
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+    const advBox = document.getElementById('modalCmlSmlAdvisory');
+
+    let model = window._lastRiskModel;
+    if (!model || !model.portfolios) {
+        try { model = await buildRiskModel(clients); } catch (e) { /* ignore */ }
+    }
+    if (!model) {
+        if (advBox) advBox.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח כרגע — נסה לרענן.</div>';
+        return;
+    }
+    window._lastRiskModel = model;
+
+    for (const k of Object.keys(_modalRiskCharts)) {
+        try { _modalRiskCharts[k].destroy(); } catch (e) { /* noop */ }
+        delete _modalRiskCharts[k];
+    }
+    requestAnimationFrame(() => {
+        _drawModalCML(model, client);
+        _drawModalSML(model, client);
+    });
+
+    if (advBox && typeof buildPortfolioAdvisory === 'function' && typeof renderAdvisoryHTML === 'function') {
+        try {
+            const adv = buildPortfolioAdvisory(client, model);
+            advBox.innerHTML = renderAdvisoryHTML(adv, { clientId });
+        } catch (e) {
+            advBox.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח כרגע.</div>';
+        }
+    }
+}
+
+function _drawModalCML(model, client) {
+    const canvas = document.getElementById('modal-cml-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const rfPct = model.rf * 100;
+    const fr = model.frontier;
+    const frPts = (fr && fr.points && fr.points.length > 4) ? fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 })) : null;
+    const tang = (fr && fr.tangency) ? { x: fr.tangency.x * 100, y: fr.tangency.y * 100, name: 'תיק אופטימלי' } : null;
+    const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
+    const p = model.portfolios.find(x => x.id === client.id);
+    const portPt = (p && p.hasData) ? { x: p.vol * 100, y: p.expReturn * 100, name: 'התיק שלך' } : null;
+
+    const anchor = tang || marketPt;
+    const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
+    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : Math.max(marketPt.x, portPt ? portPt.x : 0, 20) * 1.2;
+    const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : null;
+    const byMin = (fr && fr.bounds) ? fr.bounds.retMin * 100 : Math.min(0, rfPct - 2);
+    const maxX = Math.max(bx, portPt ? portPt.x * 1.1 : 0);
+    const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
+
+    const datasets = [];
+    if (frPts) datasets.push({ type: 'line', label: 'חזית יעילה', data: frPts, borderColor: '#22c55e', borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0.4, order: 4 });
+    datasets.push({ type: 'line', label: 'CML', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 });
+    datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 2 });
+    if (tang) datasets.push({ type: 'scatter', label: 'תיק אופטימלי', data: [tang], pointStyle: 'star', pointRadius: 12, backgroundColor: '#facc15', borderColor: '#fff', borderWidth: 1.5, order: 1 });
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
+
+    const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
+    opts.scales.x.min = 0; opts.scales.x.max = maxX;
+    opts.scales.y.min = byMin; if (by) opts.scales.y.max = by;
+    _modalRiskCharts.mcml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
+}
+
+function _drawModalSML(model, client) {
+    const canvas = document.getElementById('modal-sml-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const rfPct = model.rf * 100;
+    const rmPct = model.rm * 100;
+    const clampB = (b) => Math.max(-0.5, Math.min(2.5, (b == null || !isFinite(b)) ? 1 : b));
+
+    const held = (client.holdings || []).filter(h => model.assets[h.ticker] && model.assets[h.ticker].hasData);
+    const holdPts = held.map(h => { const a = model.assets[h.ticker]; return { x: clampB(a.beta), y: a.expReturn * 100, name: h.ticker, rec: a.recommendation }; });
+    const p = model.portfolios.find(x => x.id === client.id);
+    const portPt = (p && p.hasData) ? { x: clampB(p.beta), y: p.expReturn * 100, name: 'התיק שלך' } : null;
+    const marketPt = { x: 1, y: rmPct, name: model.marketLabel };
+
+    // FIXED β axis → the SML is ALWAYS a clear diagonal line (never vertical)
+    const xMin = -0.5, xMax = 2.5;
+    const smlLine = [{ x: xMin, y: rfPct + xMin * (rmPct - rfPct) }, { x: xMax, y: rfPct + xMax * (rmPct - rfPct) }];
+
+    const ys = holdPts.map(q => q.y).concat([marketPt.y, rfPct, portPt ? portPt.y : rfPct, smlLine[0].y, smlLine[1].y]);
+    const yMax = Math.min(130, Math.max(...ys) * 1.12 + 3);
+    const yMin = Math.max(-70, Math.min(...ys) * 1.12 - 3);
+
+    const datasets = [
+        { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },
+        { type: 'scatter', label: 'נכסי התיק', data: holdPts, pointRadius: 6, pointHoverRadius: 8, backgroundColor: holdPts.map(q => rmRecColor(q.rec)), borderColor: '#0b0b0f', borderWidth: 1, order: 2 },
+        { type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1 },
+    ];
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
+
+    const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
+    opts.scales.x.min = xMin; opts.scales.x.max = xMax;
+    opts.scales.y.min = yMin; opts.scales.y.max = yMax;
+    _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
+}
+
 // Open the add-holding flow for a portfolio, pre-filled with a recommended ticker.
 function addCandidateToPortfolio(clientId, ticker) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
@@ -499,4 +602,5 @@ if (typeof window !== 'undefined') {
     window.closeRiskAnalysis = closeRiskAnalysis;
     window.refreshRiskAnalysis = refreshRiskAnalysis;
     window.addCandidateToPortfolio = addCandidateToPortfolio;
+    window._renderModalRiskCharts = _renderModalRiskCharts;
 }

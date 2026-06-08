@@ -46,6 +46,13 @@ function switchModalTab(tabName) {
         setTimeout(() => renderModalSectorChart(client), 50);
     }
 
+    // Render per-portfolio CML/SML curves + advisory on demand
+    if (tabName === 'cmlsml') {
+        if (typeof _renderModalRiskCharts === 'function') {
+            setTimeout(() => _renderModalRiskCharts(client.id), 50);
+        }
+    }
+
     // Fresh-fetch transactions from Supabase every time the tab is opened
     if (tabName === 'transactions') {
         const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
@@ -201,6 +208,7 @@ async function openModal(clientId) {
         </div>
         <div class="modal-tab-bar">
             <button class="modal-tab active" data-tab="overview" onclick="switchModalTab('overview')">סקירה כללית</button>
+            <button class="modal-tab" data-tab="cmlsml" onclick="switchModalTab('cmlsml')">CML / SML</button>
             <button class="modal-tab" data-tab="holdings" onclick="switchModalTab('holdings')">נכסים</button>
             <button class="modal-tab" data-tab="sectors" onclick="switchModalTab('sectors')">סקטורים</button>
             <button class="modal-tab" data-tab="transactions" onclick="switchModalTab('transactions')">היסטוריית פעולות</button>
@@ -310,15 +318,6 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
-                <!-- ═══ CML/SML ADVISORY — per-portfolio review & recommendations ═══ -->
-                <div class="ov-advisory glass-card" id="modalAdvisory">
-                    <div class="ov-advisory-head">
-                        <span>סקירת CML / SML והמלצות</span>
-                        <span class="ov-advisory-sub">האם התיק עומד במודלים · מה מתאים · מה לשנות ולקנות</span>
-                    </div>
-                    <div id="modalAdvisoryBody"><div class="adv-empty">מחשב ניתוח CML/SML…</div></div>
-                </div>
-
                 <!-- ═══ CURRENCY EXPOSURE — full-width row ═══ -->
                 <div class="ov-currency-bar">
                     <div class="ov-curbar-side">
@@ -340,6 +339,26 @@ async function openModal(clientId) {
                      from the portfolio card's expand button on the dashboard. -->
                 <!-- Hidden donut canvas for sectors tab data (still needed for chart init) -->
                 <div style="display:none"><canvas id="modal-chart"></canvas></div>
+            </div>
+            <!-- Tab: CML / SML -->
+            <div class="modal-tab-content" id="tab-cmlsml">
+                <div class="mcs-charts">
+                    <div class="mcs-chart-card">
+                        <div class="mcs-chart-head">
+                            <h4>קו שוק ההון (CML)</h4>
+                            <span>החזית היעילה (עקומה) · מיקום התיק שלך עליה</span>
+                        </div>
+                        <div class="mcs-canvas-wrap"><canvas id="modal-cml-chart"></canvas></div>
+                    </div>
+                    <div class="mcs-chart-card">
+                        <div class="mcs-chart-head">
+                            <h4>קו שוק נייר הערך (SML)</h4>
+                            <span>תשואה מול β · מעל הקו = מתומחר בחסר, מתחת = ביתר</span>
+                        </div>
+                        <div class="mcs-canvas-wrap"><canvas id="modal-sml-chart"></canvas></div>
+                    </div>
+                </div>
+                <div id="modalCmlSmlAdvisory"><div class="adv-empty">מחשב ניתוח CML/SML…</div></div>
             </div>
             <!-- Tab: Holdings -->
             <div class="modal-tab-content" id="tab-holdings">
@@ -416,9 +435,7 @@ async function openModal(clientId) {
         // Performance chart removed from the modal by design — it's opened from the
         // dashboard card's expand button (openFullscreenChart) instead.
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
-
-        // CML/SML advisory panel — built async (reuses cached model when available)
-        if (typeof _fillModalAdvisory === 'function') _fillModalAdvisory(client.id);
+        // CML/SML analysis now lives in its own modal tab (rendered on demand).
     }, 300);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──
