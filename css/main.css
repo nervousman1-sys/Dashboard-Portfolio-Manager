@@ -7619,3 +7619,25 @@ body.full-list-open { overflow: hidden; }
 .ov-advisory .adv-act-list { gap: 6px; }
 .ov-advisory .adv-act { font-size: 12px; line-height: 1.45; }
 .ov-advisory .adv-note { font-size: 12px; }
+
+/* Tighter hero/KPIs so the CML/SML advisory gets more room in the modal */
+#tab-overview .ov-hero-value { font-size: 23px; }
+#tab-overview .ov-hero-inner { padding: 7px 24px 7px; }
+#tab-overview .ov-hero-sep { margin: 4px 0; }
+#tab-overview .ov-hero-kpis { gap: 7px; }
+#tab-overview .ov-kpi-card { padding: 4px 10px; }
+#tab-overview .ov-kpi-value { font-size: 14px; }
+#tab-overview .ov-kpi-label { font-size: 9px; }
+#tab-overview .ov-panel-grid { gap: 4px; }
+#tab-overview .ov-cell-value { font-size: 14px; }
+#tab-overview .ov-cell-bar { margin-top: 3px; }
+
+/* Clickable recommended-asset cards (add to portfolio) */
+.adv-cand-click { cursor: pointer; position: relative; }
+.adv-cand-click:hover { border-color: rgba(0,229,255,0.55); background: rgba(0,229,255,0.07); transform: translateY(-1px); }
+.adv-cand-add {
+    margin-top: 7px; text-align: center; font-size: 10.5px; font-weight: 800;
+    color: var(--accent-blue); border-top: 1px dashed rgba(0,229,255,0.25); padding-top: 6px;
+    opacity: 0.75;
+}
+.adv-cand-click:hover .adv-cand-add { opacity: 1; }

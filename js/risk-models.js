@@ -924,18 +924,23 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
             <ol class="adv-act-list">${actionsHTML}</ol>
         </div>
-        ${compact ? '' : _rmRenderCandidates(adv)}
+        ${compact ? '' : _rmRenderCandidates(adv, opts.clientId)}
     </div>`;
 }
 
 // Selectable shortlist of suitable assets to ADD to the portfolio (ranked by fit:
 // positive alpha + low correlation to current holdings). Lets the user choose.
-function _rmRenderCandidates(adv) {
+function _rmRenderCandidates(adv, clientId) {
     const list = adv.candidates || [];
     if (!list.length) return '';
-    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const rows = list.map(c => `
-        <div class="adv-cand">
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+    const clickable = clientId != null;
+    const rows = list.map(c => {
+        const onclick = clickable
+            ? `onclick="addCandidateToPortfolio(${clientId}, '${esc(c.ticker)}')" role="button" tabindex="0"`
+            : '';
+        return `
+        <div class="adv-cand${clickable ? ' adv-cand-click' : ''}" ${onclick}>
             <div class="adv-cand-top">
                 <span class="adv-cand-tk">${esc(c.ticker)}</span>
                 <span class="adv-cand-sector">${esc(c.sector || '')}</span>
@@ -946,11 +951,13 @@ function _rmRenderCandidates(adv) {
                 <span title="סטיית תקן">σ <b>${rmFmtPct(c.vol, 0)}</b></span>
                 <span title="קורלציה לתיק">ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
-        </div>`).join('');
+            ${clickable ? '<div class="adv-cand-add">+ הוסף לתיק</div>' : ''}
+        </div>`;
+    }).join('');
     return `
         <div class="adv-plan adv-cands">
-            <div class="adv-action-h">נכסים מתאימים להוספה — בחר מהאפשרויות</div>
-            <p class="adv-cands-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). ρ נמוך = מגוון יותר.</p>
+            <div class="adv-action-h">נכסים מתאימים להוספה — בחר להוספה לתיק</div>
+            <p class="adv-cands-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור) — מקרב את התיק לחלק האופטימלי בעקומה. ρ נמוך = מגוון יותר.</p>
             <div class="adv-cand-grid">${rows}</div>
         </div>`;
 }

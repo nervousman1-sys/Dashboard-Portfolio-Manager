@@ -97,6 +97,43 @@ function invalidateSyntheticCache(clientId) {
 // Returns: [{date: 'YYYY-MM-DD', close: number}] in chronological order, or null.
 // Uses localStorage cache (24h TTL) to avoid API burnout — never fetches same ticker twice.
 
+// ── Yahoo Finance daily history (free, no key, no strict rate limit) ──
+// This is the most reliable free source and is tried FIRST: FMP/Twelve Data free
+// tiers frequently 429 / exhaust, which previously left the risk model with NO
+// data → every portfolio fell back to the same "no equity exposure" verdict and
+// the CML/SML charts had no curve. Yahoo via a browser-friendly CORS proxy fixes
+// that. Returns chronological [{date, close}] or null.
+const _SYNTH_YAHOO_PROXIES = [
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+async function _fetchYahooHistory(ticker, currency, outputSize) {
+    let sym = ticker;
+    if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
+    const range = outputSize > 300 ? '2y' : '1y';
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d`;
+    for (const wrap of _SYNTH_YAHOO_PROXIES) {
+        try {
+            const res = await fetch(wrap(url));
+            if (!res.ok) continue;
+            const j = await res.json();
+            const r = j?.chart?.result?.[0];
+            const ts = r?.timestamp;
+            const closes = r?.indicators?.quote?.[0]?.close;
+            if (!ts || !closes) continue;
+            const out = [];
+            for (let i = 0; i < ts.length; i++) {
+                const c = closes[i];
+                if (c != null && isFinite(c) && c > 0) {
+                    out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: c });
+                }
+            }
+            if (out.length > 20) return out;
+        } catch { /* try next proxy */ }
+    }
+    return null;
+}
+
 async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     // ── Check session cache (instant — no parse overhead) ──
     if (_sessionTickerCache[ticker]) {
@@ -113,7 +150,18 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
 
     const sym = (currency === 'ILS') ? `${ticker}:TASE` : ticker;
 
-    // ── Primary: FMP historical-price-full ──
+    // ── PRIMARY: Yahoo Finance (free, reliable, no rate limit) ──
+    try {
+        const yh = await _fetchYahooHistory(ticker, currency, outputSize);
+        if (yh && yh.length > 20) {
+            const result = yh.length > outputSize ? yh.slice(yh.length - outputSize) : yh;
+            _sessionTickerCache[ticker] = result;
+            _saveTickerToLS(ticker, result);
+            return result;
+        }
+    } catch (e) { /* fall through to FMP/Twelve Data */ }
+
+    // ── Secondary: FMP historical-price-full ──
     // FMP is primary for bulk fetches: 250 calls/day, no per-minute limit,
     // which works much better for large portfolios (20+ holdings).
     const _fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY'

@@ -361,7 +361,7 @@ function _renderAdvisorySection(model) {
         if (!client) return '';
         let adv = null;
         try { adv = buildPortfolioAdvisory(client, model); } catch (e) { /* skip */ }
-        const body = (typeof renderAdvisoryHTML === 'function') ? renderAdvisoryHTML(adv) : '';
+        const body = (typeof renderAdvisoryHTML === 'function') ? renderAdvisoryHTML(adv, { clientId: p.id }) : '';
         return `
             <div class="adv-portfolio glass-card">
                 <div class="adv-portfolio-head">
@@ -461,8 +461,22 @@ function _riskEsc(s) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Open the add-holding flow for a portfolio, pre-filled with a recommended ticker.
+function addCandidateToPortfolio(clientId, ticker) {
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client || typeof openMgmtModal !== 'function') return;
+    openMgmtModal('addHolding', client);
+    // The add-holding modal renders asynchronously; add a pre-filled row once it's up.
+    setTimeout(() => {
+        if (typeof addHoldingRow === 'function') {
+            addHoldingRow({ ticker, currency: 'USD' });
+        }
+    }, 180);
+}
+
 if (typeof window !== 'undefined') {
     window.openRiskAnalysis = openRiskAnalysis;
     window.closeRiskAnalysis = closeRiskAnalysis;
     window.refreshRiskAnalysis = refreshRiskAnalysis;
+    window.addCandidateToPortfolio = addCandidateToPortfolio;
 }
