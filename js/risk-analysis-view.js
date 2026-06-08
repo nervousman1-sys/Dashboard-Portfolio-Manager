@@ -249,8 +249,12 @@ function _drawCMLChart(model) {
     // The CML is tangent to the frontier at the tangency portfolio (fallback: market)
     const anchor = tang || marketPt;
     const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
-    const maxX = Math.max(model.marketVol * 100, anchor.x,
-        ...pts.map(p => p.x), frPts ? Math.max(...frPts.map(p => p.x)) : 0, 6) * 1.18;
+    // Sane axis ceilings from the frontier (keeps the chart textbook-clean even when
+    // a few estimates are extreme); fall back to data-derived bounds.
+    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : null;
+    const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : null;
+    const byMin = (fr && fr.bounds) ? fr.bounds.retMin * 100 : Math.min(0, rfPct - 2);
+    const maxX = bx || (Math.max(model.marketVol * 100, anchor.x, ...pts.map(p => p.x), 6) * 1.18);
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const ptColors = pts.map(p => p.risk === 'גבוה' ? '#ef4444' : p.risk === 'בינוני' ? '#eab308' : '#22c55e');
@@ -283,7 +287,10 @@ function _drawCMLChart(model) {
     }
 
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
-    opts.scales.y.min = Math.min(0, rfPct - 2);
+    opts.scales.x.min = 0;
+    opts.scales.x.max = maxX;
+    opts.scales.y.min = byMin;
+    if (by) opts.scales.y.max = by;
 
     _riskCharts.cml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
@@ -293,24 +300,37 @@ function _drawCMLChart(model) {
 function _drawSMLChart(model) {
     const canvas = document.getElementById('smlChart');
     if (!canvas || typeof Chart === 'undefined') return;
+    const rfPct = model.rf * 100;
     const assets = Object.values(model.assets || {}).filter(a => a.hasData);
+    // Clamp β to a sane display window so one glitchy outlier can't squish the axis
     const pts = assets.map(a => ({
-        x: a.beta, y: a.expReturn * 100, name: a.ticker, rec: a.recommendation
+        x: Math.max(-0.5, Math.min(3.0, a.beta)), y: a.expReturn * 100, name: a.ticker, rec: a.recommendation
     }));
     const marketPt = { x: 1, y: model.rm * 100, name: model.marketLabel };
 
-    const maxBeta = Math.max(1.2, ...pts.map(p => p.x)) * 1.15;
-    const minBeta = Math.min(0, ...pts.map(p => p.x));
-    const rfPct = model.rf * 100;
+    const betas = pts.map(p => p.x);
+    const maxBeta = Math.min(3.0, Math.max(1.6, ...betas, 1.6));
+    const minBeta = Math.min(0, ...betas);
     const smlAt = (b) => rfPct + b * (model.rm * 100 - rfPct);
     const smlLine = [{ x: minBeta, y: smlAt(minBeta) }, { x: maxBeta, y: smlAt(maxBeta) }];
 
+    // Sane return-axis window
+    const rets = pts.map(p => p.y).concat([model.rm * 100, rfPct, smlAt(maxBeta)]);
+    const yMax = Math.min(120, Math.max(...rets) * 1.12 + 2);
+    const yMin = Math.max(-60, Math.min(0, ...rets) * 1.12 - 2);
+
     const ptColors = pts.map(p => rmRecColor(p.rec));
+
+    const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
+    opts.scales.x.min = minBeta;
+    opts.scales.x.max = maxBeta;
+    opts.scales.y.min = yMin;
+    opts.scales.y.max = yMax;
 
     _riskCharts.sml = new Chart(canvas.getContext('2d'), {
         data: {
             datasets: [
-                { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2,
+                { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5,
                   borderDash: [6, 4], pointRadius: 0, fill: false, tension: 0 },
                 { type: 'scatter', label: 'נכסים', data: pts, pointRadius: 6, pointHoverRadius: 8,
                   backgroundColor: ptColors, borderColor: '#0b0b0f', borderWidth: 1 },
@@ -318,7 +338,7 @@ function _drawSMLChart(model) {
                   pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5 },
             ]
         },
-        options: _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)')
+        options: opts
     });
 }
 

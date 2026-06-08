@@ -21,7 +21,7 @@ async function _fillModalAdvisory(clientId) {
         const stillOpen = document.getElementById('modalAdvisoryBody');
         if (!stillOpen) return;
         const adv = buildPortfolioAdvisory(client, model);
-        stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: true });
+        stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: true, clientId });
     } catch (e) {
         body.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח CML/SML כרגע.</div>';
     }

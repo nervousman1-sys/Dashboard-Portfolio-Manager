@@ -7641,3 +7641,15 @@ body.full-list-open { overflow: hidden; }
     opacity: 0.75;
 }
 .adv-cand-click:hover .adv-cand-add { opacity: 1; }
+
+/* In-modal recommended-stocks picker (collapsible) */
+.adv-cands-details { margin-top: 4px; }
+.adv-cands-details > summary {
+    cursor: pointer; list-style: none; font-size: 13px; font-weight: 800; color: var(--accent-blue);
+    padding: 9px 12px; background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.25);
+    border-radius: 9px; user-select: none; transition: background .15s;
+}
+.adv-cands-details > summary::-webkit-details-marker { display: none; }
+.adv-cands-details > summary:hover { background: rgba(0,229,255,0.12); }
+.adv-cands-details[open] > summary { border-radius: 9px 9px 0 0; }
+.adv-cands-details .adv-cands { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }

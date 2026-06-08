@@ -96,12 +96,23 @@ function _rmCorrelation(a, b) {
     return _rmCovariance(a, b) / (sa * sb);
 }
 
-// Convert a chronological close vector → simple daily returns
+// Convert a chronological close vector → simple daily returns.
+// Daily returns are WINSORIZED to ±25%: a single-day move larger than that is
+// almost always a stock split, an agurot/redenomination jump, or a data glitch —
+// not a real return. Left unclipped, one such point makes the annualized mean and
+// beta explode (e.g. 600% returns, squished axes). Clipping keeps the statistics
+// — and therefore the CML/SML charts — sane and textbook-clean.
+const _RM_RET_CLIP = 0.25;
 function _rmClosesToReturns(closes) {
     const out = [];
     for (let i = 1; i < closes.length; i++) {
         const p0 = closes[i - 1], p1 = closes[i];
-        if (p0 > 0 && p1 > 0) out.push(p1 / p0 - 1);
+        if (p0 > 0 && p1 > 0) {
+            let r = p1 / p0 - 1;
+            if (r > _RM_RET_CLIP) r = _RM_RET_CLIP;
+            else if (r < -_RM_RET_CLIP) r = -_RM_RET_CLIP;
+            out.push(r);
+        }
     }
     return out;
 }
@@ -276,7 +287,9 @@ async function buildRiskModel(clientsList, opts = {}) {
 
         const seriesMap = {};      // ticker -> [{date,close}]
         const closeMaps = {};      // ticker -> Map(date->close)
-        const BATCH = 5;
+        // Yahoo (the primary history source) has no rate limit, so fetch in larger,
+        // faster batches — the analysis loads noticeably quicker.
+        const BATCH = 12;
         for (let i = 0; i < tickers.length; i += BATCH) {
             const batch = tickers.slice(i, i + BATCH);
             const results = await Promise.allSettled(
@@ -288,7 +301,7 @@ async function buildRiskModel(clientsList, opts = {}) {
                     closeMaps[batch[j]] = _rmSeriesToMap(results[j].value);
                 }
             }
-            if (i + BATCH < tickers.length) await new Promise(r => setTimeout(r, 250));
+            if (i + BATCH < tickers.length) await new Promise(r => setTimeout(r, 60));
         }
 
         const marketOk = marketReturns.length > RISK_MODEL.MIN_POINTS && marketVar > 0;
@@ -579,22 +592,39 @@ function _rmBuildFrontier(assets, tickers, matrix, rf, rm) {
         if (varT > 0 && isFinite(muT)) tangency = { x: Math.sqrt(varT), y: muT };
     }
 
-    // Sweep μ along the upper (efficient) branch and clamp to sane bounds
-    const maxE = Math.max(...E, rm);
-    const lo = muGmv;
-    const hi = Math.max(maxE * 1.10, tangency ? tangency.y : maxE);
+    // Sweep μ across BOTH branches around the GMV vertex → the textbook "bullet"
+    // (a sideways parabola opening right). Span is bounded by the asset return
+    // range and capped so noisy estimates can't produce an absurd curve.
+    const minE = Math.min(...E), maxE = Math.max(...E, rm);
+    const spanUp = Math.max(maxE - muGmv, 0.05);
+    const spanDn = Math.max(muGmv - Math.min(minE, rf), 0.05);
+    const span = Math.min(Math.max(spanUp, spanDn), 0.55); // cap at ±55%
+    const lo = muGmv - span, hi = muGmv + span;
     const pts = [];
-    const N = 44;
+    const N = 60;
     for (let k = 0; k <= N; k++) {
         const mu = lo + (hi - lo) * (k / N);
         const v = (A * mu * mu - 2 * B * mu + C) / D;
         if (v > 0) {
             const s = Math.sqrt(v);
-            if (s < 2.0 && mu < 3.0) pts.push({ x: s, y: mu });
+            if (s < 1.5) pts.push({ x: s, y: mu }); // ordered by μ → traces the bullet
         }
     }
-    if (pts.length < 5) return null;
-    return { points: pts, gmv: { x: Math.sqrt(varGmv), y: muGmv }, tangency };
+    if (pts.length < 6) return null;
+
+    // Keep tangency only if it sits in a sane region (else the optimizer chased noise)
+    if (tangency && (tangency.x > 1.2 || tangency.y > hi * 1.2 || tangency.y < rf)) tangency = null;
+
+    // Sane axis bounds for the CML chart (decimals)
+    const maxAssetVol = Math.max(...sig);
+    const maxPtX = Math.max(...pts.map(p => p.x));
+    const bounds = {
+        sigMax: Math.min(Math.max(maxAssetVol * 1.2, maxPtX * 1.05, 0.1), 0.9),
+        retMax: Math.min(Math.max(maxE * 1.15, hi * 1.05, 0.1), 1.2),
+        retMin: Math.min(0, rf - 0.01, lo),
+    };
+
+    return { points: pts, gmv: { x: Math.sqrt(varGmv), y: muGmv }, tangency, bounds };
 }
 
 // ========== AUTO RISK CLASSIFICATION ==========
@@ -924,7 +954,11 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
             <ol class="adv-act-list">${actionsHTML}</ol>
         </div>
-        ${compact ? '' : _rmRenderCandidates(adv, opts.clientId)}
+        ${(adv.candidates && adv.candidates.length)
+            ? (compact
+                ? `<details class="adv-cands-details"><summary>🎯 מניות מומלצות להוספה לתיק האופטימלי (${adv.candidates.length})</summary>${_rmRenderCandidates(adv, opts.clientId)}</details>`
+                : _rmRenderCandidates(adv, opts.clientId))
+            : ''}
     </div>`;
 }
 
