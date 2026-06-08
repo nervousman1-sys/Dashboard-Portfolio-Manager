@@ -522,15 +522,9 @@ async function _renderCardSparkline(client, renderKey) {
     const isPositive = calcPortfolioReturn(client).returnPct >= 0;
     const lineColor = isPositive ? '#00ff94' : '#ff4d4d';
 
-    // Soft fading gradient fill — keeps every card's sparkline visually consistent
-    // (a thin line + soft glow) instead of a solid block whose height depends on the
-    // data shape. Fixes the "red loss chart looks taller than the others" issue.
-    const _ctx2d = perfCtx.getContext('2d');
-    const _h = perfCtx.parentElement ? (perfCtx.parentElement.clientHeight || 75) : 75;
-    const bgColor = _ctx2d.createLinearGradient(0, 0, 0, _h);
-    bgColor.addColorStop(0, isPositive ? 'rgba(0,255,148,0.20)' : 'rgba(255,77,77,0.20)');
-    bgColor.addColorStop(1, 'rgba(0,0,0,0)');
-
+    // Line-only sparkline (no area fill) — guarantees every card's chart occupies
+    // the same vertical band regardless of trend shape, so a losing (red) portfolio
+    // no longer looks like a taller solid block than the gainers.
     charts[`perf-${client.id}`] = new Chart(perfCtx, {
         type: 'line',
         data: {
@@ -538,9 +532,9 @@ async function _renderCardSparkline(client, renderKey) {
             datasets: [{
                 data: hist.map(p => p.value),
                 borderColor: lineColor,
-                backgroundColor: bgColor,
+                backgroundColor: 'transparent',
                 borderWidth: 2,
-                fill: true,
+                fill: false,
                 pointRadius: 0,
                 tension: 0.3,
                 clip: true
@@ -549,10 +543,10 @@ async function _renderCardSparkline(client, renderKey) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { top: 4, bottom: 4 } },
+            layout: { padding: { top: 6, bottom: 6 } },
             scales: {
                 x: { display: false },
-                y: { display: false, beginAtZero: false, grace: '15%' }
+                y: { display: false, beginAtZero: false, grace: '25%' }
             },
             plugins: {
                 legend: { display: false },

@@ -187,9 +187,13 @@ function _matchCategory(eventName) {
 const _FRED_SERIES = [
     { key: 'cpi',          id: 'CPIAUCSL',       units: 'pc1', label: 'מדד המחירים לצרכן (CPI)',   unit: '%' },
     { key: 'core_cpi',     id: 'CPILFESL',        units: 'pc1', label: 'אינפלציית ליבה (Core CPI)', unit: '%' },
+    { key: 'ppi',          id: 'PPIFIS',          units: 'pch', label: 'מדד מחירי יצרן (PPI MoM)',  unit: '%' },
+    { key: 'core_ppi',     id: 'PPIFES',          units: 'pch', label: 'מדד יצרן ליבה (Core PPI)',  unit: '%' },
     { key: 'fed_rate',     id: 'FEDFUNDS',        units: 'lin', label: 'ריבית הפד',                 unit: '%' },
-    { key: 'gdp',          id: 'A191RL1Q225SBEA', units: 'lin', label: 'צמיחת תוצר (GDP)',          unit: '%' },
     { key: 'unemployment', id: 'UNRATE',          units: 'lin', label: 'שיעור אבטלה',               unit: '%' },
+    { key: 'nfp',          id: 'PAYEMS',          units: 'chg', label: 'משרות חדשות (NFP)',          unit: 'K' },
+    { key: 'gdp',          id: 'A191RL1Q225SBEA', units: 'lin', label: 'צמיחת תוצר (GDP)',          unit: '%' },
+    { key: 'real_rate',    id: 'DFII10',          units: 'lin', label: 'ריבית ריאלית (Real Rate)',   unit: '%' },
 ];
 
 // Public CORS proxies — let the browser read FRED directly when the same-origin

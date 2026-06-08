@@ -296,24 +296,36 @@ async function searchTwelveDataSymbols(query) {
 // For Israeli (.TA) stocks, Yahoo returns prices in Agurot — ALWAYS divide by 100.
 // Returns { price, previousClose, change, changePct, currency } or null.
 
-async function _fetchYahooPrice(yahooSymbol) {
+// Browser-friendly CORS proxies tried in order — corsproxy.io validates the
+// Origin header and is the most reliable from a real browser; allorigins is the
+// fallback. (The old single allorigins-only path made TASE/Yahoo fetches flaky.)
+const _YAHOO_PROXIES = [
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+
+async function _fetchYahooPrice(yahooSymbol, opts = {}) {
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1d`;
-    const proxyUrl = CORS_PROXY + encodeURIComponent(yahooUrl);
 
-    const res = await fetch(proxyUrl);
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || !meta.regularMarketPrice || meta.regularMarketPrice <= 0) return null;
+    let meta = null;
+    for (const wrap of _YAHOO_PROXIES) {
+        try {
+            const res = await fetch(wrap(yahooUrl));
+            if (!res.ok) continue;
+            const data = await res.json();
+            const m = data?.chart?.result?.[0]?.meta;
+            if (m && m.regularMarketPrice > 0) { meta = m; break; }
+        } catch { /* try next proxy */ }
+    }
+    if (!meta) return null;
 
     let rawPrice = parseFloat(meta.regularMarketPrice);
     let rawPrevClose = parseFloat(meta.chartPreviousClose || meta.previousClose || rawPrice);
 
-    // TASE stocks on Yahoo are ALWAYS quoted in Agurot (Israeli cents).
-    // Divide by 100 to get NIS. Detect via .TA suffix or ILA currency.
+    // TASE *securities* are quoted on Yahoo in Agurot (NIS cents) → divide by 100.
+    // TASE *indices* (TA-35, TA-125) are quoted in POINTS, NOT agurot — never divide.
     const isTASE = yahooSymbol.toUpperCase().endsWith('.TA');
-    const isAgurot = isTASE || meta.currency === 'ILA';
+    const isAgurot = !opts.isIndex && (isTASE || meta.currency === 'ILA');
 
     if (isAgurot) {
         rawPrice = rawPrice / 100;

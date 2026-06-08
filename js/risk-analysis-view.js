@@ -148,7 +148,7 @@ function _renderRiskPage(model, errMsg) {
                     <span class="risk-chart-sub">תשואה צפויה מול סיכון כולל (σ) — לכל תיק</span>
                 </div>
                 <div class="risk-chart-canvas-wrap"><canvas id="cmlChart"></canvas></div>
-                <p class="risk-chart-legend">מעל הקו = יחס תשואה/סיכון עדיף לשוק · מתחת = נחות. נקודת היהלום = ${_riskEsc(model.marketLabel)}.</p>
+                <p class="risk-chart-legend">העקומה הירוקה = החזית היעילה (Markowitz). הקו הכחול = ה-CML, משיק לחזית ב<b>כוכב הזהב</b> = <b>התיק האופטימלי</b>. תיקים על/מעל ה-CML יעילים; מתחת — נחותים.</p>
             </div>
             <div class="risk-chart-card glass-card">
                 <div class="risk-chart-head">
@@ -235,30 +235,57 @@ function _renderPortfolioTable(model) {
 function _drawCMLChart(model) {
     const canvas = document.getElementById('cmlChart');
     if (!canvas || typeof Chart === 'undefined') return;
+    const rfPct = model.rf * 100;
     const pts = (model.portfolios || []).filter(p => p.hasData && p.totalValue > 0)
         .map(p => ({ x: p.vol * 100, y: p.expReturn * 100, name: p.name, risk: p.riskLabel }));
     const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
 
-    const maxX = Math.max(model.marketVol * 100, ...pts.map(p => p.x), 5) * 1.25;
-    const slope = model.marketVol > 0 ? (model.rm - model.rf) / model.marketVol : 0; // per unit σ (decimal)
-    const rfPct = model.rf * 100;
-    const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * (maxX) }];
+    // Efficient frontier curve + tangency (optimal risky portfolio)
+    const fr = model.frontier;
+    const frPts = (fr && fr.points && fr.points.length > 4)
+        ? fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 })) : null;
+    const tang = (fr && fr.tangency) ? { x: fr.tangency.x * 100, y: fr.tangency.y * 100, name: 'תיק אופטימלי (משיק)' } : null;
+
+    // The CML is tangent to the frontier at the tangency portfolio (fallback: market)
+    const anchor = tang || marketPt;
+    const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
+    const maxX = Math.max(model.marketVol * 100, anchor.x,
+        ...pts.map(p => p.x), frPts ? Math.max(...frPts.map(p => p.x)) : 0, 6) * 1.18;
+    const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const ptColors = pts.map(p => p.risk === 'גבוה' ? '#ef4444' : p.risk === 'בינוני' ? '#eab308' : '#22c55e');
 
-    _riskCharts.cml = new Chart(canvas.getContext('2d'), {
-        data: {
-            datasets: [
-                { type: 'line', label: 'CML', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2,
-                  borderDash: [6, 4], pointRadius: 0, fill: false, tension: 0 },
-                { type: 'scatter', label: 'תיקים', data: pts, pointRadius: 7, pointHoverRadius: 9,
-                  backgroundColor: ptColors, borderColor: '#0b0b0f', borderWidth: 1.5 },
-                { type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot',
-                  pointRadius: 10, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5 },
-            ]
-        },
-        options: _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)')
+    const datasets = [];
+    if (frPts) {
+        datasets.push({
+            type: 'line', label: 'חזית יעילה', data: frPts,
+            borderColor: '#22c55e', borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0.4,
+            order: 3,
+        });
+    }
+    datasets.push({
+        type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5,
+        borderDash: [7, 4], pointRadius: 0, fill: false, tension: 0, order: 2,
     });
+    datasets.push({
+        type: 'scatter', label: 'תיקים', data: pts, pointRadius: 7, pointHoverRadius: 9,
+        backgroundColor: ptColors, borderColor: '#0b0b0f', borderWidth: 1.5, order: 1,
+    });
+    datasets.push({
+        type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot',
+        pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1,
+    });
+    if (tang) {
+        datasets.push({
+            type: 'scatter', label: 'תיק אופטימלי', data: [tang], pointStyle: 'star',
+            pointRadius: 13, pointHoverRadius: 15, backgroundColor: '#facc15', borderColor: '#fff', borderWidth: 1.5, order: 0,
+        });
+    }
+
+    const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
+    opts.scales.y.min = Math.min(0, rfPct - 2);
+
+    _riskCharts.cml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
 // ── 4. SML chart ──

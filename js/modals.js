@@ -332,7 +332,7 @@ async function openModal(clientId) {
                     <div class="ov-curbar-side">
                         <span class="ov-curbar-pct">${_rm ? _rm.ilsExposurePct : 50}%</span>
                         <span class="ov-curbar-label">ILS</span>
-                        <span class="ov-curbar-symbol">₪</span>
+                        <span class="ov-curbar-symbol ils">₪</span>
                     </div>
                 </div>
 

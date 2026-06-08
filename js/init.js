@@ -421,23 +421,32 @@ async function _updateQuickWatch() {
     const cached = _loadQWPriceCache();
     if (cached) _applyQWPrices(cached);
 
-    // Step 2: fetch fresh prices with per-ticker retry + 3s timeout
+    // Fetch one ticker — TASE indices (TA-35/TA-125, quoted in points) go straight
+    // to Yahoo with isIndex so they aren't wrongly divided by 100, which is why
+    // TA-35 previously showed nothing / a wrong value.
+    const _fetchQW = async (t) => {
+        const isTaseIndex = t.type === 'index' && /\.TA$/i.test(t.sym);
+        if (isTaseIndex && typeof _fetchYahooPrice === 'function') {
+            const r = await _fetchYahooPrice(t.sym, { isIndex: true });
+            if (r && r.price) return r;
+        }
+        return await fetchSingleTickerPrice(t.sym, t.currency);
+    };
+
+    // Step 2: fetch fresh prices with a single retry (snappier — was 2 retries/3s)
     const freshPrices = cached ? { ...cached } : {};
     const fetchWithRetry = async (t, attempt = 0) => {
         try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3000);
-            const result = await fetchSingleTickerPrice(t.sym, t.currency);
-            clearTimeout(timeout);
+            const result = await _fetchQW(t);
             if (result && result.price) {
                 freshPrices[t.sym] = result;
             }
         } catch (_) {
-            if (attempt < 2) {
-                await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+            if (attempt < 1) {
+                await new Promise(r => setTimeout(r, 400));
                 return fetchWithRetry(t, attempt + 1);
             }
-            // All retries exhausted — cached value already shown, no further action
+            // Retry exhausted — cached value already shown, no further action
         }
     };
 

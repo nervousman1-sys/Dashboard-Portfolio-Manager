@@ -643,11 +643,12 @@ body {
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 24px 28px;
+    padding: 12px 18px;
     background: rgba(6, 6, 6, 0.88);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     position: relative;
+    overflow: hidden;
 }
 
 /* Subtle left-edge live-data indicator */
@@ -687,6 +688,7 @@ body {
     align-items: center;
     gap: 0;
     flex: 1;
+    min-width: 0;
     justify-content: space-around;
 }
 
@@ -703,9 +705,11 @@ body {
 .qw-ticker {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 20px;
+    gap: 9px;
+    padding: 8px 14px;
     border-left: 1px solid rgba(255, 255, 255, 0.04);
+    min-width: 0;
+    white-space: nowrap;
 }
 
 .qw-ticker:last-child {
@@ -2602,26 +2606,31 @@ body.filter-modal-open::after {
 }
 
 .card-cur-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: rgba(245,245,250,0.55);
+    font-size: 10.5px;
+    font-weight: 800;
+    color: rgba(245,245,250,0.72);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    min-width: 36px;
+    min-width: 40px;
 }
+.card-cur-label:first-child { color: #4fd8ff; }       /* USD */
+.card-cur-label:last-child  { color: #c9a0fc; }        /* ILS */
 
+/* Two-colour split bar — USD (cyan fill) vs ILS (purple track remainder) */
 .card-cur-track {
     flex: 1;
-    height: 3px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 2px;
+    height: 7px;
+    background: linear-gradient(90deg, rgba(192,132,252,0.50), rgba(192,132,252,0.34));
+    border-radius: 4px;
     overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.05);
 }
 
 .card-cur-fill {
     height: 100%;
     background: linear-gradient(90deg, #00e5ff, #00b8d4);
-    border-radius: 2px;
+    border-radius: 4px 0 0 4px;
+    box-shadow: 1px 0 6px rgba(0, 229, 255, 0.3);
     transition: width 0.5s ease;
 }
 
@@ -2802,9 +2811,11 @@ body.filter-modal-open::after {
     overflow: hidden;
 }
 
-/* Overview: no scroll, everything fits */
+/* Overview: scroll inside the modal so the advisory/action-plan is never cut off */
 #tab-overview {
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 8px;
 }
 
 /* Holdings / Transactions: allow scrolling inside the table area */
@@ -3212,7 +3223,7 @@ body.filter-modal-open::after {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 16px 32px 14px;
+    padding: 11px 32px 11px;
 }
 
 /* Top section: label + value + live badge */
@@ -3220,8 +3231,8 @@ body.filter-modal-open::after {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    padding-bottom: 10px;
+    gap: 2px;
+    padding-bottom: 7px;
 }
 
 .ov-hero-label {
@@ -3233,7 +3244,7 @@ body.filter-modal-open::after {
 }
 
 .ov-hero-value {
-    font-size: 34px;
+    font-size: 30px;
     font-weight: 800;
     color: #00e5ff;
     letter-spacing: -1px;
@@ -3512,31 +3523,36 @@ body.filter-modal-open::after {
 
 .ov-curbar-label {
     font-size: 11px;
-    font-weight: 600;
-    color: rgba(245,245,250,0.50);
+    font-weight: 700;
+    color: rgba(245,245,250,0.72);
     letter-spacing: 0.5px;
 }
 
+.ov-curbar-symbol.ils { color: rgba(192,132,252,0.95); }
+
 .ov-curbar-pct {
     font-size: 13px;
-    font-weight: 700;
-    color: rgba(245,245,250,0.92);
+    font-weight: 800;
+    color: rgba(245,245,250,0.95);
     font-variant-numeric: tabular-nums;
 }
 
+/* Two-colour split bar — USD (cyan fill) vs ILS (purple track remainder) */
 .ov-curbar-track {
     flex: 1;
-    height: 6px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 3px;
+    height: 11px;
+    background: linear-gradient(90deg, rgba(192,132,252,0.55), rgba(192,132,252,0.38));
+    border-radius: 6px;
     overflow: hidden;
-    min-width: 40px;
+    min-width: 60px;
+    border: 1px solid rgba(255,255,255,0.06);
 }
 
 .ov-curbar-fill {
     height: 100%;
     background: linear-gradient(90deg, #00e5ff, #00b8d4);
-    border-radius: 3px;
+    border-radius: 6px 0 0 6px;
+    box-shadow: 1px 0 8px rgba(0, 229, 255, 0.35);
     transition: width 0.5s ease;
 }
 
@@ -7560,3 +7576,16 @@ body.full-list-open { overflow: hidden; }
     transition: background .15s, transform .1s;
 }
 .card-model-btn:hover { background: color-mix(in srgb, var(--mc) 26%, transparent); transform: translateY(-1px); }
+
+/* Suitable-assets selection grid (advisory) */
+.adv-cands-hint { font-size: 11.5px; color: rgba(245,245,250,0.7); margin: 2px 0 10px; line-height: 1.5; }
+.adv-cand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 9px; }
+.adv-cand { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 11px; transition: border-color .15s, background .15s; cursor: default; }
+.adv-cand:hover { border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.05); }
+.adv-cand-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.adv-cand-tk { font-size: 14px; font-weight: 800; color: #fff; }
+.adv-cand-sector { font-size: 10px; color: rgba(245,245,250,0.55); }
+.adv-cand-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 11px; color: rgba(245,245,250,0.7); }
+.adv-cand-stats b { color: rgba(245,245,250,0.95); font-weight: 800; }
+.adv-cand-stats b.pos { color: var(--risk-low); }

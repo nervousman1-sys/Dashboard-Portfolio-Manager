@@ -349,6 +349,11 @@ async function buildRiskModel(clientsList, opts = {}) {
         // ── 5. Per-portfolio aggregation ──
         const portfolios = clients_.map(c => _rmComputePortfolio(c, assets, closeMaps, { rf, rm, marketVol }));
 
+        // ── 6. Efficient frontier + tangency (the curve for the CML chart) ──
+        let frontier = null;
+        try { frontier = _rmBuildFrontier(assets, corrTickers, matrix, rf, rm); }
+        catch (e) { console.warn('[RiskModel] frontier build failed:', e.message); }
+
         const model = {
             rf, rm, marketVol,
             marketSymbol: RISK_MODEL.MARKET_SYMBOL,
@@ -357,6 +362,7 @@ async function buildRiskModel(clientsList, opts = {}) {
             asOf: new Date().toISOString(),
             assets,
             correlation: { tickers: corrTickers, matrix },
+            frontier,
             portfolios,
             coverage: { requested: tickers.length, resolved: corrTickers.length },
             marketOk,
@@ -501,6 +507,94 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
         avgCorr, topWeight, hhi,
         complianceScore, complianceLabel, cmlScore, smlScore, divScore,
     };
+}
+
+// ========== EFFICIENT FRONTIER (Markowitz) ==========
+// Builds the risky-asset efficient frontier (the curved "Markowitz bullet"), the
+// global-minimum-variance point, and the tangency portfolio (where the CML touches
+// the frontier — the optimal risky portfolio). Uses the closed-form solution with
+// light covariance shrinkage for numerical stability.
+
+function _matInverse(M) {
+    const n = M.length;
+    const A = M.map((row, i) => row.concat(Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))));
+    for (let col = 0; col < n; col++) {
+        let piv = col;
+        for (let r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+        if (Math.abs(A[piv][col]) < 1e-12) return null;
+        const tmp = A[col]; A[col] = A[piv]; A[piv] = tmp;
+        const d = A[col][col];
+        for (let j = 0; j < 2 * n; j++) A[col][j] /= d;
+        for (let r = 0; r < n; r++) {
+            if (r === col) continue;
+            const f = A[r][col];
+            for (let j = 0; j < 2 * n; j++) A[r][j] -= f * A[col][j];
+        }
+    }
+    return A.map(row => row.slice(n));
+}
+function _matVec(M, v) { return M.map(row => row.reduce((s, x, j) => s + x * v[j], 0)); }
+function _vecDot(a, b) { return a.reduce((s, x, i) => s + x * b[i], 0); }
+
+function _rmBuildFrontier(assets, tickers, matrix, rf, rm) {
+    const usable = tickers.filter(t => assets[t] && assets[t].hasData && isFinite(assets[t].vol) && assets[t].vol > 0);
+    if (usable.length < 2) return null;
+    const idx = {}; tickers.forEach((t, i) => { idx[t] = i; });
+    const n = usable.length;
+    const E = usable.map(t => assets[t].expReturn);
+    const sig = usable.map(t => assets[t].vol);
+
+    // Covariance with shrinkage toward the diagonal (δ) → stable, invertible Σ
+    const delta = 0.30;
+    const S = [];
+    for (let i = 0; i < n; i++) {
+        S[i] = [];
+        for (let j = 0; j < n; j++) {
+            const rho = i === j ? 1 : (matrix[idx[usable[i]]][idx[usable[j]]] || 0) * (1 - delta);
+            S[i][j] = rho * sig[i] * sig[j];
+        }
+    }
+    const inv = _matInverse(S);
+    if (!inv) return null;
+    const ones = Array(n).fill(1);
+    const Zi = _matVec(inv, ones);
+    const Ze = _matVec(inv, E);
+    const A = _vecDot(ones, Zi);
+    const B = _vecDot(ones, Ze);
+    const C = _vecDot(E, Ze);
+    const D = A * C - B * B;
+    if (!(A > 0) || !(D > 0)) return null;
+
+    const muGmv = B / A, varGmv = 1 / A;
+
+    // Tangency portfolio: w ∝ Σ⁻¹ (E − Rf·1)
+    let tangency = null;
+    const excess = E.map(e => e - rf);
+    const Zt = _matVec(inv, excess);
+    const denom = _vecDot(ones, Zt);
+    if (Math.abs(denom) > 1e-9) {
+        const w = Zt.map(x => x / denom);
+        const muT = _vecDot(w, E);
+        const varT = _vecDot(w, _matVec(S, w));
+        if (varT > 0 && isFinite(muT)) tangency = { x: Math.sqrt(varT), y: muT };
+    }
+
+    // Sweep μ along the upper (efficient) branch and clamp to sane bounds
+    const maxE = Math.max(...E, rm);
+    const lo = muGmv;
+    const hi = Math.max(maxE * 1.10, tangency ? tangency.y : maxE);
+    const pts = [];
+    const N = 44;
+    for (let k = 0; k <= N; k++) {
+        const mu = lo + (hi - lo) * (k / N);
+        const v = (A * mu * mu - 2 * B * mu + C) / D;
+        if (v > 0) {
+            const s = Math.sqrt(v);
+            if (s < 2.0 && mu < 3.0) pts.push({ x: s, y: mu });
+        }
+    }
+    if (pts.length < 5) return null;
+    return { points: pts, gmv: { x: Math.sqrt(varGmv), y: muGmv }, tangency };
 }
 
 // ========== AUTO RISK CLASSIFICATION ==========
@@ -660,13 +754,33 @@ function buildPortfolioAdvisory(client, model) {
         .sort((a, b) => (b.weight * -b.alpha) - (a.weight * -a.alpha))
         .map(x => ({ ticker: x.ticker, name: x.name, weight: x.weight, alpha: x.alpha, beta: x.beta }));
 
-    // What to ADD — high-alpha assets (above SML) not already held, best first
+    // What to ADD — suitable assets not already held, ranked by a FIT score that
+    // rewards positive alpha (above SML) AND low correlation to the current book
+    // (genuine diversification). Returns a selectable shortlist, not just 2 names.
     const held = new Set(positions.map(x => x.ticker));
+    const corrIdx = {}; (model.correlation?.tickers || []).forEach((t, i) => { corrIdx[t] = i; });
+    const heldTickers = positions.map(p => p.ticker);
+    const _avgCorrTo = (ticker) => {
+        const ti = corrIdx[ticker]; if (ti == null) return null;
+        let s = 0, k = 0;
+        for (const h of heldTickers) {
+            const hi = corrIdx[h];
+            if (hi != null && hi !== ti) { s += model.correlation.matrix[ti][hi]; k++; }
+        }
+        return k ? s / k : null;
+    };
     const candidates = Object.values(model.assets)
-        .filter(a => a.hasData && a.recommendation === 'buy' && !held.has(a.ticker))
-        .sort((a, b) => b.alpha - a.alpha)
-        .slice(0, 3)
-        .map(a => ({ ticker: a.ticker, name: a.name, alpha: a.alpha, beta: a.beta }));
+        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > 0 && a.recommendation !== 'avoid')
+        .map(a => {
+            const c = _avgCorrTo(a.ticker);
+            return {
+                ticker: a.ticker, name: a.name, sector: a.sector,
+                alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
+                fit: a.alpha - 0.4 * (c == null ? 0.4 : Math.max(0, c)),
+            };
+        })
+        .sort((x, y) => y.fit - x.fit)
+        .slice(0, 6);
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];
@@ -704,8 +818,8 @@ function buildPortfolioAdvisory(client, model) {
         });
     }
 
-    // 4. Quality upgrades — swap toward higher-alpha names
-    candidates.forEach((c) => {
+    // 4. Quality upgrades — top 2 best-fit names (full list shown separately)
+    candidates.slice(0, 2).forEach((c) => {
         actions.push({
             priority: 4, kind: 'buy',
             text: `שקול הוספת <b>${c.ticker}</b> — מעל ה-SML (α=${rmFmtPct(c.alpha, 1)}, β=${rmFmtNum(c.beta, 2)}), מועמד איכותי.`
@@ -809,7 +923,35 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
             <ol class="adv-act-list">${actionsHTML}</ol>
         </div>
+        ${_rmRenderCandidates(adv)}
     </div>`;
+}
+
+// Selectable shortlist of suitable assets to ADD to the portfolio (ranked by fit:
+// positive alpha + low correlation to current holdings). Lets the user choose.
+function _rmRenderCandidates(adv) {
+    const list = adv.candidates || [];
+    if (!list.length) return '';
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = list.map(c => `
+        <div class="adv-cand">
+            <div class="adv-cand-top">
+                <span class="adv-cand-tk">${esc(c.ticker)}</span>
+                <span class="adv-cand-sector">${esc(c.sector || '')}</span>
+            </div>
+            <div class="adv-cand-stats">
+                <span title="אלפא">α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
+                <span title="ביטא">β <b>${rmFmtNum(c.beta, 2)}</b></span>
+                <span title="סטיית תקן">σ <b>${rmFmtPct(c.vol, 0)}</b></span>
+                <span title="קורלציה לתיק">ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
+            </div>
+        </div>`).join('');
+    return `
+        <div class="adv-plan adv-cands">
+            <div class="adv-action-h">נכסים מתאימים להוספה — בחר מהאפשרויות</div>
+            <p class="adv-cands-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). ρ נמוך = מגוון יותר.</p>
+            <div class="adv-cand-grid">${rows}</div>
+        </div>`;
 }
 
 // Expose for non-module consumers / debugging
