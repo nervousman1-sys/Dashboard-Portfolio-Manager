@@ -361,9 +361,16 @@ function _scatterOpts(xLabel, yLabel) {
             }
         },
         scales: {
-            x: { title: { display: true, text: xLabel, color: '#94a3b8' },
+            // type:'linear' is ESSENTIAL — without it, a chart that mixes a 'line'
+            // dataset (the SML/CML/frontier) with 'scatter' points defaults the
+            // x-axis to 'category', which drops every point onto index 0 and renders
+            // the whole thing as a meaningless vertical line. Forcing linear axes is
+            // what makes the points spread by their real β / σ values.
+            x: { type: 'linear', position: 'bottom', bounds: 'data', offset: false,
+                 title: { display: true, text: xLabel, color: '#94a3b8' },
                  ticks: { color: '#64748b' }, grid: { color: 'rgba(148,163,184,0.12)' } },
-            y: { title: { display: true, text: yLabel, color: '#94a3b8' },
+            y: { type: 'linear',
+                 title: { display: true, text: yLabel, color: '#94a3b8' },
                  ticks: { color: '#64748b' }, grid: { color: 'rgba(148,163,184,0.12)' } }
         }
     };

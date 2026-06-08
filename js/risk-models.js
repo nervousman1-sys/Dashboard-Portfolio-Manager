@@ -47,6 +47,13 @@ const RISK_MODEL = {
     ALPHA_AVOID: -0.02,           // α ≤ −2%  → overvalued  (below SML) → not recommended
     MIN_POINTS: 30,               // minimum aligned observations to trust a statistic
     CACHE_TTL: 30 * 60 * 1000,    // 30 min model cache
+    // Liquid, diversified names always analyzed so the "add to portfolio" picker
+    // has real, ranked candidates to choose from (across sectors).
+    CANDIDATE_UNIVERSE: [
+        'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'AVGO', 'JPM', 'V', 'MA',
+        'UNH', 'JNJ', 'LLY', 'XOM', 'CVX', 'PG', 'KO', 'COST', 'HD', 'WMT',
+        'NFLX', 'AMD', 'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK',
+    ],
 };
 
 // In-memory cache of the last computed model (keyed by a holdings signature)
@@ -271,6 +278,14 @@ async function buildRiskModel(clientsList, opts = {}) {
                     };
                 }
             }
+        }
+        // Always analyze a curated universe of liquid, diversified names so the
+        // "suitable assets to add" picker is never empty — even for a single
+        // portfolio. These are fetched + scored just like holdings; the advisory
+        // surfaces the ones NOT already held with positive alpha.
+        const _sectorOf = (t) => (typeof SECTOR_MAP !== 'undefined' && SECTOR_MAP[t]) ? SECTOR_MAP[t] : 'Other';
+        for (const t of RISK_MODEL.CANDIDATE_UNIVERSE) {
+            if (!tickerMeta[t]) tickerMeta[t] = { currency: 'USD', name: t, sector: _sectorOf(t) };
         }
         const tickers = Object.keys(tickerMeta);
 
@@ -954,7 +969,7 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
             <ol class="adv-act-list">${actionsHTML}</ol>
         </div>
-        ${(adv.candidates && adv.candidates.length)
+        ${(adv.candidates && adv.candidates.length && !opts.noCandidates)
             ? (compact
                 ? `<details class="adv-cands-details"><summary>🎯 מניות מומלצות להוספה לתיק האופטימלי (${adv.candidates.length})</summary>${_rmRenderCandidates(adv, opts.clientId)}</details>`
                 : _rmRenderCandidates(adv, opts.clientId))

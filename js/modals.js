@@ -4,8 +4,10 @@
 
 // Fills the per-portfolio CML/SML advisory panel in the client modal overview.
 // Reuses the cached risk model when available; otherwise builds it on demand.
+// Fills the Overview tab's risk-detail block with the model verdict + the
+// quantified action plan (no charts/picker — those live in the CML/SML tab).
 async function _fillModalAdvisory(clientId) {
-    const body = document.getElementById('modalAdvisoryBody');
+    const body = document.getElementById('modalOverviewRiskBody');
     if (!body) return;
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client) return;
@@ -17,11 +19,13 @@ async function _fillModalAdvisory(clientId) {
         let model = window._lastRiskModel;
         if (!model || !model.portfolios) model = await buildRiskModel(clients);
         window._lastRiskModel = model;
-        // Guard against the modal being closed/switched while the model built
-        const stillOpen = document.getElementById('modalAdvisoryBody');
+        const stillOpen = document.getElementById('modalOverviewRiskBody');
         if (!stillOpen) return;
         const adv = buildPortfolioAdvisory(client, model);
-        stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: true, clientId });
+        stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: true, noCandidates: true, clientId });
+        // Refresh the compact compliance bar now that the model is in
+        const p = model.portfolios.find(x => x.id === clientId);
+        if (p) { client.complianceScore = p.complianceScore; client.complianceLabel = p.complianceLabel; }
     } catch (e) {
         body.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח CML/SML כרגע.</div>';
     }
@@ -354,6 +358,15 @@ async function openModal(clientId) {
 
                 <!-- Performance chart intentionally lives OUTSIDE the modal — open it
                      from the portfolio card's expand button on the dashboard. -->
+                <!-- ═══ PORTFOLIO RISK DETAIL — fills the overview with the model verdict + changes ═══ -->
+                <div class="ov-risk-detail glass-card" id="modalOverviewRisk">
+                    <div class="ov-advisory-head">
+                        <span>פירוט סיכון התיק והשינויים הנדרשים</span>
+                        <span class="ov-advisory-sub">לפי CML/SML וקורלציות — לתיק האופטימלי. העקומות והבורר בלשונית CML / SML</span>
+                    </div>
+                    <div id="modalOverviewRiskBody"><div class="adv-empty">מחשב ניתוח CML/SML…</div></div>
+                </div>
+
                 <!-- Hidden donut canvas for sectors tab data (still needed for chart init) -->
                 <div style="display:none"><canvas id="modal-chart"></canvas></div>
             </div>
@@ -452,7 +465,9 @@ async function openModal(clientId) {
         // Performance chart removed from the modal by design — it's opened from the
         // dashboard card's expand button (openFullscreenChart) instead.
         if (_modalPerfChartInstance) { _modalPerfChartInstance.destroy(); _modalPerfChartInstance = null; }
-        // CML/SML analysis now lives in its own modal tab (rendered on demand).
+        // Fill the Overview risk-detail block (verdict + action plan); the full
+        // CML/SML charts + picker render in the dedicated tab on demand.
+        if (typeof _fillModalAdvisory === 'function') _fillModalAdvisory(client.id);
     }, 300);
 
     // ── Async: Fetch transaction history from Supabase (non-blocking) ──
