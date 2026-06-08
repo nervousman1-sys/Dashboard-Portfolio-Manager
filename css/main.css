@@ -7663,3 +7663,19 @@ body.full-list-open { overflow: hidden; }
 .mcs-chart-head span { font-size: 11px; color: rgba(245,245,250,0.6); }
 .mcs-canvas-wrap { position: relative; height: 300px; width: 100%; }
 @media (max-width: 900px) { .mcs-charts { grid-template-columns: 1fr; } .mcs-canvas-wrap { height: 260px; } }
+
+/* Overview → compact model-compliance bar (links to CML/SML tab) */
+.ov-compliance {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 13px; margin-bottom: 7px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.ov-compliance:hover { border-color: color-mix(in srgb, var(--cc) 55%, transparent); background: rgba(255,255,255,0.05); }
+.ov-comp-left { display: flex; align-items: center; gap: 11px; }
+.ov-comp-ring { font-size: 19px; font-weight: 900; color: var(--cc); line-height: 1; }
+.ov-comp-ring small { font-size: 9px; color: rgba(245,245,250,0.5); font-weight: 700; }
+.ov-comp-txt { display: flex; flex-direction: column; gap: 1px; }
+.ov-comp-label { font-size: 12.5px; font-weight: 800; color: var(--text-primary); }
+.ov-comp-sub { font-size: 10.5px; color: rgba(245,245,250,0.6); }
+.ov-comp-cta { font-size: 11.5px; font-weight: 800; color: var(--accent-blue); white-space: nowrap; }

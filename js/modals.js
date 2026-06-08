@@ -318,6 +318,23 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
+                <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->
+                ${(() => {
+                    const cs = client.complianceScore;
+                    const cl = client.complianceLabel || '';
+                    const col = cs == null ? 'var(--text-muted)' : cs >= 75 ? 'var(--risk-low)' : cs >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+                    return `<div class="ov-compliance" onclick="switchModalTab('cmlsml')" style="--cc:${col}">
+                        <div class="ov-comp-left">
+                            <span class="ov-comp-ring">${cs == null ? '—' : cs}<small>/100</small></span>
+                            <div class="ov-comp-txt">
+                                <span class="ov-comp-label">עמידה במודל CML / SML</span>
+                                <span class="ov-comp-sub">${cs == null ? 'לחץ לפתיחת הניתוח, העקומות וההמלצות' : cl + ' · לחץ לעקומות ולתוכנית הפעולה'}</span>
+                            </div>
+                        </div>
+                        <span class="ov-comp-cta">ניתוח CML / SML →</span>
+                    </div>`;
+                })()}
+
                 <!-- ═══ CURRENCY EXPOSURE — full-width row ═══ -->
                 <div class="ov-currency-bar">
                     <div class="ov-curbar-side">

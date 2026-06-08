@@ -48,7 +48,9 @@ const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 // ========== LOCAL STORAGE TICKER CACHE (24-hour, per-ticker) ==========
 // Prevents API burnout: never fetch the same ticker twice per session or within 24h.
-const TICKER_LS_PREFIX = 'ticker_hist_';
+// v2 prefix invalidates any history cached before the serverless-proxy fix
+// (old entries could be sparse/flat fallbacks that collapsed variance & beta to ~0).
+const TICKER_LS_PREFIX = 'ticker_hist_v2_';
 const TICKER_LS_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 // Session-level dedup: track tickers already fetched this session
@@ -111,6 +113,19 @@ async function _fetchYahooHistory(ticker, currency, outputSize) {
     let sym = ticker;
     if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
     const range = outputSize > 300 ? '2y' : '1y';
+
+    // PRIMARY: same-origin serverless proxy (server-side Yahoo fetch — 100% reliable,
+    // no CORS, no flaky public proxy). This is what makes the deployed risk model
+    // actually receive real price history (and thus non-zero variance/beta).
+    try {
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(sym)}&range=${range}`, { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+            const j = await res.json();
+            if (j && Array.isArray(j.points) && j.points.length > 20) return j.points;
+        }
+    } catch { /* fall through to public proxies (local dev without the function) */ }
+
+    // FALLBACK: public CORS proxies (used only when the serverless function isn't available)
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d`;
     for (const wrap of _SYNTH_YAHOO_PROXIES) {
         try {
