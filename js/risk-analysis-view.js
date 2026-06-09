@@ -689,9 +689,16 @@ async function _renderPortfolioNews(clientId) {
         if (!res.ok) { box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע (נסה שוב בעוד רגע).</div>'; return; }
         const data = await res.json();
         const items = [];
+        const seenHeadlines = new Set();
         for (const t of tickers) {
             const arr = data[t];
-            if (arr && arr.length) for (const n of arr) items.push({ t, ...n });
+            if (!arr || !arr.length) continue;
+            for (const n of arr) {
+                const key = (n.he || n.en || '').trim();
+                if (key && seenHeadlines.has(key)) continue; // skip market-wide dupes
+                if (key) seenHeadlines.add(key);
+                items.push({ t, ...n });
+            }
         }
         console.log(`[PortfolioNews] ${tickers.length} tickers → ${Object.keys(data || {}).length} with news, ${items.length} headlines`);
         if (!items.length) {
