@@ -388,6 +388,9 @@ async function openModal(clientId) {
                         <div class="mcs-canvas-wrap"><canvas id="modal-sml-chart"></canvas></div>
                     </div>
                 </div>
+                <button class="mcs-reco-btn" onclick="openStockRecommendations(${client.id})">
+                    🎯 פתח המלצות מניות לתיק האופטימלי
+                </button>
                 <div id="modalCmlSmlAdvisory"><div class="adv-empty">מחשב ניתוח CML/SML…</div></div>
             </div>
             <!-- Tab: Holdings -->

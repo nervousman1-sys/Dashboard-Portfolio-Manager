@@ -630,13 +630,13 @@ function _rmBuildFrontier(assets, tickers, matrix, rf, rm) {
     // Keep tangency only if it sits in a sane region (else the optimizer chased noise)
     if (tangency && (tangency.x > 1.2 || tangency.y > hi * 1.2 || tangency.y < rf)) tangency = null;
 
-    // Sane axis bounds for the CML chart (decimals)
-    const maxAssetVol = Math.max(...sig);
+    // Axis bounds derived from the FRONTIER itself (not the single most-volatile
+    // asset) so the curve fills the chart width instead of being squished left.
     const maxPtX = Math.max(...pts.map(p => p.x));
     const bounds = {
-        sigMax: Math.min(Math.max(maxAssetVol * 1.2, maxPtX * 1.05, 0.1), 0.9),
-        retMax: Math.min(Math.max(maxE * 1.15, hi * 1.05, 0.1), 1.2),
-        retMin: Math.min(0, rf - 0.01, lo),
+        sigMax: Math.min(Math.max(maxPtX * 1.12, 0.15), 0.6),
+        retMax: Math.min(Math.max(maxE * 1.12, hi * 1.04, 0.1), 1.2),
+        retMin: Math.max(-0.55, Math.min(0, rf - 0.01, lo)),
     };
 
     return { points: pts, gmv: { x: Math.sqrt(varGmv), y: muGmv }, tangency, bounds };

@@ -260,13 +260,7 @@ function _drawCMLChart(model) {
     const ptColors = pts.map(p => p.risk === 'גבוה' ? '#ef4444' : p.risk === 'בינוני' ? '#eab308' : '#22c55e');
 
     const datasets = [];
-    if (frPts) {
-        datasets.push({
-            type: 'line', label: 'חזית יעילה', data: frPts,
-            borderColor: '#22c55e', borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0.4,
-            order: 3,
-        });
-    }
+    for (const ds of _frontierDatasets(model.frontier)) datasets.push(ds);
     datasets.push({
         type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5,
         borderDash: [7, 4], pointRadius: 0, fill: false, tension: 0, order: 2,
@@ -340,6 +334,32 @@ function _drawSMLChart(model) {
         },
         options: opts
     });
+}
+
+// Splits the Markowitz frontier into the EFFICIENT branch (GMV upward — the
+// optimal region, drawn bright/thick) and the INEFFICIENT branch (below GMV —
+// dim/dashed). Returns ready-to-use Chart.js datasets (values already ×100).
+function _frontierDatasets(fr) {
+    if (!fr || !fr.points || fr.points.length < 5) return [];
+    const pts = fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 }));
+    const gmvY = fr.gmv ? fr.gmv.y * 100 : null;
+    if (gmvY == null) {
+        return [{ type: 'line', label: 'חזית יעילה', data: pts, borderColor: '#22ff88', borderWidth: 3, pointRadius: 0, fill: false, tension: 0.4, order: 5 }];
+    }
+    const lower = pts.filter(p => p.y <= gmvY + 1e-6);
+    const upper = pts.filter(p => p.y >= gmvY - 1e-6);
+    const out = [];
+    if (lower.length > 1) out.push({
+        type: 'line', label: 'חזית — לא יעיל', data: lower,
+        borderColor: 'rgba(148,163,184,0.45)', borderWidth: 2, borderDash: [4, 3],
+        pointRadius: 0, fill: false, tension: 0.4, order: 6,
+    });
+    if (upper.length > 1) out.push({
+        type: 'line', label: 'אזור אופטימלי (חזית יעילה)', data: upper,
+        borderColor: '#22ff88', borderWidth: 4, pointRadius: 0, fill: false, tension: 0.4,
+        borderCapStyle: 'round', order: 5,
+    });
+    return out;
 }
 
 function _scatterOpts(xLabel, yLabel) {
@@ -545,7 +565,7 @@ function _drawModalCML(model, client) {
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const datasets = [];
-    if (frPts) datasets.push({ type: 'line', label: 'חזית יעילה', data: frPts, borderColor: '#22c55e', borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0.4, order: 4 });
+    for (const ds of _frontierDatasets(fr)) datasets.push(ds);
     datasets.push({ type: 'line', label: 'CML', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 });
     datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 2 });
     if (tang) datasets.push({ type: 'scatter', label: 'תיק אופטימלי', data: [tang], pointStyle: 'star', pointRadius: 12, backgroundColor: '#facc15', borderColor: '#fff', borderWidth: 1.5, order: 1 });
@@ -604,10 +624,61 @@ function addCandidateToPortfolio(clientId, ticker) {
     }, 180);
 }
 
+// ════════ Recommended-stocks popup dialog ════════
+function openStockRecommendations(clientId) {
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+    const model = window._lastRiskModel;
+    let cands = [];
+    if (model && typeof buildPortfolioAdvisory === 'function') {
+        try { const adv = buildPortfolioAdvisory(client, model); cands = (adv && adv.candidates) || []; } catch (e) { /* ignore */ }
+    }
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+
+    let ov = document.getElementById('stockRecoOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'stockRecoOverlay';
+        ov.className = 'reco-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeStockRecommendations(); });
+        document.body.appendChild(ov);
+    }
+
+    const cardsHTML = cands.length ? cands.map(c => `
+        <div class="reco-card" onclick="addCandidateToPortfolio(${clientId}, '${esc(c.ticker)}'); closeStockRecommendations();">
+            <div class="reco-card-top"><span class="reco-tk">${esc(c.ticker)}</span><span class="reco-sector">${esc(c.sector || '')}</span></div>
+            <div class="reco-stats">
+                <span>α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
+                <span>β <b>${rmFmtNum(c.beta, 2)}</b></span>
+                <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
+                <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
+            </div>
+            <div class="reco-add">+ הוסף לתיק</div>
+        </div>`).join('')
+        : '<div class="adv-empty">אין כרגע מועמדים מתאימים — ייתכן שהמודל עדיין נטען, נסה שוב בעוד רגע.</div>';
+
+    ov.innerHTML = `<div class="reco-box" dir="rtl">
+        <div class="reco-head">
+            <div><h3>מניות מומלצות לתיק האופטימלי</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
+            <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
+        </div>
+        <p class="reco-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). הוספתן מקרבת את התיק לאזור האופטימלי בעקומה.</p>
+        <div class="reco-grid">${cardsHTML}</div>
+    </div>`;
+    ov.classList.add('active');
+}
+
+function closeStockRecommendations() {
+    const ov = document.getElementById('stockRecoOverlay');
+    if (ov) ov.classList.remove('active');
+}
+
 if (typeof window !== 'undefined') {
     window.openRiskAnalysis = openRiskAnalysis;
     window.closeRiskAnalysis = closeRiskAnalysis;
     window.refreshRiskAnalysis = refreshRiskAnalysis;
     window.addCandidateToPortfolio = addCandidateToPortfolio;
     window._renderModalRiskCharts = _renderModalRiskCharts;
+    window.openStockRecommendations = openStockRecommendations;
+    window.closeStockRecommendations = closeStockRecommendations;
 }
