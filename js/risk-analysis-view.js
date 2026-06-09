@@ -242,8 +242,6 @@ function _drawCMLChart(model) {
 
     // Efficient frontier curve + tangency (optimal risky portfolio)
     const fr = model.frontier;
-    const frPts = (fr && fr.points && fr.points.length > 4)
-        ? fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 })) : null;
     const tang = (fr && fr.tangency) ? { x: fr.tangency.x * 100, y: fr.tangency.y * 100, name: 'תיק אופטימלי (משיק)' } : null;
 
     // The CML is tangent to the frontier at the tangency portfolio (fallback: market)
@@ -621,16 +619,17 @@ function _drawModalSML(model, client) {
     const portPt = (p && p.hasData) ? { x: clampB(p.beta), y: p.expReturn * 100, name: 'התיק שלך' } : null;
     const marketPt = { x: 1, y: rmPct, name: model.marketLabel };
 
-    // FIXED β axis → the SML is ALWAYS a clear diagonal line (never vertical)
-    const xMin = -0.5, xMax = 2.5;
+    // FIXED β axis, but the AXIS is wider than the β clamp so points clamped to the
+    // edges (β=2.5 / −0.5) still have margin and are fully visible (not half-cut).
+    const xMin = -0.8, xMax = 2.8;
     const smlLine = [{ x: xMin, y: rfPct + xMin * (rmPct - rfPct) }, { x: xMax, y: rfPct + xMax * (rmPct - rfPct) }];
 
     // Zoom OUT so every asset point is comfortably inside the frame (extra margin)
     const ys = holdPts.map(q => q.y).concat([marketPt.y, rfPct, portPt ? portPt.y : rfPct, smlLine[0].y, smlLine[1].y]);
     const yLo = Math.min(...ys), yHi = Math.max(...ys);
     const yRange = (yHi - yLo) || 50;
-    const yMax = Math.min(180, yHi + yRange * 0.14 + 7);
-    const yMin = Math.max(-120, yLo - yRange * 0.14 - 7);
+    const yMax = Math.min(190, yHi + yRange * 0.18 + 10);
+    const yMin = Math.max(-130, yLo - yRange * 0.18 - 10);
 
     const datasets = [
         { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },
