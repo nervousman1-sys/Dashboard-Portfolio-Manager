@@ -45,10 +45,11 @@ function switchModalTab(tabName) {
     const client = clients.find(c => c.id === currentModalClientId);
     if (!client) return;
 
-    // Render sector chart + portfolio correlation matrix on demand
+    // Render sector chart + correlation matrix + portfolio news on demand
     if (tabName === 'sectors') {
         setTimeout(() => renderModalSectorChart(client), 50);
         if (typeof _renderModalCorrelation === 'function') _renderModalCorrelation(client.id);
+        if (typeof _renderPortfolioNews === 'function') _renderPortfolioNews(client.id);
     }
 
     // Render per-portfolio CML/SML curves + advisory on demand
@@ -413,12 +414,21 @@ async function openModal(clientId) {
                     <div class="sectors-chart-wrap"><canvas id="modal-sector-chart"></canvas></div>
                     <div class="sectors-table-wrap"><table class="sector-table"><thead><tr><th>סקטור</th><th>שווי</th><th>אחוז</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
                 </div>
-                <div class="pf-corr-section">
-                    <div class="pf-corr-head">
-                        <h4>מטריצת קורלציות — נכסי התיק</h4>
-                        <span>אדום = נעים יחד (סיכון ריכוז) · תכלת = מגוון (פיזור)</span>
+                <div class="pf-data-lower">
+                    <div class="pf-news-section">
+                        <div class="pf-corr-head">
+                            <h4>עדכונים מהותיים — נכסי התיק</h4>
+                            <span>כותרות יומיות אמיתיות, מתורגמות לעברית · מתעדכן אוטומטית</span>
+                        </div>
+                        <div id="modalPortfolioNews"><div class="adv-empty">טוען עדכונים…</div></div>
                     </div>
-                    <div id="modalCorrMatrix"><div class="adv-empty">מחשב קורלציות…</div></div>
+                    <div class="pf-corr-section">
+                        <div class="pf-corr-head">
+                            <h4>מטריצת קורלציות — נכסי התיק</h4>
+                            <span>אדום = נעים יחד (סיכון ריכוז) · תכלת = מגוון (פיזור)</span>
+                        </div>
+                        <div id="modalCorrMatrix"><div class="adv-empty">מחשב קורלציות…</div></div>
+                    </div>
                 </div>
             </div>
             <!-- Tab: Transactions -->

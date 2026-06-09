@@ -662,6 +662,46 @@ function _drawModalSML(model, client) {
     _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
+// Daily Hebrew news headlines for the portfolio's HELD US tickers. Because it reads
+// the current holdings, a sold ticker is simply not requested → its news disappears.
+async function _renderPortfolioNews(clientId) {
+    const box = document.getElementById('modalPortfolioNews');
+    if (!box) return;
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+
+    const tickers = [...new Set((client.holdings || [])
+        .filter(h => h.type === 'stock' && h.ticker && !/\.TA$/i.test(h.ticker))
+        .map(h => h.ticker.toUpperCase()))].slice(0, 12);
+    if (!tickers.length) {
+        box.innerHTML = '<div class="adv-empty">אין נכסים סחירים אמריקאים בתיק להצגת עדכונים.</div>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) { box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע.</div>'; return; }
+        const data = await res.json();
+        const items = [];
+        for (const t of tickers) {
+            const arr = data[t];
+            if (arr && arr.length) for (const n of arr) items.push({ t, ...n });
+        }
+        if (!items.length) {
+            box.innerHTML = '<div class="adv-empty">אין עדכונים מהותיים זמינים כרגע לנכסי התיק.</div>';
+            return;
+        }
+        box.innerHTML = items.map(n => `
+            <a class="pf-news-item" href="${n.url || '#'}" target="_blank" rel="noopener">
+                <span class="pf-news-tk">${_riskEsc(n.t)}</span>
+                <span class="pf-news-he">${_riskEsc(n.he || n.en || '')}</span>
+                ${n.date ? `<span class="pf-news-date">${_riskEsc(n.date)}</span>` : ''}
+            </a>`).join('');
+    } catch (e) {
+        box.innerHTML = '<div class="adv-empty">שגיאה בטעינת עדכונים.</div>';
+    }
+}
+
 // Correlation matrix of THIS portfolio's own holdings (Portfolio Data tab).
 async function _renderModalCorrelation(clientId) {
     const box = document.getElementById('modalCorrMatrix');
@@ -834,6 +874,7 @@ if (typeof window !== 'undefined') {
     window.addCandidateToPortfolio = addCandidateToPortfolio;
     window._renderModalRiskCharts = _renderModalRiskCharts;
     window._renderModalCorrelation = _renderModalCorrelation;
+    window._renderPortfolioNews = _renderPortfolioNews;
     window.openStockRecommendations = openStockRecommendations;
     window.closeStockRecommendations = closeStockRecommendations;
 }
