@@ -332,7 +332,9 @@ async function buildRiskModel(clientsList, opts = {}) {
             const cm = closeMaps[t];
             if (!cm) { assets[t] = _rmEmptyAsset(t, tickerMeta[t]); continue; }
 
-            const ownReturns = _rmClosesToReturns([...cm.keys()].sort().map(d => cm.get(d)));
+            const _sortedDates = [...cm.keys()].sort();
+            const ownReturns = _rmClosesToReturns(_sortedDates.map(d => cm.get(d)));
+            const lastClose = _sortedDates.length ? cm.get(_sortedDates[_sortedDates.length - 1]) : null;
             const rawExpReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS;
             const vol = _rmStd(ownReturns) * Math.sqrt(RISK_MODEL.TRADING_DAYS);
 
@@ -366,7 +368,7 @@ async function buildRiskModel(clientsList, opts = {}) {
                 name: tickerMeta[t].name,
                 sector: tickerMeta[t].sector,
                 hasData: true,
-                expReturn, rawExpReturn, vol, beta, corrToMarket,
+                expReturn, rawExpReturn, vol, beta, corrToMarket, lastClose,
                 requiredReturn, alpha, sharpe, recommendation,
                 points: ownReturns.length,
             };
@@ -735,6 +737,22 @@ function rmFmtNum(v, digits = 2) {
     if (v == null || !isFinite(v)) return '—';
     return v.toFixed(digits);
 }
+// Google Finance deep-link for a ticker (so a manager can read up on a stock they
+// don't know). Exchange map covers the recommendation universe; TASE → :TLV.
+const _GF_EXCHANGE = {
+    AAPL: 'NASDAQ', MSFT: 'NASDAQ', NVDA: 'NASDAQ', GOOGL: 'NASDAQ', AMZN: 'NASDAQ', META: 'NASDAQ',
+    AVGO: 'NASDAQ', NFLX: 'NASDAQ', AMD: 'NASDAQ', COST: 'NASDAQ', QQQ: 'NASDAQ', TSLA: 'NASDAQ', PEP: 'NASDAQ', TLT: 'NASDAQ',
+    JPM: 'NYSE', V: 'NYSE', MA: 'NYSE', UNH: 'NYSE', JNJ: 'NYSE', LLY: 'NYSE', XOM: 'NYSE', CVX: 'NYSE', PG: 'NYSE', KO: 'NYSE', HD: 'NYSE', WMT: 'NYSE',
+    SPY: 'NYSEARCA', GLD: 'NYSEARCA', XLF: 'NYSEARCA', XLV: 'NYSEARCA', XLE: 'NYSEARCA', XLK: 'NYSEARCA',
+};
+function googleFinanceUrl(ticker) {
+    const t = String(ticker || '').toUpperCase().trim();
+    if (!t) return 'https://www.google.com/finance';
+    if (/\.TA$/.test(t)) return `https://www.google.com/finance/quote/${t.replace(/\.TA$/, '')}:TLV`;
+    const ex = _GF_EXCHANGE[t] || 'NASDAQ';
+    return `https://www.google.com/finance/quote/${encodeURIComponent(t)}:${ex}`;
+}
+
 function rmRecLabel(rec) {
     switch (rec) {
         case 'buy': return 'מומלץ';
@@ -844,13 +862,18 @@ function buildPortfolioAdvisory(client, model) {
         }
         return k ? s / k : null;
     };
+    const TARGET_ADD = 0.10; // size each suggested addition to ~10% of the portfolio
     const candidates = Object.values(model.assets)
         .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > 0 && a.recommendation !== 'avoid')
         .map(a => {
             const c = _avgCorrTo(a.ticker);
+            const price = (a.lastClose != null && a.lastClose > 0) ? a.lastClose : null;
+            const shares = (price && total > 0) ? Math.max(1, Math.round((TARGET_ADD * total) / price)) : null;
+            const pct = (shares && price && total > 0) ? (shares * price / total) * 100 : null;
             return {
                 ticker: a.ticker, name: a.name, sector: a.sector,
                 alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
+                price, shares, pct,
                 fit: a.alpha - 0.4 * (c == null ? 0.4 : Math.max(0, c)),
             };
         })
@@ -1046,12 +1069,17 @@ function _rmRenderCandidates(adv, clientId) {
         const onclick = clickable
             ? `onclick="addCandidateToPortfolio(${clientId}, '${esc(c.ticker)}')" role="button" tabindex="0"`
             : '';
+        const buyLine = (c.shares != null)
+            ? `<div class="adv-cand-buy">קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}%)</div>`
+            : '';
         return `
         <div class="adv-cand${clickable ? ' adv-cand-click' : ''}" ${onclick}>
             <div class="adv-cand-top">
                 <span class="adv-cand-tk">${esc(c.ticker)}</span>
-                <span class="adv-cand-sector">${esc(c.sector || '')}</span>
+                <a class="adv-cand-gf" href="${googleFinanceUrl(c.ticker)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
             </div>
+            <div class="adv-cand-sector">${esc(c.sector || '')}</div>
+            ${buyLine}
             <div class="adv-cand-stats">
                 <span title="אלפא">α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
                 <span title="ביטא">β <b>${rmFmtNum(c.beta, 2)}</b></span>
@@ -1077,5 +1105,6 @@ if (typeof window !== 'undefined') {
     window.classifyRisk = classifyRisk;
     window.buildPortfolioAdvisory = buildPortfolioAdvisory;
     window.renderAdvisoryHTML = renderAdvisoryHTML;
+    window.googleFinanceUrl = googleFinanceUrl;
     window.RISK_MODEL = RISK_MODEL;
 }

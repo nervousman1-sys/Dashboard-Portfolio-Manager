@@ -726,18 +726,42 @@ function openStockRecommendations(clientId) {
         document.body.appendChild(ov);
     }
 
-    const cardsHTML = cands.length ? cands.map(c => `
+    // Group candidates by sector → same-sector names play a similar role, so present
+    // them as ALTERNATIVES (Option A / B): buy one OR the other.
+    const _gfUrl = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl : (t) => `https://www.google.com/finance/quote/${t}:NASDAQ`;
+    const OPT = ['א', 'ב', 'ג', 'ד', 'ה'];
+    const card = (c, i, alt) => `
         <div class="reco-card" onclick="addCandidateToPortfolio(${clientId}, '${esc(c.ticker)}'); closeStockRecommendations();">
-            <div class="reco-card-top"><span class="reco-tk">${esc(c.ticker)}</span><span class="reco-sector">${esc(c.sector || '')}</span></div>
+            <div class="reco-card-top">
+                <span class="reco-tk">${alt ? `אופציה ${OPT[i] || (i + 1)} · ` : ''}${esc(c.ticker)}</span>
+                <a class="reco-gf" href="${_gfUrl(c.ticker)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
+            </div>
+            <div class="reco-buy">${c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק'}</div>
             <div class="reco-stats">
                 <span>α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
                 <span>β <b>${rmFmtNum(c.beta, 2)}</b></span>
                 <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
                 <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
-            <div class="reco-add">+ הוסף לתיק</div>
-        </div>`).join('')
-        : '<div class="adv-empty">אין כרגע מועמדים מתאימים — ייתכן שהמודל עדיין נטען, נסה שוב בעוד רגע.</div>';
+            <div class="reco-add">+ הוסף לתיק וקנה</div>
+        </div>`;
+    let cardsHTML;
+    if (!cands.length) {
+        cardsHTML = '<div class="adv-empty">אין כרגע מועמדים מתאימים — ייתכן שהמודל עדיין נטען, נסה שוב בעוד רגע.</div>';
+    } else {
+        const bySector = {};
+        for (const c of cands) { (bySector[c.sector || 'אחר'] = bySector[c.sector || 'אחר'] || []).push(c); }
+        cardsHTML = Object.entries(bySector).map(([sector, list]) => {
+            const alt = list.length > 1;
+            const head = alt
+                ? `${esc(sector)} — בחר אופציה אחת (תפקיד דומה בתיק)`
+                : esc(sector);
+            return `<div class="reco-group">
+                <div class="reco-group-head">${head}</div>
+                <div class="reco-grid">${list.map((c, i) => card(c, i, alt)).join('')}</div>
+            </div>`;
+        }).join('');
+    }
 
     ov.innerHTML = `<div class="reco-box" dir="rtl">
         <div class="reco-head">
@@ -745,8 +769,8 @@ function openStockRecommendations(clientId) {
             <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
         </div>
         ${effHTML}
-        <p class="reco-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). הוספתן מקרבת את התיק לאיזור היעיל בעקומה.</p>
-        <div class="reco-grid">${cardsHTML}</div>
+        <p class="reco-hint">לכל מנייה: מספר המניות לקנייה ו-% מהתיק (יעד ~10% לכל הוספה), קישור לגוגל פיננס, ומדדים. מניות באותו סקטור = אופציות חלופיות (בחר אחת).</p>
+        ${cardsHTML}
     </div>`;
     ov.classList.add('active');
 }
