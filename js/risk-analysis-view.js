@@ -900,41 +900,34 @@ function openStockRecommendations(clientId) {
         document.body.appendChild(ov);
     }
 
-    // Group candidates by sector → same-sector names play a similar role, so present
-    // them as ALTERNATIVES (Option A / B): buy one OR the other.
-    const _gfUrl = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl : (t) => `https://www.google.com/finance/quote/${t}:NASDAQ`;
+    // Group candidates by sector → same-sector names play a similar role. Show up to 2
+    // per sector, and let each card cycle through the REST of that sector's bench via a
+    // "check an alternative" button (state kept in window._recoState).
     const OPT = ['א', 'ב', 'ג', 'ד', 'ה'];
-    const card = (c, i, alt) => `
-        <div class="reco-card" onclick="addCandidateToPortfolio(${clientId}, '${esc(c.ticker)}'); closeStockRecommendations();">
-            <div class="reco-card-top">
-                <span class="reco-tk">${alt ? `אופציה ${OPT[i] || (i + 1)} · ` : ''}${esc(c.ticker)}</span>
-                <a class="reco-gf" href="${_gfUrl(c.ticker)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
-            </div>
-            <div class="reco-buy">${c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק'}</div>
-            <div class="reco-stats">
-                <span>α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
-                <span>β <b>${rmFmtNum(c.beta, 2)}</b></span>
-                <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
-                <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
-            </div>
-            <div class="reco-add">+ הוסף לתיק וקנה</div>
-        </div>`;
     let cardsHTML;
     if (!cands.length) {
         cardsHTML = '<div class="adv-empty">אין כרגע מועמדים מתאימים — ייתכן שהמודל עדיין נטען, נסה שוב בעוד רגע.</div>';
+        window._recoState = null;
     } else {
         const bySector = {};
         for (const c of cands) { (bySector[c.sector || 'אחר'] = bySector[c.sector || 'אחר'] || []).push(c); }
+        const state = { clientId, bySector, slots: {}, cards: {} };
+        let seq = 0;
         cardsHTML = Object.entries(bySector).map(([sector, list]) => {
+            const slots = Math.min(list.length, 2);
+            state.slots[sector] = slots;
             const alt = list.length > 1;
-            const head = alt
-                ? `${esc(sector)} — בחר אופציה אחת (תפקיד דומה בתיק)`
-                : esc(sector);
-            return `<div class="reco-group">
-                <div class="reco-group-head">${head}</div>
-                <div class="reco-grid">${list.map((c, i) => card(c, i, alt)).join('')}</div>
-            </div>`;
+            const head = alt ? `${_riskEsc(sector)} — אופציות חלופיות (תפקיד דומה בתיק)` : _riskEsc(sector);
+            let grid = '';
+            for (let slot = 0; slot < slots; slot++) {
+                const cardId = `recoCard_${seq++}`;
+                const label = alt ? `אופציה ${OPT[slot] || (slot + 1)} · ` : '';
+                state.cards[cardId] = { sector, shownIdx: slot, label };
+                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, label, list.length > slots)}</div>`;
+            }
+            return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
         }).join('');
+        window._recoState = state;
     }
 
     ov.innerHTML = `<div class="reco-box" dir="rtl">
@@ -943,7 +936,7 @@ function openStockRecommendations(clientId) {
             <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
         </div>
         ${effHTML}
-        <p class="reco-hint">לכל מנייה: מספר המניות לקנייה ו-% מהתיק (יעד ~10% לכל הוספה), קישור לגוגל פיננס, ומדדים. מניות באותו סקטור = אופציות חלופיות (בחר אחת).</p>
+        <p class="reco-hint">לכל מנייה: מספר המניות לקנייה ו-% מהתיק (יעד ~10% לכל הוספה), קישור לגוגל פיננס, ומדדים. לא מאמין בחברה? לחץ <b>"↻ בדוק אופציה חלופית"</b> כדי לראות מנייה אחרת מאותו סקטור.</p>
         ${cardsHTML}
     </div>`;
     ov.classList.add('active');
@@ -952,6 +945,54 @@ function openStockRecommendations(clientId) {
 function closeStockRecommendations() {
     const ov = document.getElementById('stockRecoOverlay');
     if (ov) ov.classList.remove('active');
+}
+
+// Inner HTML of a recommendation card (so a card can be re-rendered in place when the
+// user asks for an alternative). `hasAlt` controls the "check an alternative" button.
+function _recoCardInner(c, cardId, label, hasAlt) {
+    const gf = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(c.ticker) : `https://www.google.com/finance/quote/${c.ticker}:NASDAQ`;
+    const buy = c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק';
+    const altBtn = hasAlt ? `<button class="reco-alt" onclick="event.stopPropagation(); swapRecommendation('${cardId}')" title="הצג מנייה חלופית מאותו סקטור">↻ בדוק אופציה חלופית</button>` : '';
+    return `
+            <div class="reco-card-top">
+                <span class="reco-tk">${label}${_riskEsc(c.ticker)}</span>
+                <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
+            </div>
+            <div class="reco-buy">${buy}</div>
+            <div class="reco-stats">
+                <span>α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>
+                <span>β <b>${rmFmtNum(c.beta, 2)}</b></span>
+                <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
+                <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
+            </div>
+            ${altBtn}
+            <div class="reco-add">+ הוסף לתיק וקנה</div>`;
+}
+
+// Cycle a card to the next not-currently-shown candidate in its sector (in place).
+function swapRecommendation(cardId) {
+    const st = window._recoState;
+    if (!st || !st.cards || !st.cards[cardId]) return;
+    const cs = st.cards[cardId];
+    const list = st.bySector[cs.sector] || [];
+    if (list.length < 2) return;
+    const othersShown = new Set(
+        Object.entries(st.cards)
+            .filter(([id, s]) => id !== cardId && s.sector === cs.sector)
+            .map(([, s]) => s.shownIdx)
+    );
+    let next = cs.shownIdx;
+    for (let step = 1; step <= list.length; step++) {
+        const idx = (cs.shownIdx + step) % list.length;
+        if (!othersShown.has(idx)) { next = idx; break; }
+    }
+    if (next === cs.shownIdx) return; // no free alternative
+    cs.shownIdx = next;
+    const c = list[next];
+    const el = document.getElementById(cardId);
+    if (!el) return;
+    el.setAttribute('onclick', `addCandidateToPortfolio(${st.clientId}, '${_riskEsc(c.ticker)}'); closeStockRecommendations();`);
+    el.innerHTML = _recoCardInner(c, cardId, cs.label, list.length > (st.slots[cs.sector] || 1));
 }
 
 if (typeof window !== 'undefined') {
@@ -963,5 +1004,6 @@ if (typeof window !== 'undefined') {
     window._renderModalCorrelation = _renderModalCorrelation;
     window._renderPortfolioNews = _renderPortfolioNews;
     window.openStockRecommendations = openStockRecommendations;
+    window.swapRecommendation = swapRecommendation;
     window.closeStockRecommendations = closeStockRecommendations;
 }

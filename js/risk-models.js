@@ -887,7 +887,7 @@ function buildPortfolioAdvisory(client, model) {
             };
         })
         .sort((x, y) => y.fit - x.fit)
-        .slice(0, 6);
+        .slice(0, 24);   // deep bench so the picker can offer alternatives per sector
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];
@@ -1070,7 +1070,7 @@ function renderAdvisoryHTML(adv, opts = {}) {
 // Selectable shortlist of suitable assets to ADD to the portfolio (ranked by fit:
 // positive alpha + low correlation to current holdings). Lets the user choose.
 function _rmRenderCandidates(adv, clientId) {
-    const list = adv.candidates || [];
+    const list = (adv.candidates || []).slice(0, 6); // inline preview; the popup uses the full bench
     if (!list.length) return '';
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
     const clickable = clientId != null;
