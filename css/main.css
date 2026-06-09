@@ -7832,3 +7832,6 @@ body.full-list-open { overflow: hidden; }
 .pf-news-he { font-size: 13.5px; color: #fff; line-height: 1.5; font-weight: 600; }
 .pf-news-date { font-size: 10.5px; color: rgba(245,245,250,0.5); white-space: nowrap; }
 @media (max-width: 900px) { .pf-data-lower { grid-template-columns: 1fr; } }
+
+/* Correlation table footer — data-provenance note */
+.corr-foot { margin-top: 10px; font-size: 11px; color: rgba(245,245,250,0.5); line-height: 1.5; }

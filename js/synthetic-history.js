@@ -50,7 +50,7 @@ const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 // Prevents API burnout: never fetch the same ticker twice per session or within 24h.
 // v2 prefix invalidates any history cached before the serverless-proxy fix
 // (old entries could be sparse/flat fallbacks that collapsed variance & beta to ~0).
-const TICKER_LS_PREFIX = 'ticker_hist_v2_';
+const TICKER_LS_PREFIX = 'ticker_hist_v3_';
 const TICKER_LS_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 // Session-level dedup: track tickers already fetched this session
@@ -65,8 +65,10 @@ function _getTickerFromLS(ticker, outputSize) {
             localStorage.removeItem(TICKER_LS_PREFIX + ticker);
             return null;
         }
-        // Only use if stored data has enough points for the requested range
-        if (entry.data && entry.data.length >= Math.min(outputSize, 30)) {
+        // Only use if the stored series is long enough for the requested range. The
+        // risk model asks for a full trading year (~260) — accepting a short 30-point
+        // cache here would silently compute β/σ/correlation on far too few days.
+        if (entry.data && entry.data.length >= Math.min(outputSize, 200)) {
             return entry.data;
         }
         return null;
@@ -169,10 +171,12 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     try {
         const yh = await _fetchYahooHistory(ticker, currency, outputSize);
         if (yh && yh.length > 20) {
-            const result = yh.length > outputSize ? yh.slice(yh.length - outputSize) : yh;
-            _sessionTickerCache[ticker] = result;
-            _saveTickerToLS(ticker, result);
-            return result;
+            // Cache the FULL fetched series (a whole trading year), not a short slice —
+            // so the risk model always computes β/σ/correlation on every trading day of
+            // the year, regardless of which consumer fetched it first.
+            _sessionTickerCache[ticker] = yh;
+            _saveTickerToLS(ticker, yh);
+            return yh.length > outputSize ? yh.slice(yh.length - outputSize) : yh;
         }
     } catch (e) { /* fall through to FMP/Twelve Data */ }
 

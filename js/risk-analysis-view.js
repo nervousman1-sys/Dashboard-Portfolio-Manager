@@ -811,13 +811,19 @@ async function _renderModalCorrelation(clientId) {
             <td class="corr-td-partner">${r.topT ? `${_riskEsc(r.topT)} (${r.topV.toFixed(2)})` : '—'}</td>
         </tr>`).join('');
 
+    // Transparency: how many trading days the statistics are based on
+    const ptsArr = tickers.map(t => (model.assets && model.assets[t] && model.assets[t].points) ? model.assets[t].points : 0).filter(x => x > 0);
+    const minPts = ptsArr.length ? Math.min(...ptsArr) : 0;
+    const foot = minPts ? `<div class="corr-foot">מחושב על כל ימי המסחר בשנה האחרונה (~${minPts} ימי מסחר), נתוני מחירים יומיים אמיתיים.</div>` : '';
+
     box.innerHTML = `${summary}
         <div class="corr-table-wrap">
             <table class="corr-table">
                 <thead><tr><th>נכס</th><th>ρ לשוק (S&P 500)</th><th>ρ ממוצע לתיק</th><th>רמת קורלציה</th><th>הכי מתואם עם</th></tr></thead>
                 <tbody>${tableRows}</tbody>
             </table>
-        </div>`;
+        </div>
+        ${foot}`;
 }
 
 // Land DIRECTLY on the stock ready to buy: open the buy form, SELECT the chosen
