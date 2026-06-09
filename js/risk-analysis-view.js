@@ -662,6 +662,43 @@ function _drawModalSML(model, client) {
     _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
+// Correlation matrix of THIS portfolio's own holdings (Portfolio Data tab).
+async function _renderModalCorrelation(clientId) {
+    const box = document.getElementById('modalCorrMatrix');
+    if (!box) return;
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+
+    let model = window._lastRiskModel;
+    if (!model || !model.correlation) {
+        try { model = await buildRiskModel(clients); } catch (e) { /* ignore */ }
+    }
+    if (!model || !model.correlation) { box.innerHTML = '<div class="adv-empty">אין נתוני קורלציה כרגע.</div>'; return; }
+    window._lastRiskModel = model;
+
+    const idx = {}; model.correlation.tickers.forEach((t, i) => { idx[t] = i; });
+    const seen = new Set(); const tickers = [];
+    for (const h of (client.holdings || [])) {
+        if (idx[h.ticker] != null && !seen.has(h.ticker)) { seen.add(h.ticker); tickers.push(h.ticker); }
+    }
+    if (tickers.length < 2) {
+        box.innerHTML = '<div class="adv-empty">דרושים לפחות 2 נכסים סחירים עם היסטוריה כדי להציג מטריצת קורלציות.</div>';
+        return;
+    }
+
+    const M = model.correlation.matrix;
+    const head = `<th class="risk-corr-corner"></th>` + tickers.map(t => `<th class="risk-corr-h">${_riskEsc(t)}</th>`).join('');
+    const rows = tickers.map(ti => {
+        const cells = tickers.map(tj => {
+            const v = M[idx[ti]][idx[tj]];
+            const txt = (v == null || !isFinite(v)) ? '—' : v.toFixed(2);
+            return `<td class="risk-corr-cell" style="background:${_corrColor(v)}" title="${_riskEsc(ti)} ↔ ${_riskEsc(tj)}: ${txt}">${txt}</td>`;
+        }).join('');
+        return `<tr><th class="risk-corr-row">${_riskEsc(ti)}</th>${cells}</tr>`;
+    }).join('');
+    box.innerHTML = `<div class="risk-corr-scroll"><table class="risk-corr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 // Land DIRECTLY on the stock ready to buy: open the buy form, SELECT the chosen
 // ticker (fills the security field + shows its badge), auto-fill the live market
 // price, and focus the quantity — so the user only enters the amount and confirms.
@@ -796,6 +833,7 @@ if (typeof window !== 'undefined') {
     window.refreshRiskAnalysis = refreshRiskAnalysis;
     window.addCandidateToPortfolio = addCandidateToPortfolio;
     window._renderModalRiskCharts = _renderModalRiskCharts;
+    window._renderModalCorrelation = _renderModalCorrelation;
     window.openStockRecommendations = openStockRecommendations;
     window.closeStockRecommendations = closeStockRecommendations;
 }
