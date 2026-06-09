@@ -17,8 +17,6 @@ function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-    // Refresh a few times a day; serve stale while revalidating
-    res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
 }
 
 async function translateHe(text) {
@@ -70,8 +68,15 @@ module.exports = async (req, res) => {
         }));
         const out = {};
         for (const [s, v] of entries) if (v && v.length) out[s] = v;
+        // Cache a populated result for ~6h; but if we got nothing (a transient
+        // upstream hiccup), cache only briefly so it isn't stuck empty all day.
+        const hasData = Object.keys(out).length > 0;
+        res.setHeader('Cache-Control', hasData
+            ? 's-maxage=21600, stale-while-revalidate=86400'
+            : 's-maxage=120');
         res.status(200).json(out);
     } catch (e) {
+        res.setHeader('Cache-Control', 's-maxage=60');
         res.status(502).json({ error: 'news_failed', message: e.message });
     }
 };

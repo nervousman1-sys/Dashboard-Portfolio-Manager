@@ -680,17 +680,22 @@ async function _renderPortfolioNews(clientId) {
         return;
     }
 
+    box.innerHTML = '<div class="adv-empty">טוען עדכונים…</div>';
+    // Daily cache key: stable within a day (cached at the edge) but fresh each day,
+    // and it bypasses any earlier edge-cached EMPTY response for this portfolio.
+    const day = new Date().toISOString().slice(0, 10);
     try {
-        const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) { box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע.</div>'; return; }
+        const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&d=${day}`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) { box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע (נסה שוב בעוד רגע).</div>'; return; }
         const data = await res.json();
         const items = [];
         for (const t of tickers) {
             const arr = data[t];
             if (arr && arr.length) for (const n of arr) items.push({ t, ...n });
         }
+        console.log(`[PortfolioNews] ${tickers.length} tickers → ${Object.keys(data || {}).length} with news, ${items.length} headlines`);
         if (!items.length) {
-            box.innerHTML = '<div class="adv-empty">אין עדכונים מהותיים זמינים כרגע לנכסי התיק.</div>';
+            box.innerHTML = '<div class="adv-empty">אין כרגע עדכונים זמינים לנכסי התיק (מתעדכן מספר פעמים ביום).</div>';
             return;
         }
         box.innerHTML = items.map(n => `
@@ -700,6 +705,7 @@ async function _renderPortfolioNews(clientId) {
                 ${n.date ? `<span class="pf-news-date">${_riskEsc(n.date)}</span>` : ''}
             </a>`).join('');
     } catch (e) {
+        console.warn('[PortfolioNews] fetch failed:', e);
         box.innerHTML = '<div class="adv-empty">שגיאה בטעינת עדכונים.</div>';
     }
 }
@@ -732,7 +738,9 @@ async function _renderModalCorrelation(clientId) {
         return;
     }
 
-    // Per-asset: average correlation to the OTHER holdings + most-correlated partner
+    // Per-asset: correlation to the market (S&P 500 — the systematic tie the user
+    // expects to see), average correlation to the OTHER holdings, and the single
+    // most-correlated partner.
     const rows = tickers.map(ti => {
         let sum = 0, k = 0, topV = -2, topT = null;
         for (const tj of tickers) {
@@ -742,8 +750,10 @@ async function _renderModalCorrelation(clientId) {
             sum += v; k++;
             if (v > topV) { topV = v; topT = tj; }
         }
-        return { ticker: ti, avg: k ? sum / k : 0, topT, topV };
-    }).sort((a, b) => b.avg - a.avg);
+        const a = model.assets ? model.assets[ti] : null;
+        const mkt = (a && a.corrToMarket != null && isFinite(a.corrToMarket)) ? a.corrToMarket : null;
+        return { ticker: ti, mkt, avg: k ? sum / k : 0, topT, topV };
+    }).sort((a, b) => (b.mkt == null ? -1 : b.mkt) - (a.mkt == null ? -1 : a.mkt));
 
     // Overall average pairwise correlation → diversification score
     let pSum = 0, pK = 0;
@@ -788,15 +798,16 @@ async function _renderModalCorrelation(clientId) {
     const tableRows = rows.map(r => `
         <tr>
             <td class="corr-td-tk">${_riskEsc(r.ticker)}</td>
+            <td class="corr-td-num">${r.mkt != null ? r.mkt.toFixed(2) : '—'}</td>
             <td class="corr-td-num">${r.avg.toFixed(2)}</td>
-            <td>${lvl(r.avg)}</td>
+            <td>${lvl(r.mkt != null ? r.mkt : r.avg)}</td>
             <td class="corr-td-partner">${r.topT ? `${_riskEsc(r.topT)} (${r.topV.toFixed(2)})` : '—'}</td>
         </tr>`).join('');
 
     box.innerHTML = `${summary}
         <div class="corr-table-wrap">
             <table class="corr-table">
-                <thead><tr><th>נכס</th><th>קורלציה ממוצעת</th><th>רמת קורלציה</th><th>הכי מתואם עם</th></tr></thead>
+                <thead><tr><th>נכס</th><th>ρ לשוק (S&P 500)</th><th>ρ ממוצע לתיק</th><th>רמת קורלציה</th><th>הכי מתואם עם</th></tr></thead>
                 <tbody>${tableRows}</tbody>
             </table>
         </div>`;
