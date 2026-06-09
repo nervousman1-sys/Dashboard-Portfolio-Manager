@@ -686,6 +686,15 @@ function classifyRisk(beta, vol, marketVol) {
 // from the naive heuristic to the model-based classification, then re-renders.
 // Safe to call repeatedly; cached + de-duped.
 
+// Drop the cached model so the next build is fresh. MUST be called after any change
+// to holdings or cash (buy/sell/deposit/withdraw) — otherwise the CML/SML dot keeps
+// showing the OLD portfolio because buildRiskModel returns the cached result.
+function invalidateRiskModel() {
+    _riskModelCache = { sig: null, ts: 0, model: null };
+    _riskModelInflight = null;
+    if (typeof window !== 'undefined') window._lastRiskModel = null;
+}
+
 let _modelRiskApplying = false;
 async function applyModelRiskToClients(opts = {}) {
     if (_modelRiskApplying && !opts.force) return;
@@ -1101,6 +1110,7 @@ function _rmRenderCandidates(adv, clientId) {
 if (typeof window !== 'undefined') {
     window.buildRiskModel = buildRiskModel;
     window.applyModelRiskToClients = applyModelRiskToClients;
+    window.invalidateRiskModel = invalidateRiskModel;
     window.getRiskFreeRate = getRiskFreeRate;
     window.classifyRisk = classifyRisk;
     window.buildPortfolioAdvisory = buildPortfolioAdvisory;

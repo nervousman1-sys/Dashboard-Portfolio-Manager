@@ -1503,6 +1503,7 @@ async function editClient(clientId) {
         : await apiEditClient(clientId, name);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
@@ -1575,6 +1576,7 @@ async function addHolding(clientId) {
 
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
@@ -1592,6 +1594,7 @@ async function depositCash(clientId) {
     const updated = await portfolioDepositCash(clientId, amount, currency);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
@@ -1613,6 +1616,7 @@ async function editHolding(clientId, holdingId) {
         : await apiEditHolding(clientId, holdingId, { name: newName, price: newPrice, quantity: newQty });
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
@@ -1626,6 +1630,7 @@ async function removeHolding(clientId, holdingId) {
         : await apiRemoveHolding(clientId, holdingId);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
@@ -1670,6 +1675,7 @@ async function sellHolding(clientId, holdingId) {
         : null;
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
+    if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
     if (currentModalClientId === clientId) {
