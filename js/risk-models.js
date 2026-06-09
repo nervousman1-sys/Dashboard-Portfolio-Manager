@@ -42,9 +42,14 @@ const RISK_MODEL = {
     TRADING_DAYS: 252,            // annualization factor
     RF_FALLBACK: 0.038,           // ~3.8% — used only if DGS3MO proxy + CORS are unreachable
     RF_SERIES: 'DGS3MO',          // FRED series: 3-Month Treasury (secondary market rate)
-    // Jensen alpha thresholds (annualized) for the recommendation engine
-    ALPHA_BUY: 0.02,             // α ≥ +2%  → undervalued (above SML) → recommend
-    ALPHA_AVOID: -0.02,           // α ≤ −2%  → overvalued  (below SML) → not recommended
+    // Shrinkage of the raw 1-year mean toward CAPM (0=full CAPM, 1=raw history).
+    // 0.5 halves the overfit so the frontier is realistic and consistent with the
+    // portfolio's own position.
+    RETURN_SHRINK: 0.5,
+    // Jensen alpha thresholds (annualized) for the recommendation engine. Lower than
+    // before because the shrunk alpha is ~half the raw alpha.
+    ALPHA_BUY: 0.012,            // α ≥ +1.2% → undervalued (above SML) → recommend
+    ALPHA_AVOID: -0.012,          // α ≤ −1.2% → overvalued  (below SML) → not recommended
     MIN_POINTS: 30,               // minimum aligned observations to trust a statistic
     CACHE_TTL: 30 * 60 * 1000,    // 30 min model cache
     // Liquid, diversified names always analyzed so the "add to portfolio" picker
@@ -328,7 +333,7 @@ async function buildRiskModel(clientsList, opts = {}) {
             if (!cm) { assets[t] = _rmEmptyAsset(t, tickerMeta[t]); continue; }
 
             const ownReturns = _rmClosesToReturns([...cm.keys()].sort().map(d => cm.get(d)));
-            const expReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS;
+            const rawExpReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS;
             const vol = _rmStd(ownReturns) * Math.sqrt(RISK_MODEL.TRADING_DAYS);
 
             let beta = 1, corrToMarket = 0;
@@ -343,7 +348,13 @@ async function buildRiskModel(clientsList, opts = {}) {
             }
 
             const requiredReturn = rf + beta * (rm - rf);       // SML / CAPM
-            const alpha = expReturn - requiredReturn;            // Jensen's alpha
+            // Shrink the noisy 1-year mean halfway toward its CAPM-required return.
+            // Raw historical means overfit (a winner looks like it returns 200%/yr),
+            // which produces an unrealistically good frontier and pushes every real
+            // portfolio far off the curve. Shrinking toward CAPM keeps the analysis
+            // realistic and consistent (the market, β=1, is unchanged: CAPM = Rm).
+            const expReturn = RISK_MODEL.RETURN_SHRINK * rawExpReturn + (1 - RISK_MODEL.RETURN_SHRINK) * requiredReturn;
+            const alpha = expReturn - requiredReturn;            // Jensen's alpha (on the shrunk return)
             const sharpe = vol > 0 ? (expReturn - rf) / vol : 0;
 
             let recommendation = 'neutral';
@@ -355,7 +366,7 @@ async function buildRiskModel(clientsList, opts = {}) {
                 name: tickerMeta[t].name,
                 sector: tickerMeta[t].sector,
                 hasData: true,
-                expReturn, vol, beta, corrToMarket,
+                expReturn, rawExpReturn, vol, beta, corrToMarket,
                 requiredReturn, alpha, sharpe, recommendation,
                 points: ownReturns.length,
             };

@@ -595,6 +595,17 @@ function _drawModalCML(model, client) {
     datasets.push({ type: 'line', label: 'CML', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 });
     datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 2 });
     if (tang) datasets.push({ type: 'scatter', label: 'תיק אופטימלי', data: [tang], pointStyle: 'star', pointRadius: 12, backgroundColor: '#facc15', borderColor: '#fff', borderWidth: 1.5, order: 1 });
+    // Connector: from the portfolio to the efficient frontier at the SAME return —
+    // visualizes the gap to the optimum (how much risk could be cut by rebalancing).
+    if (portPt) {
+        const effPoint = (typeof _projectOntoEfficient === 'function') ? _projectOntoEfficient(fr, portPt.y) : null;
+        if (effPoint && Math.abs(effPoint.x - portPt.x) > 0.4) {
+            datasets.push({
+                type: 'line', label: 'פער מהחזית', data: [{ x: effPoint.x, y: effPoint.y }, { x: portPt.x, y: portPt.y }],
+                borderColor: 'rgba(255,255,255,0.45)', borderWidth: 1.5, borderDash: [3, 3], pointRadius: 0, fill: false, order: 1.5,
+            });
+        }
+    }
     if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
@@ -641,23 +652,36 @@ function _drawModalSML(model, client) {
     _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
-// Land DIRECTLY on the stock ready to buy: open the buy form and drop in a single
-// pre-filled row for the chosen ticker (its live price is auto-fetched), so the user
-// only has to enter the quantity and confirm.
+// Land DIRECTLY on the stock ready to buy: open the buy form, SELECT the chosen
+// ticker (fills the security field + shows its badge), auto-fill the live market
+// price, and focus the quantity — so the user only enters the amount and confirms.
 function addCandidateToPortfolio(clientId, ticker) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client || typeof openMgmtModal !== 'function') return;
     openMgmtModal('addHolding', client);
-    const tryAdd = (attempt) => {
-        const tbody = document.getElementById('mgmt-holdings-tbody');
-        if (tbody && typeof addHoldingRow === 'function') {
-            tbody.innerHTML = '';                       // start clean — one stock, ready to buy
-            addHoldingRow({ ticker, currency: 'USD' });  // pre-fills ticker + fetches live price
-        } else if (attempt < 12) {
-            setTimeout(() => tryAdd(attempt + 1), 60);
+    const trySelect = (attempt) => {
+        const searchEl = document.getElementById('mgmt-ticker-search');
+        if (searchEl && typeof selectSearchResult === 'function') {
+            // Select the ticker in the buy form (fills hidden fields, shows the badge,
+            // fetches the market-price preview).
+            selectSearchResult(ticker, ticker, 'USD', 'NASDAQ');
+            // Auto-fill the buy price with the live price and focus the quantity field.
+            if (typeof fetchSingleTickerPrice === 'function') {
+                fetchSingleTickerPrice(ticker, 'USD').then((r) => {
+                    const priceEl = document.getElementById('mgmt-price');
+                    if (priceEl && r && r.price > 0 && !priceEl.value) {
+                        priceEl.value = r.price.toFixed(2);
+                        if (typeof updateBuyCost === 'function') updateBuyCost();
+                    }
+                    const qtyEl = document.getElementById('mgmt-qty');
+                    if (qtyEl) qtyEl.focus();
+                }).catch(() => {});
+            }
+        } else if (attempt < 14) {
+            setTimeout(() => trySelect(attempt + 1), 60);
         }
     };
-    requestAnimationFrame(() => tryAdd(0));
+    requestAnimationFrame(() => trySelect(0));
 }
 
 // ════════ Recommended-stocks popup dialog ════════
