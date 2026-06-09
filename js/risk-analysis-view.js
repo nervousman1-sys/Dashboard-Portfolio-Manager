@@ -249,10 +249,17 @@ function _drawCMLChart(model) {
     const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
     // Sane axis ceilings from the frontier (keeps the chart textbook-clean even when
     // a few estimates are extreme); fall back to data-derived bounds.
-    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : null;
-    const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : null;
+    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : 0;
+    const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : 0;
     const byMin = (fr && fr.bounds) ? fr.bounds.retMin * 100 : Math.min(0, rfPct - 2);
-    const maxX = bx || (Math.max(model.marketVol * 100, anchor.x, ...pts.map(p => p.x), 6) * 1.18);
+    // Axes must contain EVERY portfolio dot (not just the frontier) so no portfolio
+    // is clipped off the edge.
+    const portMaxX = pts.length ? Math.max(...pts.map(p => p.x)) : 0;
+    const portMaxY = pts.length ? Math.max(...pts.map(p => p.y)) : 0;
+    const portMinY = pts.length ? Math.min(...pts.map(p => p.y)) : rfPct;
+    const maxX = Math.max(bx, portMaxX * 1.1, marketPt.x * 1.2, 6);
+    const yMax = Math.max(by, portMaxY * 1.12, marketPt.y * 1.2, 10);
+    const yMin = Math.min(byMin, portMinY - 5);
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const ptColors = pts.map(p => p.risk === 'גבוה' ? '#ef4444' : p.risk === 'בינוני' ? '#eab308' : '#22c55e');
@@ -281,8 +288,8 @@ function _drawCMLChart(model) {
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
     opts.scales.x.min = 0;
     opts.scales.x.max = maxX;
-    opts.scales.y.min = byMin;
-    if (by) opts.scales.y.max = by;
+    opts.scales.y.min = yMin;
+    opts.scales.y.max = yMax;
 
     _riskCharts.cml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
@@ -301,21 +308,24 @@ function _drawSMLChart(model) {
     const marketPt = { x: 1, y: model.rm * 100, name: model.marketLabel };
 
     const betas = pts.map(p => p.x);
-    const maxBeta = Math.min(3.0, Math.max(1.6, ...betas, 1.6));
-    const minBeta = Math.min(0, ...betas);
+    // Axis is wider than the data so EVERY asset (incl. edge ones) is fully visible.
+    const axisMin = Math.min(0, ...betas) - 0.25;
+    const axisMax = Math.min(3.2, Math.max(1.6, ...betas)) + 0.25;
     const smlAt = (b) => rfPct + b * (model.rm * 100 - rfPct);
-    const smlLine = [{ x: minBeta, y: smlAt(minBeta) }, { x: maxBeta, y: smlAt(maxBeta) }];
+    const smlLine = [{ x: axisMin, y: smlAt(axisMin) }, { x: axisMax, y: smlAt(axisMax) }];
 
-    // Sane return-axis window
-    const rets = pts.map(p => p.y).concat([model.rm * 100, rfPct, smlAt(maxBeta)]);
-    const yMax = Math.min(120, Math.max(...rets) * 1.12 + 2);
-    const yMin = Math.max(-60, Math.min(0, ...rets) * 1.12 - 2);
+    // Return-axis window with margin so no asset point is clipped (zoom out)
+    const rets = pts.map(p => p.y).concat([model.rm * 100, rfPct, smlAt(axisMax)]);
+    const yLo = Math.min(...rets), yHi = Math.max(...rets);
+    const yRange = (yHi - yLo) || 50;
+    const yMax = Math.min(190, yHi + yRange * 0.14 + 8);
+    const yMin = Math.max(-130, yLo - yRange * 0.14 - 8);
 
     const ptColors = pts.map(p => rmRecColor(p.rec));
 
     const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
-    opts.scales.x.min = minBeta;
-    opts.scales.x.max = maxBeta;
+    opts.scales.x.min = axisMin;
+    opts.scales.x.max = axisMax;
     opts.scales.y.min = yMin;
     opts.scales.y.max = yMax;
 
