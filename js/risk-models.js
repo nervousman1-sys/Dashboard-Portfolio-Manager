@@ -971,7 +971,7 @@ function renderAdvisoryHTML(adv, opts = {}) {
         </div>
         ${(adv.candidates && adv.candidates.length && !opts.noCandidates)
             ? (compact
-                ? `<details class="adv-cands-details"><summary>🎯 מניות מומלצות להוספה לתיק האופטימלי (${adv.candidates.length})</summary>${_rmRenderCandidates(adv, opts.clientId)}</details>`
+                ? `<details class="adv-cands-details"><summary>מניות מומלצות להוספה לתיק האופטימלי (${adv.candidates.length})</summary>${_rmRenderCandidates(adv, opts.clientId)}</details>`
                 : _rmRenderCandidates(adv, opts.clientId))
             : ''}
     </div>`;

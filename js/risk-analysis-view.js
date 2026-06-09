@@ -362,6 +362,27 @@ function _frontierDatasets(fr) {
     return out;
 }
 
+// Projects a portfolio onto the EFFICIENT frontier at its expected return:
+// returns the {x:σ, y:return} point on the green region for that return level
+// (clamped to the efficient range). Lets the portfolio dot slide along the curve.
+function _projectOntoEfficient(fr, retPct) {
+    if (!fr || !fr.points || fr.points.length < 3) return null;
+    const gmvY = fr.gmv ? fr.gmv.y * 100 : -Infinity;
+    const eff = fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 }))
+        .filter(p => p.y >= gmvY - 1e-6)
+        .sort((a, b) => a.y - b.y);
+    if (eff.length < 2) return null;
+    const r = Math.max(eff[0].y, Math.min(eff[eff.length - 1].y, retPct));
+    for (let i = 1; i < eff.length; i++) {
+        if (eff[i].y >= r) {
+            const a = eff[i - 1], b = eff[i];
+            const t = (b.y - a.y) ? (r - a.y) / (b.y - a.y) : 0;
+            return { x: a.x + t * (b.x - a.x), y: r };
+        }
+    }
+    return eff[eff.length - 1];
+}
+
 function _scatterOpts(xLabel, yLabel) {
     return {
         responsive: true,
@@ -550,18 +571,28 @@ function _drawModalCML(model, client) {
     if (!canvas || typeof Chart === 'undefined') return;
     const rfPct = model.rf * 100;
     const fr = model.frontier;
-    const frPts = (fr && fr.points && fr.points.length > 4) ? fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 })) : null;
     const tang = (fr && fr.tangency) ? { x: fr.tangency.x * 100, y: fr.tangency.y * 100, name: 'תיק אופטימלי' } : null;
     const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
     const p = model.portfolios.find(x => x.id === client.id);
-    const portPt = (p && p.hasData) ? { x: p.vol * 100, y: p.expReturn * 100, name: 'התיק שלך' } : null;
+
+    // Place THE PORTFOLIO on the efficient frontier itself — projected by its
+    // expected return so it slides along the optimal (green) region: a high-return
+    // (optimal) portfolio sits high on the curve, a mid one in the middle.
+    let portPt = null;
+    if (p && p.hasData) {
+        const proj = _projectOntoEfficient(fr, p.expReturn * 100);
+        portPt = proj ? { x: proj.x, y: proj.y, name: 'התיק שלך' }
+            : { x: p.vol * 100, y: p.expReturn * 100, name: 'התיק שלך' };
+    }
 
     const anchor = tang || marketPt;
     const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
-    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : Math.max(marketPt.x, portPt ? portPt.x : 0, 20) * 1.2;
+    // Axes come ONLY from the global frontier → the curve looks IDENTICAL for every
+    // client; only the portfolio dot moves.
+    const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : Math.max(marketPt.x, 20) * 1.2;
     const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : null;
     const byMin = (fr && fr.bounds) ? fr.bounds.retMin * 100 : Math.min(0, rfPct - 2);
-    const maxX = Math.max(bx, portPt ? portPt.x * 1.1 : 0);
+    const maxX = bx;
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const datasets = [];
@@ -594,9 +625,12 @@ function _drawModalSML(model, client) {
     const xMin = -0.5, xMax = 2.5;
     const smlLine = [{ x: xMin, y: rfPct + xMin * (rmPct - rfPct) }, { x: xMax, y: rfPct + xMax * (rmPct - rfPct) }];
 
+    // Zoom OUT so every asset point is comfortably inside the frame (extra margin)
     const ys = holdPts.map(q => q.y).concat([marketPt.y, rfPct, portPt ? portPt.y : rfPct, smlLine[0].y, smlLine[1].y]);
-    const yMax = Math.min(130, Math.max(...ys) * 1.12 + 3);
-    const yMin = Math.max(-70, Math.min(...ys) * 1.12 - 3);
+    const yLo = Math.min(...ys), yHi = Math.max(...ys);
+    const yRange = (yHi - yLo) || 50;
+    const yMax = Math.min(180, yHi + yRange * 0.14 + 7);
+    const yMin = Math.max(-120, yLo - yRange * 0.14 - 7);
 
     const datasets = [
         { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },

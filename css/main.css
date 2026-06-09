@@ -7728,3 +7728,9 @@ body.full-list-open { overflow: hidden; }
 .reco-stats b.pos { color: var(--risk-low); }
 .reco-add { margin-top: 10px; text-align: center; font-size: 11px; font-weight: 800; color: var(--accent-blue);
     border-top: 1px dashed rgba(0,229,255,0.25); padding-top: 8px; }
+
+/* CML/SML tab scrolls so charts + advisory are never cut off */
+#tab-cmlsml { overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
+/* Serious open-recommendations button (icon, no emoji) */
+.mcs-reco-btn { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.mcs-reco-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
