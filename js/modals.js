@@ -424,8 +424,8 @@ async function openModal(clientId) {
                     </div>
                     <div class="pf-corr-section">
                         <div class="pf-corr-head">
-                            <h4>מטריצת קורלציות — נכסי התיק</h4>
-                            <span>אדום = נעים יחד (סיכון ריכוז) · תכלת = מגוון (פיזור)</span>
+                            <h4>קורלציה וריכוזיות — נכסי התיק</h4>
+                            <span>קורלציה ממוצעת של כל נכס לשאר התיק, ציון פיזור והמלצה לצמצום ריכוזיות</span>
                         </div>
                         <div id="modalCorrMatrix"><div class="adv-empty">מחשב קורלציות…</div></div>
                     </div>

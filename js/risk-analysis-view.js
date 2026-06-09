@@ -704,7 +704,10 @@ async function _renderPortfolioNews(clientId) {
     }
 }
 
-// Correlation matrix of THIS portfolio's own holdings (Portfolio Data tab).
+// Correlation table for THIS portfolio: per-asset average correlation to the rest,
+// a level column (high/mid/low), a diversification score, and a concrete recommendation
+// (sell the most-correlated holding / add a low-correlation diversifier). A compact,
+// fixed-column table that never gets clipped — replaces the old N×N heatmap.
 async function _renderModalCorrelation(clientId) {
     const box = document.getElementById('modalCorrMatrix');
     if (!box) return;
@@ -719,34 +722,84 @@ async function _renderModalCorrelation(clientId) {
     window._lastRiskModel = model;
 
     const idx = {}; model.correlation.tickers.forEach((t, i) => { idx[t] = i; });
+    const M = model.correlation.matrix;
     const seen = new Set(); const tickers = [];
     for (const h of (client.holdings || [])) {
         if (idx[h.ticker] != null && !seen.has(h.ticker)) { seen.add(h.ticker); tickers.push(h.ticker); }
     }
     if (tickers.length < 2) {
-        box.innerHTML = '<div class="adv-empty">דרושים לפחות 2 נכסים סחירים עם היסטוריה כדי להציג מטריצת קורלציות.</div>';
+        box.innerHTML = '<div class="adv-empty">דרושים לפחות 2 נכסים סחירים עם היסטוריה כדי לחשב קורלציות.</div>';
         return;
     }
 
-    // Auto-fit the cell/number size to the number of holdings: few assets → large &
-    // readable; many assets → smaller so the whole matrix (and the news) stay visible.
-    const n = tickers.length;
-    const cell = n <= 5 ? 56 : n <= 8 ? 46 : n <= 11 ? 38 : n <= 14 ? 32 : n <= 18 ? 27 : n <= 24 ? 23 : 20;
-    const ch = Math.round(cell * 0.8);
-    const cf = n <= 5 ? 15 : n <= 8 ? 13 : n <= 11 ? 12 : n <= 14 ? 11 : n <= 18 ? 10 : n <= 24 ? 9 : 8;
-    const clf = Math.max(8, cf);
-
-    const M = model.correlation.matrix;
-    const head = `<th class="risk-corr-corner"></th>` + tickers.map(t => `<th class="risk-corr-h">${_riskEsc(t)}</th>`).join('');
+    // Per-asset: average correlation to the OTHER holdings + most-correlated partner
     const rows = tickers.map(ti => {
-        const cells = tickers.map(tj => {
+        let sum = 0, k = 0, topV = -2, topT = null;
+        for (const tj of tickers) {
+            if (tj === ti) continue;
             const v = M[idx[ti]][idx[tj]];
-            const txt = (v == null || !isFinite(v)) ? '—' : v.toFixed(2);
-            return `<td class="risk-corr-cell" style="background:${_corrColor(v)}" title="${_riskEsc(ti)} ↔ ${_riskEsc(tj)}: ${txt}">${txt}</td>`;
-        }).join('');
-        return `<tr><th class="risk-corr-row">${_riskEsc(ti)}</th>${cells}</tr>`;
-    }).join('');
-    box.innerHTML = `<div class="risk-corr-scroll" style="--cc:${cell}px;--ch:${ch}px;--cf:${cf}px;--clf:${clf}px"><table class="risk-corr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+            if (v == null || !isFinite(v)) continue;
+            sum += v; k++;
+            if (v > topV) { topV = v; topT = tj; }
+        }
+        return { ticker: ti, avg: k ? sum / k : 0, topT, topV };
+    }).sort((a, b) => b.avg - a.avg);
+
+    // Overall average pairwise correlation → diversification score
+    let pSum = 0, pK = 0;
+    for (let i = 0; i < tickers.length; i++) {
+        for (let j = i + 1; j < tickers.length; j++) {
+            const v = M[idx[tickers[i]]][idx[tickers[j]]];
+            if (v != null && isFinite(v)) { pSum += v; pK++; }
+        }
+    }
+    const avgPair = pK ? pSum / pK : 0;
+    const divScore = Math.max(0, Math.min(100, Math.round(100 * (1 - Math.max(0, avgPair)))));
+    const highCount = rows.filter(r => r.avg > 0.6).length;
+    const scoreColor = divScore >= 70 ? 'var(--risk-low)' : divScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+
+    // Recommendation: SELL the most-correlated holding; BUY the lowest-correlation candidate
+    const sellX = rows[0];
+    let buyY = null;
+    try {
+        const adv = buildPortfolioAdvisory(client, model);
+        const cands = (adv && adv.candidates) ? adv.candidates.slice() : [];
+        cands.sort((a, b) => ((a.corrToPort == null ? 1 : a.corrToPort) - (b.corrToPort == null ? 1 : b.corrToPort)));
+        buyY = cands[0] || null;
+    } catch (e) { /* ignore */ }
+
+    const lvl = (a) => a > 0.6 ? '<span class="corr-lvl high">גבוהה</span>'
+        : a > 0.35 ? '<span class="corr-lvl mid">בינונית</span>'
+            : '<span class="corr-lvl low">נמוכה</span>';
+
+    const recText = highCount > 0
+        ? `כדי לצמצם קורלציה: מכור את <b>${_riskEsc(sellX.ticker)}</b> (ρ̄=${sellX.avg.toFixed(2)} — הכי מתואם)${buyY ? ` או הוסף <b>${_riskEsc(buyY.ticker)}</b> (קורלציה נמוכה ${buyY.corrToPort != null ? buyY.corrToPort.toFixed(2) : ''} — מגוון)` : ''}.`
+        : `הפיזור טוב — אין נכסים בקורלציה גבוהה מדי. שמור על ההרכב.`;
+
+    const summary = `
+        <div class="corr-summary">
+            <div class="corr-score" style="--c:${scoreColor}"><span>${divScore}</span><small>/100 פיזור</small></div>
+            <div class="corr-rec-txt">
+                <div class="corr-rec-title" style="color:${scoreColor}">${highCount > 0 ? `התיק מכיל ${highCount} נכסים בקורלציה גבוהה ביניהם` : 'פיזור טוב'} · קורלציה ממוצעת ${avgPair.toFixed(2)}</div>
+                <div class="corr-rec-sub">${recText}</div>
+            </div>
+        </div>`;
+
+    const tableRows = rows.map(r => `
+        <tr>
+            <td class="corr-td-tk">${_riskEsc(r.ticker)}</td>
+            <td class="corr-td-num">${r.avg.toFixed(2)}</td>
+            <td>${lvl(r.avg)}</td>
+            <td class="corr-td-partner">${r.topT ? `${_riskEsc(r.topT)} (${r.topV.toFixed(2)})` : '—'}</td>
+        </tr>`).join('');
+
+    box.innerHTML = `${summary}
+        <div class="corr-table-wrap">
+            <table class="corr-table">
+                <thead><tr><th>נכס</th><th>קורלציה ממוצעת</th><th>רמת קורלציה</th><th>הכי מתואם עם</th></tr></thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>`;
 }
 
 // Land DIRECTLY on the stock ready to buy: open the buy form, SELECT the chosen
