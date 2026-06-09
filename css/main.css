@@ -7790,15 +7790,17 @@ body.full-list-open { overflow: hidden; }
 .adv-cand .adv-cand-top { align-items: center; }
 
 /* Portfolio Data tab — lower two-column area (news + correlation) */
-.pf-data-lower { display: grid; grid-template-columns: 1.05fr 1fr; gap: 22px; margin-top: 16px;
-    border-top: 1px solid var(--border); padding-top: 16px; }
+.pf-data-lower { display: grid; grid-template-columns: 0.9fr 1.25fr; gap: 22px; margin-top: 16px;
+    border-top: 1px solid var(--border); padding-top: 16px; align-items: start; }
 .pf-data-lower .pf-corr-section { margin-top: 0; border-top: none; padding-top: 0; }
 
-/* Enlarged, high-contrast correlation matrix in the modal */
-#modalCorrMatrix .risk-corr-cell { width: 58px; min-width: 58px; height: 46px; font-size: 15px; font-weight: 800; color: #fff; }
+/* High-contrast correlation matrix in the modal — cell/number/label sizes auto-fit
+   the asset count (CSS vars set inline per portfolio in _renderModalCorrelation). */
+#modalCorrMatrix .risk-corr-cell { width: var(--cc, 46px); min-width: var(--cc, 46px); height: var(--ch, 38px);
+    font-size: var(--cf, 13px); font-weight: 800; color: #fff; }
 #modalCorrMatrix .risk-corr-table th { color: #fff; font-weight: 800; }
-#modalCorrMatrix .risk-corr-row { color: #fff; font-size: 13px; font-weight: 800; }
-#modalCorrMatrix .risk-corr-h { color: #fff; font-size: 12.5px; font-weight: 800; }
+#modalCorrMatrix .risk-corr-row { color: #fff; font-size: var(--clf, 12px); font-weight: 800; padding: 2px 6px; }
+#modalCorrMatrix .risk-corr-h { color: #fff; font-size: var(--clf, 12px); font-weight: 800; }
 
 /* Daily portfolio news headlines */
 .pf-news-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center;

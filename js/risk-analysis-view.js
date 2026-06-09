@@ -670,8 +670,10 @@ async function _renderPortfolioNews(clientId) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client) return;
 
+    // Any US-listed holding (stocks AND ETFs) — not bonds/cash/TASE. Built from the
+    // CURRENT holdings, so a sold ticker is dropped automatically.
     const tickers = [...new Set((client.holdings || [])
-        .filter(h => h.type === 'stock' && h.ticker && !/\.TA$/i.test(h.ticker))
+        .filter(h => h.ticker && h.type !== 'bond' && h.type !== 'cash' && !/\.TA$/i.test(h.ticker))
         .map(h => h.ticker.toUpperCase()))].slice(0, 12);
     if (!tickers.length) {
         box.innerHTML = '<div class="adv-empty">אין נכסים סחירים אמריקאים בתיק להצגת עדכונים.</div>';
@@ -726,6 +728,14 @@ async function _renderModalCorrelation(clientId) {
         return;
     }
 
+    // Auto-fit the cell/number size to the number of holdings: few assets → large &
+    // readable; many assets → smaller so the whole matrix (and the news) stay visible.
+    const n = tickers.length;
+    const cell = n <= 5 ? 56 : n <= 8 ? 46 : n <= 11 ? 38 : n <= 14 ? 32 : n <= 18 ? 27 : n <= 24 ? 23 : 20;
+    const ch = Math.round(cell * 0.8);
+    const cf = n <= 5 ? 15 : n <= 8 ? 13 : n <= 11 ? 12 : n <= 14 ? 11 : n <= 18 ? 10 : n <= 24 ? 9 : 8;
+    const clf = Math.max(8, cf);
+
     const M = model.correlation.matrix;
     const head = `<th class="risk-corr-corner"></th>` + tickers.map(t => `<th class="risk-corr-h">${_riskEsc(t)}</th>`).join('');
     const rows = tickers.map(ti => {
@@ -736,7 +746,7 @@ async function _renderModalCorrelation(clientId) {
         }).join('');
         return `<tr><th class="risk-corr-row">${_riskEsc(ti)}</th>${cells}</tr>`;
     }).join('');
-    box.innerHTML = `<div class="risk-corr-scroll"><table class="risk-corr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    box.innerHTML = `<div class="risk-corr-scroll" style="--cc:${cell}px;--ch:${ch}px;--cf:${cf}px;--clf:${clf}px"><table class="risk-corr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // Land DIRECTLY on the stock ready to buy: open the buy form, SELECT the chosen
