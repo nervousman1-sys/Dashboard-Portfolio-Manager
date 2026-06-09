@@ -890,27 +890,28 @@ function buildPortfolioAdvisory(client, model) {
         });
     });
 
-    // 0. EFFICIENCY — is the portfolio inside the efficient region of the curve?
-    //    The efficient frontier at the portfolio's return gives the MINIMUM risk
-    //    needed for that return; if σ_p exceeds it, the portfolio is inefficient and
-    //    we show how to move it onto the efficient region (2-fund / CML allocation).
-    const effSigma = _rmEfficientSigmaAt(model.frontier, p.expReturn);
+    // 0. EFFICIENCY — measured against the CML (the efficient set). A portfolio is
+    //    efficient iff it sits ON or ABOVE the CML, i.e. its return ≥ the CML return
+    //    at its own σ. This is ONE coherent criterion that matches the chart (the
+    //    dot is plotted at its true σ/return, so above-the-blue-line = efficient).
     let efficiency = null;
-    if (effSigma != null && p.vol != null && effSigma > 0) {
-        const gap = p.vol - effSigma;
-        const isEfficient = gap <= effSigma * 0.12;
+    if (p.vol != null && isFinite(p.vol)) {
+        const mSharpe = model.marketSharpe || 0;
+        const cmlReturn = model.rf + mSharpe * p.vol;          // CML return at σ_p
+        const returnGap = cmlReturn - p.expReturn;             // >0 ⇒ below CML (inefficient)
+        const isEfficient = returnGap <= 0.005;
         const wM = (model.rm - model.rf) !== 0 ? (p.expReturn - model.rf) / (model.rm - model.rf) : null;
         const wMarket = (wM != null) ? Math.max(0, Math.min(1.3, wM)) : null;
-        efficiency = { isEfficient, portfolioSigma: p.vol, efficientSigma: effSigma, gap, wMarket };
+        efficiency = { isEfficient, portfolioSigma: p.vol, portfolioReturn: p.expReturn, cmlReturn, returnGap, sharpe: p.sharpe, marketSharpe: mSharpe, wMarket };
         if (!isEfficient) {
             actions.push({
                 priority: 0, kind: 'efficient',
-                text: `התיק <b>לא יעיל</b> — נושא σ=${rmFmtPct(p.vol, 1)}, בעוד שלאותה תשואה (${rmFmtPct(p.expReturn, 1)}) מספיק σ=${rmFmtPct(effSigma, 1)} על החזית (פער של ${rmFmtPct(gap, 1)}). יש להזיזו לאיזור היעיל (הקטע הירוק העליון של העקומה).`
+                text: `התיק <b>מתחת לקו ה-CML</b> (לא יעיל) — בסיכון σ=${rmFmtPct(p.vol, 1)} מקבל תשואה ${rmFmtPct(p.expReturn, 1)}, בעוד שעל הקו ניתן ${rmFmtPct(cmlReturn, 1)} באותו סיכון (פער ${rmFmtPct(returnGap, 1)}). יש להזיזו לאיזור היעיל.`
             });
             if (wMarket != null && wMarket > 0.02) {
                 actions.push({
                     priority: 0, kind: 'efficient',
-                    text: `איזון יעיל (CML) לאותה תשואה: כ-<b>${Math.round(wMarket * 100)}%</b> מדד שוק (${model.marketSymbol}) + <b>${Math.round(Math.max(0, 1 - wMarket) * 100)}%</b> אג"ח קצר/מזומן — תשואה דומה בסיכון נמוך יותר.`
+                    text: `איזון יעיל (CML) לאותה תשואה: כ-<b>${Math.round(wMarket * 100)}%</b> מדד שוק (${model.marketSymbol}) + <b>${Math.round(Math.max(0, 1 - wMarket) * 100)}%</b> אג"ח קצר/מזומן — אותה תשואה בסיכון נמוך יותר.`
                 });
             }
         }
@@ -955,19 +956,6 @@ function renderAdvisoryHTML(adv, opts = {}) {
         ? arr.map(x => `<span class="adv-chip" title="β=${rmFmtNum(x.beta,2)} · α=${rmFmtPct(x.alpha,1)}">${esc(x.ticker)}</span>`).join(' ')
         : '<span class="adv-dim">—</span>';
 
-    // CML verdict text
-    let cmlClass, cmlTitle, cmlText;
-    if (adv.cmlStatus === 'above') {
-        cmlClass = 'adv-good'; cmlTitle = 'התיק מעל קו ה-CML ✓';
-        cmlText = `יחס התשואה-לסיכון עדיף לשוק: Sharpe ${rmFmtNum(p.sharpe,2)} מול ${rmFmtNum(adv.marketSharpe,2)} של השוק.`;
-    } else if (adv.cmlStatus === 'on') {
-        cmlClass = 'adv-ok'; cmlTitle = 'התיק בקירוב על קו ה-CML';
-        cmlText = `יחס תשואה/סיכון דומה לשוק (Sharpe ${rmFmtNum(p.sharpe,2)}).`;
-    } else {
-        cmlClass = 'adv-bad'; cmlTitle = 'התיק מתחת לקו ה-CML ✗';
-        cmlText = `התיק נושא סיכון כולל (σ=${rmFmtPct(p.vol,1)}) שאינו מתוגמל מספיק (תשואה צפויה ${rmFmtPct(p.expReturn,1)}). ניתן להשיג תשואה דומה בסיכון נמוך יותר.`;
-    }
-
     const subBar = (label, val) => {
         const c = val >= 75 ? 'var(--risk-low)' : val >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
         return `<div class="adv-sub"><span class="adv-sub-label">${label}</span>
@@ -980,16 +968,17 @@ function renderAdvisoryHTML(adv, opts = {}) {
         `<li class="adv-act adv-act-${a.kind}"><span class="adv-act-ic">${kindIcon(a.kind)}</span><span>${a.text}</span></li>`
     ).join('');
 
-    // Efficiency verdict — is the portfolio inside the efficient (optimal) region?
+    // Efficiency verdict — ONE coherent message (CML-based), consistent with the
+    // chart (the dot is at its true σ/return → above the CML line = efficient).
     const eff = adv.efficiency;
     const effBlock = eff ? `
         <div class="adv-eff ${eff.isEfficient ? 'eff-ok' : 'eff-bad'}">
             <span class="adv-eff-dot"></span>
             <div class="adv-eff-txt">
-                <div class="adv-eff-title">${eff.isEfficient ? 'התיק נמצא באיזור היעיל של העקומה ✓' : 'התיק מחוץ לאיזור היעיל של העקומה ✗'}</div>
+                <div class="adv-eff-title">${eff.isEfficient ? 'התיק על/מעל קו ה-CML — באיזור היעיל ✓' : 'התיק מתחת לקו ה-CML — לא יעיל ✗'}</div>
                 <div class="adv-eff-sub">${eff.isEfficient
-                    ? `התיק יושב על/סמוך לחזית היעילה (σ=${rmFmtPct(eff.portfolioSigma, 1)}) — זהו האיזור האופטימלי (תשואה מקסימלית לרמת הסיכון).`
-                    : `σ נוכחי ${rmFmtPct(eff.portfolioSigma, 1)} מול ${rmFmtPct(eff.efficientSigma, 1)} הנדרש על החזית לאותה תשואה — פער ${rmFmtPct(eff.gap, 1)}. ראה תוכנית האיזון לאיזור היעיל למטה.`}</div>
+                    ? `יחס תשואה/סיכון עדיף או שווה לשוק: Sharpe ${rmFmtNum(eff.sharpe, 2)} מול ${rmFmtNum(eff.marketSharpe, 2)}. זהו האיזור האופטימלי — תשואה מרבית לרמת הסיכון.`
+                    : `בסיכון σ=${rmFmtPct(eff.portfolioSigma, 1)} מתקבלת תשואה ${rmFmtPct(eff.portfolioReturn, 1)}, בעוד שעל קו ה-CML ניתן ${rmFmtPct(eff.cmlReturn, 1)} (פער ${rmFmtPct(eff.returnGap, 1)}). Sharpe ${rmFmtNum(eff.sharpe, 2)} מול ${rmFmtNum(eff.marketSharpe, 2)} של השוק — ראה תוכנית האיזון למטה.`}</div>
             </div>
         </div>` : '';
 
@@ -1012,8 +1001,6 @@ function renderAdvisoryHTML(adv, opts = {}) {
 
         ${effBlock}
 
-        <div class="adv-verdict ${cmlClass}"><span class="adv-verdict-dot"></span>${cmlTitle}</div>
-        <p class="adv-note">${cmlText}</p>
         <div class="adv-metaline">
             <span>β=<b>${rmFmtNum(p.beta,2)}</b></span>
             <span>תשואה צפויה=<b>${rmFmtPct(p.expReturn,1)}</b></span>

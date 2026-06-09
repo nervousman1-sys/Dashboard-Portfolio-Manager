@@ -535,10 +535,11 @@ async function _renderModalRiskCharts(clientId) {
     if (!client) return;
     const advBox = document.getElementById('modalCmlSmlAdvisory');
 
-    let model = window._lastRiskModel;
-    if (!model || !model.portfolios) {
-        try { model = await buildRiskModel(clients); } catch (e) { /* ignore */ }
-    }
+    // Always (re)build — buildRiskModel is cached by a holdings signature, so this is
+    // instant when nothing changed, but rebuilds (and moves the dot) after any
+    // buy/sell. This is what makes holdings changes reflect directly on the curve.
+    let model = null;
+    try { model = await buildRiskModel(clients); } catch (e) { model = window._lastRiskModel; }
     if (!model) {
         if (advBox) advBox.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח כרגע — נסה לרענן.</div>';
         return;
@@ -573,24 +574,20 @@ function _drawModalCML(model, client) {
     const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
     const p = model.portfolios.find(x => x.id === client.id);
 
-    // Place THE PORTFOLIO on the efficient frontier itself — projected by its
-    // expected return so it slides along the optimal (green) region: a high-return
-    // (optimal) portfolio sits high on the curve, a mid one in the middle.
-    let portPt = null;
-    if (p && p.hasData) {
-        const proj = _projectOntoEfficient(fr, p.expReturn * 100);
-        portPt = proj ? { x: proj.x, y: proj.y, name: 'התיק שלך' }
-            : { x: p.vol * 100, y: p.expReturn * 100, name: 'התיק שלך' };
-    }
+    // Plot THE PORTFOLIO at its TRUE position (σ, expected return). If it's efficient
+    // it lands on/above the CML line near the frontier; if not, it sits below/right —
+    // which matches the verdict (no contradiction) and moves directly with holdings.
+    const portPt = (p && p.hasData) ? { x: p.vol * 100, y: p.expReturn * 100, name: 'התיק שלך' } : null;
 
     const anchor = tang || marketPt;
     const slope = anchor.x > 0 ? (anchor.y - rfPct) / anchor.x : 0;
-    // Axes come ONLY from the global frontier → the curve looks IDENTICAL for every
-    // client; only the portfolio dot moves.
+    // Axes from the global frontier, but always wide/tall enough to show the
+    // portfolio dot at its true position.
     const bx = (fr && fr.bounds) ? fr.bounds.sigMax * 100 : Math.max(marketPt.x, 20) * 1.2;
     const by = (fr && fr.bounds) ? fr.bounds.retMax * 100 : null;
     const byMin = (fr && fr.bounds) ? fr.bounds.retMin * 100 : Math.min(0, rfPct - 2);
-    const maxX = bx;
+    const maxX = Math.max(bx, portPt ? portPt.x * 1.12 : 0, marketPt.x * 1.2);
+    const yTop = Math.max(by || 0, portPt ? portPt.y * 1.12 : 0, marketPt.y * 1.2);
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
     const datasets = [];
@@ -602,7 +599,7 @@ function _drawModalCML(model, client) {
 
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
     opts.scales.x.min = 0; opts.scales.x.max = maxX;
-    opts.scales.y.min = byMin; if (by) opts.scales.y.max = by;
+    opts.scales.y.min = byMin; opts.scales.y.max = Math.max(yTop, byMin + 10);
     _modalRiskCharts.mcml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
@@ -644,17 +641,23 @@ function _drawModalSML(model, client) {
     _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
 }
 
-// Open the add-holding flow for a portfolio, pre-filled with a recommended ticker.
+// Land DIRECTLY on the stock ready to buy: open the buy form and drop in a single
+// pre-filled row for the chosen ticker (its live price is auto-fetched), so the user
+// only has to enter the quantity and confirm.
 function addCandidateToPortfolio(clientId, ticker) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client || typeof openMgmtModal !== 'function') return;
     openMgmtModal('addHolding', client);
-    // The add-holding modal renders asynchronously; add a pre-filled row once it's up.
-    setTimeout(() => {
-        if (typeof addHoldingRow === 'function') {
-            addHoldingRow({ ticker, currency: 'USD' });
+    const tryAdd = (attempt) => {
+        const tbody = document.getElementById('mgmt-holdings-tbody');
+        if (tbody && typeof addHoldingRow === 'function') {
+            tbody.innerHTML = '';                       // start clean — one stock, ready to buy
+            addHoldingRow({ ticker, currency: 'USD' });  // pre-fills ticker + fetches live price
+        } else if (attempt < 12) {
+            setTimeout(() => tryAdd(attempt + 1), 60);
         }
-    }, 180);
+    };
+    requestAnimationFrame(() => tryAdd(0));
 }
 
 // ════════ Recommended-stocks popup dialog ════════
@@ -676,15 +679,15 @@ function openStockRecommendations(clientId) {
     if (eff) {
         if (eff.isEfficient) {
             effHTML = `<div class="reco-eff reco-eff-ok">
-                <div class="reco-eff-title">התיק כבר באיזור היעיל ✓</div>
-                <div class="reco-eff-sub">σ=${rmFmtPct(eff.portfolioSigma, 1)} — תשואה מקסימלית לרמת הסיכון. ההוספות למטה ישמרו/ישפרו את הפיזור.</div>
+                <div class="reco-eff-title">התיק כבר באיזור היעיל (על/מעל קו ה-CML) ✓</div>
+                <div class="reco-eff-sub">Sharpe ${rmFmtNum(eff.sharpe, 2)} מול ${rmFmtNum(eff.marketSharpe, 2)} של השוק — תשואה מרבית לרמת הסיכון. ההוספות למטה ישמרו/ישפרו את הפיזור.</div>
             </div>`;
         } else {
             const wm = eff.wMarket != null ? Math.round(Math.max(0, Math.min(1, eff.wMarket)) * 100) : null;
             const mix = (wm != null) ? `<div class="reco-eff-mix">יעד איזון (CML): <b>${wm}%</b> ${esc(adv.marketSymbol)} + <b>${100 - wm}%</b> אג"ח קצר/מזומן</div>` : '';
             effHTML = `<div class="reco-eff reco-eff-bad">
-                <div class="reco-eff-title">התיק לא יעיל — מחוץ לאיזור היעיל</div>
-                <div class="reco-eff-sub">σ נוכחי ${rmFmtPct(eff.portfolioSigma, 1)} מול ${rmFmtPct(eff.efficientSigma, 1)} הדרוש על החזית (פער ${rmFmtPct(eff.gap, 1)}). הוסף מהנכסים הבאים — מתומחרים בחסר ובקורלציה נמוכה — כדי לאזן את התיק לאיזור היעיל.</div>
+                <div class="reco-eff-title">התיק מתחת לקו ה-CML — לא יעיל</div>
+                <div class="reco-eff-sub">בסיכון σ=${rmFmtPct(eff.portfolioSigma, 1)} התשואה ${rmFmtPct(eff.portfolioReturn, 1)}, בעוד שעל הקו ניתן ${rmFmtPct(eff.cmlReturn, 1)} (פער ${rmFmtPct(eff.returnGap, 1)}). הוסף מהנכסים הבאים — מתומחרים בחסר ובקורלציה נמוכה — כדי לאזן את התיק לאיזור היעיל.</div>
                 ${mix}
             </div>`;
         }
