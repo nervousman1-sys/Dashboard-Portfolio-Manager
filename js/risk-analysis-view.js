@@ -663,10 +663,32 @@ function openStockRecommendations(clientId) {
     if (!client) return;
     const model = window._lastRiskModel;
     let cands = [];
+    let adv = null;
     if (model && typeof buildPortfolioAdvisory === 'function') {
-        try { const adv = buildPortfolioAdvisory(client, model); cands = (adv && adv.candidates) || []; } catch (e) { /* ignore */ }
+        try { adv = buildPortfolioAdvisory(client, model); cands = (adv && adv.candidates) || []; } catch (e) { /* ignore */ }
     }
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+
+    // Rebalance-to-efficient banner: states whether the portfolio is in the optimal
+    // region and the target CML allocation to get it there.
+    let effHTML = '';
+    const eff = adv && adv.efficiency;
+    if (eff) {
+        if (eff.isEfficient) {
+            effHTML = `<div class="reco-eff reco-eff-ok">
+                <div class="reco-eff-title">התיק כבר באיזור היעיל ✓</div>
+                <div class="reco-eff-sub">σ=${rmFmtPct(eff.portfolioSigma, 1)} — תשואה מקסימלית לרמת הסיכון. ההוספות למטה ישמרו/ישפרו את הפיזור.</div>
+            </div>`;
+        } else {
+            const wm = eff.wMarket != null ? Math.round(Math.max(0, Math.min(1, eff.wMarket)) * 100) : null;
+            const mix = (wm != null) ? `<div class="reco-eff-mix">יעד איזון (CML): <b>${wm}%</b> ${esc(adv.marketSymbol)} + <b>${100 - wm}%</b> אג"ח קצר/מזומן</div>` : '';
+            effHTML = `<div class="reco-eff reco-eff-bad">
+                <div class="reco-eff-title">התיק לא יעיל — מחוץ לאיזור היעיל</div>
+                <div class="reco-eff-sub">σ נוכחי ${rmFmtPct(eff.portfolioSigma, 1)} מול ${rmFmtPct(eff.efficientSigma, 1)} הדרוש על החזית (פער ${rmFmtPct(eff.gap, 1)}). הוסף מהנכסים הבאים — מתומחרים בחסר ובקורלציה נמוכה — כדי לאזן את התיק לאיזור היעיל.</div>
+                ${mix}
+            </div>`;
+        }
+    }
 
     let ov = document.getElementById('stockRecoOverlay');
     if (!ov) {
@@ -695,7 +717,8 @@ function openStockRecommendations(clientId) {
             <div><h3>מניות מומלצות לתיק האופטימלי</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
             <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
         </div>
-        <p class="reco-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). הוספתן מקרבת את התיק לאזור האופטימלי בעקומה.</p>
+        ${effHTML}
+        <p class="reco-hint">מדורג לפי אלפא (מעל ה-SML) + קורלציה נמוכה לתיק (פיזור). הוספתן מקרבת את התיק לאיזור היעיל בעקומה.</p>
         <div class="reco-grid">${cardsHTML}</div>
     </div>`;
     ov.classList.add('active');

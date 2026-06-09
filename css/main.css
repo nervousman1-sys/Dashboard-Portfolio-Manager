@@ -7742,3 +7742,25 @@ body.full-list-open { overflow: hidden; }
 /* Serious open-recommendations button (icon, no emoji) */
 .mcs-reco-btn { display: flex; align-items: center; justify-content: center; gap: 9px; }
 .mcs-reco-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* Efficiency verdict (advisory) — is the portfolio in the efficient region? */
+.adv-eff { display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px; border-radius: 10px;
+    border: 1px solid var(--border); }
+.adv-eff-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.adv-eff.eff-ok { color: var(--risk-low); background: rgba(0,255,148,0.06); border-color: rgba(0,255,148,0.25); }
+.adv-eff.eff-bad { color: var(--accent-yellow); background: rgba(250,204,21,0.06); border-color: rgba(250,204,21,0.28); }
+.adv-eff-title { font-size: 13.5px; font-weight: 800; }
+.adv-eff-sub { font-size: 12px; color: rgba(245,245,250,0.85); line-height: 1.55; margin-top: 2px; }
+.adv-act-efficient { color: #ffe08a; }
+
+/* Rebalance-to-efficient banner (recommendations popup) */
+.reco-eff { border-radius: 11px; padding: 13px 15px; margin: 4px 0 14px; border: 1px solid var(--border); }
+.reco-eff-ok { background: rgba(0,255,148,0.07); border-color: rgba(0,255,148,0.3); }
+.reco-eff-bad { background: rgba(250,204,21,0.07); border-color: rgba(250,204,21,0.32); }
+.reco-eff-title { font-size: 15px; font-weight: 900; color: var(--text-primary); }
+.reco-eff-ok .reco-eff-title { color: var(--risk-low); }
+.reco-eff-bad .reco-eff-title { color: var(--accent-yellow); }
+.reco-eff-sub { font-size: 12.5px; color: rgba(245,245,250,0.82); line-height: 1.6; margin-top: 4px; }
+.reco-eff-mix { margin-top: 9px; font-size: 13px; font-weight: 700; color: var(--accent-blue);
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25); border-radius: 8px; padding: 8px 11px; }
+.reco-eff-mix b { color: #fff; }

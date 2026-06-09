@@ -747,6 +747,25 @@ function rmRecColor(rec) {
 //   • Which holdings fit the SML (fairly/under-priced) and which don't (over-priced)?
 //   • What to REDUCE/SELL and what to BUY/ADD so the portfolio conforms to the models.
 
+// Efficient-frontier σ (decimal) at a target return — the MINIMUM risk needed for
+// that return. Interpolated along the efficient (upper) branch. Used to measure how
+// far the portfolio is from the efficient region.
+function _rmEfficientSigmaAt(fr, ret) {
+    if (!fr || !fr.points || fr.points.length < 3) return null;
+    const gmvY = fr.gmv ? fr.gmv.y : -Infinity;
+    const eff = fr.points.filter(p => p.y >= gmvY - 1e-9).slice().sort((a, b) => a.y - b.y);
+    if (eff.length < 2) return null;
+    const r = Math.max(eff[0].y, Math.min(eff[eff.length - 1].y, ret));
+    for (let i = 1; i < eff.length; i++) {
+        if (eff[i].y >= r) {
+            const a = eff[i - 1], b = eff[i];
+            const t = (b.y - a.y) ? (r - a.y) / (b.y - a.y) : 0;
+            return a.x + t * (b.x - a.x);
+        }
+    }
+    return eff[eff.length - 1].x;
+}
+
 function _rmAvgPairwiseCorr(tickers, model) {
     const idx = {};
     (model.correlation?.tickers || []).forEach((t, i) => { idx[t] = i; });
@@ -871,17 +890,43 @@ function buildPortfolioAdvisory(client, model) {
         });
     });
 
+    // 0. EFFICIENCY — is the portfolio inside the efficient region of the curve?
+    //    The efficient frontier at the portfolio's return gives the MINIMUM risk
+    //    needed for that return; if σ_p exceeds it, the portfolio is inefficient and
+    //    we show how to move it onto the efficient region (2-fund / CML allocation).
+    const effSigma = _rmEfficientSigmaAt(model.frontier, p.expReturn);
+    let efficiency = null;
+    if (effSigma != null && p.vol != null && effSigma > 0) {
+        const gap = p.vol - effSigma;
+        const isEfficient = gap <= effSigma * 0.12;
+        const wM = (model.rm - model.rf) !== 0 ? (p.expReturn - model.rf) / (model.rm - model.rf) : null;
+        const wMarket = (wM != null) ? Math.max(0, Math.min(1.3, wM)) : null;
+        efficiency = { isEfficient, portfolioSigma: p.vol, efficientSigma: effSigma, gap, wMarket };
+        if (!isEfficient) {
+            actions.push({
+                priority: 0, kind: 'efficient',
+                text: `התיק <b>לא יעיל</b> — נושא σ=${rmFmtPct(p.vol, 1)}, בעוד שלאותה תשואה (${rmFmtPct(p.expReturn, 1)}) מספיק σ=${rmFmtPct(effSigma, 1)} על החזית (פער של ${rmFmtPct(gap, 1)}). יש להזיזו לאיזור היעיל (הקטע הירוק העליון של העקומה).`
+            });
+            if (wMarket != null && wMarket > 0.02) {
+                actions.push({
+                    priority: 0, kind: 'efficient',
+                    text: `איזון יעיל (CML) לאותה תשואה: כ-<b>${Math.round(wMarket * 100)}%</b> מדד שוק (${model.marketSymbol}) + <b>${Math.round(Math.max(0, 1 - wMarket) * 100)}%</b> אג"ח קצר/מזומן — תשואה דומה בסיכון נמוך יותר.`
+                });
+            }
+        }
+    }
+
     // 5. If already compliant — maintenance note
     if (actions.length === 0) {
         actions.push({
             priority: 5, kind: 'hold',
-            text: `התיק עומד היטב במודל — שמור על ההרכב, אזן תקופתית כדי לשמר את ה-β והפיזור.`
+            text: `התיק עומד היטב במודל ונמצא באיזור היעיל — שמור על ההרכב, אזן תקופתית כדי לשמר את ה-β והפיזור.`
         });
     }
     actions.sort((a, b) => a.priority - b.priority);
 
     return {
-        hasRisky: true, p, cmlStatus,
+        hasRisky: true, p, cmlStatus, efficiency,
         fit, notFit, neutral, reduce, candidates, actions,
         topWeight, avgCorr, concentrated, highCorr,
         complianceScore: p.complianceScore, complianceLabel: p.complianceLabel,
@@ -930,10 +975,23 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <span class="adv-sub-val">${val}</span></div>`;
     };
 
-    const kindIcon = (k) => k === 'sell' ? '🔻' : k === 'buy' ? '🟢' : k === 'diversify' ? '🧩' : k === 'hold' ? '✓' : '•';
+    const kindIcon = (k) => k === 'sell' ? '🔻' : k === 'buy' ? '🟢' : k === 'diversify' ? '🧩' : k === 'efficient' ? '◎' : k === 'hold' ? '✓' : '•';
     const actionsHTML = (adv.actions || []).map(a =>
         `<li class="adv-act adv-act-${a.kind}"><span class="adv-act-ic">${kindIcon(a.kind)}</span><span>${a.text}</span></li>`
     ).join('');
+
+    // Efficiency verdict — is the portfolio inside the efficient (optimal) region?
+    const eff = adv.efficiency;
+    const effBlock = eff ? `
+        <div class="adv-eff ${eff.isEfficient ? 'eff-ok' : 'eff-bad'}">
+            <span class="adv-eff-dot"></span>
+            <div class="adv-eff-txt">
+                <div class="adv-eff-title">${eff.isEfficient ? 'התיק נמצא באיזור היעיל של העקומה ✓' : 'התיק מחוץ לאיזור היעיל של העקומה ✗'}</div>
+                <div class="adv-eff-sub">${eff.isEfficient
+                    ? `התיק יושב על/סמוך לחזית היעילה (σ=${rmFmtPct(eff.portfolioSigma, 1)}) — זהו האיזור האופטימלי (תשואה מקסימלית לרמת הסיכון).`
+                    : `σ נוכחי ${rmFmtPct(eff.portfolioSigma, 1)} מול ${rmFmtPct(eff.efficientSigma, 1)} הנדרש על החזית לאותה תשואה — פער ${rmFmtPct(eff.gap, 1)}. ראה תוכנית האיזון לאיזור היעיל למטה.`}</div>
+            </div>
+        </div>` : '';
 
     return `
     <div class="adv-block">
@@ -951,6 +1009,8 @@ function renderAdvisoryHTML(adv, opts = {}) {
                 ${subBar('פיזור', adv.divScore != null ? adv.divScore : 0)}
             </div>
         </div>
+
+        ${effBlock}
 
         <div class="adv-verdict ${cmlClass}"><span class="adv-verdict-dot"></span>${cmlTitle}</div>
         <p class="adv-note">${cmlText}</p>
