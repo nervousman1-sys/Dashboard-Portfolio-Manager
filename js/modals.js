@@ -8,11 +8,15 @@
 // scrolls the background. Checks every overlay so closing one popup while another
 // is still open keeps the lock.
 function syncBodyScrollLock() {
-    const anyOpen = ['modalOverlay', 'mgmtOverlay', 'stockRecoOverlay', 'qwConfigModal']
+    const anyOpen = ['modalOverlay', 'mgmtOverlay', 'stockRecoOverlay', 'qwConfigModal', 'assetFitOverlay']
         .some(id => {
             const el = document.getElementById(id);
             return el && el.classList.contains('active');
         });
+    // The page scrolls on the <html> element (html has overflow-x:hidden, which makes
+    // IT the scroll container — body{overflow:hidden} alone does NOT stop wheel
+    // scrolling). Lock BOTH html and body.
+    document.documentElement.classList.toggle('modal-open', anyOpen);
     document.body.classList.toggle('modal-open', anyOpen);
 }
 

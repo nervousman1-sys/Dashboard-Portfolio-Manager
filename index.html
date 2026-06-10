@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=63.0">
+    <link rel="stylesheet" href="css/main.css?v=64.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -272,6 +272,12 @@
             <div class="quick-watch-bar" id="quickWatchBar">
                 <!-- Ticker items built dynamically by _renderQWTickers() in init.js -->
                 <div class="qw-tickers" id="qwTickers"></div>
+                <!-- Fixed USD/ILS FX badge — measures shekel strength vs the dollar -->
+                <div class="qw-fx" id="qwFxBadge" title="שער דולר/שקל — מודד התחזקות/היחלשות השקל מול הדולר">
+                    <span class="qw-fx-label">USD/ILS</span>
+                    <span class="qw-fx-rate" id="qwFxRate">—</span>
+                    <span class="qw-fx-chg" id="qwFxChg"></span>
+                </div>
                 <span class="qw-last-update" id="lastUpdate"></span>
                 <!-- Settings button on left (RTL end) -->
                 <button class="qw-settings-btn" title="הגדרות מעקב" onclick="openTickerModal()">

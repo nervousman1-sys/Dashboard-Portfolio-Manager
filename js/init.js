@@ -411,6 +411,46 @@ function _applyQWPrices(priceMap) {
     }
 }
 
+// ── USD/ILS live rate ──
+// Renders the fixed FX badge in the top bar (rate + daily %, shekel strength) AND
+// pushes the live rate into the app-wide FX state (_fxRates + USD_ILS_RATE), so
+// ILS-mode portfolio values and the FX-adjusted return both use the REAL rate.
+window.USD_ILS_RATE = window.USD_ILS_RATE || 3.7;
+function _applyFxQuote(q) {
+    if (!q || !(q.price > 0)) return;
+    const rate = q.price;
+    const prev = q.prevClose > 0 ? q.prevClose : rate;
+    const chgPct = prev > 0 ? ((rate - prev) / prev * 100) : 0;
+
+    // Badge: rate + daily change. Rate UP = dollar up = shekel WEAKER (red);
+    // rate DOWN = shekel STRONGER (green).
+    const rateEl = document.getElementById('qwFxRate');
+    const chgEl = document.getElementById('qwFxChg');
+    if (rateEl) rateEl.textContent = `₪${rate.toFixed(3)}`;
+    if (chgEl) {
+        const up = chgPct >= 0.005, down = chgPct <= -0.005;
+        chgEl.textContent = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}% ${down ? '· השקל מתחזק' : up ? '· השקל נחלש' : ''}`;
+        chgEl.className = `qw-fx-chg ${down ? 'positive' : up ? 'negative' : ''}`;
+    }
+
+    // Push into the app-wide FX state so every ILS conversion uses the live rate
+    const prevAppRate = (typeof _fxRates !== 'undefined' && _fxRates.USDILS) ? _fxRates.USDILS : window.USD_ILS_RATE;
+    try { _fxRates = { USDILS: rate, ILSUSD: 1 / rate }; } catch (e) { /* fx-service not loaded */ }
+    window.USD_ILS_RATE = rate;
+    // Material rate move while viewing in ILS or with FX-adjusted return ON →
+    // re-render so USD portfolio values/returns reflect the live rate.
+    const rateMoved = Math.abs(rate - prevAppRate) / prevAppRate > 0.0005;
+    const fxMatters = (typeof _displayCurrency !== 'undefined' && _displayCurrency === 'ILS')
+        || (typeof _fxAdjustedReturn !== 'undefined' && _fxAdjustedReturn);
+    if (rateMoved && fxMatters) {
+        try {
+            if (typeof renderSummaryBar === 'function') renderSummaryBar();
+            if (typeof renderClientCards === 'function') renderClientCards();
+            if (typeof renderExposureSection === 'function') renderExposureSection();
+        } catch (e) { /* render not ready yet */ }
+    }
+}
+
 // ── Quick-Watch: fetch prices and update DOM ──
 // Strategy: render cached prices immediately, then resolve ALL tickers in a single
 // same-origin /api/quote batch round-trip (incl. TA-35 — TASE indices are quoted in
@@ -424,10 +464,10 @@ async function _updateQuickWatch() {
 
     const freshPrices = cached ? { ...cached } : {};
 
-    // Step 2: ONE batched request for every ticker on the bar
+    // Step 2: ONE batched request for every ticker on the bar + the USD/ILS rate
     let missing = _QW_TICKERS.slice();
     if (typeof _fetchYahooQuotesBatch === 'function' && typeof _shapeYahooQuote === 'function') {
-        const raw = await _fetchYahooQuotesBatch(_QW_TICKERS.map(t => t.sym));
+        const raw = await _fetchYahooQuotesBatch(_QW_TICKERS.map(t => t.sym).concat(['ILS=X']));
         missing = [];
         for (const t of _QW_TICKERS) {
             const isTaseIndex = t.type === 'index' && /\.TA$/i.test(t.sym);
@@ -435,6 +475,7 @@ async function _updateQuickWatch() {
             if (shaped && shaped.price) freshPrices[t.sym] = shaped;
             else missing.push(t);
         }
+        if (raw['ILS=X']) _applyFxQuote(raw['ILS=X']);   // USD/ILS badge + live app-wide rate
         if (Object.keys(raw).length) _applyQWPrices(freshPrices); // paint as soon as the batch lands
     }
 

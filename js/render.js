@@ -617,6 +617,11 @@ function renderSummaryBar() {
     const avgClass = globalAllStale ? 'neutral' : (avgReturn >= 0 ? 'positive' : 'negative');
     const avgSign = globalAllStale ? '' : (avgReturn >= 0 ? '+' : '');
 
+    // Simple (unweighted) average return — every portfolio counts equally
+    const simpleAvgReturn = src.length ? src.reduce((s, c) => s + _calcReturn(c).returnPct, 0) / src.length : 0;
+    const sAvgClass = globalAllStale ? 'neutral' : (simpleAvgReturn >= 0 ? 'positive' : 'negative');
+    const sAvgSign = globalAllStale ? '' : (simpleAvgReturn >= 0 ? '+' : '');
+
     // Realized P/L — aggregate from cached transaction data if available
     const realizedPnl = _cachedRealizedPnl || 0;
     const hasRealized = _cachedRealizedPnl !== null;
@@ -668,6 +673,11 @@ function renderSummaryBar() {
                 <span class="stat-label">תשואה משוקללת${_fxAdjustedReturn ? ' <span class="fx-badge">FX</span>' : ''}</span>
                 <span class="stat-value ${avgClass === 'positive' ? 'stat-val-green' : avgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${avgSign}${avgReturn.toFixed(2)}%`}</span>
                 <span class="stat-sub">ממוצע משוקלל לפי הון</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">תשואה ממוצעת${_fxAdjustedReturn ? ' <span class="fx-badge">FX</span>' : ''}</span>
+                <span class="stat-value ${sAvgClass === 'positive' ? 'stat-val-green' : sAvgClass === 'negative' ? 'stat-val-red' : ''}">${globalAllStale ? '<span class="stat-stale">ממתין...</span>' : `${sAvgSign}${simpleAvgReturn.toFixed(2)}%`}</span>
+                <span class="stat-sub">ממוצע פשוט של התיקים</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">תיקים פעילים</span>

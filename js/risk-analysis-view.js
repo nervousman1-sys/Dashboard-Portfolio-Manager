@@ -460,23 +460,24 @@ function _renderAdvisorySection(model) {
 
 // ── 5. Recommendations table ──
 
-// For an asset, find the portfolio it fits BEST as an addition: highest
-// fit = α − 0.4·max(0, avg correlation to that portfolio's current holdings),
-// skipping portfolios that already hold it. Returns {id, name} or null.
-function _bestPortfolioFor(asset, model) {
-    if (!asset.hasData || asset.alpha == null || asset.recommendation === 'avoid') return null;
+// For an asset, score EVERY portfolio it could be added to:
+// fit = α − 0.4·max(0, avg correlation to that portfolio's current holdings).
+// Portfolios already holding the asset are skipped. Returns a sorted (best-first)
+// array of { id, name, fit, avgCorr } — used by the table cell and the fit popup.
+function _portfolioFitsFor(asset, model) {
+    if (!asset || !asset.hasData || asset.alpha == null || asset.recommendation === 'avoid') return [];
     const clientsList = (typeof clients !== 'undefined') ? clients : [];
     const corr = model.correlation;
     const idx = {}; (corr?.tickers || []).forEach((t, i) => { idx[t] = i; });
     const ai = idx[asset.ticker];
-    let best = null, bestFit = -Infinity;
+    const fits = [];
     for (const p of (model.portfolios || [])) {
         if (!p.hasData || !(p.totalValue > 0)) continue;
         const client = clientsList.find(c => c.id === p.id);
         if (!client) continue;
         const held = (client.holdings || []).map(h => h.ticker).filter(Boolean);
         if (held.includes(asset.ticker)) continue;       // already held — not an addition
-        let avgCorr = 0.4; // conservative default when no correlation data
+        let avgCorr = null;
         if (ai != null && held.length) {
             let s = 0, k = 0;
             for (const t of held) {
@@ -485,10 +486,62 @@ function _bestPortfolioFor(asset, model) {
             }
             if (k) avgCorr = s / k;
         }
-        const fit = asset.alpha - 0.4 * Math.max(0, avgCorr);
-        if (fit > bestFit) { bestFit = fit; best = { id: p.id, name: p.name }; }
+        const corrForFit = (avgCorr == null) ? 0.4 : avgCorr; // conservative default
+        fits.push({ id: p.id, name: p.name, avgCorr, fit: asset.alpha - 0.4 * Math.max(0, corrForFit) });
     }
-    return best;
+    fits.sort((a, b) => b.fit - a.fit);
+    return fits;
+}
+
+// Small popup listing every portfolio the asset fits, best first, each with a very
+// short WHY (α + correlation to that portfolio) and an open-portfolio action.
+function openAssetFitPopup(ticker) {
+    const model = window._lastRiskModel;
+    const asset = model && model.assets ? model.assets[ticker] : null;
+    if (!asset) return;
+    const fits = _portfolioFitsFor(asset, model);
+
+    let ov = document.getElementById('assetFitOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'assetFitOverlay';
+        ov.className = 'reco-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeAssetFitPopup(); });
+        document.body.appendChild(ov);
+    }
+
+    const reason = (f) => {
+        const corrTxt = f.avgCorr == null ? '' :
+            f.avgCorr <= 0.25 ? `קורלציה נמוכה (ρ̄ ${f.avgCorr.toFixed(2)}) — מוסיף פיזור אמיתי`
+            : f.avgCorr <= 0.5 ? `קורלציה מתונה (ρ̄ ${f.avgCorr.toFixed(2)}) — משלים את ההרכב`
+            : `קורלציה גבוהה (ρ̄ ${f.avgCorr.toFixed(2)}) — חופף להחזקות`;
+        return `α ${rmFmtPct(asset.alpha, 1)} מעל ה-SML${corrTxt ? ' · ' + corrTxt : ''}`;
+    };
+    const rows = fits.length ? fits.map((f, i) => `
+        <div class="fit-row${i === 0 ? ' fit-best' : ''}">
+            <div class="fit-row-main">
+                <span class="fit-name">${i === 0 ? '★ ' : ''}${_riskEsc(f.name)}</span>
+                <span class="fit-why">${reason(f)}</span>
+            </div>
+            <button class="rec-fit-btn" onclick="closeAssetFitPopup(); openModal(${f.id})">פתח תיק</button>
+        </div>`).join('')
+        : '<div class="adv-empty">כל התיקים כבר מחזיקים את הנכס, או שאין תיקים מתאימים.</div>';
+
+    ov.innerHTML = `<div class="reco-box fit-box" dir="rtl">
+        <div class="reco-head">
+            <div><h3>התאמת ${_riskEsc(ticker)} לתיקים</h3><span class="reco-sub">מדורג לפי תרומה: אלפא גבוה + קורלציה נמוכה להחזקות הקיימות</span></div>
+            <button class="reco-close" onclick="closeAssetFitPopup()">✕</button>
+        </div>
+        ${rows}
+    </div>`;
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+}
+
+function closeAssetFitPopup() {
+    const ov = document.getElementById('assetFitOverlay');
+    if (ov) ov.classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
 function _renderRecommendations(model) {
@@ -496,9 +549,9 @@ function _renderRecommendations(model) {
         .sort((a, b) => (b.alpha || 0) - (a.alpha || 0));
     if (assets.length === 0) return '';
     const body = assets.map(a => {
-        const fit = _bestPortfolioFor(a, model);
-        const fitCell = fit
-            ? `<button class="rec-fit-btn" onclick="event.stopPropagation(); openModal(${fit.id})" title="פתח את התיק — הנכס מתאים להוספה אליו">${_riskEsc(fit.name)}</button>`
+        const fits = _portfolioFitsFor(a, model);
+        const fitCell = fits.length
+            ? `<button class="rec-fit-btn" onclick="event.stopPropagation(); openAssetFitPopup('${_riskEsc(a.ticker)}')" title="לאילו תיקים הנכס מתאים — ולמה">${_riskEsc(fits[0].name)}${fits.length > 1 ? ` <span class="fit-more">+${fits.length - 1}</span>` : ''}</button>`
             : '<span class="adv-dim">—</span>';
         return `
         <tr>
@@ -512,9 +565,9 @@ function _renderRecommendations(model) {
             <td>${fitCell}</td>
         </tr>`;
     }).join('');
-    // Collapsible <details>: click the header to fold/unfold the whole table (open by default)
+    // Collapsible <details>: click the header to fold/unfold (collapsed by default)
     return `
-        <details class="risk-table-card glass-card recs-details" open>
+        <details class="risk-table-card glass-card recs-details">
             <summary class="risk-chart-head recs-summary">
                 <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
                 <span class="recs-summary-txt"><h3>המלצות נכסים</h3>
@@ -1089,5 +1142,7 @@ if (typeof window !== 'undefined') {
     window._renderPortfolioNews = _renderPortfolioNews;
     window.openStockRecommendations = openStockRecommendations;
     window.swapRecommendation = swapRecommendation;
+    window.openAssetFitPopup = openAssetFitPopup;
+    window.closeAssetFitPopup = closeAssetFitPopup;
     window.closeStockRecommendations = closeStockRecommendations;
 }
