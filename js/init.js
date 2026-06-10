@@ -426,7 +426,7 @@ function _applyFxQuote(q) {
     // rate DOWN = shekel STRONGER (green).
     const rateEl = document.getElementById('qwFxRate');
     const chgEl = document.getElementById('qwFxChg');
-    if (rateEl) rateEl.textContent = `₪${rate.toFixed(3)}`;
+    if (rateEl) rateEl.textContent = `${rate.toFixed(3)} ₪`;  // number first, ₪ on the right
     if (chgEl) {
         const up = chgPct >= 0.005, down = chgPct <= -0.005;
         chgEl.textContent = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}% ${down ? '· השקל מתחזק' : up ? '· השקל נחלש' : ''}`;

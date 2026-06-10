@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=64.0">
+    <link rel="stylesheet" href="css/main.css?v=65.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -233,7 +233,7 @@
                         </svg>
                         <span>ניתוח CML/SML</span>
                     </button>
-                    <button class="header-action-btn" onclick="window.print && window.print()" title="הפקת דוח">
+                    <button class="header-action-btn" onclick="if(typeof generateReport==='function') generateReport()" title="הפקת דוח מרוכז — כל התיקים">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />

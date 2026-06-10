@@ -98,10 +98,11 @@ function _calcReturn(client) {
     const currentRate = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0)
         ? _fxRates.USDILS
         : (typeof FX_HARDCODED_USDILS !== 'undefined' ? FX_HARDCODED_USDILS : 3.65);
-    // Use a reference rate of 3.9 (approximate mid-2023 USDILS when most portfolios were built).
-    // The adjustment factor = currentRate / referenceRate; if USD weakened, factor < 1,
-    // making the USD cost basis cheaper in ILS terms — i.e., reducing effective ILS return.
-    const refRate = 3.9;
+    // Reference rate = the ILS price the client ACTUALLY paid per dollar (weighted
+    // average of recorded ILS→USD conversions at deposit time). Falls back to 3.9
+    // (approx. mid-2023) only when no conversion was ever recorded for this client.
+    const clientRef = (typeof getClientFxRefRate === 'function') ? getClientFxRefRate(client.id) : null;
+    const refRate = (clientRef && clientRef > 0) ? clientRef : 3.9;
     const fxFactor = currentRate / refRate;
     const fxAdj = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
     const totalValue = client.holdings.reduce((s, h) => s + (h.value || 0) * fxAdj(h.currency), 0);

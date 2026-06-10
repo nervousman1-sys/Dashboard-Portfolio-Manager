@@ -111,6 +111,38 @@ async function fetchFxRates() {
     }
 }
 
+// ========== PER-CLIENT FX CONVERSION BASIS ==========
+// When the user deposits USD that came from converting SHEKELS, we record the
+// actual conversion rate. The FX-adjusted return then measures against the REAL
+// average ILS price the dollars were bought at — not a hardcoded reference.
+// Stored per client in localStorage: { ils: total ₪ paid, usd: total $ acquired }.
+
+const _FX_BASIS_PREFIX = 'fx_basis_v1_';
+
+function getClientFxBasis(clientId) {
+    try {
+        const raw = localStorage.getItem(_FX_BASIS_PREFIX + clientId);
+        if (!raw) return null;
+        const b = JSON.parse(raw);
+        return (b && b.usd > 0 && b.ils > 0) ? b : null;
+    } catch (e) { return null; }
+}
+
+// Record a conversion: `usdAmount` dollars acquired at `rate` ₪ per $.
+function addClientFxBasis(clientId, usdAmount, rate) {
+    if (!(usdAmount > 0) || !(rate > 0)) return;
+    const cur = getClientFxBasis(clientId) || { ils: 0, usd: 0 };
+    cur.usd += usdAmount;
+    cur.ils += usdAmount * rate;
+    try { localStorage.setItem(_FX_BASIS_PREFIX + clientId, JSON.stringify(cur)); } catch (e) { /* full */ }
+}
+
+// The client's effective ILS→USD acquisition rate (weighted average), or null.
+function getClientFxRefRate(clientId) {
+    const b = getClientFxBasis(clientId);
+    return b ? (b.ils / b.usd) : null;
+}
+
 // ========== FX RATE ACCESSORS ==========
 
 // Get the conversion rate between two currencies.

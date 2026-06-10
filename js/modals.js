@@ -611,7 +611,31 @@ function closeModal(event) {
 
 // ========== REPORTS ==========
 
+// Hide ALL app UI — the report becomes the only visible element (print-clean)
+function _hideAppForReport() {
+    document.querySelector('.header').style.display = 'none';
+    document.querySelector('.summary-bar').style.display = 'none';
+    const filtersEl = document.querySelector('.filters');
+    if (filtersEl) filtersEl.style.display = 'none';
+    const filtersRow = document.querySelector('.filters-search-row');
+    if (filtersRow) filtersRow.style.display = 'none';
+    document.getElementById('exposureSection').style.display = 'none';
+    document.getElementById('clientsGrid').style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) heroFold.style.display = 'none';
+    const portfolioHeader = document.querySelector('.portfolio-section-header');
+    if (portfolioHeader) portfolioHeader.style.display = 'none';
+    const quickWatch = document.querySelector('.quick-watch-bar');
+    if (quickWatch) quickWatch.style.display = 'none';
+    const mobileNav = document.getElementById('mobileBottomNav');
+    if (mobileNav) mobileNav.style.display = 'none';
+    const sidebar = document.getElementById('appSidebar');
+    if (sidebar) sidebar.style.display = 'none';
+}
+
 function generateReport(clientId) {
+    // No specific client → consolidated all-portfolios report
+    if (clientId == null) { generateAllPortfoliosReport(); return; }
     const client = clients.find(c => c.id === clientId);
     if (!client) return;
 
@@ -646,25 +670,7 @@ function generateReport(clientId) {
     document.getElementById('modalOverlay').classList.remove('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 
-    // Hide ALL UI — report is the only visible element
-    document.querySelector('.header').style.display = 'none';
-    document.querySelector('.summary-bar').style.display = 'none';
-    const filtersEl = document.querySelector('.filters');
-    if (filtersEl) filtersEl.style.display = 'none';
-    const filtersRow = document.querySelector('.filters-search-row');
-    if (filtersRow) filtersRow.style.display = 'none';
-    document.getElementById('exposureSection').style.display = 'none';
-    document.getElementById('clientsGrid').style.display = 'none';
-    const heroFold = document.querySelector('.hero-above-fold');
-    if (heroFold) heroFold.style.display = 'none';
-    const portfolioHeader = document.querySelector('.portfolio-section-header');
-    if (portfolioHeader) portfolioHeader.style.display = 'none';
-    const quickWatch = document.querySelector('.quick-watch-bar');
-    if (quickWatch) quickWatch.style.display = 'none';
-    const mobileNav = document.getElementById('mobileBottomNav');
-    if (mobileNav) mobileNav.style.display = 'none';
-    const sidebar = document.getElementById('appSidebar');
-    if (sidebar) sidebar.style.display = 'none';
+    _hideAppForReport();
 
     const reportView = document.getElementById('reportView');
     reportView.classList.add('active');
@@ -724,6 +730,99 @@ function closeReport() {
     if (mobileNav) mobileNav.style.display = '';
     const sidebar = document.getElementById('appSidebar');
     if (sidebar) sidebar.style.display = '';
+}
+
+// ========== CONSOLIDATED ALL-PORTFOLIOS REPORT ==========
+// One clean, print-ready report covering EVERY portfolio: value, return, risk level,
+// CML/SML model efficiency, and per-portfolio sector exposure (%).
+
+function generateAllPortfoliosReport() {
+    const list = (typeof clients !== 'undefined' ? clients : []).filter(c => c && (c.holdings || []).length >= 0);
+    if (!list.length) { alert('אין תיקים להפקת דוח'); return; }
+    const dateStr = new Date().toLocaleDateString('he-IL');
+    const model = window._lastRiskModel || null;
+
+    // Totals
+    const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    let totalAUM = 0, totalCost = 0, totalValue = 0;
+    for (const c of list) {
+        totalAUM += c.portfolioValue || 0;
+        const r = calcPortfolioReturn(c);
+        totalCost += r.totalCost; totalValue += r.totalValue;
+    }
+    const totalRet = totalCost > 0 ? ((totalValue - totalCost) / totalCost * 100) : 0;
+
+    // Per-portfolio sector exposure (% of securities value)
+    const sectorsOf = (c) => {
+        const by = {};
+        let tot = 0;
+        for (const h of (c.holdings || [])) {
+            const v = (h._valueInDisplayCurrency != null) ? h._valueInDisplayCurrency : (h.value || 0) * fx(h.currency);
+            if (!(v > 0)) continue;
+            const sec = h.type === 'bond' ? 'אג"ח'
+                : (h.sector || (typeof SECTOR_MAP !== 'undefined' && SECTOR_MAP[h.ticker]) || 'Other');
+            by[sec] = (by[sec] || 0) + v;
+            tot += v;
+        }
+        return Object.entries(by).map(([s, v]) => ({ s, pct: tot > 0 ? v / tot * 100 : 0 }))
+            .sort((a, b) => b.pct - a.pct);
+    };
+
+    const effCell = (c) => {
+        const p = model && model.portfolios ? model.portfolios.find(x => x.id === c.id) : null;
+        if (!p || !p.hasData) return '<span style="color:#888">—</span>';
+        return p.aboveCML
+            ? '<span style="color:green;font-weight:700">יעיל ✓ (על/מעל ה-CML)</span>'
+            : '<span style="color:#c00;font-weight:700">לא יעיל ✗ (מתחת ל-CML)</span>';
+    };
+
+    const portfolioSections = list.map(c => {
+        const r = calcPortfolioReturn(c);
+        const sign = r.returnPct >= 0 ? '+' : '';
+        const secs = sectorsOf(c);
+        const secLine = secs.length
+            ? secs.map(x => `${x.s} <b>${x.pct.toFixed(1)}%</b>`).join(' · ')
+            : 'אין נכסים';
+        return `
+        <div class="report-section rpt-portfolio">
+            <div class="rpt-port-head">
+                <h3 style="margin:0">${c.name}</h3>
+                <span class="rpt-risk rpt-risk-${c.risk || 'low'}">${c.riskLabel || ''}</span>
+            </div>
+            <div class="report-stats-grid">
+                <div class="report-stat"><div class="label">שווי תיק</div><div class="value">${formatCurrency(c.portfolioValue)}</div></div>
+                <div class="report-stat"><div class="label">תשואה</div><div class="value" style="color:${r.returnPct >= 0 ? 'green' : 'red'}">${sign}${r.returnPct.toFixed(2)}%</div></div>
+                <div class="report-stat"><div class="label">רווח/הפסד</div><div class="value" style="color:${r.profit >= 0 ? 'green' : 'red'}">${r.profit >= 0 ? '+' : ''}${formatCurrency(Math.abs(r.profit))}</div></div>
+                <div class="report-stat"><div class="label">יעילות לפי המודל</div><div class="value" style="font-size:13px">${effCell(c)}</div></div>
+            </div>
+            <p class="rpt-sectors"><b>חשיפה לסקטורים:</b> ${secLine}</p>
+        </div>`;
+    }).join('');
+
+    _hideAppForReport();
+    const reportView = document.getElementById('reportView');
+    reportView.classList.add('active');
+    reportView.innerHTML = `
+        <button class="report-back-btn" onclick="closeReport()">חזור לדשבורד</button>
+        <div class="report-header">
+            <h1>דוח תיקים מרוכז — Finextium</h1>
+            <p>תאריך: ${dateStr} | ${list.length} תיקים | סך נכסים: ${formatCurrency(totalAUM)} | תשואה כוללת: <b style="color:${totalRet >= 0 ? 'green' : 'red'}">${totalRet >= 0 ? '+' : ''}${totalRet.toFixed(2)}%</b></p>
+        </div>
+        ${portfolioSections}
+        <div class="report-section" style="text-align:center;margin-top:32px">
+            <p style="color:#999;font-size:11px">הדוח הופק אוטומטית ע"י Finextium | יעילות לפי מודל CML/SML | ${dateStr}</p>
+            <button class="report-back-btn" style="position:static;margin-top:16px" onclick="window.print()">הדפס / שמור כ-PDF</button>
+        </div>
+    `;
+
+    // Model not built yet (e.g. report opened right after login)? Build it in the
+    // background and fill the efficiency cells in place when ready.
+    if (!model && typeof buildRiskModel === 'function') {
+        buildRiskModel(list).then(m => {
+            window._lastRiskModel = m;
+            if (document.getElementById('reportView')?.classList.contains('active')) generateAllPortfoliosReport();
+        }).catch(() => { /* keep dashes */ });
+    }
 }
 
 // ========== PORTFOLIO & ASSET MANAGEMENT ==========
@@ -943,6 +1042,16 @@ function openMgmtModal(action, data) {
                 <input type="hidden" id="mgmt-deposit-cash-usd" value="${cashUsd}" />
                 <input type="hidden" id="mgmt-deposit-cash-ils" value="${cashIls}" />
                 <div class="mgmt-field"><label>סכום להפקדה</label><input type="text" inputmode="decimal" id="mgmt-deposit-amount" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateDepositPreview()" /></div>
+                <div class="mgmt-field" id="mgmt-deposit-fx-section">
+                    <label>מקור הכסף — הומר משקלים לדולרים? (משפיע על תשואה מותאמת מט"ח)</label>
+                    <select id="mgmt-deposit-fxmode" onchange="_onDepositFxModeChange()">
+                        <option value="none">לא — הופקדו דולרים</option>
+                        <option value="today">כן — לפי שער היום (₪${(window.USD_ILS_RATE || 3.7).toFixed(3)} לדולר)</option>
+                        <option value="custom">כן — שער המרה מותאם אישית</option>
+                    </select>
+                    <input type="text" inputmode="decimal" id="mgmt-deposit-fxrate" placeholder="לדוגמה: 3.62"
+                           style="display:none;direction:ltr;text-align:left;margin-top:8px" />
+                </div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>יתרה לאחר הפקדה:</span><span id="mgmt-deposit-new-balance">${formatCurrency(cashUsd, 'USD')}</span></div>
                 </div>
@@ -1149,6 +1258,9 @@ function updateDepositPreview() {
         : parseInputNumber(document.getElementById('mgmt-deposit-cash-usd')?.value);
     const newBalanceEl = document.getElementById('mgmt-deposit-new-balance');
     if (newBalanceEl) newBalanceEl.textContent = formatCurrency(currentCash + amount, currency);
+    // ILS→USD conversion section is only meaningful for USD deposits
+    const fxSection = document.getElementById('mgmt-deposit-fx-section');
+    if (fxSection) fxSection.style.display = (currency === 'USD') ? '' : 'none';
 }
 
 // --- Ticker Search (Twelve Data symbol_search + local Hebrew lookup) ---
@@ -1628,10 +1740,34 @@ async function addHolding(clientId) {
 
 // --- Deposit Cash ---
 
+// Show the custom-rate input only for "custom" mode; the whole FX section is
+// relevant only for USD deposits (handled in updateDepositPreview).
+function _onDepositFxModeChange() {
+    const mode = document.getElementById('mgmt-deposit-fxmode')?.value;
+    const rateEl = document.getElementById('mgmt-deposit-fxrate');
+    if (rateEl) {
+        rateEl.style.display = (mode === 'custom') ? '' : 'none';
+        if (mode === 'custom' && !rateEl.value) rateEl.value = (window.USD_ILS_RATE || 3.7).toFixed(3);
+    }
+}
+
 async function depositCash(clientId) {
     const amount = parseInputNumber(document.getElementById('mgmt-deposit-amount')?.value);
     const currency = document.getElementById('mgmt-deposit-currency')?.value || 'USD';
     if (!amount || amount <= 0) { alert('נא להזין סכום תקין'); return; }
+
+    // ILS→USD conversion basis: record the REAL rate the dollars were bought at,
+    // so the FX-adjusted return measures against the actual purchase rate.
+    if (currency === 'USD' && typeof addClientFxBasis === 'function') {
+        const mode = document.getElementById('mgmt-deposit-fxmode')?.value || 'none';
+        if (mode !== 'none') {
+            const rate = mode === 'today'
+                ? (window.USD_ILS_RATE || 0)
+                : parseInputNumber(document.getElementById('mgmt-deposit-fxrate')?.value);
+            if (rate > 0.5 && rate < 20) addClientFxBasis(clientId, amount, rate);
+            else if (mode === 'custom') { alert('נא להזין שער המרה תקין (למשל 3.62)'); return; }
+        }
+    }
 
     const updated = await portfolioDepositCash(clientId, amount, currency);
     const idx = clients.findIndex(c => c.id === clientId);
