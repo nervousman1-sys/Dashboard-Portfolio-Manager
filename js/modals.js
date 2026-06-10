@@ -776,6 +776,29 @@ function generateAllPortfoliosReport() {
             : '<span style="color:#c00;font-weight:700">לא יעיל ✗ (מתחת ל-CML)</span>';
     };
 
+    // Per-portfolio holdings detail table (asset, type, allocation, value, return)
+    const holdingsTable = (c) => {
+        const hs = (c.holdings || []).filter(h => (h.value || 0) > 0 || (h.shares || 0) > 0);
+        if (!hs.length) return '<p class="rpt-sectors" style="color:#888">אין נכסים בתיק.</p>';
+        const rows = hs.map(h => {
+            const profit = (h.value || 0) - (h.costBasis || 0);
+            const ret = h.costBasis > 0 ? (profit / h.costBasis * 100) : 0;
+            const heName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+            const nm = heName || (h.type === 'stock' ? h.ticker : (h.name || h.ticker));
+            return `<tr>
+                <td>${nm}</td>
+                <td>${h.type === 'bond' ? 'אג"ח' : 'מניה'}</td>
+                <td>${(h.allocationPct || 0).toFixed(1)}%</td>
+                <td>${formatCurrency(h.value || 0, h.currency)}</td>
+                <td style="color:${ret >= 0 ? 'green' : 'red'}">${(ret >= 0 ? '+' : '')}${ret.toFixed(2)}%</td>
+            </tr>`;
+        }).join('');
+        return `<table class="report-table rpt-holdings">
+            <thead><tr><th>נכס</th><th>סוג</th><th>הקצאה</th><th>שווי</th><th>תשואה</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    };
+
     const portfolioSections = list.map(c => {
         const r = calcPortfolioReturn(c);
         const sign = r.returnPct >= 0 ? '+' : '';
@@ -794,7 +817,10 @@ function generateAllPortfoliosReport() {
                 <div class="report-stat"><div class="label">תשואה</div><div class="value" style="color:${r.returnPct >= 0 ? 'green' : 'red'}">${sign}${r.returnPct.toFixed(2)}%</div></div>
                 <div class="report-stat"><div class="label">רווח/הפסד</div><div class="value" style="color:${r.profit >= 0 ? 'green' : 'red'}">${r.profit >= 0 ? '+' : ''}${formatCurrency(Math.abs(r.profit))}</div></div>
                 <div class="report-stat"><div class="label">יעילות לפי המודל</div><div class="value" style="font-size:13px">${effCell(c)}</div></div>
+                <div class="report-stat"><div class="label">עסקאות החודש</div><div class="value" id="rpt-tx-${c.id}">…</div></div>
             </div>
+            <h4 class="rpt-subhead">נכסים בתיק (${(c.holdings || []).length})</h4>
+            ${holdingsTable(c)}
             <p class="rpt-sectors"><b>חשיפה לסקטורים:</b> ${secLine}</p>
         </div>`;
     }).join('');
@@ -814,6 +840,31 @@ function generateAllPortfoliosReport() {
             <button class="report-back-btn" style="position:static;margin-top:16px" onclick="window.print()">הדפס / שמור כ-PDF</button>
         </div>
     `;
+
+    // Fill "transactions this month" per portfolio (async — Supabase per portfolio,
+    // in parallel). Counts buys/sells/deposits made in the CURRENT calendar month.
+    if (typeof supaFetchTransactions === 'function' && typeof supabaseConnected !== 'undefined' && supabaseConnected) {
+        const now = new Date();
+        const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        list.forEach(async (c) => {
+            try {
+                const txs = await supaFetchTransactions(c.id);
+                const el = document.getElementById(`rpt-tx-${c.id}`);
+                if (!el) return;
+                if (txs && txs.unavailable) { el.textContent = '—'; return; }
+                const count = (txs || []).filter(t => t.date instanceof Date && t.date >= mStart).length;
+                el.textContent = String(count);
+            } catch (e) {
+                const el = document.getElementById(`rpt-tx-${c.id}`);
+                if (el) el.textContent = '—';
+            }
+        });
+    } else {
+        list.forEach(c => {
+            const el = document.getElementById(`rpt-tx-${c.id}`);
+            if (el) el.textContent = '—';
+        });
+    }
 
     // Model not built yet (e.g. report opened right after login)? Build it in the
     // background and fill the efficiency cells in place when ready.

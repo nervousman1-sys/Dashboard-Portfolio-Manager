@@ -7933,3 +7933,8 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .rpt-risk-low { color: #15803d; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.4); }
 .rpt-sectors { font-size: 12.5px; line-height: 1.7; margin: 10px 0 0; }
 @media print { .report-back-btn { display: none !important; } }
+
+/* Report: per-portfolio holdings detail */
+.rpt-subhead { margin: 14px 0 8px; font-size: 13.5px; font-weight: 800; }
+.rpt-holdings { margin-bottom: 4px; }
+.rpt-holdings td, .rpt-holdings th { font-size: 12px; padding: 6px 9px; }
