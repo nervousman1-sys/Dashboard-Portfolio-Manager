@@ -248,6 +248,27 @@ async function _fredFetchViaCors() {
     return Object.keys(out).length ? out : null;
 }
 
+// PRIMARY macro source: the same-origin /api/macro aggregator (FRED for US + Israeli
+// rates/unemployment/yields, CBS for Israeli CPI) — all server-side, so no flaky
+// public CORS proxies. Returns { us, il } or null. Cached in memory for the TTL.
+let _macroApiCache = null;
+async function _fetchMacroAPI(forceRefresh) {
+    if (!forceRefresh && _macroApiCache && (Date.now() - _macroApiCache.ts) < _MACRO_TTL_IND) {
+        return _macroApiCache.data;
+    }
+    try {
+        const day = new Date().toISOString().slice(0, 10);
+        const res = await _macroFetch(`/api/macro?d=${day}`, 12000, 1);
+        if (!res || !res.ok) return _macroApiCache ? _macroApiCache.data : null;
+        const data = await res.json();
+        if (!data || typeof data !== 'object' || (!data.us && !data.il)) {
+            return _macroApiCache ? _macroApiCache.data : null;
+        }
+        _macroApiCache = { ts: Date.now(), data };
+        return data;
+    } catch { return _macroApiCache ? _macroApiCache.data : null; }
+}
+
 // Fetches all US indicators live from FRED — serverless proxy first, public CORS
 // proxy as fallback so data is current EVERYWHERE (local + production), not the
 // stale hardcoded baseline. Returns null (→ caller tries FMP) if both paths fail.
@@ -374,11 +395,21 @@ async function _fetchUSHeadlines(forceRefresh) {
     // endpoint is restricted on the free tier and frequently fails, so it's the
     // fallback only.
     let liveData = null;
+    // Primary: the /api/macro aggregator (most reliable, current)
     try {
-        liveData = await _fetchFREDIndicators(forceRefresh);
-        if (liveData) console.log('[Macro] ✓ US live overlay via FRED (proxy)');
-    } catch (e) { console.warn('[Macro] FRED overlay failed:', e.message); }
-
+        const agg = await _fetchMacroAPI(forceRefresh);
+        if (agg && agg.us && Object.keys(agg.us).length) {
+            liveData = agg.us;
+            console.log('[Macro] ✓ US live overlay via /api/macro');
+        }
+    } catch (e) { console.warn('[Macro] /api/macro US failed:', e.message); }
+    // Fallbacks: direct FRED proxy/CORS, then FMP
+    if (!liveData) {
+        try {
+            liveData = await _fetchFREDIndicators(forceRefresh);
+            if (liveData) console.log('[Macro] ✓ US live overlay via FRED (proxy)');
+        } catch (e) { console.warn('[Macro] FRED overlay failed:', e.message); }
+    }
     if (!liveData) {
         try {
             liveData = await _fetchFMPUSIndicators(forceRefresh);
@@ -587,6 +618,18 @@ async function _fetchILHeadlines(forceRefresh) {
             _macroApiStatus.fmpIL = e.message;
         }
     }
+
+    // Primary overlay: the /api/macro Israel block (FRED rates/unemployment/yield +
+    // CBS CPI) — most reliable & current, so it wins over BOI/FMP and the baseline.
+    try {
+        const agg = await _fetchMacroAPI(forceRefresh);
+        if (agg && agg.il) {
+            for (const [k, v] of Object.entries(agg.il)) {
+                if (v && v.value != null && !isNaN(v.value)) results[k] = v;
+            }
+            if (Object.keys(agg.il).length) { _macroApiStatus.boiIL = true; _macroApiStatus.fmpIL = true; }
+        }
+    } catch (e) { /* keep BOI/FMP results */ }
 
     // Merge: live API results override baseline
     const merged = { ...baseline, ...results };

@@ -7512,6 +7512,22 @@ body.full-list-open { overflow: hidden; }
 .adv-portfolio-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
     border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .adv-portfolio-name { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+
+/* Collapsible per-portfolio accordion on the CML/SML analysis page */
+.adv-accordion { display: flex; flex-direction: column; gap: 12px; }
+details.adv-portfolio { padding: 0; overflow: hidden; }
+details.adv-portfolio > summary.adv-portfolio-head {
+    display: flex; align-items: center; gap: 12px; justify-content: flex-start;
+    margin: 0; padding: 14px 18px; cursor: pointer; list-style: none; border-bottom: 1px solid transparent;
+    transition: background .15s;
+}
+details.adv-portfolio > summary.adv-portfolio-head::-webkit-details-marker { display: none; }
+details.adv-portfolio > summary.adv-portfolio-head:hover { background: rgba(255,255,255,0.03); }
+details.adv-portfolio[open] > summary.adv-portfolio-head { border-bottom-color: var(--border); }
+.adv-portfolio-head .adv-portfolio-name { flex: 1; }
+.adv-portfolio-chevron { font-size: 13px; color: var(--accent-blue); transition: transform .2s; }
+details.adv-portfolio[open] .adv-portfolio-chevron { transform: rotate(180deg); }
+.adv-portfolio-body { padding: 14px 18px 18px; }
 .adv-block { display: flex; flex-direction: column; gap: 10px; }
 .adv-verdict { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; }
 .adv-verdict-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }

@@ -161,7 +161,6 @@ function _renderRiskPage(model, errMsg) {
         </div>
         ${_renderAdvisorySection(model)}
         ${_renderRecommendations(model)}
-        ${_renderCorrelationHeatmap(model)}
     `;
     page.innerHTML = _riskPageShell(inner);
 
@@ -438,22 +437,25 @@ function _renderAdvisorySection(model) {
         let adv = null;
         try { adv = buildPortfolioAdvisory(client, model); } catch (e) { /* skip */ }
         const body = (typeof renderAdvisoryHTML === 'function') ? renderAdvisoryHTML(adv, { clientId: p.id }) : '';
+        // Collapsed by default; native <details> expands downward in place on click and
+        // collapses on a second click — no pop-up window.
         return `
-            <div class="adv-portfolio glass-card">
-                <div class="adv-portfolio-head">
+            <details class="adv-portfolio glass-card">
+                <summary class="adv-portfolio-head">
+                    <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
                     <span class="adv-portfolio-name">${_riskEsc(p.name)}</span>
                     <span class="risk-badge ${p.risk}">${p.riskLabel} · ${p.riskScore}</span>
-                </div>
-                ${body}
-            </div>`;
+                </summary>
+                <div class="adv-portfolio-body">${body}</div>
+            </details>`;
     }).join('');
 
     return `
         <div class="risk-section-head">
             <h3>סקירה והמלצות לכל תיק</h3>
-            <span class="risk-chart-sub">האם התיק עומד ב-CML/SML · אילו נכסים מתאימים · מה לשנות ומה לקנות</span>
+            <span class="risk-chart-sub">לחץ על תיק כדי לפתוח את הפרטים המלאים (לחיצה נוספת תסגור)</span>
         </div>
-        <div class="adv-grid">${cards}</div>`;
+        <div class="adv-accordion">${cards}</div>`;
 }
 
 // ── 5. Recommendations table ──
