@@ -55,9 +55,21 @@ const RISK_MODEL = {
     // Liquid, diversified names always analyzed so the "add to portfolio" picker
     // has real, ranked candidates to choose from (across sectors).
     CANDIDATE_UNIVERSE: [
-        'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'AVGO', 'JPM', 'V', 'MA',
-        'UNH', 'JNJ', 'LLY', 'XOM', 'CVX', 'PG', 'KO', 'COST', 'HD', 'WMT',
-        'NFLX', 'AMD', 'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK',
+        // Tech / Communication
+        'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'AVGO', 'NFLX', 'AMD', 'ORCL',
+        'CRM', 'ADBE', 'CSCO', 'QCOM', 'TXN', 'INTC', 'T', 'VZ',
+        // Financials
+        'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'AXP', 'SCHW', 'BLK',
+        // Healthcare
+        'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO', 'ABT', 'AMGN', 'DHR',
+        // Energy
+        'XOM', 'CVX', 'COP', 'SLB', 'EOG',
+        // Consumer staples / discretionary
+        'PG', 'KO', 'PEP', 'COST', 'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'DIS', 'LOW',
+        // Industrials
+        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX',
+        // Broad ETFs / hedges
+        'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
     ],
 };
 
@@ -873,7 +885,7 @@ function buildPortfolioAdvisory(client, model) {
     };
     const TARGET_ADD = 0.10; // size each suggested addition to ~10% of the portfolio
     const candidates = Object.values(model.assets)
-        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > 0 && a.recommendation !== 'avoid')
+        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > -0.005 && a.recommendation !== 'avoid')
         .map(a => {
             const c = _avgCorrTo(a.ticker);
             const price = (a.lastClose != null && a.lastClose > 0) ? a.lastClose : null;
@@ -887,7 +899,7 @@ function buildPortfolioAdvisory(client, model) {
             };
         })
         .sort((x, y) => y.fit - x.fit)
-        .slice(0, 24);   // deep bench so the picker can offer alternatives per sector
+        .slice(0, 36);   // deep bench so the picker can offer many alternatives per sector
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];

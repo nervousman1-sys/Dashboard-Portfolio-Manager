@@ -921,9 +921,9 @@ function openStockRecommendations(clientId) {
             let grid = '';
             for (let slot = 0; slot < slots; slot++) {
                 const cardId = `recoCard_${seq++}`;
-                const label = alt ? `אופציה ${OPT[slot] || (slot + 1)} · ` : '';
-                state.cards[cardId] = { sector, shownIdx: slot, label };
-                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, label, list.length > slots)}</div>`;
+                const optLetter = alt ? `${OPT[slot] || (slot + 1)}'` : '';
+                state.cards[cardId] = { sector, shownIdx: slot, optLetter };
+                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, list.length > slots)}</div>`;
             }
             return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
         }).join('');
@@ -948,14 +948,19 @@ function closeStockRecommendations() {
 }
 
 // Inner HTML of a recommendation card (so a card can be re-rendered in place when the
-// user asks for an alternative). `hasAlt` controls the "check an alternative" button.
-function _recoCardInner(c, cardId, label, hasAlt) {
+// user asks for an alternative). `optLetter` is e.g. "א'" (empty for a single option).
+// The letter + ticker are kept on ONE line (nowrap); the alt button + buy CTA live in
+// a footer pinned to the bottom so they never jump when the card is swapped.
+function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const gf = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(c.ticker) : `https://www.google.com/finance/quote/${c.ticker}:NASDAQ`;
     const buy = c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק';
     const altBtn = hasAlt ? `<button class="reco-alt" onclick="event.stopPropagation(); swapRecommendation('${cardId}')" title="הצג מנייה חלופית מאותו סקטור">↻ בדוק אופציה חלופית</button>` : '';
+    const heading = optLetter
+        ? `<span class="reco-opt-lead">אופציה</span> <span class="reco-opt">${_riskEsc(optLetter)} · ${_riskEsc(c.ticker)}</span>`
+        : `<span class="reco-opt">${_riskEsc(c.ticker)}</span>`;
     return `
             <div class="reco-card-top">
-                <span class="reco-tk">${label}${_riskEsc(c.ticker)}</span>
+                <span class="reco-tk">${heading}</span>
                 <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
             </div>
             <div class="reco-buy">${buy}</div>
@@ -965,8 +970,10 @@ function _recoCardInner(c, cardId, label, hasAlt) {
                 <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
                 <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
-            ${altBtn}
-            <div class="reco-add">+ הוסף לתיק וקנה</div>`;
+            <div class="reco-foot">
+                ${altBtn}
+                <div class="reco-add">+ הוסף לתיק וקנה</div>
+            </div>`;
 }
 
 // Cycle a card to the next not-currently-shown candidate in its sector (in place).
@@ -992,7 +999,7 @@ function swapRecommendation(cardId) {
     const el = document.getElementById(cardId);
     if (!el) return;
     el.setAttribute('onclick', `addCandidateToPortfolio(${st.clientId}, '${_riskEsc(c.ticker)}'); closeStockRecommendations();`);
-    el.innerHTML = _recoCardInner(c, cardId, cs.label, list.length > (st.slots[cs.sector] || 1));
+    el.innerHTML = _recoCardInner(c, cardId, cs.optLetter, list.length > (st.slots[cs.sector] || 1));
 }
 
 if (typeof window !== 'undefined') {

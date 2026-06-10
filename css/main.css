@@ -7743,10 +7743,15 @@ body.full-list-open { overflow: hidden; }
 .reco-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 9px; font-size: 11.5px; color: rgba(245,245,250,0.72); }
 .reco-stats b { color: rgba(245,245,250,0.95); font-weight: 800; }
 .reco-stats b.pos { color: var(--risk-low); }
-.reco-add { margin-top: auto; text-align: center; font-size: 11px; font-weight: 800; color: var(--accent-blue);
+/* Footer (alt button + buy CTA) is pinned to the bottom of every card, so the alt
+   button never jumps when the card is swapped to a different candidate. */
+.reco-foot { margin-top: auto; }
+.reco-add { text-align: center; font-size: 11px; font-weight: 800; color: var(--accent-blue);
     border-top: 1px dashed rgba(0,229,255,0.25); padding-top: 8px; }
-/* keep a minimum gap above the pinned CTA even when content nearly fills the card */
 .reco-stats { margin-bottom: 10px; }
+/* Keep the option letter and ticker on ONE line (e.g. "א' · JNJ"); "אופציה" may wrap above */
+.reco-opt { white-space: nowrap; font-weight: 900; }
+.reco-opt-lead { font-weight: 900; }
 
 /* CML/SML tab scrolls so charts + advisory are never cut off */
 #tab-cmlsml { overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
@@ -7842,7 +7847,7 @@ body.full-list-open { overflow: hidden; }
 
 /* "Check an alternative" button on a recommendation card (subtle, in-design) */
 .reco-alt {
-    display: block; width: 100%; margin: 2px 0 9px; font-family: inherit;
+    display: block; width: 100%; margin: 0 0 9px; font-family: inherit;
     background: transparent; border: 1px solid rgba(0,229,255,0.25); border-radius: 7px;
     color: rgba(0,229,255,0.85); font-size: 10.5px; font-weight: 700;
     padding: 5px 6px; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
