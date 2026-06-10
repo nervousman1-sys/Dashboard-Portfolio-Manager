@@ -611,8 +611,13 @@ function closeModal(event) {
 
 // ========== REPORTS ==========
 
-// Hide ALL app UI — the report becomes the only visible element (print-clean)
+// Hide ALL app UI — the report becomes the only visible element (print-clean).
+// CRITICAL: the report view sits AFTER the app-shell in the DOM, and the shell keeps
+// min-height:100vh even when its children are hidden — so the shell itself must be
+// hidden too, or the report starts a full screen down.
 function _hideAppForReport() {
+    const shell = document.getElementById('appShell');
+    if (shell) shell.style.display = 'none';
     document.querySelector('.header').style.display = 'none';
     document.querySelector('.summary-bar').style.display = 'none';
     const filtersEl = document.querySelector('.filters');
@@ -731,6 +736,8 @@ function closeReport() {
     if (mobileNav) mobileNav.style.display = '';
     const sidebar = document.getElementById('appSidebar');
     if (sidebar) sidebar.style.display = '';
+    const shell = document.getElementById('appShell');
+    if (shell) shell.style.display = '';
 }
 
 // ========== CONSOLIDATED ALL-PORTFOLIOS REPORT ==========
