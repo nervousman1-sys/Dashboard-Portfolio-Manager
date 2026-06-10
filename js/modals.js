@@ -671,6 +671,7 @@ function generateReport(clientId) {
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 
     _hideAppForReport();
+    window.scrollTo(0, 0);
 
     const reportView = document.getElementById('reportView');
     reportView.classList.add('active');
@@ -776,6 +777,31 @@ function generateAllPortfoliosReport() {
             : '<span style="color:#c00;font-weight:700">לא יעיל ✗ (מתחת ל-CML)</span>';
     };
 
+    // Per-portfolio dividend yield ESTIMATE — weighted by holding value using
+    // approximate trailing annual yields (%) for common names; unknown tickers = 0.
+    const DIV_EST = {
+        SPY: 1.2, VOO: 1.2, QQQ: 0.6, DIA: 1.6, IWM: 1.2, SCHD: 3.4, TLT: 3.8, IEF: 3.3, LQD: 4.2, GLD: 0,
+        AAPL: 0.4, MSFT: 0.7, NVDA: 0.03, GOOGL: 0.5, AMZN: 0, META: 0.4, AVGO: 1.2, NFLX: 0, AMD: 0, ORCL: 1.1,
+        CRM: 0.4, ADBE: 0, CSCO: 2.7, QCOM: 2.1, TXN: 3.0, INTC: 1.5, T: 4.0, VZ: 6.2,
+        JPM: 2.0, V: 0.7, MA: 0.5, BAC: 2.4, WFC: 2.6, GS: 2.0, MS: 3.2, AXP: 1.0, SCHW: 1.3, BLK: 2.0,
+        UNH: 1.5, JNJ: 3.0, LLY: 0.7, ABBV: 3.5, MRK: 3.0, PFE: 5.9, TMO: 0.3, ABT: 1.9, AMGN: 3.1, DHR: 0.4,
+        XOM: 3.3, CVX: 4.1, COP: 2.9, SLB: 2.5, EOG: 3.2,
+        PG: 2.4, KO: 2.9, PEP: 3.2, COST: 0.5, WMT: 0.9, HD: 2.3, MCD: 2.2, NKE: 2.0, SBUX: 2.5, DIS: 0.9, LOW: 1.9,
+        CAT: 1.5, BA: 0, HON: 2.0, GE: 0.7, UPS: 4.5, RTX: 2.0,
+        XLF: 1.5, XLV: 1.6, XLE: 3.2, XLK: 0.7, XLI: 1.4, XLP: 2.5,
+    };
+    const divYieldOf = (c) => {
+        let tot = 0, weighted = 0;
+        for (const h of (c.holdings || [])) {
+            const v = (h._valueInDisplayCurrency != null) ? h._valueInDisplayCurrency : (h.value || 0) * fx(h.currency);
+            if (!(v > 0)) continue;
+            tot += v;
+            const base = (h.ticker || '').toUpperCase().replace(/\.TA$/, '');
+            weighted += v * (DIV_EST[base] || 0);
+        }
+        return tot > 0 ? weighted / tot : 0;
+    };
+
     // Per-portfolio holdings detail table (asset, type, allocation, value, return)
     const holdingsTable = (c) => {
         const hs = (c.holdings || []).filter(h => (h.value || 0) > 0 || (h.shares || 0) > 0);
@@ -818,10 +844,13 @@ function generateAllPortfoliosReport() {
                 <div class="report-stat"><div class="label">רווח/הפסד</div><div class="value" style="color:${r.profit >= 0 ? 'green' : 'red'}">${r.profit >= 0 ? '+' : ''}${formatCurrency(Math.abs(r.profit))}</div></div>
                 <div class="report-stat"><div class="label">יעילות לפי המודל</div><div class="value" style="font-size:13px">${effCell(c)}</div></div>
                 <div class="report-stat"><div class="label">עסקאות החודש</div><div class="value" id="rpt-tx-${c.id}">…</div></div>
+                <div class="report-stat"><div class="label">תשואת דיבידנד</div><div class="value" style="color:green">${divYieldOf(c).toFixed(2)}%</div></div>
             </div>
             <h4 class="rpt-subhead">נכסים בתיק (${(c.holdings || []).length})</h4>
             ${holdingsTable(c)}
             <p class="rpt-sectors"><b>חשיפה לסקטורים:</b> ${secLine}</p>
+            <h4 class="rpt-subhead">עסקאות אחרונות — מחירי קנייה/מכירה</h4>
+            <div id="rpt-txtable-${c.id}"><p class="rpt-sectors" style="color:#888">טוען עסקאות…</p></div>
         </div>`;
     }).join('');
 
@@ -841,28 +870,59 @@ function generateAllPortfoliosReport() {
         </div>
     `;
 
-    // Fill "transactions this month" per portfolio (async — Supabase per portfolio,
-    // in parallel). Counts buys/sells/deposits made in the CURRENT calendar month.
+    // Open at the TOP of the page (the dashboard may have been scrolled down)
+    window.scrollTo(0, 0);
+
+    // Per portfolio (async, parallel): "transactions this month" count + a detailed
+    // table of the latest transactions with their actual buy/sell prices.
+    const TX_LABEL = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
+    const txTableHTML = (txs) => {
+        const shown = (txs || []).filter(t => t.type === 'buy' || t.type === 'sell' || t.type === 'deposit' || t.type === 'withdraw').slice(0, 10);
+        if (!shown.length) return '<p class="rpt-sectors" style="color:#888">אין עסקאות בתיק.</p>';
+        const rows = shown.map(t => {
+            const sym = t.currency === 'ILS' ? '₪' : '$';
+            return `<tr>
+                <td>${t.date instanceof Date ? t.date.toLocaleDateString('he-IL') : ''}</td>
+                <td><b>${TX_LABEL[t.type] || t.type}</b></td>
+                <td>${t.name || (t.ticker !== '-' ? t.ticker : '—')}</td>
+                <td>${t.shares > 0 ? Number(t.shares).toLocaleString('en-US') : '—'}</td>
+                <td>${t.price > 0 ? `${formatPrice(t.price)} ${sym}` : '—'}</td>
+                <td>${t.total > 0 ? formatCurrency(t.total, t.currency) : '—'}</td>
+                <td>${(t.type === 'sell' && t.realizedPnl != null) ? `<span style="color:${t.realizedPnl >= 0 ? 'green' : 'red'}">${t.realizedPnl >= 0 ? '+' : ''}${formatCurrency(Math.abs(t.realizedPnl))}</span>` : '—'}</td>
+            </tr>`;
+        }).join('');
+        return `<table class="report-table rpt-holdings">
+            <thead><tr><th>תאריך</th><th>פעולה</th><th>נכס</th><th>כמות</th><th>מחיר</th><th>סה"כ</th><th>רווח ממומש</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    };
+
     if (typeof supaFetchTransactions === 'function' && typeof supabaseConnected !== 'undefined' && supabaseConnected) {
         const now = new Date();
         const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
         list.forEach(async (c) => {
+            const countEl = document.getElementById(`rpt-tx-${c.id}`);
+            const tableEl = document.getElementById(`rpt-txtable-${c.id}`);
             try {
                 const txs = await supaFetchTransactions(c.id);
-                const el = document.getElementById(`rpt-tx-${c.id}`);
-                if (!el) return;
-                if (txs && txs.unavailable) { el.textContent = '—'; return; }
-                const count = (txs || []).filter(t => t.date instanceof Date && t.date >= mStart).length;
-                el.textContent = String(count);
+                if (txs && txs.unavailable) {
+                    if (countEl) countEl.textContent = '—';
+                    if (tableEl) tableEl.innerHTML = '<p class="rpt-sectors" style="color:#888">היסטוריית עסקאות אינה זמינה.</p>';
+                    return;
+                }
+                if (countEl) countEl.textContent = String((txs || []).filter(t => t.date instanceof Date && t.date >= mStart).length);
+                if (tableEl) tableEl.innerHTML = txTableHTML(txs);
             } catch (e) {
-                const el = document.getElementById(`rpt-tx-${c.id}`);
-                if (el) el.textContent = '—';
+                if (countEl) countEl.textContent = '—';
+                if (tableEl) tableEl.innerHTML = '<p class="rpt-sectors" style="color:#888">שגיאה בטעינת עסקאות.</p>';
             }
         });
     } else {
         list.forEach(c => {
             const el = document.getElementById(`rpt-tx-${c.id}`);
             if (el) el.textContent = '—';
+            const tableEl = document.getElementById(`rpt-txtable-${c.id}`);
+            if (tableEl) tableEl.innerHTML = '<p class="rpt-sectors" style="color:#888">היסטוריית עסקאות אינה זמינה.</p>';
         });
     }
 
