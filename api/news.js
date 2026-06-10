@@ -33,7 +33,8 @@ async function translateHe(text) {
 
 function ymd(d) { return new Date(d).toISOString().slice(0, 10); }
 
-async function newsFor(symbol, perSymbol) {
+// Primary: Finnhub company-news (rich, per-company).
+async function finnhubNewsFor(symbol, perSymbol) {
     const to = Date.now();
     const from = to - 12 * 86400000; // last ~12 days
     const url = `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(symbol)}` +
@@ -43,11 +44,37 @@ async function newsFor(symbol, perSymbol) {
     const arr = await r.json();
     if (!Array.isArray(arr) || !arr.length) return [];
     arr.sort((a, b) => (b.datetime || 0) - (a.datetime || 0));
-    const top = arr.filter(n => n && n.headline).slice(0, perSymbol);
+    return arr.filter(n => n && n.headline).slice(0, perSymbol)
+        .map(n => ({ en: n.headline, date: ymd((n.datetime || 0) * 1000), url: n.url || '', source: n.source || '' }));
+}
+
+// Fallback: Yahoo Finance search news (no key, very reliable) — covers ETFs and any
+// symbol Finnhub has nothing for, so a held asset is never left without updates.
+async function yahooNewsFor(symbol, perSymbol) {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}` +
+        `&newsCount=${perSymbol + 2}&quotesCount=0`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+    if (!r.ok) return [];
+    const j = await r.json();
+    const arr = (j && j.news) || [];
+    return arr.filter(n => n && n.title).slice(0, perSymbol)
+        .map(n => ({
+            en: n.title,
+            date: n.providerPublishTime ? ymd(n.providerPublishTime * 1000) : '',
+            url: n.link || '', source: n.publisher || 'Yahoo',
+        }));
+}
+
+async function newsFor(symbol, perSymbol) {
+    let items = [];
+    try { items = await finnhubNewsFor(symbol, perSymbol); } catch (e) { items = []; }
+    if (!items.length) {
+        try { items = await yahooNewsFor(symbol, perSymbol); } catch (e) { items = []; }
+    }
     const out = [];
-    for (const n of top) {
-        const he = await translateHe(n.headline);
-        out.push({ he, en: n.headline, date: ymd((n.datetime || 0) * 1000), url: n.url || '', source: n.source || '' });
+    for (const n of items) {
+        const he = await translateHe(n.en);
+        out.push({ he, en: n.en, date: n.date, url: n.url, source: n.source });
     }
     return out;
 }
@@ -68,12 +95,13 @@ module.exports = async (req, res) => {
         }));
         const out = {};
         for (const [s, v] of entries) if (v && v.length) out[s] = v;
-        // Cache a populated result for ~6h; but if we got nothing (a transient
-        // upstream hiccup), cache only briefly so it isn't stuck empty all day.
+        // Cache a populated result for ~2h (continuous through-the-day scanning);
+        // if we got nothing (a transient upstream hiccup), cache only briefly so
+        // it isn't stuck empty.
         const hasData = Object.keys(out).length > 0;
         res.setHeader('Cache-Control', hasData
-            ? 's-maxage=21600, stale-while-revalidate=86400'
-            : 's-maxage=120');
+            ? 's-maxage=7200, stale-while-revalidate=21600'
+            : 's-maxage=60');
         res.status(200).json(out);
     } catch (e) {
         res.setHeader('Cache-Control', 's-maxage=60');

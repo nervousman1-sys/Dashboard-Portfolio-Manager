@@ -2,6 +2,20 @@
 
 // Transaction history is now fetched from Supabase (supaFetchTransactions)
 
+// ── Background scroll lock ──
+// While ANY overlay (client modal / CRUD modal / stock-recommendations popup) is
+// open, the page behind must not scroll — wheel/touch outside the window otherwise
+// scrolls the background. Checks every overlay so closing one popup while another
+// is still open keeps the lock.
+function syncBodyScrollLock() {
+    const anyOpen = ['modalOverlay', 'mgmtOverlay', 'stockRecoOverlay', 'qwConfigModal']
+        .some(id => {
+            const el = document.getElementById(id);
+            return el && el.classList.contains('active');
+        });
+    document.body.classList.toggle('modal-open', anyOpen);
+}
+
 // Fills the per-portfolio CML/SML advisory panel in the client modal overview.
 // Reuses the cached risk model when available; otherwise builds it on demand.
 // Fills the Overview tab's risk-detail block with the model verdict + the
@@ -444,6 +458,7 @@ async function openModal(clientId) {
     `;
 
     document.getElementById('modalOverlay').classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 
     // Create modal charts
     setTimeout(() => {
@@ -584,6 +599,7 @@ async function _retryTransactionLoad(portfolioId) {
 function closeModal(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('modalOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
     currentModalClientId = null;
     // Clear URL state
     if (typeof clearURLState === 'function') clearURLState();
@@ -624,6 +640,7 @@ function generateReport(clientId) {
 
     // Close modal
     document.getElementById('modalOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 
     // Hide ALL UI — report is the only visible element
     document.querySelector('.header').style.display = 'none';
@@ -934,11 +951,13 @@ function openMgmtModal(action, data) {
 
     box.innerHTML = html;
     document.getElementById('mgmtOverlay').classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
 function closeMgmtModal(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('mgmtOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
 // Called internally when asset type changes (now auto-detected, not user-driven)
@@ -1537,6 +1556,7 @@ async function deleteClient(clientId) {
     closeMgmtModal();
     if (currentModalClientId === clientId) {
         document.getElementById('modalOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
         currentModalClientId = null;
     }
     refreshDashboard();

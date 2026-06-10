@@ -706,6 +706,7 @@ window.addEventListener('popstate', function(e) {
         // Back from modal → dashboard (don't push new state)
         _suppressPopstate = true;
         document.getElementById('modalOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
         return;
     }
     if (macroOpen && view !== 'macro') {
@@ -803,6 +804,7 @@ document.addEventListener('keydown', (e) => {
             return;
         }
         document.getElementById('modalOverlay').classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
         currentModalClientId = null;
         clearURLState();
     }

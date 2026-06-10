@@ -7869,3 +7869,30 @@ details.adv-portfolio[open] .adv-portfolio-chevron { transform: rotate(180deg); 
     padding: 5px 6px; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
 }
 .reco-alt:hover { background: rgba(0,229,255,0.09); border-color: rgba(0,229,255,0.55); color: #fff; }
+
+/* Background scroll lock while any modal/popup is open */
+body.modal-open { overflow: hidden; }
+
+/* Google Finance link pinned in the card footer (above the alt button) — fixed
+   position on every card regardless of ticker-name length */
+.reco-gf-foot { display: block; text-align: center; margin: 0 0 7px; padding: 4px 7px; }
+
+/* "Fits portfolio X" button in the asset-recommendations table */
+.rec-fit-btn {
+    font-family: inherit; font-size: 11px; font-weight: 800; color: var(--accent-blue);
+    background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.3);
+    border-radius: 7px; padding: 4px 11px; cursor: pointer; white-space: nowrap;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.rec-fit-btn:hover { background: rgba(0,229,255,0.16); border-color: rgba(0,229,255,0.6); color: #fff; }
+
+/* Collapsible asset-recommendations table */
+details.recs-details > summary.recs-summary {
+    display: flex; align-items: flex-start; gap: 12px; cursor: pointer; list-style: none;
+}
+details.recs-details > summary.recs-summary::-webkit-details-marker { display: none; }
+details.recs-details > summary.recs-summary:hover h3 { color: var(--accent-blue); }
+details.recs-details .adv-portfolio-chevron { margin-top: 3px; }
+details.recs-details[open] .adv-portfolio-chevron { transform: rotate(180deg); }
+.recs-summary-txt { display: flex; flex-direction: column; gap: 3px; }
+details.recs-details:not([open]) { padding-bottom: 14px; }

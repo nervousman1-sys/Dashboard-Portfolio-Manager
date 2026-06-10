@@ -460,11 +460,47 @@ function _renderAdvisorySection(model) {
 
 // ── 5. Recommendations table ──
 
+// For an asset, find the portfolio it fits BEST as an addition: highest
+// fit = α − 0.4·max(0, avg correlation to that portfolio's current holdings),
+// skipping portfolios that already hold it. Returns {id, name} or null.
+function _bestPortfolioFor(asset, model) {
+    if (!asset.hasData || asset.alpha == null || asset.recommendation === 'avoid') return null;
+    const clientsList = (typeof clients !== 'undefined') ? clients : [];
+    const corr = model.correlation;
+    const idx = {}; (corr?.tickers || []).forEach((t, i) => { idx[t] = i; });
+    const ai = idx[asset.ticker];
+    let best = null, bestFit = -Infinity;
+    for (const p of (model.portfolios || [])) {
+        if (!p.hasData || !(p.totalValue > 0)) continue;
+        const client = clientsList.find(c => c.id === p.id);
+        if (!client) continue;
+        const held = (client.holdings || []).map(h => h.ticker).filter(Boolean);
+        if (held.includes(asset.ticker)) continue;       // already held — not an addition
+        let avgCorr = 0.4; // conservative default when no correlation data
+        if (ai != null && held.length) {
+            let s = 0, k = 0;
+            for (const t of held) {
+                const hi = idx[t];
+                if (hi != null && hi !== ai) { s += corr.matrix[ai][hi]; k++; }
+            }
+            if (k) avgCorr = s / k;
+        }
+        const fit = asset.alpha - 0.4 * Math.max(0, avgCorr);
+        if (fit > bestFit) { bestFit = fit; best = { id: p.id, name: p.name }; }
+    }
+    return best;
+}
+
 function _renderRecommendations(model) {
     const assets = Object.values(model.assets || {}).filter(a => a.hasData)
         .sort((a, b) => (b.alpha || 0) - (a.alpha || 0));
     if (assets.length === 0) return '';
-    const body = assets.map(a => `
+    const body = assets.map(a => {
+        const fit = _bestPortfolioFor(a, model);
+        const fitCell = fit
+            ? `<button class="rec-fit-btn" onclick="event.stopPropagation(); openModal(${fit.id})" title="פתח את התיק — הנכס מתאים להוספה אליו">${_riskEsc(fit.name)}</button>`
+            : '<span class="adv-dim">—</span>';
+        return `
         <tr>
             <td class="risk-td-name">${_riskEsc(a.ticker)}</td>
             <td class="risk-td-sector">${_riskEsc(a.sector || '')}</td>
@@ -473,21 +509,27 @@ function _renderRecommendations(model) {
             <td>${rmFmtPct(a.requiredReturn, 1)}</td>
             <td class="${a.alpha >= 0 ? 'pos' : 'neg'}">${rmFmtPct(a.alpha, 1)}</td>
             <td><span class="risk-rec" style="--rec:${rmRecColor(a.recommendation)}">${rmRecLabel(a.recommendation)}</span></td>
-        </tr>`).join('');
+            <td>${fitCell}</td>
+        </tr>`;
+    }).join('');
+    // Collapsible <details>: click the header to fold/unfold the whole table (open by default)
     return `
-        <div class="risk-table-card glass-card">
-            <div class="risk-chart-head"><h3>המלצות נכסים</h3>
-                <span class="risk-chart-sub">לפי אלפא של ג'נסן — תשואה צפויה מול הנדרש ב-CAPM</span></div>
+        <details class="risk-table-card glass-card recs-details" open>
+            <summary class="risk-chart-head recs-summary">
+                <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
+                <span class="recs-summary-txt"><h3>המלצות נכסים</h3>
+                <span class="risk-chart-sub">לפי אלפא של ג'נסן — לחץ על הכותרת לקיפול/פתיחה · "מתאים לתיק" = התיק שבו ההוספה תורמת הכי הרבה (α גבוה + קורלציה נמוכה)</span></span>
+            </summary>
             <div class="risk-table-scroll">
             <table class="risk-table">
                 <thead><tr>
                     <th>נכס</th><th>סקטור</th><th>β</th><th>תשואה צפויה</th>
-                    <th>תשואה נדרשת</th><th>α</th><th>המלצה</th>
+                    <th>תשואה נדרשת</th><th>α</th><th>המלצה</th><th>מתאים לתיק</th>
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
             </div>
-        </div>`;
+        </details>`;
 }
 
 // ── 6. Correlation heatmap ──
@@ -682,14 +724,34 @@ async function _renderPortfolioNews(clientId) {
         return;
     }
 
-    box.innerHTML = '<div class="adv-empty">טוען עדכונים…</div>';
-    // Daily cache key: stable within a day (cached at the edge) but fresh each day,
-    // and it bypasses any earlier edge-cached EMPTY response for this portfolio.
-    const day = new Date().toISOString().slice(0, 10);
-    try {
-        const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&d=${day}`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) { box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע (נסה שוב בעוד רגע).</div>'; return; }
-        const data = await res.json();
+    if (!box.querySelector('.pf-news-item')) box.innerHTML = '<div class="adv-empty">טוען עדכונים…</div>';
+
+    // One news request, returning parsed {ok, data}. `bust` forces a fresh edge entry.
+    const fetchNews = async (bust) => {
+        // 2-hour bucket key → the edge serves the same scan for up to 2h, then a new
+        // scan runs; combined with the auto-refresh below this is a continuous 24/7 scan.
+        const bucket = Math.floor(Date.now() / 7200000);
+        const extra = bust ? `&fresh=${Date.now()}` : '';
+        try {
+            const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&b=${bucket}${extra}`, { headers: { Accept: 'application/json' } });
+            if (!res.ok) return { ok: false, data: null };
+            const data = await res.json();
+            if (!data || typeof data !== 'object' || data.error) return { ok: false, data: null };
+            return { ok: true, data };
+        } catch (e) { return { ok: false, data: null }; }
+    };
+
+    let { ok, data } = await fetchNews(false);
+    // Empty/failed? retry ONCE with a cache-busting key — recovers from a stale empty
+    // edge entry or a transient upstream miss (the reason updates "never arrived").
+    if (!ok || !Object.keys(data || {}).length) {
+        const retry = await fetchNews(true);
+        if (retry.ok) { ok = true; data = retry.data; }
+    }
+
+    if (!ok) {
+        if (!box.querySelector('.pf-news-item')) box.innerHTML = '<div class="adv-empty">לא ניתן לטעון עדכונים כרגע — ננסה שוב אוטומטית בעוד מספר דקות.</div>';
+    } else {
         const items = [];
         const seenHeadlines = new Set();
         for (const t of tickers) {
@@ -703,20 +765,30 @@ async function _renderPortfolioNews(clientId) {
             }
         }
         console.log(`[PortfolioNews] ${tickers.length} tickers → ${Object.keys(data || {}).length} with news, ${items.length} headlines`);
-        if (!items.length) {
-            box.innerHTML = '<div class="adv-empty">אין כרגע עדכונים זמינים לנכסי התיק (מתעדכן מספר פעמים ביום).</div>';
+        if (items.length) {
+            box.innerHTML = items.map(n => `
+                <a class="pf-news-item" href="${n.url || '#'}" target="_blank" rel="noopener">
+                    <span class="pf-news-tk">${_riskEsc(n.t)}</span>
+                    <span class="pf-news-he">${_riskEsc(n.he || n.en || '')}</span>
+                    ${n.date ? `<span class="pf-news-date">${_riskEsc(n.date)}</span>` : ''}
+                </a>`).join('');
+        } else if (!box.querySelector('.pf-news-item')) {
+            box.innerHTML = '<div class="adv-empty">אין כרגע עדכונים זמינים לנכסי התיק — הסריקה ממשיכה ברקע.</div>';
+        }
+    }
+
+    // 24/7 scanning: while the Portfolio Data tab stays open, re-scan every 10 min.
+    // The interval kills itself once the news box leaves the DOM (modal closed).
+    if (window._pfNewsTimer) clearInterval(window._pfNewsTimer);
+    window._pfNewsTimer = setInterval(() => {
+        const el = document.getElementById('modalPortfolioNews');
+        if (!el || !document.body.contains(el)) {
+            clearInterval(window._pfNewsTimer);
+            window._pfNewsTimer = null;
             return;
         }
-        box.innerHTML = items.map(n => `
-            <a class="pf-news-item" href="${n.url || '#'}" target="_blank" rel="noopener">
-                <span class="pf-news-tk">${_riskEsc(n.t)}</span>
-                <span class="pf-news-he">${_riskEsc(n.he || n.en || '')}</span>
-                ${n.date ? `<span class="pf-news-date">${_riskEsc(n.date)}</span>` : ''}
-            </a>`).join('');
-    } catch (e) {
-        console.warn('[PortfolioNews] fetch failed:', e);
-        box.innerHTML = '<div class="adv-empty">שגיאה בטעינת עדכונים.</div>';
-    }
+        _renderPortfolioNews(clientId);
+    }, 10 * 60 * 1000);
 }
 
 // Correlation table for THIS portfolio: per-asset average correlation to the rest,
@@ -942,17 +1014,20 @@ function openStockRecommendations(clientId) {
         ${cardsHTML}
     </div>`;
     ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
 function closeStockRecommendations() {
     const ov = document.getElementById('stockRecoOverlay');
     if (ov) ov.classList.remove('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
 // Inner HTML of a recommendation card (so a card can be re-rendered in place when the
 // user asks for an alternative). `optLetter` is e.g. "א'" (empty for a single option).
-// The letter + ticker are kept on ONE line (nowrap); the alt button + buy CTA live in
-// a footer pinned to the bottom so they never jump when the card is swapped.
+// The letter + ticker are kept on ONE line (nowrap). The Google Finance link, the alt
+// button and the buy CTA all live in a footer pinned to the bottom — fixed positions
+// that never move when the card is swapped, regardless of ticker-name length.
 function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const gf = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(c.ticker) : `https://www.google.com/finance/quote/${c.ticker}:NASDAQ`;
     const buy = c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק';
@@ -963,7 +1038,6 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
     return `
             <div class="reco-card-top">
                 <span class="reco-tk">${heading}</span>
-                <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
             </div>
             <div class="reco-buy">${buy}</div>
             <div class="reco-stats">
@@ -973,6 +1047,7 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
                 <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
             <div class="reco-foot">
+                <a class="reco-gf reco-gf-foot" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
                 ${altBtn}
                 <div class="reco-add">+ הוסף לתיק וקנה</div>
             </div>`;
