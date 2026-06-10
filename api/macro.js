@@ -69,6 +69,24 @@ function entry(d, label, unit) {
     return { value: d.value, previous: d.previous, trend, date: d.date, prevDate: d.prevDate || null, label, unit };
 }
 
+// Verified CURRENT Israeli policy figures. FRED's Israeli series lag (e.g. the BOI
+// rate cut to 3.75% on 25-May-2026 still shows 4.0% on FRED), and FRED's harmonized
+// unemployment differs from the CBS official print. Each override is used ONLY while
+// it is MORE RECENT than the matching FRED observation — once FRED catches up, FRED
+// automatically wins. ⇢ UPDATE these two lines whenever the BOI changes the rate or a
+// newer official Israeli labour print lands.
+const IL_OVERRIDES = {
+    boi_rate: { value: 3.75, previous: 4.0, date: '2026-05-25', prevDate: '2026-01-05' }, // BOI -25bp → 3.75%
+    il_unemployment: { value: 3.2, previous: 3.1, date: '2026-04-01', prevDate: '2026-02-01' }, // CBS official
+};
+
+// Pick whichever observation is more recent (ISO dates compare lexicographically).
+function pickRecent(fred, override) {
+    if (!override) return fred;
+    if (!fred || !fred.date) return override;
+    return (String(override.date) >= String(fred.date)) ? override : fred;
+}
+
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
@@ -93,9 +111,9 @@ module.exports = async (req, res) => {
         add(us, 'real_rate', entry(realRate, 'ריבית ריאלית (Real Rate)', '%'));
 
         const il = {};
-        add(il, 'boi_rate', entry(boi, 'ריבית בנק ישראל (BOI Rate)', '%'));
+        add(il, 'boi_rate', entry(pickRecent(boi, IL_OVERRIDES.boi_rate), 'ריבית בנק ישראל (BOI Rate)', '%'));
         add(il, 'il_cpi', entry(ilCpi, 'אינפלציה שנתית (CPI YoY)', '%'));
-        add(il, 'il_unemployment', entry(ilUnemp, 'שיעור אבטלה (Unemployment)', '%'));
+        add(il, 'il_unemployment', entry(pickRecent(ilUnemp, IL_OVERRIDES.il_unemployment), 'שיעור אבטלה (Unemployment)', '%'));
         add(il, 'il_bond10y', entry(ilBond, 'אג"ח ממשלתי 10 שנים', '%'));
 
         const hasData = Object.keys(us).length > 0 || Object.keys(il).length > 0;
