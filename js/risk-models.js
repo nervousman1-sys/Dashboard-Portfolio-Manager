@@ -276,6 +276,16 @@ async function buildRiskModel(clientsList, opts = {}) {
         && (Date.now() - _riskModelCache.ts) < RISK_MODEL.CACHE_TTL) {
         return _riskModelCache.model;
     }
+    // PERSISTED model (survives reload): if a stored model matches the exact same
+    // holdings signature and is fresh, return it instantly — the CML/SML page then
+    // renders with zero network work. Any buy/sell changes the signature → rebuild.
+    if (!force && (!_riskModelCache.model || _riskModelCache.sig !== sig)) {
+        const persisted = _rmLoadPersistedModel(sig);
+        if (persisted) {
+            _riskModelCache = { sig, ts: Date.now(), model: persisted };
+            return persisted;
+        }
+    }
     // De-dupe concurrent callers (e.g. dashboard + analysis page both trigger a build)
     if (_riskModelInflight && _riskModelCache.sig === sig) return _riskModelInflight;
 
@@ -319,8 +329,14 @@ async function buildRiskModel(clientsList, opts = {}) {
 
         const seriesMap = {};      // ticker -> [{date,close}]
         const closeMaps = {};      // ticker -> Map(date->close)
-        // Yahoo (the primary history source) has no rate limit, so fetch in larger,
-        // faster batches — the analysis loads noticeably quicker.
+        // FAST PATH: batch-prefetch every uncached ticker in ~2 same-origin requests
+        // (instead of ~70 individual ones). The per-ticker loop below then resolves
+        // almost entirely from the session cache.
+        if (typeof prefetchTickerHistories === 'function') {
+            try {
+                await prefetchTickerHistories(tickers.map(t => ({ ticker: t, currency: tickerMeta[t].currency })), out);
+            } catch (e) { /* per-ticker path covers it */ }
+        }
         const BATCH = 12;
         for (let i = 0; i < tickers.length; i += BATCH) {
             const batch = tickers.slice(i, i + BATCH);
@@ -422,6 +438,7 @@ async function buildRiskModel(clientsList, opts = {}) {
         };
 
         _riskModelCache = { sig, ts: Date.now(), model };
+        _rmPersistModel(sig, model);
         return model;
     })();
 
@@ -698,12 +715,35 @@ function classifyRisk(beta, vol, marketVol) {
 // from the naive heuristic to the model-based classification, then re-renders.
 // Safe to call repeatedly; cached + de-duped.
 
+// ── Persisted model (localStorage) — instant CML/SML after a page reload ──
+const _RM_PERSIST_KEY = 'risk_model_persist_v1';
+const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
+
+function _rmPersistModel(sig, model) {
+    try {
+        localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify({ sig, ts: Date.now(), model }));
+    } catch (e) { /* localStorage full — skip persistence */ }
+}
+
+function _rmLoadPersistedModel(sig) {
+    try {
+        const raw = localStorage.getItem(_RM_PERSIST_KEY);
+        if (!raw) return null;
+        const entry = JSON.parse(raw);
+        if (!entry || entry.sig !== sig || !entry.model) return null;
+        if (Date.now() - entry.ts > _RM_PERSIST_TTL) return null;
+        console.log('[RiskModel] Instant model from persisted cache');
+        return entry.model;
+    } catch (e) { return null; }
+}
+
 // Drop the cached model so the next build is fresh. MUST be called after any change
 // to holdings or cash (buy/sell/deposit/withdraw) — otherwise the CML/SML dot keeps
 // showing the OLD portfolio because buildRiskModel returns the cached result.
 function invalidateRiskModel() {
     _riskModelCache = { sig: null, ts: 0, model: null };
     _riskModelInflight = null;
+    try { localStorage.removeItem(_RM_PERSIST_KEY); } catch (e) { /* ignore */ }
     if (typeof window !== 'undefined') window._lastRiskModel = null;
 }
 

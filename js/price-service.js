@@ -304,9 +304,51 @@ const _YAHOO_PROXIES = [
     (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
 ];
 
-async function _fetchYahooPrice(yahooSymbol, opts = {}) {
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1d`;
+// Shape a raw quote ({price, prevClose, currency}) into the public result, applying
+// the TASE rules: *securities* are quoted in Agurot (÷100); *indices* (TA-35/TA-125)
+// are quoted in POINTS — never divide. Shared by the single and batch paths.
+function _shapeYahooQuote(yahooSymbol, q, opts = {}) {
+    if (!q || !(q.price > 0)) return null;
+    let rawPrice = parseFloat(q.price);
+    let rawPrevClose = parseFloat(q.prevClose || q.price);
+    const isTASE = yahooSymbol.toUpperCase().endsWith('.TA');
+    const isAgurot = !opts.isIndex && (isTASE || q.currency === 'ILA');
+    if (isAgurot) { rawPrice /= 100; rawPrevClose /= 100; }
+    return {
+        price: Math.round(rawPrice * 100) / 100,
+        previousClose: Math.round(rawPrevClose * 100) / 100,
+        change: +((rawPrice - rawPrevClose).toFixed(2)),
+        changePct: rawPrevClose ? +((rawPrice - rawPrevClose) / rawPrevClose * 100).toFixed(2) : 0,
+        currency: isTASE ? 'ILS' : (q.currency || 'USD')
+    };
+}
 
+// BATCH: resolve many Yahoo quotes in ONE same-origin round-trip via /api/quote.
+// Returns { SYM: rawQuote } — shape each with _shapeYahooQuote. Empty object on failure.
+async function _fetchYahooQuotesBatch(symbols) {
+    if (!symbols || !symbols.length) return {};
+    try {
+        const res = await fetch(`/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return {};
+        const data = await res.json();
+        return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+    } catch { return {}; }
+}
+
+async function _fetchYahooPrice(yahooSymbol, opts = {}) {
+    // PRIMARY: same-origin serverless quote proxy — fast, reliable, no public-proxy
+    // flakiness. This is what makes TA-35 (and TASE prices generally) load instantly.
+    try {
+        const res = await fetch(`/api/quote?symbols=${encodeURIComponent(yahooSymbol)}`, { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+            const data = await res.json();
+            const shaped = _shapeYahooQuote(yahooSymbol, data && data[yahooSymbol], opts);
+            if (shaped) return shaped;
+        }
+    } catch { /* fall through to public proxies (local dev without functions) */ }
+
+    // FALLBACK: public CORS proxies
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1d`;
     let meta = null;
     for (const wrap of _YAHOO_PROXIES) {
         try {
@@ -318,27 +360,11 @@ async function _fetchYahooPrice(yahooSymbol, opts = {}) {
         } catch { /* try next proxy */ }
     }
     if (!meta) return null;
-
-    let rawPrice = parseFloat(meta.regularMarketPrice);
-    let rawPrevClose = parseFloat(meta.chartPreviousClose || meta.previousClose || rawPrice);
-
-    // TASE *securities* are quoted on Yahoo in Agurot (NIS cents) → divide by 100.
-    // TASE *indices* (TA-35, TA-125) are quoted in POINTS, NOT agurot — never divide.
-    const isTASE = yahooSymbol.toUpperCase().endsWith('.TA');
-    const isAgurot = !opts.isIndex && (isTASE || meta.currency === 'ILA');
-
-    if (isAgurot) {
-        rawPrice = rawPrice / 100;
-        rawPrevClose = rawPrevClose / 100;
-    }
-
-    return {
-        price: Math.round(rawPrice * 100) / 100,
-        previousClose: Math.round(rawPrevClose * 100) / 100,
-        change: +((rawPrice - rawPrevClose).toFixed(2)),
-        changePct: rawPrevClose ? +((rawPrice - rawPrevClose) / rawPrevClose * 100).toFixed(2) : 0,
-        currency: isTASE ? 'ILS' : (meta.currency || 'USD')
-    };
+    return _shapeYahooQuote(yahooSymbol, {
+        price: meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose || meta.previousClose,
+        currency: meta.currency,
+    }, opts);
 }
 
 // ========== RESOLVE YAHOO SYMBOL ==========

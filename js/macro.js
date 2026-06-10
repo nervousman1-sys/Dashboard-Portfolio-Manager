@@ -773,6 +773,17 @@ async function _supaSaveMacroData(country, indicators) {
 // ========== MAIN DATA LOADER ==========
 
 async function checkAlerts(forceRefresh = false) {
+    // DAILY SCAN: the first macro load of each calendar day bypasses every cache
+    // layer, so US + Israel indicators are re-scanned from the live sources daily.
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        if (localStorage.getItem('macro_last_scan_day') !== today) {
+            forceRefresh = true;
+            localStorage.setItem('macro_last_scan_day', today);
+            console.log('[Macro] First load today — forcing a fresh daily scan');
+        }
+    } catch (e) { /* ignore */ }
+
     window._macroUsingCache = { us: false, il: false };
 
     // Pre-seed globals from verified baseline so first render always shows real data.

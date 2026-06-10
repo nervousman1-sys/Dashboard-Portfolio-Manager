@@ -151,6 +151,46 @@ async function _fetchYahooHistory(ticker, currency, outputSize) {
     return null;
 }
 
+// ── BATCH PREFETCH ──
+// Resolve a whole list of tickers' 1-year histories in a handful of same-origin
+// /api/history?symbols= round-trips (40 symbols each) instead of one request per
+// ticker. Seeds the session + localStorage caches, so subsequent per-ticker
+// _fetchTickerTimeSeries calls are instant. This is what makes the CML/SML model
+// build fast (~70 tickers → 2 requests).
+async function prefetchTickerHistories(specs, outputSize) {
+    const todo = [];
+    for (const s of (specs || [])) {
+        if (!s || !s.ticker) continue;
+        if (_sessionTickerCache[s.ticker]) continue;
+        if (_getTickerFromLS(s.ticker, outputSize)) continue; // warm LS → per-ticker path will hit it
+        let sym = s.ticker;
+        if (s.currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
+        todo.push({ ticker: s.ticker, sym });
+    }
+    if (!todo.length) return 0;
+    const range = outputSize > 300 ? '2y' : '1y';
+    let seeded = 0;
+    for (let i = 0; i < todo.length; i += 40) {
+        const chunk = todo.slice(i, i + 40);
+        try {
+            const res = await fetch(`/api/history?symbols=${encodeURIComponent(chunk.map(c => c.sym).join(','))}&range=${range}`,
+                { headers: { Accept: 'application/json' } });
+            if (!res.ok) continue;
+            const data = await res.json();
+            for (const c of chunk) {
+                const pts = data[c.sym];
+                if (Array.isArray(pts) && pts.length > 20) {
+                    _sessionTickerCache[c.ticker] = pts;
+                    _saveTickerToLS(c.ticker, pts);
+                    seeded++;
+                }
+            }
+        } catch { /* per-ticker path will cover the misses */ }
+    }
+    console.log(`[SyntheticHistory] Batch-prefetched ${seeded}/${todo.length} ticker histories`);
+    return seeded;
+}
+
 async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
     // ── Check session cache (instant — no parse overhead) ──
     if (_sessionTickerCache[ticker]) {

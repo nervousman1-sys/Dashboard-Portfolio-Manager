@@ -412,8 +412,9 @@ function _applyQWPrices(priceMap) {
 }
 
 // ── Quick-Watch: fetch prices and update DOM ──
-// Strategy: render cached prices immediately, then fetch fresh data in parallel.
-// Each ticker retries up to 2 times with exponential backoff before giving up.
+// Strategy: render cached prices immediately, then resolve ALL tickers in a single
+// same-origin /api/quote batch round-trip (incl. TA-35 — TASE indices are quoted in
+// points, handled by isIndex). Per-ticker fallback only for what the batch missed.
 async function _updateQuickWatch() {
     if (typeof fetchSingleTickerPrice !== 'function') return;
 
@@ -421,38 +422,37 @@ async function _updateQuickWatch() {
     const cached = _loadQWPriceCache();
     if (cached) _applyQWPrices(cached);
 
-    // Fetch one ticker — TASE indices (TA-35/TA-125, quoted in points) go straight
-    // to Yahoo with isIndex so they aren't wrongly divided by 100, which is why
-    // TA-35 previously showed nothing / a wrong value.
-    const _fetchQW = async (t) => {
-        const isTaseIndex = t.type === 'index' && /\.TA$/i.test(t.sym);
-        if (isTaseIndex && typeof _fetchYahooPrice === 'function') {
-            const r = await _fetchYahooPrice(t.sym, { isIndex: true });
-            if (r && r.price) return r;
-        }
-        return await fetchSingleTickerPrice(t.sym, t.currency);
-    };
-
-    // Step 2: fetch fresh prices with a single retry (snappier — was 2 retries/3s)
     const freshPrices = cached ? { ...cached } : {};
-    const fetchWithRetry = async (t, attempt = 0) => {
-        try {
-            const result = await _fetchQW(t);
-            if (result && result.price) {
-                freshPrices[t.sym] = result;
-            }
-        } catch (_) {
-            if (attempt < 1) {
-                await new Promise(r => setTimeout(r, 400));
-                return fetchWithRetry(t, attempt + 1);
-            }
-            // Retry exhausted — cached value already shown, no further action
+
+    // Step 2: ONE batched request for every ticker on the bar
+    let missing = _QW_TICKERS.slice();
+    if (typeof _fetchYahooQuotesBatch === 'function' && typeof _shapeYahooQuote === 'function') {
+        const raw = await _fetchYahooQuotesBatch(_QW_TICKERS.map(t => t.sym));
+        missing = [];
+        for (const t of _QW_TICKERS) {
+            const isTaseIndex = t.type === 'index' && /\.TA$/i.test(t.sym);
+            const shaped = _shapeYahooQuote(t.sym, raw[t.sym], { isIndex: isTaseIndex });
+            if (shaped && shaped.price) freshPrices[t.sym] = shaped;
+            else missing.push(t);
         }
+        if (Object.keys(raw).length) _applyQWPrices(freshPrices); // paint as soon as the batch lands
+    }
+
+    // Step 3: per-ticker fallback only for what the batch didn't resolve
+    const fetchOne = async (t) => {
+        try {
+            const isTaseIndex = t.type === 'index' && /\.TA$/i.test(t.sym);
+            if (isTaseIndex && typeof _fetchYahooPrice === 'function') {
+                const r = await _fetchYahooPrice(t.sym, { isIndex: true });
+                if (r && r.price) { freshPrices[t.sym] = r; return; }
+            }
+            const result = await fetchSingleTickerPrice(t.sym, t.currency);
+            if (result && result.price) freshPrices[t.sym] = result;
+        } catch (_) { /* cached value already shown */ }
     };
+    if (missing.length) await Promise.allSettled(missing.map(fetchOne));
 
-    await Promise.allSettled(_QW_TICKERS.map(t => fetchWithRetry(t)));
-
-    // Step 3: apply fresh prices and persist to cache
+    // Step 4: apply fresh prices and persist to cache
     _applyQWPrices(freshPrices);
     _saveQWPriceCache(freshPrices);
 }
