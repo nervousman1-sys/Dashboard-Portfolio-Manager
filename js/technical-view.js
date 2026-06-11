@@ -158,8 +158,8 @@ function _tNearAnyMA(v) {
 const _TECH_FILTERS = [
     { id: 'all', label: 'הכל', test: () => true },
     { id: 'rsi40', label: 'RSI יומי<40', test: v => v.rsiD != null && v.rsiD < 40 },
-    { id: 'oversold', label: 'RSI Oversold <30', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 30 },
-    { id: 'overbought', label: 'RSI Overbought שבועי>70', test: v => v.rsiW != null && v.rsiW > 70 },
+    { id: 'oversold', label: 'RSI Oversold שבועי', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 30 },
+    { id: 'overbought', label: 'RSI Overbought שבועי', test: v => v.rsiW != null && v.rsiW > 70 },
     { id: 'near_d200', label: '200 יום', test: v => v.ma.d200dist != null && Math.abs(v.ma.d200dist) <= _TECH_NEAR_PCT },
     { id: 'near_d300', label: '300 יום', test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
     { id: 'near_w200', label: '200 שבועות', test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
