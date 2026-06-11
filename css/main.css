@@ -8962,3 +8962,16 @@ html.day-mode .tech-table td { color: var(--text-primary) !important; }
 html.day-mode .tech-table th { color: var(--text-primary) !important; }
 html.day-mode .tech-table .tech-yes { color: #047857 !important; }
 html.day-mode .tech-table .tech-no { color: rgba(15,23,42,0.4) !important; }
+
+/* Scanner toolbar: search + ALL filter chips on ONE row (compact, white, clear) */
+.tech-toolbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+.tech-toolbar .tech-search { min-width: 170px; max-width: 190px; flex-shrink: 0; padding: 7px 12px; font-size: 12.5px; }
+.tech-chips { flex-wrap: nowrap; gap: 6px; }
+.tech-chips .dn-tab {
+    font-size: 11px; font-weight: 800; padding: 5px 10px; white-space: nowrap;
+    color: #fff;
+}
+.tech-chips .dn-tab .dn-tab-n { font-size: 9.5px; }
+.tech-chips .dn-tab.active { color: var(--accent-blue); }
+html.day-mode .tech-chips .dn-tab { color: var(--text-primary); }
+html.day-mode .tech-chips .dn-tab.active { color: var(--accent-blue); }

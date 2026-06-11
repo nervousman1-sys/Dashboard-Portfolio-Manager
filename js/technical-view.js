@@ -157,13 +157,13 @@ function _tNearAnyMA(v) {
 }
 const _TECH_FILTERS = [
     { id: 'all', label: 'הכל', test: () => true },
-    { id: 'rsi40', label: 'RSI יומי < 40', test: v => v.rsiD != null && v.rsiD < 40 },
-    { id: 'oversold', label: 'RSI Oversold (שבועי<30 ויומי<40)', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 40 },
-    { id: 'overbought', label: 'RSI Overbought (שבועי>70)', test: v => v.rsiW != null && v.rsiW > 70 },
-    { id: 'near_d200', label: `ממוצע 200 יום (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.d200dist != null && Math.abs(v.ma.d200dist) <= _TECH_NEAR_PCT },
-    { id: 'near_d300', label: `ממוצע 300 יום (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
-    { id: 'near_w200', label: `ממוצע 200 שבועות (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
-    { id: 'near_w300', label: `ממוצע 300 שבועות (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.w300dist != null && Math.abs(v.ma.w300dist) <= _TECH_NEAR_PCT },
+    { id: 'rsi40', label: 'RSI יומי<40', test: v => v.rsiD != null && v.rsiD < 40 },
+    { id: 'oversold', label: 'RSI Oversold שבועי<30', test: v => v.rsiW != null && v.rsiW < 30 },
+    { id: 'overbought', label: 'RSI Overbought שבועי>70', test: v => v.rsiW != null && v.rsiW > 70 },
+    { id: 'near_d200', label: '200 יום', test: v => v.ma.d200dist != null && Math.abs(v.ma.d200dist) <= _TECH_NEAR_PCT },
+    { id: 'near_d300', label: '300 יום', test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
+    { id: 'near_w200', label: '200 שבועות', test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
+    { id: 'near_w300', label: '300 שבועות', test: v => v.ma.w300dist != null && Math.abs(v.ma.w300dist) <= _TECH_NEAR_PCT },
     { id: 'fvgm', label: 'בתוך FVG חודשי', test: v => v.fvgM && v.fvgM.inside },
     { id: 'fvgq', label: 'בתוך FVG רבעוני', test: v => v.fvgQ && v.fvgQ.inside },
 ];
