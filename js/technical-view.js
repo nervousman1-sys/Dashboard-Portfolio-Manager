@@ -158,9 +158,12 @@ function _tNearAnyMA(v) {
 const _TECH_FILTERS = [
     { id: 'all', label: 'הכל', test: () => true },
     { id: 'rsi40', label: 'RSI יומי < 40', test: v => v.rsiD != null && v.rsiD < 40 },
-    { id: 'oversold', label: 'Oversold (שבועי < 30)', test: v => v.rsiW != null && v.rsiW < 30 },
-    { id: 'overbought', label: 'Overbought (שבועי > 70)', test: v => v.rsiW != null && v.rsiW > 70 },
-    { id: 'nearma', label: `קרוב לממוצע (±${_TECH_NEAR_PCT}%)`, test: _tNearAnyMA },
+    { id: 'oversold', label: 'RSI Oversold (שבועי<30 ויומי<40)', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 40 },
+    { id: 'overbought', label: 'RSI Overbought (שבועי>70)', test: v => v.rsiW != null && v.rsiW > 70 },
+    { id: 'near_d200', label: `ממוצע 200 יום (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.d200dist != null && Math.abs(v.ma.d200dist) <= _TECH_NEAR_PCT },
+    { id: 'near_d300', label: `ממוצע 300 יום (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
+    { id: 'near_w200', label: `ממוצע 200 שבועות (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
+    { id: 'near_w300', label: `ממוצע 300 שבועות (±${_TECH_NEAR_PCT}%)`, test: v => v.ma.w300dist != null && Math.abs(v.ma.w300dist) <= _TECH_NEAR_PCT },
     { id: 'fvgm', label: 'בתוך FVG חודשי', test: v => v.fvgM && v.fvgM.inside },
     { id: 'fvgq', label: 'בתוך FVG רבעוני', test: v => v.fvgQ && v.fvgQ.inside },
 ];
@@ -190,10 +193,10 @@ function _techRender() {
     // Relevance sort per filter
     if (_techFilter === 'rsi40' || _techFilter === 'oversold') rows.sort((a, b) => (a[1].rsiD ?? 99) - (b[1].rsiD ?? 99));
     else if (_techFilter === 'overbought') rows.sort((a, b) => (b[1].rsiW ?? 0) - (a[1].rsiW ?? 0));
-    else if (_techFilter === 'nearma') rows.sort((a, b) => {
-        const md = (v) => Math.min(...[v.ma.d200dist, v.ma.d300dist, v.ma.w200dist, v.ma.w300dist].filter(x => x != null).map(Math.abs), 99);
-        return md(a[1]) - md(b[1]);
-    });
+    else if (_techFilter.startsWith('near_')) {
+        const key = _techFilter.replace('near_', '') + 'dist';
+        rows.sort((a, b) => Math.abs(a[1].ma[key] ?? 99) - Math.abs(b[1].ma[key] ?? 99));
+    }
     else rows.sort((a, b) => a[0].localeCompare(b[0]));
 
     const maCell = (dist) => {
@@ -206,8 +209,8 @@ function _techRender() {
         : '<td class="tech-no">✗</td>';
     const rsiWChip = (v) => {
         if (v.rsiW == null) return '—';
-        if (v.rsiW > 70) return `${v.rsiW} <span class="tech-warn ob">⚠ Overbought</span>`;
-        if (v.rsiW < 30) return `${v.rsiW} <span class="tech-warn os">⚠ Oversold</span>`;
+        if (v.rsiW > 70) return `${v.rsiW} <span class="tech-warn ob">⚠ RSI Overbought</span>`;
+        if (v.rsiW < 30) return `${v.rsiW} <span class="tech-warn os">⚠ RSI Oversold</span>`;
         return v.rsiW;
     };
     const rsiDCell = (v) => {
