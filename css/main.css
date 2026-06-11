@@ -8975,3 +8975,11 @@ html.day-mode .tech-table .tech-no { color: rgba(15,23,42,0.4) !important; }
 .tech-chips .dn-tab.active { color: var(--accent-blue); }
 html.day-mode .tech-chips .dn-tab { color: var(--text-primary); }
 html.day-mode .tech-chips .dn-tab.active { color: var(--accent-blue); }
+
+/* Day mode: technical page — final whites→black sweep */
+html.day-mode #technicalPage .tech-foot,
+html.day-mode #technicalPage .adv-empty,
+html.day-mode #technicalPage .tech-dist,
+html.day-mode #technicalPage .tech-search::placeholder { color: var(--text-secondary) !important; }
+html.day-mode #technicalPage .tech-name-cell span,
+html.day-mode #technicalPage td, html.day-mode #technicalPage th { color: var(--text-primary); }
