@@ -988,6 +988,9 @@ function _renderMacroPage() {
             </div>
         </div>
     `;
+
+    // Charts need the canvases in the DOM; analysis needs the curve data
+    setTimeout(() => { try { _renderYieldCurves(); } catch (e) { /* ignore */ } }, 60);
 }
 
 // ── Format helper for widget values ──
@@ -1118,7 +1121,169 @@ function _renderIndicatorsTab() {
     }
     html += '</div>';
 
+    // ── Yield curves (US + Israel) — charts filled async by _renderYieldCurves ──
+    html += `
+    <div class="macro-country-section">
+        <h2 class="macro-country-header">עקומות תשואה</h2>
+        <div class="macro-yield-grid">
+            <div class="macro-yield-card glass-card">
+                <h3 class="macro-yield-title">עקומת התשואה — ארה"ב (אג"ח ממשלתי)</h3>
+                <div class="macro-yield-canvas"><canvas id="usYieldCurve"></canvas></div>
+                <div class="macro-yield-note" id="usYieldNote">טוען נתונים…</div>
+            </div>
+            <div class="macro-yield-card glass-card">
+                <h3 class="macro-yield-title">עקומת התשואה — ישראל</h3>
+                <div class="macro-yield-canvas"><canvas id="ilYieldCurve"></canvas></div>
+                <div class="macro-yield-note" id="ilYieldNote">טוען נתונים…</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="macro-country-section">
+        <h2 class="macro-country-header">ניתוח מאקרו-כלכלי</h2>
+        <div class="macro-yield-grid">
+            <div class="macro-yield-card glass-card">
+                <h3 class="macro-yield-title">ארה"ב</h3>
+                <div class="macro-analysis" id="macroAnalysisUS">מחשב ניתוח…</div>
+            </div>
+            <div class="macro-yield-card glass-card">
+                <h3 class="macro-yield-title">ישראל</h3>
+                <div class="macro-analysis" id="macroAnalysisIL">מחשב ניתוח…</div>
+            </div>
+        </div>
+    </div>`;
+
     return html;
+}
+
+// ── Yield curves + macro analysis (async fill after the page renders) ──
+let _yieldCharts = { us: null, il: null };
+
+async function _renderYieldCurves() {
+    const usEl = document.getElementById('usYieldCurve');
+    const ilEl = document.getElementById('ilYieldCurve');
+    if (!usEl || !ilEl || typeof Chart === 'undefined') return;
+
+    let data = null;
+    try {
+        const res = await fetch(`/api/yields?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } });
+        if (res.ok) data = await res.json();
+    } catch (e) { /* note below */ }
+    if (!data || !Array.isArray(data.us) || data.us.length < 3) {
+        const n1 = document.getElementById('usYieldNote'), n2 = document.getElementById('ilYieldNote');
+        if (n1) n1.textContent = 'לא ניתן לטעון את העקומה כרגע.';
+        if (n2) n2.textContent = 'לא ניתן לטעון את העקומה כרגע.';
+        _renderMacroAnalysis(null);
+        return;
+    }
+    window._yieldData = data;
+
+    const mkCurve = (canvas, pts, color) => new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: pts.map(p => p.label),
+            datasets: [{
+                data: pts.map(p => p.value), borderColor: color, borderWidth: 2.5,
+                pointRadius: 4, pointBackgroundColor: color, pointBorderColor: '#fff', pointBorderWidth: 1,
+                fill: false, tension: 0.35,
+            }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y.toFixed(2)}%` } } },
+            scales: {
+                x: { ticks: { color: '#fff', font: { size: 11, weight: '700' } }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                y: { ticks: { color: '#fff', font: { size: 11 }, callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+            },
+        },
+    });
+
+    if (_yieldCharts.us) { try { _yieldCharts.us.destroy(); } catch (e) {} }
+    if (_yieldCharts.il) { try { _yieldCharts.il.destroy(); } catch (e) {} }
+    _yieldCharts.us = mkCurve(usEl, data.us, '#00e5ff');
+    _yieldCharts.il = mkCurve(ilEl, data.il, '#4ade80');
+
+    // Curve-shape notes (inverted vs normal)
+    const usMap = {}; data.us.forEach(p => { usMap[p.label] = p.value; });
+    const spread = (usMap['10Y'] != null && usMap['3M'] != null) ? usMap['10Y'] - usMap['3M'] : null;
+    const usNote = document.getElementById('usYieldNote');
+    if (usNote && spread != null) {
+        usNote.innerHTML = spread < 0
+            ? `מרווח 10Y−3M: <b>${spread.toFixed(2)}%</b> — עקומה הפוכה (סיגנל האטה היסטורי)`
+            : `מרווח 10Y−3M: <b>+${spread.toFixed(2)}%</b> — עקומה נורמלית (ציפיות צמיחה חיוביות)`;
+    }
+    const ilMap = {}; (data.il || []).forEach(p => { ilMap[p.label] = p.value; });
+    const boi = ilMap['ריבית בנק ישראל'], il10 = ilMap['10 שנים (אג"ח ממשלתי)'];
+    const ilNote = document.getElementById('ilYieldNote');
+    if (ilNote && boi != null && il10 != null) {
+        const sp = il10 - boi;
+        ilNote.innerHTML = sp >= 0
+            ? `מרווח 10 שנים מול הריבית: <b>+${sp.toFixed(2)}%</b> — תלילות חיובית (השוק מתמחר צמיחה)`
+            : `מרווח 10 שנים מול הריבית: <b>${sp.toFixed(2)}%</b> — עקומה הפוכה`;
+    }
+
+    _renderMacroAnalysis(data);
+}
+
+// Rule-based Hebrew macro analysis built from the CURRENT indicator data.
+function _renderMacroAnalysis(curve) {
+    const us = window._macroHeadUS || {};
+    const il = window._macroHeadIL || {};
+    const v = (o) => (o && o.value != null) ? o.value : null;
+    const f1 = (x) => x != null ? parseFloat(x).toFixed(1) : '—';
+
+    // ── US ──
+    const usEl = document.getElementById('macroAnalysisUS');
+    if (usEl) {
+        const cpi = v(us.cpi), core = v(us.core_cpi), fed = v(us.fed_rate),
+            unemp = v(us.unemployment), nfp = v(us.nfp), gdp = v(us.gdp), rr = v(us.real_rate);
+        const p = [];
+        if (cpi != null) {
+            const accel = us.cpi.previous != null && cpi > us.cpi.previous;
+            p.push(`<b>אינפלציה:</b> ה-CPI השנתי עומד על <b>${f1(cpi)}%</b>${accel ? ' ובמגמת האצה' : ''}${core != null ? `, בעוד הליבה (${f1(core)}%) ${core < cpi ? 'מתונה ממנו — עיקר הלחץ מאנרגיה/סחורות' : 'גבוהה — לחץ מחירים רחב'}` : ''}. ${cpi > 3 ? 'מעל יעד הפד (2%) — מגביל את מרחב ההורדות.' : 'בסביבת היעד.'}`);
+        }
+        if (fed != null) {
+            p.push(`<b>מדיניות:</b> ריבית הפד ${f1(fed)}%${rr != null ? `, ריבית ריאלית ${f1(rr)}%` : ''} — ${cpi != null && cpi > 3.5 ? 'הפד צפוי להישאר זהיר כל עוד האינפלציה מואצת' : 'מרחב להקלה אם האינפלציה תתמתן'}.`);
+        }
+        if (unemp != null || nfp != null) {
+            p.push(`<b>תעסוקה:</b> אבטלה ${f1(unemp)}%${nfp != null ? `, תוספת משרות ${nfp > 0 ? '+' : ''}${Math.round(nfp)}K` : ''} — ${unemp != null && unemp <= 4.5 ? 'שוק עבודה יציב התומך בצריכה' : 'סימני התקררות בשוק העבודה'}.`);
+        }
+        if (gdp != null) p.push(`<b>צמיחה:</b> תמ"ג ${f1(gdp)}% (קצב רבעוני) — ${gdp >= 1.5 ? 'התרחבות מתונה' : gdp >= 0 ? 'צמיחה איטית' : 'התכווצות'}.`);
+        if (curve) {
+            const m = {}; curve.us.forEach(x => { m[x.label] = x.value; });
+            if (m['10Y'] != null && m['3M'] != null) {
+                const sp = m['10Y'] - m['3M'];
+                p.push(`<b>עקומת התשואה:</b> ${sp < 0 ? `הפוכה (${sp.toFixed(2)}%) — השוק מתמחר האטה/הורדות ריבית` : `נורמלית (+${sp.toFixed(2)}%) — ציפיות צמיחה חיוביות`}.`);
+            }
+        }
+        const fg = window._marketSentiment;
+        const bottomUS = (cpi != null && cpi > 3.5)
+            ? 'שורה תחתונה: סביבה מאתגרת לנכסי סיכון — אינפלציה מואצת מגבילה את הפד; עדיפות לסלקטיביות ולנכסים דפנסיביים.'
+            : 'שורה תחתונה: סביבה תומכת יחסית בנכסי סיכון, בכפוף להמשך התמתנות האינפלציה.';
+        p.push(`${bottomUS}${fg && fg.compositeScore != null ? ` סנטימנט (CNN F&G): ${fg.compositeScore} — ${fg.labelHe || ''}.` : ''}`);
+        usEl.innerHTML = p.map(x => `<p>${x}</p>`).join('');
+    }
+
+    // ── Israel ──
+    const ilEl = document.getElementById('macroAnalysisIL');
+    if (ilEl) {
+        const cpi = v(il.il_cpi), boi = v(il.boi_rate), unemp = v(il.il_unemployment), gdp = v(il.il_gdp);
+        const p = [];
+        if (cpi != null) p.push(`<b>אינפלציה:</b> ${f1(cpi)}% שנתי — ${cpi >= 1 && cpi <= 3 ? 'בתוך יעד בנק ישראל (1%–3%), יציבות מחירים טובה' : cpi > 3 ? 'מעל היעד' : 'מתחת ליעד'}.`);
+        if (boi != null) p.push(`<b>מדיניות:</b> ריבית בנק ישראל ${f1(boi)}% לאחר הורדה (25.5) — מחזור הקלה מונטרית${cpi != null && cpi <= 2 ? ', הנתמך באינפלציה מרוסנת ובשקל חזק' : ''}. הורדות נוספות תלויות בסביבה הגיאופוליטית.`);
+        if (unemp != null) p.push(`<b>תעסוקה:</b> אבטלה ${f1(unemp)}% — שוק עבודה הדוק מאוד ברמה היסטורית.`);
+        if (gdp != null) p.push(`<b>צמיחה:</b> תמ"ג ${f1(gdp)}% — ${gdp >= 3 ? 'צמיחה חזקה ביחס למדינות מפותחות' : 'צמיחה מתונה'}.`);
+        if (curve) {
+            const m = {}; (curve.il || []).forEach(x => { m[x.label] = x.value; });
+            const b = m['ריבית בנק ישראל'], y10 = m['10 שנים (אג"ח ממשלתי)'];
+            if (b != null && y10 != null) {
+                const sp = y10 - b;
+                p.push(`<b>עקומת התשואה:</b> אג"ח 10 שנים ב-${f1(y10)}% מול ריבית ${f1(b)}% (${sp >= 0 ? '+' : ''}${sp.toFixed(2)}%) — ${sp >= 0 ? 'תלילות חיובית; השוק מתמחר המשך צמיחה עם ריבית יורדת' : 'עקומה הפוכה'}.`);
+            }
+        }
+        p.push('שורה תחתונה: תמונת מאקרו ישראלית חיובית — אינפלציה ביעד, ריבית יורדת ושוק עבודה הדוק; הסיכון המרכזי נותר גיאופוליטי.');
+        ilEl.innerHTML = p.map(x => `<p>${x}</p>`).join('');
+    }
 }
 
 // ── Calendar Event Card (unified Cyber-Noir style) ──

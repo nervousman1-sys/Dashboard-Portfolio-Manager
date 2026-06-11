@@ -374,9 +374,12 @@ function _renderAllocSection() {
             <span class="bulk-row-name">${c.name}</span>
             <span class="risk-badge ${c.risk || 'low'}">${c.riskLabel || ''}</span>
             <span class="bulk-row-cash">מזומן: ${st.cashPct.toFixed(1)}% · מניות: ${(st.total > 0 ? st.stocksVal / st.total * 100 : 0).toFixed(1)}%</span>
-            <span class="alloc-target-wrap">יעד מזומן מינ' %:
-                <input type="number" min="0" max="95" class="alloc-input" value="${target ?? ''}" placeholder="—"
-                       onchange="setAllocTarget(${c.id}, parseFloat(this.value)); _renderAllocSection(); if(typeof renderClientCards==='function') renderClientCards();" />
+            <span class="alloc-target-wrap">יעד מזומן מינימלי:
+                <span class="alloc-input-wrap">
+                    <input type="text" inputmode="decimal" class="alloc-input" value="${target ?? ''}" placeholder="—"
+                           onchange="setAllocTarget(${c.id}, parseFloat(this.value)); _renderAllocSection(); if(typeof renderClientCards==='function') renderClientCards();" />
+                    <span class="alloc-input-pct">%</span>
+                </span>
             </span>
             ${badge}
             ${detail}
