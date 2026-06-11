@@ -8333,3 +8333,81 @@ html.day-mode .sidebar-theme-btn {
     background: rgba(3, 105, 161, 0.07);
     color: var(--accent-blue);
 }
+
+/* ═══ DAY MODE — pass 2: full usability sweep (dark strips, quick-watch, exposure,
+   search, filters, card internals). Written from a user walkthrough of the UI. ═══ */
+
+/* Dark section strips → light */
+html.day-mode .summary-bar {
+    background: rgba(255, 255, 255, 0.75);
+    border-bottom: 1px solid var(--border);
+}
+html.day-mode .filters-search-row {
+    background: rgba(255, 255, 255, 0.75);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+html.day-mode .filters { background: transparent; }
+
+/* Quick-watch bar: ticker names, tags, separators, timestamps */
+html.day-mode .qw-name { color: var(--text-primary); }
+html.day-mode .qw-ticker { border-left-color: rgba(15, 23, 42, 0.1); }
+html.day-mode .qw-type-tag, html.day-mode .qw-last-update { color: var(--text-secondary); }
+html.day-mode .qw-change.positive { color: #047857; background: rgba(4, 120, 87, 0.1); }
+html.day-mode .qw-change.negative { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+html.day-mode .qw-fx { background: rgba(3, 105, 161, 0.05); border-color: rgba(3, 105, 161, 0.25); }
+
+/* Exposure section: labels, bar tracks, currency boxes */
+html.day-mode .exp-asset-label { color: var(--text-primary); font-weight: 700; }
+html.day-mode .exp-asset-bar-track { background: rgba(15, 23, 42, 0.08); }
+html.day-mode .exp-assets-panel, html.day-mode .exp-curr-box { background: #f8fafc; border-color: var(--border); }
+html.day-mode .exposure-wrapper { background: #ffffff; }
+
+/* Search inputs + placeholders */
+html.day-mode input::placeholder, html.day-mode textarea::placeholder { color: #94a3b8; }
+html.day-mode .header-search-wrap, html.day-mode .header-search-wrap input { background: #ffffff; }
+
+/* Client-card internals: allocation rows, separators, range buttons, split bar */
+html.day-mode .allocation-row { color: var(--text-primary); }
+html.day-mode .allocation-label { color: var(--text-primary); }
+html.day-mode .allocation-value { color: var(--text-secondary); }
+html.day-mode .range-btn, html.day-mode .chart-range-btn {
+    background: #f1f5f9; color: var(--text-secondary); border-color: var(--border);
+}
+html.day-mode .range-btn.active, html.day-mode .chart-range-btn.active {
+    background: rgba(3, 105, 161, 0.12); color: var(--accent-blue);
+}
+html.day-mode .card-stats, html.day-mode .card-stat-label { color: var(--text-secondary); }
+html.day-mode .card-stat-value { color: var(--text-primary); }
+
+/* Header pills / toggles */
+html.day-mode .currency-btn, html.day-mode .tz-btn {
+    background: #f1f5f9; color: var(--text-secondary); border-color: var(--border);
+}
+html.day-mode .currency-btn.active, html.day-mode .tz-btn.active {
+    background: var(--accent-blue); color: #ffffff;
+}
+
+/* Sidebar polish */
+html.day-mode .sidebar-item { color: var(--text-secondary); }
+html.day-mode .sidebar-item.active { color: var(--accent-blue); background: rgba(3, 105, 161, 0.08); }
+html.day-mode .sidebar-item:hover { background: rgba(15, 23, 42, 0.05); }
+html.day-mode .sidebar-logout { color: #dc2626; }
+html.day-mode .sidebar-tz-btn { background: #f1f5f9; color: var(--text-secondary); border-color: var(--border); }
+html.day-mode .sidebar-tz-btn.active { color: var(--accent-blue); }
+
+/* Generic remaining light-ink fixes inside white surfaces */
+html.day-mode .glass-card h1, html.day-mode .glass-card h2, html.day-mode .glass-card h3,
+html.day-mode .stat-filter-tag, html.day-mode .portfolio-section-sub,
+html.day-mode .pl-cell, html.day-mode .holdings-table th, html.day-mode .holdings-table td,
+html.day-mode .sector-table th, html.day-mode .sector-table td,
+html.day-mode .report-table th, html.day-mode .report-table td,
+html.day-mode .mgmt-field label, html.day-mode .mgmt-readonly,
+html.day-mode .cash-balance-display, html.day-mode .buy-cost-row {
+    color: var(--text-primary);
+}
+html.day-mode .holdings-table tr, html.day-mode .sector-table tr { border-color: var(--border); }
+html.day-mode .modal-tab { color: var(--text-secondary); }
+html.day-mode .modal-tab.active { color: var(--accent-blue); }
+html.day-mode .loading-overlay { background: rgba(255,255,255,0.9); }
+html.day-mode .loading-text { color: var(--text-primary); }
