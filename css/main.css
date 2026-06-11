@@ -8305,3 +8305,31 @@ html.day-mode .qw-fx-chg.negative { color: #dc2626; }
 .alloc-bulk-clear { font-size: 12px; padding: 7px 14px; }
 html.day-mode .alloc-mini-wrap { background: #ffffff; }
 html.day-mode .alloc-mini-wrap input { color: var(--text-primary); background: transparent !important; }
+
+/* Day/night toggle — ALWAYS visible in the sidebar footer (desktop + mobile) */
+.sidebar-theme-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(0, 229, 255, 0.15);
+    background: rgba(0, 229, 255, 0.04);
+    color: rgba(0, 229, 255, 0.85);
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.sidebar-theme-btn:hover { background: rgba(0, 229, 255, 0.1); }
+.sidebar-theme-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+html.day-mode .sidebar-theme-btn {
+    border-color: rgba(3, 105, 161, 0.3);
+    background: rgba(3, 105, 161, 0.07);
+    color: var(--accent-blue);
+}

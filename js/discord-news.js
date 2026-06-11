@@ -25,6 +25,7 @@ function openDiscordNews() {
 
     page.classList.add('active');
     if (typeof updateURLState === 'function') updateURLState({ view: 'disconews' });
+    if (typeof _setActiveNav === 'function') _setActiveNav('disconews');
 
     page.innerHTML = `
     <div dir="rtl">
@@ -66,6 +67,7 @@ function closeDiscordNews() {
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display = '';
     if (typeof clearURLState === 'function') clearURLState();
+    if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
 }
 
 function _dnEsc(s) {

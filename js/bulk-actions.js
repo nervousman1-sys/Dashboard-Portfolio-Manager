@@ -83,6 +83,9 @@ function openBulkPage(focusAllocId) {
     _bulkBusy = false;
     page.classList.add('active');
     if (typeof updateURLState === 'function') updateURLState({ view: 'bulkmgr' });
+    // Keep the sidebar highlight in sync even when opened directly (e.g. from a
+    // card's allocation-breach chip), not via navigateTo()
+    if (typeof _setActiveNav === 'function') _setActiveNav('bulkmgr');
     _renderBulkPage();
     window.scrollTo(0, 0);
 
@@ -115,6 +118,7 @@ function closeBulkPage() {
     const psh = document.querySelector('.portfolio-section-header');
     if (psh) psh.style.display = '';
     if (typeof clearURLState === 'function') clearURLState();
+    if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
 }
 
 function _renderBulkPage() {
