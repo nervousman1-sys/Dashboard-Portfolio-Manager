@@ -128,7 +128,30 @@ async function computeMarketSentiment() {
         }
     } catch (_) {}
 
-    // Fetch all signals in parallel
+    // PRIMARY: the EXACT CNN Fear & Greed index via the same-origin proxy — this is
+    // the authoritative number (matches cnn.com/markets/fear-and-greed precisely).
+    try {
+        const res = await fetch('/api/feargreed', { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+            const fg = await res.json();
+            if (fg && fg.score >= 0 && fg.score <= 100 && !fg.error) {
+                const score = Math.round(fg.score);
+                const sentiment = _scoreToSentiment(score);
+                const result = {
+                    compositeScore: score,
+                    ...sentiment,
+                    signals: { fearGreed: { score: fg.score, classification: fg.rating } },
+                    source: 'CNN Fear & Greed',
+                    _ts: Date.now()
+                };
+                try { localStorage.setItem(_SENTIMENT_CACHE_KEY, JSON.stringify(result)); } catch (_) {}
+                console.log(`[Sentiment] CNN Fear & Greed: ${fg.score} (${fg.rating})`);
+                return result;
+            }
+        }
+    } catch (e) { console.warn('[Sentiment] CNN F&G proxy failed — falling back to composite:', e.message); }
+
+    // FALLBACK: composite of VIX + S&P + FMP F&G (used only when the proxy fails)
     const [vix, sp500, fearGreed] = await Promise.all([
         _fetchVIX(),
         _fetchSP500(),

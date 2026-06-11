@@ -7998,3 +7998,15 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
     border-top: 1px dashed rgba(239,68,68,0.3); padding-top: 9px; margin-top: 4px; }
 .alloc-detail b { color: #fff; }
 .alloc-fix-btn { margin-top: 8px; display: inline-block; font-size: 12px; padding: 7px 16px; }
+
+/* Smart-management page: NO gray text — everything white and clear */
+#bulkPage .risk-chart-sub,
+#bulkPage .bulk-field label,
+#bulkPage .bulk-risk-label,
+#bulkPage .bulk-row-cash,
+#bulkPage .bulk-summary,
+#bulkPage .alloc-target-wrap,
+#bulkPage .alloc-detail,
+#bulkPage .adv-dim { color: #fff !important; }
+#bulkPage .bulk-row-off { opacity: 0.7; }
+#bulkPage .bulk-row-off .bulk-row-name, #bulkPage .bulk-row-off .bulk-row-cash { color: #fff; }
