@@ -8411,3 +8411,321 @@ html.day-mode .modal-tab { color: var(--text-secondary); }
 html.day-mode .modal-tab.active { color: var(--accent-blue); }
 html.day-mode .loading-overlay { background: rgba(255,255,255,0.9); }
 html.day-mode .loading-text { color: var(--text-primary); }
+
+/* ═══ DAY MODE — pass 3 (AUTO-GENERATED sweep): every selector in the night
+   theme that uses light ink or light borders gets a day override. Night mode
+   untouched — everything is scoped under html.day-mode. ═══ */
+html.day-mode .sentiment-score-badge,
+html.day-mode .alert-count,
+html.day-mode .dash-section-label,
+html.day-mode .qw-name,
+html.day-mode .fx-toggle-label,
+html.day-mode /* ── Typography hierarchy ── */
+.stat-label,
+html.day-mode /* Values animate in whenever the card content is replaced by a filter change */
+.stat-value,
+html.day-mode .stat-val-primary,
+html.day-mode .filter-btn,
+html.day-mode /* ========== FILTER DRAWER TOGGLE BUTTON ========== */
+.filter-drawer-toggle,
+html.day-mode .additional-filters-inline.open::before,
+html.day-mode .exp-panel-title,
+html.day-mode .exp-asset-label,
+html.day-mode .pl-header-row .pl-cell,
+html.day-mode .pl-cell,
+html.day-mode .ov-kpi-value,
+html.day-mode .ov-cell-value,
+html.day-mode .ov-panel-footer b,
+html.day-mode .ov-curbar-pct,
+html.day-mode .macro-page-header h1,
+html.day-mode .stat-label,
+html.day-mode .sidebar-brand-name,
+html.day-mode .sidebar-toggle-btn,
+html.day-mode /* ── Mobile Close Button (inside sidebar header) ── */
+.sidebar-close-btn,
+html.day-mode .full-list-filters .filter-btn,
+html.day-mode .adv-note,
+html.day-mode .adv-metaline,
+html.day-mode .adv-metaline b,
+html.day-mode .adv-chip,
+html.day-mode .adv-sub-label,
+html.day-mode .adv-sub-val,
+html.day-mode .adv-act,
+html.day-mode .adv-act b,
+html.day-mode .adv-cand-tk,
+html.day-mode .adv-cand-stats b,
+html.day-mode .reco-tk,
+html.day-mode .reco-stats b,
+html.day-mode .adv-eff-sub,
+html.day-mode .reco-eff-sub,
+html.day-mode .reco-eff-mix b,
+html.day-mode .reco-buy,
+html.day-mode .reco-buy b,
+html.day-mode .reco-gf:hover,
+html.day-mode .adv-cand-gf:hover,
+html.day-mode .adv-cand-buy,
+html.day-mode .adv-cand-buy b,
+html.day-mode .corr-rec-sub,
+html.day-mode .corr-rec-sub b,
+html.day-mode .corr-table tbody td,
+html.day-mode .corr-td-partner,
+html.day-mode .pf-news-he,
+html.day-mode .reco-alt:hover,
+html.day-mode .rec-fit-btn:hover,
+html.day-mode .qw-fx-rate,
+html.day-mode .fit-name,
+html.day-mode .bulk-open-btn:hover,
+html.day-mode .bulk-field input,
+html.day-mode .bulk-field select,
+html.day-mode .bulk-row-name,
+html.day-mode .bulk-progress,
+html.day-mode .alloc-input,
+html.day-mode .alloc-breach:hover,
+html.day-mode .alloc-detail,
+html.day-mode .alloc-detail b,
+html.day-mode /* Smart-management page: NO gray text — everything white and clear */
+#bulkPage .risk-chart-sub,
+html.day-mode #bulkPage .bulk-field label,
+html.day-mode #bulkPage .bulk-risk-label,
+html.day-mode #bulkPage .bulk-row-cash,
+html.day-mode #bulkPage .bulk-summary,
+html.day-mode #bulkPage .alloc-target-wrap,
+html.day-mode #bulkPage .alloc-detail,
+html.day-mode #bulkPage .adv-dim,
+html.day-mode #bulkPage .bulk-row-off .bulk-row-name,
+html.day-mode #bulkPage .bulk-row-off .bulk-row-cash,
+html.day-mode .alloc-input-pct,
+html.day-mode .macro-analysis,
+html.day-mode .card-alloc-btn:hover,
+html.day-mode .dn-content,
+html.day-mode .dn-embed-title,
+html.day-mode .dn-embed-desc,
+html.day-mode .dn-embed-field,
+html.day-mode .dn-embed-field b,
+html.day-mode .dn-setup h3,
+html.day-mode .dn-setup p,
+html.day-mode .dn-day-title,
+html.day-mode .dn-opt-line,
+html.day-mode /* Vision-transcribed lines (text read from agent images) */
+.dn-vline,
+html.day-mode /* Capital-flows visual summary (where the money goes) */
+.dn-flow-head,
+html.day-mode .dn-flow-name,
+html.day-mode .dn-flow-conc,
+html.day-mode .dn-opt-ticker,
+html.day-mode .dn-opt-vtxt,
+html.day-mode .dn-opt-mval,
+html.day-mode /* News rows: dates white & prominent */
+.dn-day-head .dn-when {
+    color: var(--text-primary);
+}
+html.day-mode .risk-inline-sep,
+html.day-mode .card-cur-label,
+html.day-mode .pf-corr-head span,
+html.day-mode .ov-kpi-label,
+html.day-mode .val-muted,
+html.day-mode .ov-cell-label,
+html.day-mode .ov-cell-sub,
+html.day-mode /* ── Panel Footer (metadata row) ── */
+.ov-panel-footer,
+html.day-mode .ov-panel-footnote,
+html.day-mode .ov-curbar-label,
+html.day-mode .sidebar-tz-btn,
+html.day-mode .sidebar-tz-btn:hover:not(.active),
+html.day-mode .adv-dim,
+html.day-mode .ov-advisory-sub,
+html.day-mode .adv-score-den,
+html.day-mode /* Suitable-assets selection grid (advisory) */
+.adv-cands-hint,
+html.day-mode .adv-cand-sector,
+html.day-mode .adv-cand-stats,
+html.day-mode .mcs-chart-head span,
+html.day-mode .ov-comp-ring small,
+html.day-mode .ov-comp-sub,
+html.day-mode .reco-sub,
+html.day-mode .reco-hint,
+html.day-mode .reco-sector,
+html.day-mode .reco-stats,
+html.day-mode .corr-score small,
+html.day-mode .corr-table thead th,
+html.day-mode .pf-news-date,
+html.day-mode /* Correlation table footer — data-provenance note */
+.corr-foot,
+html.day-mode .qw-fx-label,
+html.day-mode .qw-fx-chg,
+html.day-mode .fit-why,
+html.day-mode .bulk-mode-btn,
+html.day-mode .bulk-field label,
+html.day-mode .bulk-risk-label,
+html.day-mode .bulk-row-cash,
+html.day-mode .bulk-summary,
+html.day-mode .alloc-target-wrap,
+html.day-mode /* ── Discord economy & market news page ── */
+.dn-live,
+html.day-mode .dn-tab,
+html.day-mode .dn-ch,
+html.day-mode .dn-when,
+html.day-mode .dn-opt-mlabel,
+html.day-mode .dn-flow-axis {
+    color: var(--text-secondary);
+}
+html.day-mode /* ══ Header ══ */
+.header,
+html.day-mode .header-search-slim,
+html.day-mode /* ── Header Bell Button ── */
+.header-bell-btn,
+html.day-mode /* ── Header User Area (avatar + name) ── */
+.header-user-area,
+html.day-mode /* ── Currency Toggle ── */
+.currency-toggle,
+html.day-mode /* Header Action Buttons */
+.header-action-btn,
+html.day-mode .tz-btn,
+html.day-mode /* ── Sentiment Badge ── */
+.header-sentiment,
+html.day-mode /* ══ Quick-Watch Market Ticker Bar ══ */
+.quick-watch-bar,
+html.day-mode .qw-settings-btn,
+html.day-mode .qw-ticker,
+html.day-mode .qw-search-input,
+html.day-mode .qw-cancel-btn,
+html.day-mode /* ══ Filters + Search Row ══ */
+.filters-search-row,
+html.day-mode .header-search,
+html.day-mode /* ════ Summary Bar — 6 Glassmorphism Stat Cards ════ */
+.summary-bar,
+html.day-mode /* ── Stat Card Base ── */
+.stat-card,
+html.day-mode /* ── Risk Mini Summary (full-width equal-spaced bar) ── */
+.risk-mini-summary,
+html.day-mode .filter-btn,
+html.day-mode .additional-filters-inline.open::before,
+html.day-mode /* ══ Exposure Section — Redesign ══ */
+.exposure-section,
+html.day-mode .exposure-wrapper,
+html.day-mode .exp-asset-bar-track,
+html.day-mode .exp-donut-empty-ring,
+html.day-mode .view-toggle-group,
+html.day-mode .pl-header-row,
+html.day-mode .pl-data-row,
+html.day-mode /* Footer */
+.pl-footer,
+html.day-mode .pl-show-all-btn,
+html.day-mode /* ══ Client Card — template-matched glassmorphism ══ */
+.client-card,
+html.day-mode /* View Toggle (Pie/Chart) */
+.card-view-toggle,
+html.day-mode /* ── Card Sparkline Section ── */
+.card-sparkline-section,
+html.day-mode .allocation-row,
+html.day-mode /* ── Card Footer (template-matched) ── */
+.card-footer,
+html.day-mode .card-footer-stat-center,
+html.day-mode /* ── Card Currency Exposure Bar ── */
+.card-currency-bar,
+html.day-mode /* ILS */
+
+/* Two-colour split bar — USD (cyan fill) vs ILS (purple track remainder) */
+.card-cur-track,
+html.day-mode .ov-panel,
+html.day-mode .ov-cell,
+html.day-mode .ov-cell:hover,
+html.day-mode /* ── Panel Footer (metadata row) ── */
+.ov-panel-footer,
+html.day-mode /* Two-colour split bar — USD (cyan fill) vs ILS (purple track remainder) */
+.ov-curbar-track,
+html.day-mode .modal-header > div:last-child,
+html.day-mode /* Accordion body (summary) */
+.macro-accordion-body,
+html.day-mode .spinner,
+html.day-mode /* Each ticker = compact rectangular card */
+    .qw-ticker,
+html.day-mode .qw-ticker:last-child,
+html.day-mode .portfolio-section-header,
+html.day-mode /* Mobile: expandable row details */
+    .pl-data-row .pl-mobile-details,
+html.day-mode /* Loading spinner inside buttons */
+.btn-spinner,
+html.day-mode .ticker-search-item,
+html.day-mode /* ── Sidebar clock (mobile only) ── */
+.sidebar-clock-group,
+html.day-mode .sidebar-tz-btn,
+html.day-mode .sidebar-tz-btn:hover:not(.active),
+html.day-mode .full-list-title-row,
+html.day-mode .full-list-close-btn,
+html.day-mode .full-list-close-btn:hover,
+html.day-mode .full-list-filters .filter-btn,
+html.day-mode .full-list-search,
+html.day-mode /* ── Mobile: card-based full list ── */
+.full-list-card,
+html.day-mode .mobile-bottom-nav,
+html.day-mode .risk-table tbody td,
+html.day-mode .corr-table tbody td,
+html.day-mode .dn-opt-line,
+html.day-mode /* Vision-transcribed lines (text read from agent images) */
+.dn-vline,
+html.day-mode /* Options analysis — clean visual card */
+.dn-opt-card,
+html.day-mode /* Flow histogram polish: thinner bars,
+html.day-mode subtle track,
+html.day-mode scale note */
+.dn-flow-track {
+    border-color: var(--border);
+}
+
+/* ═══ DAY MODE — pass 3 manual fixes (user-reported) ═══ */
+
+/* 1. Sidebar open/close (hamburger) button — was invisible */
+html.day-mode .sidebar-toggle-btn, html.day-mode .sidebar-close-btn { color: var(--text-primary); }
+html.day-mode .sidebar-toggle-btn:hover { background: rgba(15,23,42,0.06); }
+
+/* 2. Exposure histogram — bars/dots/percent labels deepened so they're visible on white */
+html.day-mode .exp-asset-bar-fill { filter: brightness(0.72) saturate(1.7); box-shadow: none; }
+html.day-mode .exp-asset-dot { filter: brightness(0.7) saturate(1.6); box-shadow: none; }
+html.day-mode .exp-asset-pct { filter: brightness(0.55) saturate(1.9); font-weight: 800; }
+
+/* 3. Primary action buttons (בצע פעולה / החל על כלל התיקים / קנה / הפקד) — solid day blue */
+html.day-mode .mgmt-btn.primary, html.day-mode .alloc-fix-btn, html.day-mode .alloc-bulk-apply {
+    background: var(--accent-blue); color: #ffffff; border: 1px solid var(--accent-blue);
+}
+html.day-mode .mgmt-btn.primary:hover, html.day-mode .alloc-bulk-apply:hover { background: #075985; }
+html.day-mode .mgmt-btn.secondary, html.day-mode .alloc-bulk-clear {
+    background: #ffffff; color: var(--text-primary); border: 1px solid var(--border);
+}
+html.day-mode .mgmt-btn.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+
+/* 4. Page headers (חדשות / אינדיקטורים / ניהול חכם / ניתוח) — black on white, framed */
+html.day-mode .macro-page-header {
+    background: #ffffff; border-bottom: 1px solid var(--border);
+}
+html.day-mode .macro-main-title { color: var(--text-primary); }
+html.day-mode .macro-back-btn { background: #f1f5f9; color: var(--text-primary); border: 1px solid var(--border); }
+html.day-mode .macro-back-btn:hover { background: #e2e8f0; }
+html.day-mode .dn-live { color: var(--text-secondary); }
+html.day-mode .dn-live.on { color: #047857; }
+
+/* 5. Economic indicators: the gray value boxes + frames → clean light cards */
+html.day-mode .macro-hw-card { background: #ffffff; border: 1px solid var(--border); }
+html.day-mode .macro-hw-col { background: #f1f5f9; border-color: var(--border); }
+html.day-mode .macro-hw-col-label { color: var(--text-secondary); }
+html.day-mode .macro-hw-col-value { color: var(--text-primary); }
+html.day-mode .macro-hw-card-footer { color: var(--text-secondary); border-color: var(--border); }
+html.day-mode .macro-hw-tag { background: #eef2f7; color: var(--text-secondary); border-color: var(--border); }
+html.day-mode .macro-country-header { color: var(--text-primary); }
+html.day-mode .macro-country-section { border-color: var(--border); background: #ffffff; }
+html.day-mode .macro-sub-header { color: var(--text-primary); }
+
+/* 6. Client modal: tab strip + all section labels black-on-white */
+html.day-mode .modal-tabs, html.day-mode .modal-tab-row { background: #f8fafc; border-color: var(--border); }
+html.day-mode .modal { color: var(--text-primary); }
+html.day-mode .modal-close { color: var(--text-primary); background: #f1f5f9; }
+/* keep the hero value panel dark (cyan glow design) — readable as-is */
+
+/* 7. Misc controls that were still night-styled */
+html.day-mode .reco-close { color: var(--text-primary); background: #f1f5f9; }
+html.day-mode .qw-settings-btn { color: var(--text-primary); }
+html.day-mode .view-toggle-btn.active { background: rgba(3,105,161,0.12); color: var(--accent-blue); }
+html.day-mode .filter-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+html.day-mode .card-action-btn { background: #f1f5f9; color: var(--text-primary); border-color: var(--border); }
+html.day-mode .transaction-badge { border: 1px solid var(--border); }
+html.day-mode .fx-toggle-label { color: var(--text-primary); }
