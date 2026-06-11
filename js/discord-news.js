@@ -168,7 +168,12 @@ async function _dnLoadVision(det) {
 
 function _dnVisionHTML(text, img) {
     const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
-    return lines.map(l => `<div class="dn-vline">${_dnEsc(l)}</div>`).join('')
+    return lines.map(l => {
+        // Strip markdown markers; render **headers** / --- sections --- as emphasized lines
+        const isHead = /^\*\*.+\*\*:?$/.test(l) || /^---.*---$/.test(l);
+        const clean = l.replace(/\*\*/g, '').replace(/^\*\s*/, '• ').replace(/^---\s*|\s*---$/g, '').trim();
+        return `<div class="dn-vline${isHead ? ' dn-vhead' : ''}">${_dnEsc(clean)}</div>`;
+    }).join('')
         + `<a class="dn-att" href="${_dnEsc(img)}" target="_blank" rel="noopener">🖼 פתח את התמונה המקורית</a>`;
 }
 

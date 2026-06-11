@@ -8107,3 +8107,4 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-content { font-size: 15px; font-weight: 650; }
 .dn-embed-desc { font-size: 14px; color: #fff; font-weight: 600; }
 .dn-embed-title { font-size: 14.5px; }
+.dn-vhead { color: var(--accent-blue); font-weight: 800; font-size: 14.5px; border-bottom: none; margin-top: 6px; }
