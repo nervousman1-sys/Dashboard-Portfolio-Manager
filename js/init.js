@@ -747,6 +747,8 @@ function restoreStateFromURL() {
         if (typeof openBulkPage === 'function') openBulkPage();
     } else if (view === 'disconews') {
         if (typeof openDiscordNews === 'function') openDiscordNews();
+    } else if (view === 'technical') {
+        if (typeof openTechnicalPage === 'function') openTechnicalPage();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     } else if (clientId) {
@@ -823,6 +825,11 @@ window.addEventListener('popstate', function(e) {
         if (typeof closeDiscordNews === 'function') closeDiscordNews();
         return;
     }
+    const techOpen = document.getElementById('technicalPage')?.classList.contains('active');
+    if (techOpen && view !== 'technical') {
+        if (typeof closeTechnicalPage === 'function') closeTechnicalPage();
+        return;
+    }
 
     // Restore whatever the URL says
     if (clientId) {
@@ -837,6 +844,8 @@ window.addEventListener('popstate', function(e) {
         if (typeof openBulkPage === 'function') openBulkPage();
     } else if (view === 'disconews') {
         if (typeof openDiscordNews === 'function') openDiscordNews();
+    } else if (view === 'technical') {
+        if (typeof openTechnicalPage === 'function') openTechnicalPage();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     }

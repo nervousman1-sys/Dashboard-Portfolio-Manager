@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=92.0">
+    <link rel="stylesheet" href="css/main.css?v=93.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <!-- Apply the saved theme BEFORE first paint (no flash) -->
     <script>
@@ -111,6 +111,15 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">ניתוח CML/SML</span>
+                </a>
+                <!-- Technical analysis scanner -->
+                <a class="sidebar-item" data-nav="technical" onclick="navigateTo(&#39;technical&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12h4l3-9 4 18 3-9h4" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח טכני למניות</span>
                 </a>
                 <!-- Smart bulk management -->
                 <a class="sidebar-item" data-nav="bulkmgr" onclick="navigateTo(&#39;bulkmgr&#39;)">
@@ -349,6 +358,7 @@
             <div class="riskmodel-page" id="riskmodelPage"></div>
             <div class="riskmodel-page" id="bulkPage"></div>
             <div class="riskmodel-page" id="discordNewsPage"></div>
+            <div class="riskmodel-page" id="technicalPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -604,6 +614,7 @@
     <script src="js/risk-analysis-view.js"></script>
     <script src="js/bulk-actions.js"></script>
     <script src="js/discord-news.js"></script>
+    <script src="js/technical-view.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/init.js"></script>

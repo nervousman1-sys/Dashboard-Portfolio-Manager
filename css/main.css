@@ -8906,3 +8906,50 @@ html.day-mode .macro-yield-card .macro-yield-note { color: var(--text-primary) !
 html.day-mode .macro-yield-card .yield-sl-row { color: var(--text-primary) !important; }
 html.day-mode .macro-yield-card .yield-sl-row b,
 html.day-mode .macro-yield-card .macro-yield-note b { color: #0369a1 !important; }
+
+/* ── Technical analysis scanner page ── */
+.tech-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.tech-search {
+    font-family: inherit; font-size: 13.5px; color: #fff; background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 14px; outline: none;
+    min-width: 230px; direction: ltr; text-align: left;
+}
+.tech-search:focus { border-color: rgba(0,229,255,0.5); }
+.tech-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.tech-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.tech-progress-track { flex: 1; height: 8px; background: rgba(255,255,255,0.07); border-radius: 5px; overflow: hidden; }
+.tech-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #0ea5e9, #00e5ff); border-radius: 5px; transition: width .4s; }
+.tech-progress span, .tech-progress #techProgressTxt { font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+.tech-table td, .tech-table th { white-space: nowrap; font-size: 12.5px; }
+.tech-name-cell { display: flex; flex-direction: column; gap: 3px; }
+.tech-name-cell span { font-weight: 800; }
+.tech-tv {
+    font-size: 10px; font-weight: 700; color: #8ab4f8; text-decoration: none; width: fit-content;
+    background: rgba(138,180,248,0.1); border: 1px solid rgba(138,180,248,0.3);
+    border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+.tech-tv:hover { background: rgba(138,180,248,0.22); color: #fff; }
+.tech-yes { color: #4ade80 !important; font-weight: 800; }
+.tech-no { color: rgba(245,245,250,0.35) !important; }
+.tech-na { color: rgba(245,245,250,0.3) !important; }
+.tech-dist { font-size: 10.5px; font-weight: 700; opacity: 0.9; }
+.tech-warn { font-size: 10px; font-weight: 900; border-radius: 10px; padding: 1px 8px; margin-inline-start: 5px; }
+.tech-warn.ob { color: #fca5a5; background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); }
+.tech-warn.os { color: #86efac; background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); }
+.tech-low { color: #4ade80; font-weight: 900; }
+.tech-mid { color: #facc15; font-weight: 800; }
+.tech-foot { margin-top: 10px; font-size: 11px; color: rgba(245,245,250,0.55); line-height: 1.6; }
+
+/* Day mode for the scanner */
+html.day-mode .tech-search { background: #ffffff; color: var(--text-primary); }
+html.day-mode .tech-progress-track { background: rgba(15,23,42,0.08); }
+html.day-mode .tech-progress #techProgressTxt, html.day-mode .tech-progress span { color: var(--text-primary); }
+html.day-mode .tech-no { color: rgba(15,23,42,0.35) !important; }
+html.day-mode .tech-na { color: rgba(15,23,42,0.3) !important; }
+html.day-mode .tech-yes { color: #047857 !important; }
+html.day-mode .tech-low { color: #047857; }
+html.day-mode .tech-mid { color: #b45309; }
+html.day-mode .tech-warn.ob { color: #dc2626; background: rgba(220,38,38,0.1); }
+html.day-mode .tech-warn.os { color: #047857; background: rgba(4,120,87,0.1); }
+html.day-mode .tech-tv { color: #0369a1; background: rgba(3,105,161,0.07); border-color: rgba(3,105,161,0.4); }
+html.day-mode .tech-foot { color: var(--text-secondary); }

@@ -72,6 +72,8 @@ function navigateTo(section) {
     const closeBulkIfOpen = () => { if (bulkIsActive && typeof closeBulkPage === 'function') closeBulkPage(); };
     const dnPage = document.getElementById('discordNewsPage');
     const closeDnIfOpen = () => { if (dnPage && dnPage.classList.contains('active') && typeof closeDiscordNews === 'function') closeDiscordNews(); };
+    const techPage = document.getElementById('technicalPage');
+    const closeTechIfOpen = () => { if (techPage && techPage.classList.contains('active') && typeof closeTechnicalPage === 'function') closeTechnicalPage(); };
 
     switch (section) {
         case 'dashboard':
@@ -85,6 +87,7 @@ function navigateTo(section) {
             }
             closeBulkIfOpen();
             closeDnIfOpen();
+            closeTechIfOpen();
             // Scroll to portfolio grid if coming from "portfolio" link
             if (section === 'portfolio') {
                 const grid = document.getElementById('clientsGrid');
@@ -101,6 +104,7 @@ function navigateTo(section) {
             }
             closeBulkIfOpen();
             closeDnIfOpen();
+            closeTechIfOpen();
             if (!macroIsActive && typeof toggleAlerts === 'function') {
                 toggleAlerts();
             }
@@ -113,6 +117,7 @@ function navigateTo(section) {
             }
             closeBulkIfOpen();
             closeDnIfOpen();
+            closeTechIfOpen();
             if (typeof openRiskAnalysis === 'function') {
                 openRiskAnalysis();
             }
@@ -127,6 +132,7 @@ function navigateTo(section) {
                 closeRiskAnalysis();
             }
             closeDnIfOpen();
+            closeTechIfOpen();
             if (typeof openBulkPage === 'function') {
                 openBulkPage();
             }
@@ -141,8 +147,24 @@ function navigateTo(section) {
                 closeRiskAnalysis();
             }
             closeBulkIfOpen();
+            closeTechIfOpen();
             if (typeof openDiscordNews === 'function') {
                 openDiscordNews();
+            }
+            break;
+
+        case 'technical':
+            // Open the technical-analysis scanner page
+            if (macroIsActive && typeof closeMacroPage === 'function') {
+                closeMacroPage();
+            }
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
+            }
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            if (typeof openTechnicalPage === 'function') {
+                openTechnicalPage();
             }
             break;
 
