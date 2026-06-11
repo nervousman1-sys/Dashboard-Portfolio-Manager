@@ -8288,3 +8288,20 @@ html.day-mode .alloc-ok { color: #047857; }
 html.day-mode .dn-vhead { color: var(--accent-blue); }
 html.day-mode .qw-fx-chg.positive { color: #047857; }
 html.day-mode .qw-fx-chg.negative { color: #dc2626; }
+
+/* Multi-allocation % box — identical look to the upper bulk-field inputs, just compact */
+.alloc-mini-wrap {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0 11px;
+}
+.alloc-mini-wrap:focus-within { border-color: rgba(0,229,255,0.5); }
+.alloc-mini-wrap input {
+    font-family: inherit; font-size: 13px; color: #fff; background: transparent; border: none; outline: none;
+    width: 52px; padding: 8px 0; direction: ltr; text-align: center;
+    -moz-appearance: textfield; appearance: textfield;
+}
+.alloc-mini-wrap input::-webkit-outer-spin-button, .alloc-mini-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.alloc-bulk-clear { font-size: 12px; padding: 7px 14px; }
+html.day-mode .alloc-mini-wrap { background: #ffffff; }
+html.day-mode .alloc-mini-wrap input { color: var(--text-primary); background: transparent !important; }
