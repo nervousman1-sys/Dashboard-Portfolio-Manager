@@ -8783,3 +8783,17 @@ html.day-mode .adv-eff-sub, html.day-mode .adv-eff-title,
 html.day-mode .reco-eff-sub, html.day-mode .reco-eff-title, html.day-mode .reco-eff-mix {
     color: var(--text-primary) !important;
 }
+
+/* ═══ DAY MODE — pass 5: macro-analysis cards go WHITE (they hold text, not
+   charts — only the curve panels stay dark), and the sector donut blends into
+   the white modal instead of sitting on a black box. ═══ */
+html.day-mode .macro-analysis-host {
+    background: #ffffff !important;
+    border: 1px solid var(--border) !important;
+}
+html.day-mode .macro-analysis-host .macro-yield-title { color: var(--text-primary) !important; }
+html.day-mode .macro-analysis-host .macro-analysis,
+html.day-mode .macro-analysis-host .macro-analysis p { color: var(--text-primary) !important; }
+html.day-mode .macro-analysis-host .macro-analysis b { color: var(--accent-blue) !important; }
+
+html.day-mode .sectors-chart-wrap { background: transparent !important; border: none !important; }

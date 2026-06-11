@@ -1147,11 +1147,11 @@ function _renderIndicatorsTab() {
     <div class="macro-country-section">
         <h2 class="macro-country-header">ניתוח מאקרו-כלכלי</h2>
         <div class="macro-yield-grid">
-            <div class="macro-yield-card glass-card">
+            <div class="macro-yield-card macro-analysis-host glass-card">
                 <h3 class="macro-yield-title">ארה"ב</h3>
                 <div class="macro-analysis" id="macroAnalysisUS">מחשב ניתוח…</div>
             </div>
-            <div class="macro-yield-card glass-card">
+            <div class="macro-yield-card macro-analysis-host glass-card">
                 <h3 class="macro-yield-title">ישראל</h3>
                 <div class="macro-analysis" id="macroAnalysisIL">מחשב ניתוח…</div>
             </div>
