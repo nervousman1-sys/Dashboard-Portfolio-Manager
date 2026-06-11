@@ -67,6 +67,9 @@ function navigateTo(section) {
     const macroIsActive = macroPage && macroPage.classList.contains('active');
     const riskPage = document.getElementById('riskmodelPage');
     const riskIsActive = riskPage && riskPage.classList.contains('active');
+    const bulkPage = document.getElementById('bulkPage');
+    const bulkIsActive = bulkPage && bulkPage.classList.contains('active');
+    const closeBulkIfOpen = () => { if (bulkIsActive && typeof closeBulkPage === 'function') closeBulkPage(); };
 
     switch (section) {
         case 'dashboard':
@@ -78,6 +81,7 @@ function navigateTo(section) {
             if (riskIsActive && typeof closeRiskAnalysis === 'function') {
                 closeRiskAnalysis();
             }
+            closeBulkIfOpen();
             // Scroll to portfolio grid if coming from "portfolio" link
             if (section === 'portfolio') {
                 const grid = document.getElementById('clientsGrid');
@@ -92,6 +96,7 @@ function navigateTo(section) {
             if (riskIsActive && typeof closeRiskAnalysis === 'function') {
                 closeRiskAnalysis();
             }
+            closeBulkIfOpen();
             if (!macroIsActive && typeof toggleAlerts === 'function') {
                 toggleAlerts();
             }
@@ -102,8 +107,22 @@ function navigateTo(section) {
             if (macroIsActive && typeof closeMacroPage === 'function') {
                 closeMacroPage();
             }
+            closeBulkIfOpen();
             if (typeof openRiskAnalysis === 'function') {
                 openRiskAnalysis();
+            }
+            break;
+
+        case 'bulkmgr':
+            // Open the smart bulk-management page
+            if (macroIsActive && typeof closeMacroPage === 'function') {
+                closeMacroPage();
+            }
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
+            }
+            if (typeof openBulkPage === 'function') {
+                openBulkPage();
             }
             break;
 

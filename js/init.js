@@ -712,6 +712,8 @@ function restoreStateFromURL() {
         toggleAlerts();
     } else if (view === 'riskmodel') {
         if (typeof openRiskAnalysis === 'function') openRiskAnalysis();
+    } else if (view === 'bulkmgr') {
+        if (typeof openBulkPage === 'function') openBulkPage();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     } else if (clientId) {
@@ -736,7 +738,6 @@ window.addEventListener('popstate', function(e) {
     const popupClosers = [
         ['assetFitOverlay', () => typeof closeAssetFitPopup === 'function' && closeAssetFitPopup()],
         ['stockRecoOverlay', () => typeof closeStockRecommendations === 'function' && closeStockRecommendations()],
-        ['bulkOverlay', () => typeof closeBulkManager === 'function' && closeBulkManager()],
         ['mgmtOverlay', () => typeof closeMgmtModal === 'function' && closeMgmtModal()],
         ['qwConfigModal', () => typeof closeTickerModal === 'function' && closeTickerModal()],
     ];
@@ -779,6 +780,11 @@ window.addEventListener('popstate', function(e) {
         if (typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
         return;
     }
+    const bulkOpen = document.getElementById('bulkPage')?.classList.contains('active');
+    if (bulkOpen && view !== 'bulkmgr') {
+        if (typeof closeBulkPage === 'function') closeBulkPage();
+        return;
+    }
 
     // Restore whatever the URL says
     if (clientId) {
@@ -789,6 +795,8 @@ window.addEventListener('popstate', function(e) {
         }
     } else if (view === 'macro') {
         if (typeof toggleAlerts === 'function') toggleAlerts();
+    } else if (view === 'bulkmgr') {
+        if (typeof openBulkPage === 'function') openBulkPage();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     }

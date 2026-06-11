@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=68.0">
+    <link rel="stylesheet" href="css/main.css?v=69.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -119,6 +119,18 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">ניתוח CML/SML</span>
+                </a>
+                <!-- Smart bulk management -->
+                <a class="sidebar-item" data-nav="bulkmgr" onclick="navigateTo(&#39;bulkmgr&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="17 1 21 5 17 9" />
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                            <polyline points="7 23 3 19 7 15" />
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניהול חכם</span>
                 </a>
                 <!-- Macro Indicators -->
                 <a class="sidebar-item" data-nav="macro" onclick="navigateTo('macro')">
@@ -321,6 +333,7 @@
 
             <!-- ═══ CML / SML Risk Analysis Page ═══ -->
             <div class="riskmodel-page" id="riskmodelPage"></div>
+            <div class="riskmodel-page" id="bulkPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -443,10 +456,6 @@
                     <h2 class="section-title">ניהול תיקי השקעה</h2>
                     <span class="portfolio-section-sub" id="portfolioSectionSub"></span>
                 </div>
-                <button class="bulk-open-btn" onclick="if(typeof openBulkManager==='function') openBulkManager()"
-                        title="קנייה/צמצום סיכון בכל התיקים במקביל">
-                    ⇄ ניהול חכם — פעולה מקבילה
-                </button>
                 <div class="view-toggle-group" id="viewToggleGroup">
                     <button class="view-toggle-btn active" id="btnGridView" onclick="setPortfolioView('grid', this)"
                         title="תצוגת כרטיסים">

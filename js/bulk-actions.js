@@ -1,105 +1,179 @@
-// ========== SMART BULK PORTFOLIO MANAGER ==========
+// ========== SMART PORTFOLIO MANAGEMENT PAGE ==========
 //
-// Parallel control over ALL portfolios from one window:
-//   BUY    — buy an asset across many portfolios at once (risk-on). Portfolios
-//            without enough USD cash for the entered amount are auto-excluded live.
-//   REDUCE — risk-off: sell a given PERCENT of a specific stock, or of EVERY stock,
-//            across the selected portfolios.
-// Risk-level toggles (high/medium/low) include or exclude whole risk classes —
-// e.g. leave low-risk portfolios untouched during a risk-off move.
+// A dedicated page (sidebar → "ניהול חכם") with:
+//   1. PARALLEL ACTIONS — buy an asset across many portfolios at once (risk-on),
+//      or sell a % of a specific stock / ALL stocks (risk-off). Portfolios without
+//      enough USD cash for the entered buy amount are auto-excluded live, and
+//      whole risk classes (high/medium/low) can be included/excluded.
+//   2. ALLOCATION GUARD — per-portfolio minimum-cash target (%). When equities
+//      push cash below the target, a breach badge appears; clicking it shows the
+//      required reduction and a one-click proportional fix that keeps the
+//      portfolio's composition (and therefore its efficient-region position).
 
 let _bulkMode = 'buy';          // 'buy' | 'reduce'
 let _bulkScope = 'all';         // reduce scope: 'all' | 'ticker'
 let _bulkBusy = false;
 let _bulkManualOff = new Set(); // portfolios the user manually unchecked
 
-function openBulkManager() {
-    let ov = document.getElementById('bulkOverlay');
-    if (!ov) {
-        ov = document.createElement('div');
-        ov.id = 'bulkOverlay';
-        ov.className = 'reco-overlay';
-        ov.addEventListener('click', (e) => { if (e.target === ov && !_bulkBusy) closeBulkManager(); });
-        document.body.appendChild(ov);
-    }
-    _bulkManualOff = new Set();
-    _bulkBusy = false;
+// ── Allocation targets (min cash %) — persisted per portfolio ──
+const _ALLOC_LS_PREFIX = 'alloc_target_v1_';
 
-    ov.innerHTML = `<div class="reco-box bulk-box" dir="rtl">
-        <div class="reco-head">
-            <div><h3>ניהול חכם — פעולה מקבילה על תיקים</h3>
-            <span class="reco-sub">קנייה או צמצום סיכון בכל התיקים בבת אחת · תיקים ללא מזומן מוסרים אוטומטית</span></div>
-            <button class="reco-close" onclick="closeBulkManager()">✕</button>
-        </div>
-
-        <div class="bulk-mode-row">
-            <button class="bulk-mode-btn active" id="bulkModeBuy" onclick="setBulkMode('buy')">קנייה מקבילה (לקיחת סיכון)</button>
-            <button class="bulk-mode-btn" id="bulkModeReduce" onclick="setBulkMode('reduce')">צמצום סיכון (מכירה ב-%)</button>
-        </div>
-
-        <!-- BUY controls -->
-        <div id="bulkBuyControls" class="bulk-controls">
-            <div class="bulk-field">
-                <label>סימול לקנייה (ארה"ב)</label>
-                <input type="text" id="bulkTicker" placeholder="למשל: SPY" style="direction:ltr;text-align:left"
-                       oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
-            </div>
-            <div class="bulk-field">
-                <label>סכום קנייה לכל תיק ($)</label>
-                <input type="text" inputmode="decimal" id="bulkAmount" placeholder="1,000" style="direction:ltr;text-align:left"
-                       oninput="formatInputWithCommas(this); _bulkRefreshList()" />
-            </div>
-        </div>
-
-        <!-- REDUCE controls -->
-        <div id="bulkReduceControls" class="bulk-controls" style="display:none">
-            <div class="bulk-field">
-                <label>היקף הצמצום</label>
-                <select id="bulkScope" onchange="_bulkScope=this.value; _bulkRefreshList()">
-                    <option value="all">כל המניות בתיק</option>
-                    <option value="ticker">מניה מסוימת</option>
-                </select>
-            </div>
-            <div class="bulk-field" id="bulkReduceTickerField" style="display:none">
-                <label>סימול לצמצום</label>
-                <input type="text" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
-                       oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
-            </div>
-            <div class="bulk-field">
-                <label>אחוז צמצום (%)</label>
-                <input type="text" inputmode="decimal" id="bulkPct" placeholder="25" style="direction:ltr;text-align:left"
-                       oninput="_bulkRefreshList()" />
-            </div>
-        </div>
-
-        <!-- Risk-class include toggles -->
-        <div class="bulk-risk-row">
-            <span class="bulk-risk-label">כלול תיקים לפי רמת סיכון:</span>
-            <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskHigh" checked onchange="_bulkRefreshList()" /> <span class="risk-badge high">גבוה</span></label>
-            <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskMedium" checked onchange="_bulkRefreshList()" /> <span class="risk-badge medium">בינוני</span></label>
-            <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskLow" checked onchange="_bulkRefreshList()" /> <span class="risk-badge low">נמוך</span></label>
-        </div>
-
-        <div id="bulkList" class="bulk-list"></div>
-
-        <div class="bulk-footer">
-            <span id="bulkSummary" class="bulk-summary"></span>
-            <button class="mgmt-btn primary" id="bulkExecBtn" onclick="executeBulkAction()">בצע פעולה</button>
-        </div>
-        <div id="bulkProgress" class="bulk-progress"></div>
-    </div>`;
-
-    ov.classList.add('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-    try { history.pushState({ popup: 'bulk' }, '', location.href); } catch (e) { /* ignore */ }
-    _bulkRefreshList();
+function getAllocTarget(clientId) {
+    const v = parseFloat(localStorage.getItem(_ALLOC_LS_PREFIX + clientId));
+    return (isFinite(v) && v > 0 && v <= 95) ? v : null;
 }
 
-function closeBulkManager() {
-    if (_bulkBusy) return;
-    const ov = document.getElementById('bulkOverlay');
-    if (ov) ov.classList.remove('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+function setAllocTarget(clientId, pct) {
+    try {
+        if (pct > 0 && pct <= 95) localStorage.setItem(_ALLOC_LS_PREFIX + clientId, String(pct));
+        else localStorage.removeItem(_ALLOC_LS_PREFIX + clientId);
+    } catch (e) { /* full */ }
+}
+
+// Current allocation state of a portfolio (USD terms, consistent with the cards).
+function _allocStateOf(c) {
+    const rate = (typeof window !== 'undefined' && window.USD_ILS_RATE > 0) ? window.USD_ILS_RATE : 3.7;
+    const cash = (c.cash?.usd || 0) + (c.cash?.ils || 0) / rate;
+    const fxr = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const hVal = (h) => h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0) * fxr(h.currency);
+    const stocksVal = (c.holdings || []).filter(h => h.type === 'stock').reduce((s, h) => s + hVal(h), 0);
+    const bondsVal = (c.holdings || []).filter(h => h.type === 'bond').reduce((s, h) => s + hVal(h), 0);
+    const total = cash + stocksVal + bondsVal;
+    return { cash, stocksVal, bondsVal, total, cashPct: total > 0 ? cash / total * 100 : 0 };
+}
+
+// Breach check: returns null when fine, or details for the badge/fix.
+function allocBreachOf(c) {
+    const target = getAllocTarget(c.id);
+    if (!target) return null;
+    const st = _allocStateOf(c);
+    if (st.total <= 0 || st.cashPct >= target - 0.05) return null;
+    // Sell S of stocks so cash reaches target: S = t·V − C (total V unchanged)
+    const needSell = (target / 100) * st.total - st.cash;
+    const pctOfStocks = st.stocksVal > 0 ? Math.min(100, needSell / st.stocksVal * 100) : 0;
+    return { target, cashPct: st.cashPct, needSell, pctOfStocks, stocksVal: st.stocksVal };
+}
+
+// ── Page open/close (mirrors the riskmodel-page pattern) ──
+
+function openBulkPage() {
+    const page = document.getElementById('bulkPage');
+    if (!page) return;
+    const header = document.querySelector('.header');
+    if (header) header.style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => {
+        if (el.id !== 'bulkPage') el.style.display = 'none';
+    });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = 'none';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = 'none';
+    const risk = document.getElementById('riskmodelPage');
+    if (risk && risk.classList.contains('active') && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
+
+    _bulkManualOff = new Set();
+    _bulkBusy = false;
+    page.classList.add('active');
+    if (typeof updateURLState === 'function') updateURLState({ view: 'bulkmgr' });
+    _renderBulkPage();
+    window.scrollTo(0, 0);
+}
+
+function closeBulkPage() {
+    const page = document.getElementById('bulkPage');
+    if (!page) return;
+    page.classList.remove('active');
+    page.innerHTML = '';
+    const header = document.querySelector('.header');
+    if (header) header.style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { el.style.display = ''; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = '';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = '';
+    if (typeof clearURLState === 'function') clearURLState();
+}
+
+function _renderBulkPage() {
+    const page = document.getElementById('bulkPage');
+    if (!page) return;
+    page.innerHTML = `
+    <div dir="rtl">
+        <div class="macro-page-header">
+            <h1 class="macro-main-title">ניהול חכם — שליטה מקבילה בתיקים</h1>
+            <button class="macro-back-btn" onclick="closeBulkPage()">חזור לדשבורד</button>
+        </div>
+        <div class="macro-content">
+
+        <div class="risk-table-card glass-card">
+            <div class="risk-chart-head"><h3>פעולה מקבילה</h3>
+                <span class="risk-chart-sub">תיקים ללא מספיק מזומן לקנייה מוסרים אוטומטית · ניתן להחריג רמות סיכון שלמות</span></div>
+
+            <div class="bulk-mode-row">
+                <button class="bulk-mode-btn ${_bulkMode === 'buy' ? 'active' : ''}" id="bulkModeBuy" onclick="setBulkMode('buy')">קנייה מקבילה (לקיחת סיכון)</button>
+                <button class="bulk-mode-btn ${_bulkMode === 'reduce' ? 'active' : ''}" id="bulkModeReduce" onclick="setBulkMode('reduce')">צמצום סיכון (מכירה ב-%)</button>
+            </div>
+
+            <div id="bulkBuyControls" class="bulk-controls" style="${_bulkMode === 'buy' ? '' : 'display:none'}">
+                <div class="bulk-field">
+                    <label>סימול לקנייה (ארה"ב)</label>
+                    <input type="text" id="bulkTicker" placeholder="למשל: SPY" style="direction:ltr;text-align:left"
+                           oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
+                </div>
+                <div class="bulk-field">
+                    <label>סכום קנייה לכל תיק ($)</label>
+                    <input type="text" inputmode="decimal" id="bulkAmount" placeholder="1,000" style="direction:ltr;text-align:left"
+                           oninput="formatInputWithCommas(this); _bulkRefreshList()" />
+                </div>
+            </div>
+
+            <div id="bulkReduceControls" class="bulk-controls" style="${_bulkMode === 'reduce' ? '' : 'display:none'}">
+                <div class="bulk-field">
+                    <label>היקף הצמצום</label>
+                    <select id="bulkScope" onchange="_bulkScope=this.value; _bulkRefreshList()">
+                        <option value="all" ${_bulkScope === 'all' ? 'selected' : ''}>כל המניות בתיק</option>
+                        <option value="ticker" ${_bulkScope === 'ticker' ? 'selected' : ''}>מניה מסוימת</option>
+                    </select>
+                </div>
+                <div class="bulk-field" id="bulkReduceTickerField" style="${_bulkScope === 'ticker' ? '' : 'display:none'}">
+                    <label>סימול לצמצום</label>
+                    <input type="text" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
+                           oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
+                </div>
+                <div class="bulk-field">
+                    <label>אחוז צמצום (%)</label>
+                    <input type="text" inputmode="decimal" id="bulkPct" placeholder="25" style="direction:ltr;text-align:left"
+                           oninput="_bulkRefreshList()" />
+                </div>
+            </div>
+
+            <div class="bulk-risk-row">
+                <span class="bulk-risk-label">כלול תיקים לפי רמת סיכון:</span>
+                <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskHigh" checked onchange="_bulkRefreshList()" /> <span class="risk-badge high">גבוה</span></label>
+                <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskMedium" checked onchange="_bulkRefreshList()" /> <span class="risk-badge medium">בינוני</span></label>
+                <label class="bulk-risk-chk"><input type="checkbox" id="bulkRiskLow" checked onchange="_bulkRefreshList()" /> <span class="risk-badge low">נמוך</span></label>
+            </div>
+
+            <div id="bulkList" class="bulk-list"></div>
+
+            <div class="bulk-footer">
+                <span id="bulkSummary" class="bulk-summary"></span>
+                <button class="mgmt-btn primary" id="bulkExecBtn" onclick="executeBulkAction()">בצע פעולה</button>
+            </div>
+            <div id="bulkProgress" class="bulk-progress"></div>
+        </div>
+
+        <div class="risk-table-card glass-card">
+            <div class="risk-chart-head"><h3>יעדי אלוקציה — מזומן מול נכסים</h3>
+                <span class="risk-chart-sub">הגדר אחוז מזומן מינימלי לכל תיק · כשהחשיפה למניות חורגת — מופיעה התראה עם פעולת תיקון ששומרת על האיזור היעיל</span></div>
+            <div id="allocList" class="bulk-list"></div>
+        </div>
+        </div>
+    </div>`;
+    _bulkRefreshList();
+    _renderAllocSection();
 }
 
 function setBulkMode(mode) {
@@ -118,8 +192,7 @@ function _bulkToggleManual(id, checked) {
     _bulkRefreshList();
 }
 
-// Eligibility of each portfolio for the current operation. Returns
-// { ok, reason } — ineligible rows are shown disabled with the reason.
+// Eligibility of each portfolio for the current operation.
 function _bulkEligibility(c) {
     const riskOn = {
         high: document.getElementById('bulkRiskHigh')?.checked !== false,
@@ -137,7 +210,6 @@ function _bulkEligibility(c) {
         return { ok: true };
     }
 
-    // reduce
     const stocks = (c.holdings || []).filter(h => h.type === 'stock' && (h.shares || 0) > 0);
     if (!stocks.length) return { ok: false, reason: 'אין מניות בתיק' };
     if (_bulkScope === 'ticker') {
@@ -152,7 +224,6 @@ function _bulkEligibility(c) {
 function _bulkRefreshList() {
     const listEl = document.getElementById('bulkList');
     if (!listEl) return;
-    // reduce: show/hide the ticker field
     const tf = document.getElementById('bulkReduceTickerField');
     if (tf) tf.style.display = (_bulkScope === 'ticker') ? '' : 'none';
 
@@ -173,7 +244,6 @@ function _bulkRefreshList() {
     }).join('');
     listEl.innerHTML = rows || '<div class="adv-empty">אין תיקים.</div>';
 
-    // summary
     const selected = _bulkSelectedClients();
     const sEl = document.getElementById('bulkSummary');
     if (sEl) {
@@ -211,7 +281,11 @@ async function executeBulkAction() {
         if (progEl) progEl.innerHTML = '';
         log(`מאתר מחיר עדכני ל-${ticker}…`);
         const q = await fetchSingleTickerPrice(ticker, 'USD');
-        if (!q || !(q.price > 0)) { log(`✗ לא נמצא מחיר ל-${ticker} — הפעולה בוטלה`); _bulkBusy = false; document.getElementById('bulkExecBtn').disabled = false; return; }
+        if (!q || !(q.price > 0)) {
+            log(`✗ לא נמצא מחיר ל-${ticker} — הפעולה בוטלה`);
+            _bulkBusy = false; document.getElementById('bulkExecBtn').disabled = false;
+            return;
+        }
         const price = q.price;
         const quantity = Math.round((amount / price) * 10000) / 10000;
         log(`מחיר: $${price.toFixed(2)} → ${quantity} יחידות לכל תיק`);
@@ -273,14 +347,74 @@ async function executeBulkAction() {
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     refreshDashboard();
     _bulkRefreshList();
+    _renderAllocSection();
+}
+
+// ── Allocation guard section ──
+
+function _renderAllocSection() {
+    const el = document.getElementById('allocList');
+    if (!el) return;
+    const rows = (typeof clients !== 'undefined' ? clients : []).map(c => {
+        const st = _allocStateOf(c);
+        const target = getAllocTarget(c.id);
+        const breach = allocBreachOf(c);
+        const badge = breach
+            ? `<button class="alloc-breach" onclick="toggleAllocDetail(${c.id})">⚠ חריגה מהאלוקציה</button>`
+            : (target ? '<span class="alloc-ok">✓ בתוך היעד</span>' : '<span class="adv-dim" style="font-size:11px">לא הוגדר יעד</span>');
+        const detail = breach ? `
+            <div class="alloc-detail" id="allocDetail-${c.id}" style="display:none">
+                יש חריגה מהאלוקציה שהוגדרה: מזומן נוכחי <b>${st.cashPct.toFixed(1)}%</b> מתחת ליעד <b>${breach.target}%</b>.
+                כדי לחזור ליעד: <b>צמצם את אחוז המניות ב-${breach.pctOfStocks.toFixed(1)}%</b>
+                (מכירה פרופורציונלית של כל המניות — שומרת על הרכב התיק, על הפיזור ועל מיקומו באיזור היעיל של העקומה).
+                <button class="mgmt-btn primary alloc-fix-btn" onclick="fixAllocation(${c.id}, ${breach.pctOfStocks.toFixed(2)})">צמצם עכשיו ${breach.pctOfStocks.toFixed(1)}%</button>
+            </div>` : '';
+        return `
+        <div class="bulk-row alloc-row" style="flex-wrap:wrap">
+            <span class="bulk-row-name">${c.name}</span>
+            <span class="risk-badge ${c.risk || 'low'}">${c.riskLabel || ''}</span>
+            <span class="bulk-row-cash">מזומן: ${st.cashPct.toFixed(1)}% · מניות: ${(st.total > 0 ? st.stocksVal / st.total * 100 : 0).toFixed(1)}%</span>
+            <span class="alloc-target-wrap">יעד מזומן מינ' %:
+                <input type="number" min="0" max="95" class="alloc-input" value="${target ?? ''}" placeholder="—"
+                       onchange="setAllocTarget(${c.id}, parseFloat(this.value)); _renderAllocSection(); if(typeof renderClientCards==='function') renderClientCards();" />
+            </span>
+            ${badge}
+            ${detail}
+        </div>`;
+    }).join('');
+    el.innerHTML = rows || '<div class="adv-empty">אין תיקים.</div>';
+}
+
+function toggleAllocDetail(id) {
+    const d = document.getElementById(`allocDetail-${id}`);
+    if (d) d.style.display = d.style.display === 'none' ? '' : 'none';
+}
+
+// One-click fix: pre-arms the reduce flow for THIS portfolio only with the computed %.
+function fixAllocation(clientId, pct) {
+    setBulkMode('reduce');
+    _bulkScope = 'all';
+    const scopeSel = document.getElementById('bulkScope');
+    if (scopeSel) scopeSel.value = 'all';
+    const pctEl = document.getElementById('bulkPct');
+    if (pctEl) pctEl.value = String(Math.ceil(pct * 10) / 10);
+    // select ONLY this portfolio
+    _bulkManualOff = new Set((typeof clients !== 'undefined' ? clients : []).map(c => c.id).filter(id => id !== clientId));
+    _bulkRefreshList();
+    document.getElementById('bulkList')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Expose
 if (typeof window !== 'undefined') {
-    window.openBulkManager = openBulkManager;
-    window.closeBulkManager = closeBulkManager;
+    window.openBulkPage = openBulkPage;
+    window.closeBulkPage = closeBulkPage;
     window.setBulkMode = setBulkMode;
     window.executeBulkAction = executeBulkAction;
     window._bulkRefreshList = _bulkRefreshList;
     window._bulkToggleManual = _bulkToggleManual;
+    window.getAllocTarget = getAllocTarget;
+    window.setAllocTarget = setAllocTarget;
+    window.allocBreachOf = allocBreachOf;
+    window.toggleAllocDetail = toggleAllocDetail;
+    window.fixAllocation = fixAllocation;
 }
