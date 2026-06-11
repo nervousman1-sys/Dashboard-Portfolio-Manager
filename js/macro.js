@@ -781,6 +781,11 @@ async function checkAlerts(forceRefresh = false) {
             forceRefresh = true;
             localStorage.setItem('macro_last_scan_day', today);
             console.log('[Macro] First load today — forcing a fresh daily scan');
+            // Daily scan also re-pulls the yield curves (market-close data) so the
+            // curves + macro analysis are pre-warmed and instant when the page opens
+            if (typeof _fetchYieldsCached === 'function') {
+                try { _fetchYieldsCached(() => { }); } catch (e) { /* background warm only */ }
+            }
         }
     } catch (e) { /* ignore */ }
 
@@ -1159,16 +1164,48 @@ function _renderIndicatorsTab() {
 // ── Yield curves + macro analysis (async fill after the page renders) ──
 let _yieldCharts = { us: null, il: null };
 
+const _YIELDS_LS_KEY = 'yields_cache_v1';
+
+// Fetch yields with an instant-from-cache strategy: render yesterday's cached curve
+// IMMEDIATELY (zero wait), then refresh from the network in the background and
+// re-render only if the data changed. The daily scan warms this cache too.
+async function _fetchYieldsCached(onData) {
+    let served = false;
+    try {
+        const raw = localStorage.getItem(_YIELDS_LS_KEY);
+        if (raw) {
+            const c = JSON.parse(raw);
+            if (c && c.data && Array.isArray(c.data.us) && c.data.us.length >= 3) {
+                onData(c.data);            // instant paint
+                served = true;
+                // Same calendar day → cache IS today's scan; skip the network entirely
+                if (c.day === new Date().toISOString().slice(0, 10)) return;
+            }
+        }
+    } catch (e) { /* ignore */ }
+    try {
+        const res = await fetch(`/api/yields?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) { if (!served) onData(null); return; }
+        const data = await res.json();
+        if (data && Array.isArray(data.us) && data.us.length >= 3) {
+            try { localStorage.setItem(_YIELDS_LS_KEY, JSON.stringify({ day: new Date().toISOString().slice(0, 10), data })); } catch (e) {}
+            onData(data);
+        } else if (!served) onData(null);
+    } catch (e) { if (!served) onData(null); }
+}
+
 async function _renderYieldCurves() {
     const usEl = document.getElementById('usYieldCurve');
     const ilEl = document.getElementById('ilYieldCurve');
     if (!usEl || !ilEl || typeof Chart === 'undefined') return;
 
-    let data = null;
-    try {
-        const res = await fetch(`/api/yields?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } });
-        if (res.ok) data = await res.json();
-    } catch (e) { /* note below */ }
+    _fetchYieldsCached((data) => _paintYieldCurves(data));
+}
+
+function _paintYieldCurves(data) {
+    const usEl = document.getElementById('usYieldCurve');
+    const ilEl = document.getElementById('ilYieldCurve');
+    if (!usEl || !ilEl || typeof Chart === 'undefined') return;
     if (!data || !Array.isArray(data.us) || data.us.length < 3) {
         const n1 = document.getElementById('usYieldNote'), n2 = document.getElementById('ilYieldNote');
         if (n1) n1.textContent = 'לא ניתן לטעון את העקומה כרגע.';
@@ -1176,6 +1213,8 @@ async function _renderYieldCurves() {
         _renderMacroAnalysis(null);
         return;
     }
+    // Skip repaint when nothing changed (cache → identical network response)
+    if (window._yieldData && JSON.stringify(window._yieldData) === JSON.stringify(data)) return;
     window._yieldData = data;
 
     const mkCurve = (canvas, pts, color) => new Chart(canvas.getContext('2d'), {

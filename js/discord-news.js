@@ -170,7 +170,9 @@ function _dnVisionHTML(text, img, mode) {
     const srcLink = `<a class="dn-att" href="${_dnEsc(img)}" target="_blank" rel="noopener">פתח את התמונה המקורית</a>`;
     const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
 
-    // FLOWS: structured "סקטור | כיוון | היקף" lines → directional bars + conclusion
+    // FLOWS: structured "סקטור | כיוון | היקף" lines → a clean two-group histogram
+    // (inflows then outflows, each sorted by magnitude, bar width = |%| relative to
+    // the largest move). Same data as the image — nothing added, nothing dropped.
     if (mode === 'flows') {
         const rows = [];
         let conclusion = '';
@@ -178,23 +180,30 @@ function _dnVisionHTML(text, img, mode) {
             const mC = l.match(/^מסקנה\s*:\s*(.+)$/);
             if (mC) { conclusion = mC[1].trim(); continue; }
             const mS = l.match(/^סקטור\s*:\s*(.+?)\s*\|\s*כיוון\s*:\s*(.+?)\s*\|\s*היקף\s*:\s*(.+)$/);
-            if (mS) rows.push({ name: mS[1].trim(), inflow: /כניס/.test(mS[2]), amount: mS[3].trim() });
+            if (mS) {
+                const amount = mS[3].trim();
+                rows.push({
+                    name: mS[1].trim(),
+                    inflow: /כניס/.test(mS[2]),
+                    amount,
+                    mag: Math.abs(parseFloat(String(amount).replace(/[^\d.\-]/g, ''))) || 0,
+                });
+            }
         }
         if (rows.length) {
-            // Bar widths relative to the largest numeric amount (fallback: equal)
-            const nums = rows.map(r => parseFloat(String(r.amount).replace(/[^\d.\-]/g, '')) || 0);
-            const maxN = Math.max(...nums, 1);
-            const bars = rows.map((r, i) => {
-                const w = nums[i] > 0 ? Math.max(18, nums[i] / maxN * 100) : 55;
-                return `
+            const maxN = Math.max(...rows.map(r => r.mag), 0.001);
+            const bar = (r) => `
                 <div class="dn-flow-row">
                     <span class="dn-flow-name">${_dnEsc(r.name)}</span>
-                    <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${w.toFixed(0)}%"></div></div>
-                    <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${r.inflow ? '▲ כניסה' : '▼ יציאה'} · ${_dnEsc(r.amount)}</span>
+                    <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${Math.max(8, r.mag / maxN * 100).toFixed(0)}%"></div></div>
+                    <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${_dnEsc(r.amount)}</span>
                 </div>`;
-            }).join('');
+            const ins = rows.filter(r => r.inflow).sort((a, b) => b.mag - a.mag);
+            const outs = rows.filter(r => !r.inflow).sort((a, b) => b.mag - a.mag);
+            const insHTML = ins.length ? `<div class="dn-flow-group in">▲ כניסת כסף</div>${ins.map(bar).join('')}` : '';
+            const outsHTML = outs.length ? `<div class="dn-flow-group out">▼ יציאת כסף</div>${outs.map(bar).join('')}` : '';
             const conc = conclusion ? `<div class="dn-flow-conc"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            return `<div class="dn-flow-head">תנועות הון מוסדיות — לפי סקטור</div>${bars}${conc}${srcLink}`;
+            return `${insHTML}${outsHTML}${conc}`;
         }
         // fall through to plain lines if parsing failed
     }
@@ -283,8 +292,7 @@ function _dnRender() {
     // a money-flow title; otherwise fall back to the message's own text.
     const headlineOf = (m, chName, kindName) => {
         const n = String(kindName || chName || '');
-        const isToday = _dnDateOf(m) === new Date().toLocaleDateString('he-IL');
-        if (n.includes('חדשות')) return isToday ? 'כותרות מרכזיות להיום' : 'כותרות מרכזיות';
+        if (n.includes('חדשות')) return 'חדשות הבוקר';
         if (n.includes('תנועות-הון')) return 'לאן זורם הכסף — תנועות מוסדיות';
         const t = (m.content || '').replace(/https?:\/\/\S+/g, '').trim();
         if (t) return t;
