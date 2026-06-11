@@ -8729,3 +8729,57 @@ html.day-mode .filter-btn.active { background: var(--accent-blue); color: #fff; 
 html.day-mode .card-action-btn { background: #f1f5f9; color: var(--text-primary); border-color: var(--border); }
 html.day-mode .transaction-badge { border: 1px solid var(--border); }
 html.day-mode .fx-toggle-label { color: var(--text-primary); }
+
+/* ═══ DAY MODE — FINAL pass 4: kill every remaining white-on-white ═══ */
+
+/* 1. Page header titles use -webkit-text-fill-color (gradient-style) — `color`
+      alone can't change them. Force the fill itself. */
+html.day-mode .macro-page-header h1,
+html.day-mode .macro-main-title {
+    color: var(--text-primary) !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    text-shadow: none !important;
+}
+
+/* 2. The smart-page forced-white block (#bulkPage ... !important) must flip to
+      dark ink in day mode — counter it with equal !important + higher specificity */
+html.day-mode #bulkPage .risk-chart-sub,
+html.day-mode #bulkPage .bulk-field label,
+html.day-mode #bulkPage .bulk-risk-label,
+html.day-mode #bulkPage .bulk-row-cash,
+html.day-mode #bulkPage .bulk-summary,
+html.day-mode #bulkPage .alloc-target-wrap,
+html.day-mode #bulkPage .alloc-detail,
+html.day-mode #bulkPage .adv-dim,
+html.day-mode #bulkPage .bulk-row-off .bulk-row-name,
+html.day-mode #bulkPage .bulk-row-off .bulk-row-cash,
+html.day-mode #bulkPage .alloc-row .bulk-row-cash,
+html.day-mode #bulkPage .alloc-row .alloc-target-wrap {
+    color: var(--text-primary) !important;
+}
+html.day-mode #bulkPage .alloc-detail b, html.day-mode #bulkPage .alloc-input-pct { color: var(--text-primary) !important; }
+
+/* 3. Intentionally-DARK chart panels: re-assert LIGHT ink inside them (the auto
+      sweep + variable flip made their titles dark-on-dark) */
+html.day-mode .risk-chart-card h3,
+html.day-mode .risk-chart-card .risk-chart-sub,
+html.day-mode .risk-chart-card .risk-chart-legend,
+html.day-mode .risk-chart-card .risk-chart-legend b,
+html.day-mode .macro-yield-card .macro-yield-title,
+html.day-mode .macro-yield-card .macro-yield-note,
+html.day-mode .macro-yield-card .yield-sl-row,
+html.day-mode .macro-yield-card .yield-sl-row b {
+    color: #f5f5f5 !important;
+}
+html.day-mode .macro-yield-card .macro-yield-note b { color: #7dd3fc !important; }
+
+/* 4. Generic guarantee: ANY element inside a white card that still resolves to a
+      near-white ink via the old literals — common stragglers */
+html.day-mode .reco-sub, html.day-mode .reco-hint, html.day-mode .reco-hint b,
+html.day-mode .bulk-progress, html.day-mode .dn-setup p,
+html.day-mode .corr-rec-title, html.day-mode .rpt-sectors,
+html.day-mode .adv-act, html.day-mode .adv-note, html.day-mode .adv-metaline,
+html.day-mode .adv-eff-sub, html.day-mode .adv-eff-title,
+html.day-mode .reco-eff-sub, html.day-mode .reco-eff-title, html.day-mode .reco-eff-mix {
+    color: var(--text-primary) !important;
+}
