@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=67.0">
+    <link rel="stylesheet" href="css/main.css?v=68.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -443,6 +443,10 @@
                     <h2 class="section-title">ניהול תיקי השקעה</h2>
                     <span class="portfolio-section-sub" id="portfolioSectionSub"></span>
                 </div>
+                <button class="bulk-open-btn" onclick="if(typeof openBulkManager==='function') openBulkManager()"
+                        title="קנייה/צמצום סיכון בכל התיקים במקביל">
+                    ⇄ ניהול חכם — פעולה מקבילה
+                </button>
                 <div class="view-toggle-group" id="viewToggleGroup">
                     <button class="view-toggle-btn active" id="btnGridView" onclick="setPortfolioView('grid', this)"
                         title="תצוגת כרטיסים">
@@ -574,6 +578,7 @@
     <script src="js/portfolio.js"></script>
     <script src="js/macro.js"></script>
     <script src="js/risk-analysis-view.js"></script>
+    <script src="js/bulk-actions.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/init.js"></script>

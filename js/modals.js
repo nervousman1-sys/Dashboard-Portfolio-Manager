@@ -8,7 +8,7 @@
 // scrolls the background. Checks every overlay so closing one popup while another
 // is still open keeps the lock.
 function syncBodyScrollLock() {
-    const anyOpen = ['modalOverlay', 'mgmtOverlay', 'stockRecoOverlay', 'qwConfigModal', 'assetFitOverlay']
+    const anyOpen = ['modalOverlay', 'mgmtOverlay', 'stockRecoOverlay', 'qwConfigModal', 'assetFitOverlay', 'bulkOverlay']
         .some(id => {
             const el = document.getElementById(id);
             return el && el.classList.contains('active');
@@ -616,6 +616,8 @@ function closeModal(event) {
 // min-height:100vh even when its children are hidden — so the shell itself must be
 // hidden too, or the report starts a full screen down.
 function _hideAppForReport() {
+    // History entry so the browser back button returns from the report to the dashboard
+    try { history.pushState({ popup: 'report' }, '', location.href); } catch (e) { /* ignore */ }
     const shell = document.getElementById('appShell');
     if (shell) shell.style.display = 'none';
     document.querySelector('.header').style.display = 'none';
@@ -1183,6 +1185,8 @@ function openMgmtModal(action, data) {
     box.innerHTML = html;
     document.getElementById('mgmtOverlay').classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    // History entry so the browser back button closes this window (popstate handler)
+    try { history.pushState({ popup: 'mgmt' }, '', location.href); } catch (e) { /* ignore */ }
 }
 
 function closeMgmtModal(event) {

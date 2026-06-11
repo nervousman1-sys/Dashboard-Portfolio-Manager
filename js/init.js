@@ -511,6 +511,7 @@ function openTickerModal() {
         modal.classList.add('active');
         document.getElementById('qwSearchInput').value = '';
         document.getElementById('qwSearchInput').focus();
+        try { history.pushState({ popup: 'qw' }, '', location.href); } catch (e) { /* ignore */ }
     }
 }
 
@@ -729,6 +730,25 @@ function restoreStateFromURL() {
 // ── Back button handler (browser + Android) ──
 window.addEventListener('popstate', function(e) {
     if (_suppressPopstate) { _suppressPopstate = false; return; }
+
+    // Lightweight popups FIRST: back closes the topmost open popup (these push a
+    // same-URL history entry when opened, so popping it just closes the popup).
+    const popupClosers = [
+        ['assetFitOverlay', () => typeof closeAssetFitPopup === 'function' && closeAssetFitPopup()],
+        ['stockRecoOverlay', () => typeof closeStockRecommendations === 'function' && closeStockRecommendations()],
+        ['bulkOverlay', () => typeof closeBulkManager === 'function' && closeBulkManager()],
+        ['mgmtOverlay', () => typeof closeMgmtModal === 'function' && closeMgmtModal()],
+        ['qwConfigModal', () => typeof closeTickerModal === 'function' && closeTickerModal()],
+    ];
+    for (const [id, closer] of popupClosers) {
+        const el = document.getElementById(id);
+        if (el && el.classList.contains('active')) { closer(); return; }
+    }
+    // Report view: back returns to the dashboard
+    if (document.getElementById('reportView')?.classList.contains('active')) {
+        if (typeof closeReport === 'function') closeReport();
+        return;
+    }
 
     const params = new URLSearchParams(window.location.search);
     const view = params.get('view');

@@ -536,6 +536,7 @@ function openAssetFitPopup(ticker) {
     </div>`;
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    try { history.pushState({ popup: 'fit' }, '', location.href); } catch (e) { /* ignore */ }
 }
 
 function closeAssetFitPopup() {
@@ -1068,6 +1069,7 @@ function openStockRecommendations(clientId) {
     </div>`;
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    try { history.pushState({ popup: 'reco' }, '', location.href); } catch (e) { /* ignore */ }
 }
 
 function closeStockRecommendations() {

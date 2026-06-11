@@ -7938,3 +7938,45 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .rpt-subhead { margin: 14px 0 8px; font-size: 13.5px; font-weight: 800; }
 .rpt-holdings { margin-bottom: 4px; }
 .rpt-holdings td, .rpt-holdings th { font-size: 12px; padding: 6px 9px; }
+
+/* ── Smart bulk portfolio manager ── */
+.bulk-open-btn {
+    font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--accent-blue);
+    background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.32); border-radius: 10px;
+    padding: 8px 16px; cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s;
+}
+.bulk-open-btn:hover { background: rgba(0,229,255,0.14); border-color: rgba(0,229,255,0.6); color: #fff; }
+
+.bulk-box { max-width: 640px; }
+.bulk-mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 14px; }
+.bulk-mode-btn {
+    font-family: inherit; font-size: 12.5px; font-weight: 800; padding: 10px 8px; cursor: pointer;
+    color: rgba(245,245,250,0.6); background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 10px; transition: all .15s;
+}
+.bulk-mode-btn.active { color: var(--accent-blue); background: rgba(0,229,255,0.08); border-color: rgba(0,229,255,0.45); }
+.bulk-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 12px; }
+.bulk-field { display: flex; flex-direction: column; gap: 5px; }
+.bulk-field label { font-size: 11px; font-weight: 700; color: rgba(245,245,250,0.6); }
+.bulk-field input, .bulk-field select {
+    font-family: inherit; font-size: 13px; color: #fff; background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; outline: none;
+}
+.bulk-field input:focus, .bulk-field select:focus { border-color: rgba(0,229,255,0.5); }
+.bulk-risk-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,0.02); }
+.bulk-risk-label { font-size: 11.5px; font-weight: 700; color: rgba(245,245,250,0.65); }
+.bulk-risk-chk { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+.bulk-list { display: flex; flex-direction: column; gap: 7px; max-height: 260px; overflow-y: auto; margin-bottom: 12px; }
+.bulk-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,0.02); }
+.bulk-row:hover { border-color: rgba(0,229,255,0.3); }
+.bulk-row-off { opacity: 0.45; cursor: default; }
+.bulk-row-name { font-size: 13.5px; font-weight: 800; color: #fff; flex: 1; }
+.bulk-row-cash { font-size: 11px; color: rgba(245,245,250,0.6); white-space: nowrap; }
+.bulk-row-reason { font-size: 10.5px; font-weight: 700; color: #fca5a5; white-space: nowrap; }
+.bulk-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bulk-summary { font-size: 12px; font-weight: 700; color: rgba(245,245,250,0.75); }
+.bulk-progress { margin-top: 10px; font-size: 12px; line-height: 1.8; color: rgba(245,245,250,0.85);
+    max-height: 160px; overflow-y: auto; }
+@media (max-width: 640px) { .bulk-controls { grid-template-columns: 1fr; } }
