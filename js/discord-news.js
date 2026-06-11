@@ -184,14 +184,31 @@ function _dnRender() {
     if (!data || !tabsEl || !feedEl) return;
 
     const visible = data.channels.filter(c => _dnChannelKind(c.name) !== 'hidden');
-    const withMsgs = visible.filter(c => (c.messages || []).length);
 
-    // Channel tabs (all + each visible channel)
-    tabsEl.innerHTML = [
-        `<button class="dn-tab ${_dnActiveChannel === 'all' ? 'active' : ''}" onclick="setDnChannel('all')">הכל</button>`,
-        ...visible.map(c =>
-            `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" ${(c.messages || []).length ? ` <span class="dn-tab-n">${c.messages.length}</span>` : ''}</button>`),
-    ].join('');
+    // Fixed category labels, in the user's order — no 'all' tab, no message counts
+    const CAT_ORDER = ['חדשות', 'קטליסט', 'תנועות הון', 'קניות פנימיות', 'ניתוח תנועת אופציות'];
+    const labelOf = (name) => {
+        const n = String(name || '');
+        if (n.includes('חדשות')) return 'חדשות';
+        if (n.includes('קטליסט')) return 'קטליסט';
+        if (n.includes('תנועות-הון')) return 'תנועות הון';
+        if (n.includes('קניות-פנימיות')) return 'קניות פנימיות';
+        if (n.includes('אופציות')) return 'ניתוח תנועת אופציות';
+        return _dnCleanName(n);
+    };
+    const ordered = visible.slice().sort((a, b) => {
+        const ia = CAT_ORDER.indexOf(labelOf(a.name)), ib = CAT_ORDER.indexOf(labelOf(b.name));
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+
+    // Everything is categorized — no merged view. Default to the first category.
+    if (_dnActiveChannel === 'all' || !ordered.some(c => c.id === _dnActiveChannel)) {
+        _dnActiveChannel = ordered.length ? ordered[0].id : null;
+    }
+
+    tabsEl.innerHTML = ordered.map(c =>
+        `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" onclick="setDnChannel('${c.id}')">${_dnEsc(labelOf(c.name))}</button>`
+    ).join('');
 
     const isImgUrl = (u) => /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(u) || /hcti\.io\/v1\/image\//i.test(u);
     const renderMsg = (m, chName) => {
@@ -302,23 +319,12 @@ function _dnRender() {
         return out || '<div class="adv-empty">אין הודעות בערוץ הזה עדיין.</div>';
     };
 
+    // Single-category view only — every update lives under its category tab
     let html = '';
-    if (_dnActiveChannel === 'all') {
-        // Merge everything (visible channels only), newest first
-        const all = [];
-        for (const c of withMsgs) for (const m of c.messages) all.push({ m, ch: c.name, kind: _dnChannelKind(c.name) });
-        all.sort((a, b) => new Date(b.m.ts) - new Date(a.m.ts));
-        html = all.length
-            ? all.slice(0, 60).map((x, i) => {
-                if (x.kind === 'collapse') return renderCollapsed(x.m, x.ch, false, visionModeOf(x.ch));
-                if (x.kind === 'options') return `<div class="dn-msg dn-msg-opt"><div class="dn-msg-head"><span class="dn-ch">${_dnEsc(_dnCleanName(x.ch))}</span><span class="dn-when">${_dnDateOf(x.m)}</span></div>${renderOption(x.m)}</div>`;
-                return renderMsg(x.m, x.ch);
-            }).join('')
-            : '<div class="adv-empty">אין עדיין הודעות בערוצים.</div>';
-    } else {
+    {
         const c = data.channels.find(x => x.id === _dnActiveChannel);
         if (!c || !c.messages.length) {
-            html = '<div class="adv-empty">אין הודעות בערוץ הזה עדיין.</div>';
+            html = '<div class="adv-empty">אין הודעות בקטגוריה הזאת עדיין.</div>';
         } else {
             const kind = _dnChannelKind(c.name);
             if (kind === 'collapse') {
