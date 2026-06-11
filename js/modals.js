@@ -260,8 +260,18 @@ async function openModal(clientId) {
                                 <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${totalReturnPct.toFixed(2)}%</span>
                             </div>
                             <div class="ov-kpi-card ${_rm && _rm.dailyPnl >= 0 ? 'kpi-positive' : 'kpi-negative'}">
-                                <span class="ov-kpi-label">P&L יומי</span>
+                                <span class="ov-kpi-label">רווח יומי</span>
                                 <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${_rm ? (_rm.dailyPnl >= 0 ? '+' : '') + formatCurrency(Math.abs(_rm.dailyPnl)) : '—'}</span>
+                            </div>
+                            <div class="ov-kpi-card ${_rm && _rm.dailyPnl >= 0 ? 'kpi-positive' : 'kpi-negative'}">
+                                <span class="ov-kpi-label">תשואה יומית</span>
+                                <span class="ov-kpi-value ${_rm && _rm.dailyPnl >= 0 ? 'val-positive' : 'val-negative'}">${(() => {
+                                    if (!_rm || _rm.dailyPnl == null) return '—';
+                                    const base = (client.portfolioValue || 0) - _rm.dailyPnl;
+                                    if (!(base > 0)) return '—';
+                                    const pct = _rm.dailyPnl / base * 100;
+                                    return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+                                })()}</span>
                             </div>
                         </div>
                     </div>

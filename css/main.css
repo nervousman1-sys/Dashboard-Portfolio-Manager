@@ -8885,3 +8885,13 @@ html.day-mode .reco-add {
 }
 html.day-mode .reco-stats, html.day-mode .reco-stats b { color: var(--text-primary) !important; }
 html.day-mode .reco-stats b.pos { color: #047857 !important; }
+
+/* Day mode: score denominators (/100) and their slash — black and clear */
+html.day-mode .ov-cell-dim,
+html.day-mode .ov-comp-ring small,
+html.day-mode .corr-score small,
+html.day-mode .adv-score-den {
+    color: var(--text-primary) !important;
+    font-weight: 700;
+    opacity: 1 !important;
+}
