@@ -1203,23 +1203,31 @@ async function _renderYieldCurves() {
     _yieldCharts.us = mkCurve(usEl, data.us, '#00e5ff');
     _yieldCharts.il = mkCurve(ilEl, data.il, '#4ade80');
 
-    // Curve-shape notes (inverted vs normal)
-    const usMap = {}; data.us.forEach(p => { usMap[p.label] = p.value; });
-    const spread = (usMap['10Y'] != null && usMap['3M'] != null) ? usMap['10Y'] - usMap['3M'] : null;
+    // Short-vs-long emphasis + data provenance (as-of date, daily after each close)
+    const usMap = {}, usDates = {};
+    data.us.forEach(p => { usMap[p.label] = p.value; usDates[p.label] = p.date; });
     const usNote = document.getElementById('usYieldNote');
-    if (usNote && spread != null) {
-        usNote.innerHTML = spread < 0
-            ? `מרווח 10Y−3M: <b>${spread.toFixed(2)}%</b> — עקומה הפוכה (סיגנל האטה היסטורי)`
-            : `מרווח 10Y−3M: <b>+${spread.toFixed(2)}%</b> — עקומה נורמלית (ציפיות צמיחה חיוביות)`;
+    if (usNote && usMap['10Y'] != null) {
+        const short = usMap['3M'], long = usMap['10Y'], two = usMap['2Y'];
+        const sp = long - short;
+        const sp210 = (two != null) ? (long - two) : null;
+        const asOf = usDates['10Y'] ? new Date(usDates['10Y']).toLocaleDateString('he-IL') : '';
+        usNote.innerHTML = `
+            <div class="yield-sl-row"><span>אג"ח קצר (3M): <b>${short.toFixed(2)}%</b></span><span>אג"ח ארוך (10Y): <b>${long.toFixed(2)}%</b></span>
+                <span>מרווח קצר-ארוך: <b>${sp >= 0 ? '+' : ''}${sp.toFixed(2)}%</b></span>${sp210 != null ? `<span>2Y/10Y: <b>${sp210 >= 0 ? '+' : ''}${sp210.toFixed(2)}%</b></span>` : ''}</div>
+            <div>${sp < 0 ? 'עקומה הפוכה — סיגנל האטה היסטורי' : 'עקומה נורמלית — ציפיות צמיחה חיוביות'} · נתוני משרד האוצר האמריקאי (H.15), נכון ל-${asOf}, מתעדכן יומית לאחר סגירת המסחר</div>`;
     }
-    const ilMap = {}; (data.il || []).forEach(p => { ilMap[p.label] = p.value; });
+    const ilMap = {}, ilDates = {};
+    (data.il || []).forEach(p => { ilMap[p.label] = p.value; ilDates[p.label] = p.date; });
     const boi = ilMap['ריבית בנק ישראל'], il10 = ilMap['10 שנים (אג"ח ממשלתי)'];
     const ilNote = document.getElementById('ilYieldNote');
     if (ilNote && boi != null && il10 != null) {
         const sp = il10 - boi;
-        ilNote.innerHTML = sp >= 0
-            ? `מרווח 10 שנים מול הריבית: <b>+${sp.toFixed(2)}%</b> — תלילות חיובית (השוק מתמחר צמיחה)`
-            : `מרווח 10 שנים מול הריבית: <b>${sp.toFixed(2)}%</b> — עקומה הפוכה`;
+        const d10 = ilDates['10 שנים (אג"ח ממשלתי)'] ? new Date(ilDates['10 שנים (אג"ח ממשלתי)']).toLocaleDateString('he-IL') : '';
+        ilNote.innerHTML = `
+            <div class="yield-sl-row"><span>קצר (ריבית בנק ישראל): <b>${boi.toFixed(2)}%</b></span><span>ארוך (אג"ח 10 שנים): <b>${il10.toFixed(2)}%</b></span>
+                <span>מרווח קצר-ארוך: <b>${sp >= 0 ? '+' : ''}${sp.toFixed(2)}%</b></span></div>
+            <div>${sp >= 0 ? 'תלילות חיובית — השוק מתמחר צמיחה עם ריבית יורדת' : 'עקומה הפוכה'} · ריבית בנק ישראל רשמית (25.5); תשואת 10ש' — הפרסום העדכני ביותר (${d10})</div>`;
     }
 
     _renderMacroAnalysis(data);

@@ -8045,3 +8045,7 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 }
 .card-alloc-btn:hover { background: rgba(239,68,68,0.25); color: #fff; }
 @keyframes allocPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); } 50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); } }
+
+/* Short-vs-long yield row in curve notes */
+.yield-sl-row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 6px; font-size: 13px; font-weight: 700; }
+.yield-sl-row b { color: var(--accent-blue); }

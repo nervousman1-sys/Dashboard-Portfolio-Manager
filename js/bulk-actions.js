@@ -140,12 +140,12 @@ function _renderBulkPage() {
             <div id="bulkBuyControls" class="bulk-controls" style="${_bulkMode === 'buy' ? '' : 'display:none'}">
                 <div class="bulk-field">
                     <label>סימול לקנייה (ארה"ב)</label>
-                    <input type="text" id="bulkTicker" placeholder="למשל: SPY" style="direction:ltr;text-align:left"
+                    <input type="text" autocomplete="off" id="bulkTicker" placeholder="למשל: SPY" style="direction:ltr;text-align:left"
                            oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
                 </div>
                 <div class="bulk-field">
                     <label>סכום קנייה לכל תיק ($)</label>
-                    <input type="text" inputmode="decimal" id="bulkAmount" placeholder="1,000" style="direction:ltr;text-align:left"
+                    <input type="text" inputmode="decimal" autocomplete="off" id="bulkAmount" placeholder="1,000" style="direction:ltr;text-align:left"
                            oninput="formatInputWithCommas(this); _bulkRefreshList()" />
                 </div>
             </div>
@@ -160,12 +160,12 @@ function _renderBulkPage() {
                 </div>
                 <div class="bulk-field" id="bulkReduceTickerField" style="${_bulkScope === 'ticker' ? '' : 'display:none'}">
                     <label>סימול לצמצום</label>
-                    <input type="text" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
+                    <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
                            oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
                 </div>
                 <div class="bulk-field">
                     <label>אחוז צמצום (%)</label>
-                    <input type="text" inputmode="decimal" id="bulkPct" placeholder="25" style="direction:ltr;text-align:left"
+                    <input type="text" inputmode="decimal" autocomplete="off" id="bulkPct" placeholder="25" style="direction:ltr;text-align:left"
                            oninput="_bulkRefreshList()" />
                 </div>
             </div>
@@ -409,7 +409,7 @@ function _renderAllocSection() {
             <span class="bulk-row-cash">מזומן: ${st.cashPct.toFixed(1)}% · מניות: ${(st.total > 0 ? st.stocksVal / st.total * 100 : 0).toFixed(1)}%</span>
             <span class="alloc-target-wrap">יעד מזומן מינימלי:
                 <span class="alloc-input-wrap">
-                    <input type="text" inputmode="decimal" class="alloc-input" value="${target ?? ''}" placeholder="—"
+                    <input type="text" inputmode="decimal" autocomplete="off" class="alloc-input" value="${target ?? ''}" placeholder="—"
                            onchange="setAllocTarget(${c.id}, parseFloat(this.value)); _renderAllocSection(); if(typeof renderClientCards==='function') renderClientCards();" />
                     <span class="alloc-input-pct">%</span>
                 </span>

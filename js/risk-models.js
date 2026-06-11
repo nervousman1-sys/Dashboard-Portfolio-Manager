@@ -803,36 +803,13 @@ function rmFmtNum(v, digits = 2) {
 // correct listing venue (a wrong venue shows Google's "no results" page). Anything
 // NOT in the map falls back to the Google Finance SEARCH url (?q=) — Google then
 // resolves the right quote page itself, so the link never dead-ends.
-const _GF_EXCHANGE = {
-    // NASDAQ listings
-    AAPL: 'NASDAQ', MSFT: 'NASDAQ', NVDA: 'NASDAQ', GOOGL: 'NASDAQ', AMZN: 'NASDAQ', META: 'NASDAQ',
-    AVGO: 'NASDAQ', NFLX: 'NASDAQ', AMD: 'NASDAQ', COST: 'NASDAQ', TSLA: 'NASDAQ', PEP: 'NASDAQ',
-    SBUX: 'NASDAQ', CSCO: 'NASDAQ', QCOM: 'NASDAQ', TXN: 'NASDAQ', INTC: 'NASDAQ', ADBE: 'NASDAQ',
-    AMGN: 'NASDAQ', HON: 'NASDAQ',
-    // NYSE listings
-    CRM: 'NYSE', ORCL: 'NYSE', T: 'NYSE', VZ: 'NYSE',
-    JPM: 'NYSE', V: 'NYSE', MA: 'NYSE', BAC: 'NYSE', WFC: 'NYSE', GS: 'NYSE', MS: 'NYSE',
-    AXP: 'NYSE', SCHW: 'NYSE', BLK: 'NYSE',
-    UNH: 'NYSE', JNJ: 'NYSE', LLY: 'NYSE', ABBV: 'NYSE', MRK: 'NYSE', PFE: 'NYSE', TMO: 'NYSE',
-    ABT: 'NYSE', DHR: 'NYSE',
-    XOM: 'NYSE', CVX: 'NYSE', COP: 'NYSE', SLB: 'NYSE', EOG: 'NYSE',
-    PG: 'NYSE', KO: 'NYSE', WMT: 'NYSE', HD: 'NYSE', MCD: 'NYSE', NKE: 'NYSE', DIS: 'NYSE', LOW: 'NYSE',
-    CAT: 'NYSE', BA: 'NYSE', GE: 'NYSE', UPS: 'NYSE', RTX: 'NYSE',
-    // ETFs
-    QQQ: 'NASDAQ', TLT: 'NASDAQ', IEF: 'NASDAQ',
-    SPY: 'NYSEARCA', VOO: 'NYSEARCA', DIA: 'NYSEARCA', IWM: 'NYSEARCA', GLD: 'NYSEARCA',
-    SCHD: 'NYSEARCA', LQD: 'NYSEARCA',
-    XLF: 'NYSEARCA', XLV: 'NYSEARCA', XLE: 'NYSEARCA', XLK: 'NYSEARCA', XLI: 'NYSEARCA', XLP: 'NYSEARCA',
-};
 function googleFinanceUrl(ticker) {
     const t = String(ticker || '').toUpperCase().trim();
     if (!t) return 'https://www.google.com/finance';
-    if (/\.TA$/.test(t)) return `https://www.google.com/finance/quote/${t.replace(/\.TA$/, '')}:TLV`;
-    const ex = _GF_EXCHANGE[t];
-    // Known venue → direct quote page; unknown → Google Finance search (always resolves)
-    return ex
-        ? `https://www.google.com/finance/quote/${encodeURIComponent(t)}:${ex}`
-        : `https://www.google.com/finance?q=${encodeURIComponent(t)}`;
+    // Server-side smart redirect: Google Finance's beta UI no longer matches a static
+    // exchange map (its own resolver maps e.g. WMT→WMT:NASDAQ), so /api/gf resolves
+    // the working page via Google's resolver (map + search as fallbacks) and 302s.
+    return `/api/gf?t=${encodeURIComponent(t)}`;
 }
 
 function rmRecLabel(rec) {
