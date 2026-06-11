@@ -1184,7 +1184,10 @@ async function _fetchYieldsCached(onData) {
         }
     } catch (e) { /* ignore */ }
     try {
-        const res = await fetch(`/api/yields?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } });
+        const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        if (ctrl) setTimeout(() => ctrl.abort(), 10000); // never hang the section
+        const res = await fetch(`/api/yields?d=${new Date().toISOString().slice(0, 10)}`,
+            { headers: { Accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined });
         if (!res.ok) { if (!served) onData(null); return; }
         const data = await res.json();
         if (data && Array.isArray(data.us) && data.us.length >= 3) {
@@ -1194,11 +1197,23 @@ async function _fetchYieldsCached(onData) {
     } catch (e) { if (!served) onData(null); }
 }
 
-async function _renderYieldCurves() {
+// Warm the yields cache in the background shortly after app boot, so by the time
+// the user opens the macro page the curves render INSTANTLY from localStorage.
+if (typeof window !== 'undefined') {
+    setTimeout(() => { try { _fetchYieldsCached(() => { }); } catch (e) { /* ignore */ } }, 3500);
+}
+
+async function _renderYieldCurves(attempt = 0) {
     const usEl = document.getElementById('usYieldCurve');
     const ilEl = document.getElementById('ilYieldCurve');
-    if (!usEl || !ilEl || typeof Chart === 'undefined') return;
-
+    if (!usEl || !ilEl) return;
+    // Chart.js is a deferred CDN script — if it isn't ready yet, RETRY instead of
+    // silently giving up (this was the endless 'טוען נתונים…' hang).
+    if (typeof Chart === 'undefined') {
+        if (attempt < 40) setTimeout(() => _renderYieldCurves(attempt + 1), 250);
+        return;
+    }
+    window._yieldData = null; // force repaint (canvases were just re-created)
     _fetchYieldsCached((data) => _paintYieldCurves(data));
 }
 

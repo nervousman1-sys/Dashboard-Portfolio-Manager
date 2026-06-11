@@ -189,6 +189,18 @@ function _renderBulkPage() {
         <div class="risk-table-card glass-card">
             <div class="risk-chart-head"><h3>יעדי אלוקציה — מזומן מול נכסים</h3>
                 <span class="risk-chart-sub">הגדר אחוז מזומן מינימלי לכל תיק · כשהחשיפה למניות חורגת — מופיעה התראה עם פעולת תיקון ששומרת על האיזור היעיל</span></div>
+            <div class="bulk-risk-row alloc-bulk-row">
+                <span class="bulk-risk-label">הגדרה מרובה — יעד מזומן מינ':</span>
+                <span class="alloc-input-wrap">
+                    <input type="text" inputmode="decimal" autocomplete="off" id="allocBulkPct" placeholder="20" />
+                    <span class="alloc-input-pct">%</span>
+                </span>
+                <span class="bulk-risk-label">לתיקים ברמת סיכון:</span>
+                <label class="bulk-risk-chk"><input type="checkbox" id="allocBulkHigh" checked /> <span class="risk-badge high">גבוה</span></label>
+                <label class="bulk-risk-chk"><input type="checkbox" id="allocBulkMedium" checked /> <span class="risk-badge medium">בינוני</span></label>
+                <label class="bulk-risk-chk"><input type="checkbox" id="allocBulkLow" checked /> <span class="risk-badge low">נמוך</span></label>
+                <button class="mgmt-btn primary alloc-bulk-apply" onclick="applyAllocTargetBulk()">החל על התיקים</button>
+            </div>
             <div id="allocList" class="bulk-list"></div>
         </div>
         </div>
@@ -421,6 +433,24 @@ function _renderAllocSection() {
     el.innerHTML = rows || '<div class="adv-empty">אין תיקים.</div>';
 }
 
+// Multi-portfolio allocation target: apply one min-cash % to every portfolio in the
+// selected risk classes (same filtering pattern as the parallel-action section).
+function applyAllocTargetBulk() {
+    const pct = parseFloat(document.getElementById('allocBulkPct')?.value);
+    if (!(pct > 0) || pct > 95) { alert('נא להזין יעד מזומן בין 1 ל-95 אחוז'); return; }
+    const riskOn = {
+        high: document.getElementById('allocBulkHigh')?.checked !== false,
+        medium: document.getElementById('allocBulkMedium')?.checked !== false,
+        low: document.getElementById('allocBulkLow')?.checked !== false,
+    };
+    const targets = (typeof clients !== 'undefined' ? clients : []).filter(c => riskOn[c.risk || 'low']);
+    if (!targets.length) { alert('אין תיקים ברמות הסיכון שנבחרו'); return; }
+    if (!confirm(`להגדיר יעד מזומן מינימלי של ${pct}% ל-${targets.length} תיקים?`)) return;
+    for (const c of targets) setAllocTarget(c.id, pct);
+    _renderAllocSection();
+    if (typeof renderClientCards === 'function') renderClientCards();
+}
+
 function toggleAllocDetail(id) {
     const d = document.getElementById(`allocDetail-${id}`);
     if (d) d.style.display = d.style.display === 'none' ? '' : 'none';
@@ -453,4 +483,5 @@ if (typeof window !== 'undefined') {
     window.allocBreachOf = allocBreachOf;
     window.toggleAllocDetail = toggleAllocDetail;
     window.fixAllocation = fixAllocation;
+    window.applyAllocTargetBulk = applyAllocTargetBulk;
 }

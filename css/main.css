@@ -8161,3 +8161,12 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-flow-group.in { color: #4ade80; }
 .dn-flow-group.out { color: #f87171; }
 .dn-flow-track { direction: rtl; }
+
+/* Flow histogram polish: thinner bars, subtle track, scale note */
+.dn-flow-track { height: 9px; border: 1px solid rgba(255,255,255,0.05); }
+.dn-flow-bar { box-shadow: 0 0 6px rgba(0,0,0,0.4); }
+.dn-flow-axis { font-size: 10.5px; color: rgba(245,245,250,0.5); margin-top: 8px; text-align: left; direction: ltr; }
+/* Multi-portfolio allocation toolbar */
+.alloc-bulk-row { margin-bottom: 14px; }
+.alloc-bulk-row .alloc-input-wrap .alloc-input { width: 52px; }
+.alloc-bulk-apply { font-size: 12px; padding: 7px 16px; margin-inline-start: auto; }

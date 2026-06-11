@@ -191,19 +191,24 @@ function _dnVisionHTML(text, img, mode) {
             }
         }
         if (rows.length) {
+            // Honest proportional scale: bars are sized against a ROUNDED axis with
+            // headroom (e.g. max move 16% → axis 0–20%), so the largest move fills
+            // ~80% of the track instead of misleadingly touching the edge.
             const maxN = Math.max(...rows.map(r => r.mag), 0.001);
+            const axisMax = Math.max(5, Math.ceil((maxN * 1.25) / 5) * 5);
             const bar = (r) => `
                 <div class="dn-flow-row">
                     <span class="dn-flow-name">${_dnEsc(r.name)}</span>
-                    <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${Math.max(8, r.mag / maxN * 100).toFixed(0)}%"></div></div>
+                    <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${Math.max(4, r.mag / axisMax * 100).toFixed(1)}%"></div></div>
                     <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${_dnEsc(r.amount)}</span>
                 </div>`;
+            const axisNote = `<div class="dn-flow-axis">סקאלה: 0% – ${axisMax}%</div>`;
             const ins = rows.filter(r => r.inflow).sort((a, b) => b.mag - a.mag);
             const outs = rows.filter(r => !r.inflow).sort((a, b) => b.mag - a.mag);
             const insHTML = ins.length ? `<div class="dn-flow-group in">▲ כניסת כסף</div>${ins.map(bar).join('')}` : '';
             const outsHTML = outs.length ? `<div class="dn-flow-group out">▼ יציאת כסף</div>${outs.map(bar).join('')}` : '';
             const conc = conclusion ? `<div class="dn-flow-conc"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            return `${insHTML}${outsHTML}${conc}`;
+            return `${insHTML}${outsHTML}${axisNote}${conc}`;
         }
         // fall through to plain lines if parsing failed
     }
