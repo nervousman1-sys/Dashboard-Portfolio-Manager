@@ -11,7 +11,8 @@
 // memoized per image (in-memory) + edge-cached hard: an image's text never changes.
 
 const KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = 'gemini-2.0-flash';
+// Primary + fallback — both verified to have free-tier quota on the user's key
+const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
 const PROMPTS = {
     transcribe: 'התמונה מכילה עדכון חדשות כלכלי בעברית. תמלל את כל הטקסט שכתוב בתמונה, בעברית, נאמן למקור, מאורגן בשורות עם כותרות המשנה. אל תוסיף הערות משלך — רק את התוכן שבתמונה.',
@@ -58,26 +59,33 @@ module.exports = async (req, res) => {
         if (buf.length > 6 * 1024 * 1024) throw new Error('image too large');
         const mime = ir.headers.get('content-type') || 'image/png';
 
-        const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: PROMPTS[mode] },
-                        { inline_data: { mime_type: mime, data: buf.toString('base64') } },
-                    ],
-                }],
-                generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-            }),
+        const payload = JSON.stringify({
+            contents: [{
+                parts: [
+                    { text: PROMPTS[mode] },
+                    { inline_data: { mime_type: mime, data: buf.toString('base64') } },
+                ],
+            }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
         });
-        if (!gr.ok) {
-            const body = await gr.text().catch(() => '');
-            throw new Error(`gemini ${gr.status}: ${body.slice(0, 140)}`);
+
+        let text = '', lastErr = '';
+        for (const model of MODELS) {
+            const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+            });
+            if (!gr.ok) {
+                lastErr = `gemini(${model}) ${gr.status}`;
+                continue; // quota/transient → try the fallback model
+            }
+            const gj = await gr.json();
+            text = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('\n').trim() || '';
+            if (text) break;
+            lastErr = `empty result from ${model}`;
         }
-        const gj = await gr.json();
-        const text = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('\n').trim() || '';
-        if (!text) throw new Error('empty vision result');
+        if (!text) throw new Error(lastErr || 'empty vision result');
 
         _memo.set(memoKey, text);
         // The image never changes → cache hard at the edge
