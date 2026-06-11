@@ -8082,3 +8082,4 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-setup { padding: 22px; }
 .dn-setup h3 { margin: 0 0 8px; color: #fff; }
 .dn-setup p { color: rgba(245,245,250,0.85); font-size: 13.5px; line-height: 1.7; }
+.dn-img { max-width: 100%; max-height: 420px; border-radius: 9px; margin-top: 8px; border: 1px solid var(--border); display: block; }

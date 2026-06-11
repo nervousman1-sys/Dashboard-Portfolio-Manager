@@ -39,8 +39,9 @@ function slimMessage(m) {
         title: e.title || '',
         description: (e.description || '').slice(0, 900),
         url: e.url || '',
+        image: (e.image && e.image.url) || (e.thumbnail && e.thumbnail.url) || '',
         fields: (e.fields || []).slice(0, 6).map(f => ({ name: f.name, value: String(f.value).slice(0, 300) })),
-    })).filter(e => e.title || e.description || e.fields.length);
+    })).filter(e => e.title || e.description || e.fields.length || e.image);
     return {
         id: m.id,
         author: (m.author && (m.author.global_name || m.author.username)) || 'bot',

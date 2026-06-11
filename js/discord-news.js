@@ -120,6 +120,7 @@ function _dnRender() {
             `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" onclick="setDnChannel('${c.id}')"># ${_dnEsc(c.name)}${(c.messages || []).length ? ` <span class="dn-tab-n">${c.messages.length}</span>` : ''}</button>`),
     ].join('');
 
+    const isImgUrl = (u) => /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(u) || /hcti\.io\/v1\/image\//i.test(u);
     const renderMsg = (m, chName) => {
         const d = m.ts ? new Date(m.ts) : null;
         const when = d ? `${d.toLocaleDateString('he-IL')} ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}` : '';
@@ -128,9 +129,23 @@ function _dnRender() {
                 ${e.title ? `<div class="dn-embed-title">${e.url ? `<a href="${_dnEsc(e.url)}" target="_blank" rel="noopener">${_dnEsc(e.title)} ↗</a>` : _dnEsc(e.title)}</div>` : ''}
                 ${e.description ? `<div class="dn-embed-desc">${_dnEsc(e.description)}</div>` : ''}
                 ${(e.fields || []).map(f => `<div class="dn-embed-field"><b>${_dnEsc(f.name)}:</b> ${_dnEsc(f.value)}</div>`).join('')}
+                ${e.image ? `<a href="${_dnEsc(e.image)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(e.image)}" loading="lazy" alt="" /></a>` : ''}
             </div>`).join('');
-        const atts = (m.attachments || []).map(a =>
-            `<a class="dn-att" href="${_dnEsc(a.url)}" target="_blank" rel="noopener">📎 ${_dnEsc(a.name)}</a>`).join('');
+        // Agents often post chart IMAGES as bare URLs (e.g. hcti.io) — render inline
+        let content = m.content || '';
+        let contentImgs = '';
+        if (content) {
+            const urls = content.match(/https?:\/\/\S+/g) || [];
+            for (const u of urls) {
+                if (isImgUrl(u)) {
+                    contentImgs += `<a href="${_dnEsc(u)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(u)}" loading="lazy" alt="" /></a>`;
+                    content = content.replace(u, '').trim();
+                }
+            }
+        }
+        const atts = (m.attachments || []).map(a => isImgUrl(a.url) || /\.(png|jpe?g|webp|gif)$/i.test(a.name || '')
+            ? `<a href="${_dnEsc(a.url)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(a.url)}" loading="lazy" alt="${_dnEsc(a.name)}" /></a>`
+            : `<a class="dn-att" href="${_dnEsc(a.url)}" target="_blank" rel="noopener">📎 ${_dnEsc(a.name)}</a>`).join('');
         return `
         <div class="dn-msg">
             <div class="dn-msg-head">
@@ -138,8 +153,8 @@ function _dnRender() {
                 ${chName ? `<span class="dn-ch"># ${_dnEsc(chName)}</span>` : ''}
                 <span class="dn-when">${when}</span>
             </div>
-            ${m.content ? `<div class="dn-content">${_dnEsc(m.content)}</div>` : ''}
-            ${embeds}${atts}
+            ${content ? `<div class="dn-content">${_dnEsc(content)}</div>` : ''}
+            ${contentImgs}${embeds}${atts}
         </div>`;
     };
 
