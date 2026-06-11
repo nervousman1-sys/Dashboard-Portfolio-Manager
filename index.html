@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=73.0">
+    <link rel="stylesheet" href="css/main.css?v=74.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
 </head>
 
@@ -119,6 +119,17 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">ניהול תיקים חכם</span>
+                </a>
+                <!-- Economy & market news (Discord feed) -->
+                <a class="sidebar-item" data-nav="disconews" onclick="navigateTo(&#39;disconews&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 11a9 9 0 0 1 9 9" />
+                            <path d="M4 4a16 16 0 0 1 16 16" />
+                            <circle cx="5" cy="19" r="1.6" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">חדשות ושוק ההון</span>
                 </a>
                 <!-- Macro Indicators -->
                 <a class="sidebar-item" data-nav="macro" onclick="navigateTo('macro')">
@@ -322,6 +333,7 @@
             <!-- ═══ CML / SML Risk Analysis Page ═══ -->
             <div class="riskmodel-page" id="riskmodelPage"></div>
             <div class="riskmodel-page" id="bulkPage"></div>
+            <div class="riskmodel-page" id="discordNewsPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -576,6 +588,7 @@
     <script src="js/macro.js"></script>
     <script src="js/risk-analysis-view.js"></script>
     <script src="js/bulk-actions.js"></script>
+    <script src="js/discord-news.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/init.js"></script>

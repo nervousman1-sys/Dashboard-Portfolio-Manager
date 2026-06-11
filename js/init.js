@@ -714,6 +714,8 @@ function restoreStateFromURL() {
         if (typeof openRiskAnalysis === 'function') openRiskAnalysis();
     } else if (view === 'bulkmgr') {
         if (typeof openBulkPage === 'function') openBulkPage();
+    } else if (view === 'disconews') {
+        if (typeof openDiscordNews === 'function') openDiscordNews();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     } else if (clientId) {
@@ -785,6 +787,11 @@ window.addEventListener('popstate', function(e) {
         if (typeof closeBulkPage === 'function') closeBulkPage();
         return;
     }
+    const dnOpen = document.getElementById('discordNewsPage')?.classList.contains('active');
+    if (dnOpen && view !== 'disconews') {
+        if (typeof closeDiscordNews === 'function') closeDiscordNews();
+        return;
+    }
 
     // Restore whatever the URL says
     if (clientId) {
@@ -797,6 +804,8 @@ window.addEventListener('popstate', function(e) {
         if (typeof toggleAlerts === 'function') toggleAlerts();
     } else if (view === 'bulkmgr') {
         if (typeof openBulkPage === 'function') openBulkPage();
+    } else if (view === 'disconews') {
+        if (typeof openDiscordNews === 'function') openDiscordNews();
     } else if (view === 'fulllist') {
         if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
     }

@@ -121,8 +121,23 @@ function navigateTo(section) {
             if (riskIsActive && typeof closeRiskAnalysis === 'function') {
                 closeRiskAnalysis();
             }
+            if (typeof closeDiscordNews === 'function') closeDiscordNews();
             if (typeof openBulkPage === 'function') {
                 openBulkPage();
+            }
+            break;
+
+        case 'disconews':
+            // Open the Discord economy & market news page
+            if (macroIsActive && typeof closeMacroPage === 'function') {
+                closeMacroPage();
+            }
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
+            }
+            closeBulkIfOpen();
+            if (typeof openDiscordNews === 'function') {
+                openDiscordNews();
             }
             break;
 
