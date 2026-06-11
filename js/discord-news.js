@@ -123,6 +123,55 @@ function _dnDateOf(m) {
     return d ? d.toLocaleDateString('he-IL') : '';
 }
 
+// Clean channel name for display: no '#', no emojis/symbols, dashes → spaces
+function _dnCleanName(name) {
+    return String(name || '')
+        .replace(/#/g, '')
+        .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '')
+        .replace(/-/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Lazy vision load: when a collapsed daily post is expanded, transcribe/summarize
+// the image into Hebrew TEXT via /api/vision. Result cached in localStorage —
+// each image is read exactly once per browser (and once globally at the edge).
+async function _dnLoadVision(det) {
+    if (!det || !det.open) return;
+    const box = det.querySelector('.dn-vision');
+    if (!box || box.dataset.loaded) return;
+    box.dataset.loaded = '1';
+    const img = box.dataset.img, mode = box.dataset.mode || 'transcribe';
+    const cacheKey = 'dn_vision_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) { box.innerHTML = _dnVisionHTML(cached, img); return; }
+    } catch (e) { /* ignore */ }
+    box.innerHTML = '<div class="adv-empty">קורא את התוכן מהתמונה…</div>';
+    try {
+        const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}`, { headers: { Accept: 'application/json' } });
+        const j = await res.json();
+        if (j && j.text) {
+            try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
+            box.innerHTML = _dnVisionHTML(j.text, img);
+        } else if (j && j.error === 'not_configured') {
+            box.innerHTML = `<div class="adv-empty">תמלול אוטומטי טרם הוגדר (GEMINI_API_KEY).</div>
+                <a href="${_dnEsc(img)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(img)}" loading="lazy" alt="" /></a>`;
+        } else {
+            throw new Error((j && j.message) || 'vision failed');
+        }
+    } catch (e) {
+        box.dataset.loaded = '';
+        box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(img)}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
+    }
+}
+
+function _dnVisionHTML(text, img) {
+    const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+    return lines.map(l => `<div class="dn-vline">${_dnEsc(l)}</div>`).join('')
+        + `<a class="dn-att" href="${_dnEsc(img)}" target="_blank" rel="noopener">🖼 פתח את התמונה המקורית</a>`;
+}
+
 function _dnRender() {
     const data = _dnLastData;
     const tabsEl = document.getElementById('dnTabs');
@@ -136,7 +185,7 @@ function _dnRender() {
     tabsEl.innerHTML = [
         `<button class="dn-tab ${_dnActiveChannel === 'all' ? 'active' : ''}" onclick="setDnChannel('all')">הכל</button>`,
         ...visible.map(c =>
-            `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" onclick="setDnChannel('${c.id}')"># ${_dnEsc(c.name)}${(c.messages || []).length ? ` <span class="dn-tab-n">${c.messages.length}</span>` : ''}</button>`),
+            `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" ${(c.messages || []).length ? ` <span class="dn-tab-n">${c.messages.length}</span>` : ''}</button>`),
     ].join('');
 
     const isImgUrl = (u) => /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(u) || /hcti\.io\/v1\/image\//i.test(u);
@@ -169,7 +218,7 @@ function _dnRender() {
         <div class="dn-msg">
             <div class="dn-msg-head">
                 <span class="dn-author">${_dnEsc(m.author)}${m.bot ? ' <span class="dn-bot">BOT</span>' : ''}</span>
-                ${chName ? `<span class="dn-ch"># ${_dnEsc(chName)}</span>` : ''}
+                ${chName ? `<span class="dn-ch">${_dnEsc(_dnCleanName(chName))}</span>` : ''}
                 <span class="dn-when">${when}</span>
             </div>
             ${content ? `<div class="dn-content">${_dnEsc(content)}</div>` : ''}
@@ -186,26 +235,30 @@ function _dnRender() {
         return chName ? `עדכון ${chName.replace(/-/g, ' ').replace(/[^֐-׿\w ]/g, '').trim()}` : 'עדכון';
     };
 
-    // A collapsed-by-date item: textual headline (the "title"), image only on expand
-    const renderCollapsed = (m, chName, open) => {
+    // A collapsed-by-date item: textual headline; on expand the image is READ into
+    // Hebrew text (vision) — transcription for חדשות, short summary for תנועות-הון.
+    const renderCollapsed = (m, chName, open, visionMode) => {
         const imgs = [];
         const urls = (m.content || '').match(/https?:\/\/\S+/g) || [];
         for (const u of urls) if (isImgUrl(u)) imgs.push(u);
         for (const e of (m.embeds || [])) if (e.image) imgs.push(e.image);
         for (const a of (m.attachments || [])) if (isImgUrl(a.url) || /\.(png|jpe?g|webp|gif)/i.test(a.name || '')) imgs.push(a.url);
-        const body = imgs.map(u => `<a href="${_dnEsc(u)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(u)}" loading="lazy" alt="" /></a>`).join('')
-            || '<div class="adv-empty">אין תוכן נוסף.</div>';
+        const body = imgs.length
+            ? `<div class="dn-vision" data-img="${_dnEsc(imgs[0])}" data-mode="${visionMode || 'transcribe'}"></div>`
+            : '<div class="adv-empty">אין תוכן נוסף.</div>';
         return `
-        <details class="dn-day" ${open ? 'open' : ''}>
+        <details class="dn-day" ${open ? 'open' : ''} ontoggle="_dnLoadVision(this)">
             <summary class="dn-day-head">
                 <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
                 <span class="dn-day-title">${_dnEsc(headlineOf(m, chName))}</span>
-                ${chName ? `<span class="dn-ch"># ${_dnEsc(chName)}</span>` : ''}
+                ${chName ? `<span class="dn-ch">${_dnEsc(_dnCleanName(chName))}</span>` : ''}
                 <span class="dn-when">${_dnDateOf(m)}</span>
             </summary>
             <div class="dn-day-body">${body}</div>
         </details>`;
     };
+    // vision mode by channel: חדשות → full transcription; תנועות-הון → short summary
+    const visionModeOf = (name) => String(name || '').includes('תנועות-הון') ? 'summary' : 'transcribe';
 
     // Options-flow message: clear, large tabular line(s)
     const renderOption = (m) => {
@@ -252,8 +305,8 @@ function _dnRender() {
         all.sort((a, b) => new Date(b.m.ts) - new Date(a.m.ts));
         html = all.length
             ? all.slice(0, 60).map((x, i) => {
-                if (x.kind === 'collapse') return renderCollapsed(x.m, x.ch, false);
-                if (x.kind === 'options') return `<div class="dn-msg dn-msg-opt"><div class="dn-msg-head"><span class="dn-ch"># ${_dnEsc(x.ch)}</span><span class="dn-when">${_dnDateOf(x.m)}</span></div>${renderOption(x.m)}</div>`;
+                if (x.kind === 'collapse') return renderCollapsed(x.m, x.ch, false, visionModeOf(x.ch));
+                if (x.kind === 'options') return `<div class="dn-msg dn-msg-opt"><div class="dn-msg-head"><span class="dn-ch">${_dnEsc(_dnCleanName(x.ch))}</span><span class="dn-when">${_dnDateOf(x.m)}</span></div>${renderOption(x.m)}</div>`;
                 return renderMsg(x.m, x.ch);
             }).join('')
             : '<div class="adv-empty">אין עדיין הודעות בערוצים.</div>';
@@ -265,7 +318,7 @@ function _dnRender() {
             const kind = _dnChannelKind(c.name);
             if (kind === 'collapse') {
                 // Each daily post = its own date-collapsed headline (latest open)
-                html = c.messages.map((m, i) => renderCollapsed(m, null, i === 0)).join('');
+                html = c.messages.map((m, i) => renderCollapsed(m, null, i === 0, visionModeOf(c.name))).join('');
             } else if (kind === 'options') {
                 html = renderByDate(c.messages, (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
             } else {

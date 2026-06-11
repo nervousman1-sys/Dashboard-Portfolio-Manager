@@ -8098,3 +8098,12 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
     border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 2px; }
 .dn-opt-line:last-child { border-bottom: none; }
 .dn-msg-opt { padding: 10px 14px; }
+
+/* Vision-transcribed lines (text read from agent images) */
+.dn-vline { font-size: 14px; font-weight: 650; color: #fff; line-height: 1.85;
+    border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 2px; }
+.dn-vline:last-of-type { border-bottom: none; }
+/* Sharper, clearer message text (catalyst etc.) */
+.dn-content { font-size: 15px; font-weight: 650; }
+.dn-embed-desc { font-size: 14px; color: #fff; font-weight: 600; }
+.dn-embed-title { font-size: 14.5px; }
