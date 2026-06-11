@@ -43,13 +43,20 @@ function _allocStateOf(c) {
 }
 
 // Breach check: returns null when fine, or details for the badge/fix.
+// HYSTERESIS: the breach triggers only when cash is a FULL 1% below the target,
+// and the fix sells up to target +0.5% — so after executing the suggested fix
+// once, normal intraday price drift can no longer instantly re-trigger the alert.
+const _ALLOC_TRIGGER_GAP = 1.0;   // flag only when cashPct < target − 1%
+const _ALLOC_FIX_BUFFER = 0.5;    // fix aims for target + 0.5%
+
 function allocBreachOf(c) {
     const target = getAllocTarget(c.id);
     if (!target) return null;
     const st = _allocStateOf(c);
-    if (st.total <= 0 || st.cashPct >= target - 0.05) return null;
-    // Sell S of stocks so cash reaches target: S = t·V − C (total V unchanged)
-    const needSell = (target / 100) * st.total - st.cash;
+    if (st.total <= 0 || st.cashPct >= target - _ALLOC_TRIGGER_GAP) return null;
+    // Sell S of stocks so cash reaches target+buffer: S = t'·V − C (total V unchanged)
+    const aim = Math.min(95, target + _ALLOC_FIX_BUFFER);
+    const needSell = (aim / 100) * st.total - st.cash;
     const pctOfStocks = st.stocksVal > 0 ? Math.min(100, needSell / st.stocksVal * 100) : 0;
     return { target, cashPct: st.cashPct, needSell, pctOfStocks, stocksVal: st.stocksVal };
 }
@@ -304,8 +311,9 @@ async function executeBulkAction() {
         const quantity = Math.round((amount / price) * 10000) / 10000;
         log(`מחיר: $${price.toFixed(2)} → ${quantity} יחידות לכל תיק`);
 
+        // All portfolios buy in PARALLEL (each touches only its own cash row)
         let okCount = 0;
-        for (const c of selected) {
+        await Promise.all(selected.map(async (c) => {
             try {
                 const updated = await portfolioBuyAsset(c.id, { type: 'stock', price, quantity, ticker, currency: 'USD', stockName: ticker });
                 if (updated && !updated.error) {
@@ -317,7 +325,7 @@ async function executeBulkAction() {
                     log(`✗ ${c.name} — ${updated && updated.error === 'insufficient_cash' ? 'אין מספיק מזומן' : (updated && updated.error) || 'שגיאה'}`);
                 }
             } catch (e) { log(`✗ ${c.name} — שגיאה: ${e.message}`); }
-        }
+        }));
         log(`<b>הושלם: ${okCount}/${selected.length} תיקים עודכנו.</b>`);
     } else {
         const pct = parseFloat(document.getElementById('bulkPct')?.value);
@@ -331,27 +339,38 @@ async function executeBulkAction() {
         _bulkBusy = true;
         document.getElementById('bulkExecBtn').disabled = true;
         if (progEl) progEl.innerHTML = '';
+        log('מוכר במקביל בכל התיקים…');
 
+        // FAST PATH: one batched sell per portfolio (≈6 round-trips total instead of
+        // ~7 per holding), and all portfolios run in PARALLEL (separate cash rows).
         let okCount = 0;
-        for (const c of selected) {
+        await Promise.all(selected.map(async (c) => {
             try {
                 const targets = (c.holdings || []).filter(h => h.type === 'stock' && (h.shares || 0) > 0
                     && (!scopeTicker || (h.ticker || '').toUpperCase() === scopeTicker));
-                let sold = 0;
-                for (const h of targets) {
-                    const qty = Math.round(h.shares * (pct / 100) * 10000) / 10000;
-                    if (!(qty > 0)) continue;
-                    const updated = await supaSellHolding(c.id, h.id, qty, h.price);
-                    if (updated) {
-                        const idx = clients.findIndex(x => x.id === c.id);
-                        if (idx !== -1) clients[idx] = updated;
-                        sold++;
-                    }
+                const sales = targets.map(h => ({
+                    holdingId: h.id,
+                    qty: Math.round(h.shares * (pct / 100) * 10000) / 10000,
+                    price: h.price,
+                })).filter(s => s.qty > 0);
+                if (!sales.length) { log(`— ${c.name} — אין מה לצמצם`); return; }
+
+                let updated = null;
+                if (typeof supaSellHoldingsBatch === 'function') {
+                    updated = await supaSellHoldingsBatch(c.id, sales);
+                } else {
+                    for (const s of sales) updated = await supaSellHolding(c.id, s.holdingId, s.qty, s.price) || updated;
                 }
-                if (sold > 0) { okCount++; log(`✓ ${c.name} — צומצמו ${sold} נכסים ב-${pct}%`); }
-                else log(`— ${c.name} — אין מה לצמצם`);
+                if (updated) {
+                    const idx = clients.findIndex(x => x.id === c.id);
+                    if (idx !== -1) clients[idx] = updated;
+                    okCount++;
+                    log(`✓ ${c.name} — צומצמו ${sales.length} נכסים ב-${pct}%`);
+                } else {
+                    log(`✗ ${c.name} — שגיאה במכירה`);
+                }
             } catch (e) { log(`✗ ${c.name} — שגיאה: ${e.message}`); }
-        }
+        }));
         log(`<b>הושלם: ${okCount}/${selected.length} תיקים עודכנו.</b>`);
     }
 

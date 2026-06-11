@@ -1164,3 +1164,69 @@ async function supaSellHolding(clientId, holdingId, sellQty, sellPrice) {
     return await supaFetchClient(clientId);
 }
 
+// ── BATCH SELL — many holdings of ONE portfolio in a handful of round-trips ──
+// Same semantics as supaSellHolding (weighted-avg realized P&L, currency cash
+// buckets, full-sell deletion, transaction log) but: ONE holdings fetch, parallel
+// holding updates, ONE cash update with the summed proceeds, ONE batch transaction
+// insert, ONE recalc + ONE re-fetch. ~6 round-trips instead of ~7 PER holding —
+// this is what makes the bulk reduce / allocation fix fast.
+// sales: [{ holdingId, qty, price? }]
+async function supaSellHoldingsBatch(clientId, sales) {
+    if (!sales || !sales.length) return null;
+
+    const ids = sales.map(s => s.holdingId);
+    const { data: holdings, error: hErr } = await supabaseClient
+        .from('holdings').select('*').in('id', ids);
+    if (hErr || !holdings || !holdings.length) { console.error('supaSellHoldingsBatch fetch:', hErr?.message); return null; }
+    const byId = {}; holdings.forEach(h => { byId[h.id] = h; });
+
+    // Compute everything up-front
+    const proceeds = { cash_usd: 0, cash_ils: 0 };
+    const holdingOps = [];
+    const txRecords = [];
+    for (const s of sales) {
+        const h = byId[s.holdingId];
+        if (!h) continue;
+        const qty = Math.min(s.qty, h.shares);
+        if (!(qty > 0)) continue;
+        const price = s.price || h.price;
+        const sale = qty * price;
+        const avgCost = h.shares > 0 ? h.cost_basis / h.shares : 0;
+        proceeds[(h.currency === 'ILS') ? 'cash_ils' : 'cash_usd'] += sale;
+        txRecords.push({
+            portfolio_id: clientId, type: 'sell', ticker: h.ticker || '-', name: h.name || '',
+            asset_type: h.type || 'stock', currency: h.currency || 'USD',
+            shares: qty, price, total: sale, realized_pnl: (price - avgCost) * qty, description: null,
+        });
+        if (qty >= h.shares) {
+            holdingOps.push(supabaseClient.from('holdings').delete().eq('id', h.id));
+        } else {
+            const rem = h.shares - qty;
+            holdingOps.push(supabaseClient.from('holdings')
+                .update({ shares: rem, cost_basis: avgCost * rem, value: h.price * rem })
+                .eq('id', h.id));
+        }
+    }
+    if (!txRecords.length) return null;
+
+    // ONE cash read + ONE cash write (sum of all proceeds)
+    const { data: portfolio } = await supabaseClient
+        .from('portfolios').select('cash_usd, cash_ils').eq('id', clientId).single();
+    if (portfolio) {
+        const newUsd = (portfolio.cash_usd || 0) + proceeds.cash_usd;
+        const newIls = (portfolio.cash_ils || 0) + proceeds.cash_ils;
+        await supabaseClient.from('portfolios')
+            .update({ cash_usd: newUsd, cash_ils: newIls, cash_balance: newUsd + newIls })
+            .eq('id', clientId);
+    }
+
+    // Holding updates in parallel + one batched transaction insert (best-effort)
+    await Promise.all(holdingOps);
+    try {
+        if (_supaTransactionsAvailable) await supabaseClient.from('transactions').insert(txRecords);
+    } catch (e) { console.warn('batch tx log failed:', e.message); }
+
+    await supaRecalcClient(clientId);
+    return await supaFetchClient(clientId);
+}
+
