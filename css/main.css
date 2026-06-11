@@ -8797,3 +8797,56 @@ html.day-mode .macro-analysis-host .macro-analysis p { color: var(--text-primary
 html.day-mode .macro-analysis-host .macro-analysis b { color: var(--accent-blue) !important; }
 
 html.day-mode .sectors-chart-wrap { background: transparent !important; border: none !important; }
+
+/* ═══ DAY MODE — pass 6: client-modal readability (user walkthrough) ═══ */
+
+/* 1. Hero value panel → WHITE with bold, high-contrast numbers */
+html.day-mode .ov-hero-block {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: var(--shadow);
+}
+html.day-mode .ov-hero-block::before,
+html.day-mode .ov-hero-block::after,
+html.day-mode .ov-hero-scan { display: none !important; }
+html.day-mode .ov-hero-label { color: var(--accent-blue) !important; font-weight: 800; }
+html.day-mode .ov-hero-value { color: #0369a1 !important; text-shadow: none !important; font-weight: 900; }
+html.day-mode .ov-hero-block * { text-shadow: none !important; }
+html.day-mode .ov-hero-kpis, html.day-mode .ov-kpi-card { color: var(--text-primary); }
+html.day-mode .ov-kpi-card { background: #f8fafc; border: 1px solid var(--border); }
+html.day-mode .ov-kpi-card .ov-kpi-label, html.day-mode .ov-kpi-label { color: var(--text-secondary) !important; }
+html.day-mode .ov-kpi-card.kpi-positive .ov-kpi-value { color: #047857 !important; font-weight: 900; }
+html.day-mode .ov-kpi-card.kpi-negative .ov-kpi-value { color: #dc2626 !important; font-weight: 900; }
+html.day-mode .ov-hero-live { color: #047857 !important; border-color: rgba(4,120,87,0.4) !important; background: rgba(4,120,87,0.07) !important; }
+html.day-mode .ov-hero-sep { background: var(--border) !important; }
+
+/* 2. Modal tab bar → white band, black tabs */
+html.day-mode .modal-tab-bar { background: #ffffff !important; border-bottom: 1px solid var(--border) !important; }
+html.day-mode .modal-tab { color: var(--text-secondary) !important; }
+html.day-mode .modal-tab.active { color: var(--accent-blue) !important; }
+html.day-mode .modal-tab:hover { color: var(--text-primary) !important; }
+
+/* 3. Correlation level chips — bold, unmistakable */
+html.day-mode .corr-lvl { font-weight: 900; }
+html.day-mode .corr-lvl.low { color: #047857 !important; background: rgba(4,120,87,0.12) !important; border-color: rgba(4,120,87,0.45) !important; }
+html.day-mode .corr-lvl.mid { color: #b45309 !important; background: rgba(180,83,9,0.12) !important; border-color: rgba(180,83,9,0.45) !important; }
+html.day-mode .corr-lvl.high { color: #dc2626 !important; background: rgba(220,38,38,0.1) !important; border-color: rgba(220,38,38,0.45) !important; }
+
+/* 4. Score circles (93 / 98) — white inside, black number, colored ring kept */
+html.day-mode .corr-score { background: #ffffff !important; }
+html.day-mode .corr-score span { color: var(--text-primary) !important; }
+html.day-mode .corr-score small { color: var(--text-secondary) !important; }
+html.day-mode .adv-score-inner { background: transparent; }
+html.day-mode .adv-score-ring { background: #ffffff !important; }
+html.day-mode .adv-score-num { color: var(--text-primary) !important; }
+html.day-mode .adv-score-den { color: var(--text-secondary) !important; }
+
+/* 5. Sharp ink across the whole modal — every remaining caption readable */
+html.day-mode .modal .ov-hero-top, html.day-mode .modal .ov-hero-inner { color: var(--text-primary); }
+html.day-mode .risk-metric-label, html.day-mode .ov-metric-label,
+html.day-mode .comp-label, html.day-mode .ov-comp-label,
+html.day-mode .adv-sub-label, html.day-mode .adv-sub-val,
+html.day-mode .adv-score-title, html.day-mode .corr-td-partner,
+html.day-mode .pf-news-tk { color: var(--text-primary) !important; }
+html.day-mode .adv-act-ic { filter: saturate(1.4); }
