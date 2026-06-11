@@ -119,6 +119,15 @@ function toggleDayMode() {
     const isDay = document.documentElement.classList.toggle('day-mode');
     try { localStorage.setItem('ui_theme', isDay ? 'day' : 'night'); } catch (e) { /* ignore */ }
     _syncThemeButton();
+    // Charts bake their ink colors at render time — re-render any that are open
+    // so light charts get black numbers (and vice versa) immediately.
+    try {
+        if (document.getElementById('riskmodelPage')?.classList.contains('active')
+            && typeof openRiskAnalysis === 'function') openRiskAnalysis();
+        if (document.getElementById('modal-cml-chart')
+            && typeof _renderModalRiskCharts === 'function' && typeof currentModalClientId !== 'undefined'
+            && currentModalClientId) _renderModalRiskCharts(currentModalClientId);
+    } catch (e) { /* best effort */ }
 }
 
 function _syncThemeButton() {

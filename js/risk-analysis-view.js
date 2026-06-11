@@ -390,12 +390,23 @@ function _projectOntoEfficient(fr, retPct) {
     return eff[eff.length - 1];
 }
 
+// Day-mode aware chart inks: light charts get BLACK numbers/labels, night keeps
+// the existing light ink. Charts are re-rendered on theme toggle.
+function _chartDay() {
+    return typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode');
+}
+
 function _scatterOpts(xLabel, yLabel) {
+    const day = _chartDay();
+    const tick = day ? '#0f172a' : '#64748b';
+    const axisTitle = day ? '#334155' : '#94a3b8';
+    const grid = day ? 'rgba(15,23,42,0.1)' : 'rgba(148,163,184,0.12)';
+    const legend = day ? '#0f172a' : '#cbd5e1';
     return {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: { labels: { color: '#cbd5e1', font: { family: 'Assistant' }, usePointStyle: true } },
+            legend: { labels: { color: legend, font: { family: 'Assistant' }, usePointStyle: true } },
             tooltip: {
                 callbacks: {
                     label: (ctx) => {
@@ -415,11 +426,11 @@ function _scatterOpts(xLabel, yLabel) {
             // the whole thing as a meaningless vertical line. Forcing linear axes is
             // what makes the points spread by their real β / σ values.
             x: { type: 'linear', position: 'bottom', bounds: 'data', offset: false,
-                 title: { display: true, text: xLabel, color: '#94a3b8' },
-                 ticks: { color: '#64748b' }, grid: { color: 'rgba(148,163,184,0.12)' } },
+                 title: { display: true, text: xLabel, color: axisTitle },
+                 ticks: { color: tick }, grid: { color: grid } },
             y: { type: 'linear',
-                 title: { display: true, text: yLabel, color: '#94a3b8' },
-                 ticks: { color: '#64748b' }, grid: { color: 'rgba(148,163,184,0.12)' } }
+                 title: { display: true, text: yLabel, color: axisTitle },
+                 ticks: { color: tick }, grid: { color: grid } }
         }
     };
 }
@@ -710,7 +721,8 @@ function _drawModalCML(model, client) {
         if (effPoint && Math.abs(effPoint.x - portPt.x) > 0.4) {
             datasets.push({
                 type: 'line', label: 'פער מהחזית', data: [{ x: effPoint.x, y: effPoint.y }, { x: portPt.x, y: portPt.y }],
-                borderColor: 'rgba(255,255,255,0.45)', borderWidth: 1.5, borderDash: [3, 3], pointRadius: 0, fill: false, order: 1.5,
+                borderColor: _chartDay() ? 'rgba(15,23,42,0.45)' : 'rgba(255,255,255,0.45)',
+                borderWidth: 1.5, borderDash: [3, 3], pointRadius: 0, fill: false, order: 1.5,
             });
         }
     }

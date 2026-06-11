@@ -8850,3 +8850,38 @@ html.day-mode .adv-sub-label, html.day-mode .adv-sub-val,
 html.day-mode .adv-score-title, html.day-mode .corr-td-partner,
 html.day-mode .pf-news-tk { color: var(--text-primary) !important; }
 html.day-mode .adv-act-ic { filter: saturate(1.4); }
+
+/* ═══ DAY MODE — pass 7: light CML/SML charts + darker card buttons ═══ */
+
+/* CML/SML chart panels (modal tab + analysis page) → WHITE with dark headings.
+   These override the earlier keep-dark rules (later in file + !important wins). */
+html.day-mode .risk-chart-card,
+html.day-mode .mcs-canvas-wrap {
+    background: #ffffff !important;
+    border-color: var(--border) !important;
+}
+html.day-mode .risk-chart-card h3,
+html.day-mode .risk-chart-card .risk-chart-sub,
+html.day-mode .risk-chart-card .risk-chart-legend,
+html.day-mode .risk-chart-card .risk-chart-legend b {
+    color: var(--text-primary) !important;
+}
+html.day-mode .risk-chart-card .risk-chart-sub { color: var(--text-secondary) !important; }
+html.day-mode .mcs-chart-title, html.day-mode .mcs-chart-sub { color: var(--text-primary) !important; }
+
+/* Recommendation cards: Google Finance + alternative + buy — deep, readable */
+html.day-mode .reco-gf, html.day-mode .adv-cand-gf {
+    color: #0369a1 !important; font-weight: 800;
+    background: rgba(3,105,161,0.07) !important; border-color: rgba(3,105,161,0.45) !important;
+}
+html.day-mode .reco-alt {
+    color: #0369a1 !important; font-weight: 800;
+    border-color: rgba(3,105,161,0.45) !important; background: rgba(3,105,161,0.04) !important;
+}
+html.day-mode .reco-alt:hover { background: rgba(3,105,161,0.12) !important; }
+html.day-mode .reco-add {
+    color: #0369a1 !important; font-weight: 900;
+    border-top-color: rgba(3,105,161,0.35) !important;
+}
+html.day-mode .reco-stats, html.day-mode .reco-stats b { color: var(--text-primary) !important; }
+html.day-mode .reco-stats b.pos { color: #047857 !important; }
