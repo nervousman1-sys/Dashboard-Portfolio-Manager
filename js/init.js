@@ -127,6 +127,11 @@ function toggleDayMode() {
         if (document.getElementById('modal-cml-chart')
             && typeof _renderModalRiskCharts === 'function' && typeof currentModalClientId !== 'undefined'
             && currentModalClientId) _renderModalRiskCharts(currentModalClientId);
+        // Yield curves bake their ink too — force a repaint with the new theme
+        if (document.getElementById('usYieldCurve') && typeof _renderYieldCurves === 'function') {
+            window._yieldData = null;
+            _renderYieldCurves();
+        }
     } catch (e) { /* best effort */ }
 }
 

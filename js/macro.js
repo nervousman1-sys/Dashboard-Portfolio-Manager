@@ -1232,13 +1232,17 @@ function _paintYieldCurves(data) {
     if (window._yieldData && JSON.stringify(window._yieldData) === JSON.stringify(data)) return;
     window._yieldData = data;
 
+    // Theme-aware inks: day mode → black numbers on light; night → light on dark
+    const _day = document.documentElement.classList.contains('day-mode');
+    const tickColor = _day ? '#0f172a' : '#fff';
+    const gridColor = _day ? 'rgba(15,23,42,0.1)' : 'rgba(255,255,255,0.06)';
     const mkCurve = (canvas, pts, color) => new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
             labels: pts.map(p => p.label),
             datasets: [{
                 data: pts.map(p => p.value), borderColor: color, borderWidth: 2.5,
-                pointRadius: 4, pointBackgroundColor: color, pointBorderColor: '#fff', pointBorderWidth: 1,
+                pointRadius: 4, pointBackgroundColor: color, pointBorderColor: _day ? '#0f172a' : '#fff', pointBorderWidth: 1,
                 fill: false, tension: 0.35,
             }],
         },
@@ -1246,8 +1250,8 @@ function _paintYieldCurves(data) {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y.toFixed(2)}%` } } },
             scales: {
-                x: { ticks: { color: '#fff', font: { size: 11, weight: '700' } }, grid: { color: 'rgba(255,255,255,0.06)' } },
-                y: { ticks: { color: '#fff', font: { size: 11 }, callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                x: { ticks: { color: tickColor, font: { size: 11, weight: '700' } }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor, font: { size: 11 }, callback: (v) => v + '%' }, grid: { color: gridColor } },
             },
         },
     });
@@ -1281,7 +1285,7 @@ function _paintYieldCurves(data) {
         ilNote.innerHTML = `
             <div class="yield-sl-row"><span>קצר (ריבית בנק ישראל): <b>${boi.toFixed(2)}%</b></span><span>ארוך (אג"ח 10 שנים): <b>${il10.toFixed(2)}%</b></span>
                 <span>מרווח קצר-ארוך: <b>${sp >= 0 ? '+' : ''}${sp.toFixed(2)}%</b></span></div>
-            <div>${sp >= 0 ? 'תלילות חיובית — השוק מתמחר צמיחה עם ריבית יורדת' : 'עקומה הפוכה'} · ריבית בנק ישראל רשמית (25.5); תשואת 10ש' — הפרסום העדכני ביותר (${d10})</div>`;
+            <div>${sp >= 0 ? 'תלילות חיובית — השוק מתמחר צמיחה עם ריבית יורדת' : 'עקומה הפוכה'} · ריבית בנק ישראל רשמית ועדכנית (3.75%, מ-25.5); תשואות האג"ח — הפרסום החודשי הרשמי האחרון של ה-OECD (${d10}; מתפרסם בפיגור של כחודשיים)</div>`;
     }
 
     _renderMacroAnalysis(data);

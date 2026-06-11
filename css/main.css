@@ -8895,3 +8895,14 @@ html.day-mode .adv-score-den {
     font-weight: 700;
     opacity: 1 !important;
 }
+
+/* ═══ DAY MODE — pass 8: yield-curve panels go light with black ink ═══ */
+html.day-mode .macro-yield-card {
+    background: #ffffff !important;
+    border-color: var(--border) !important;
+}
+html.day-mode .macro-yield-card .macro-yield-title { color: var(--text-primary) !important; }
+html.day-mode .macro-yield-card .macro-yield-note { color: var(--text-primary) !important; }
+html.day-mode .macro-yield-card .yield-sl-row { color: var(--text-primary) !important; }
+html.day-mode .macro-yield-card .yield-sl-row b,
+html.day-mode .macro-yield-card .macro-yield-note b { color: #0369a1 !important; }
