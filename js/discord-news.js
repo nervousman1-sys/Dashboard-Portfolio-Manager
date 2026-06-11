@@ -191,11 +191,12 @@ function _dnVisionHTML(text, img, mode) {
             }
         }
         if (rows.length) {
-            // Honest proportional scale: bars are sized against a ROUNDED axis with
-            // headroom (e.g. max move 16% → axis 0–20%), so the largest move fills
-            // ~80% of the track instead of misleadingly touching the edge.
+            // Adaptive proportional scale: the axis follows the LARGEST move in the
+            // list, rounded up to the next 5% step (16%→20, 22%→25, 38%→40). Never a
+            // fixed cap — bigger data automatically widens the axis.
             const maxN = Math.max(...rows.map(r => r.mag), 0.001);
-            const axisMax = Math.max(5, Math.ceil((maxN * 1.25) / 5) * 5);
+            let axisMax = Math.max(5, Math.ceil(maxN / 5) * 5);
+            if (axisMax - maxN < maxN * 0.05) axisMax += 5; // keep a sliver of headroom
             const bar = (r) => `
                 <div class="dn-flow-row">
                     <span class="dn-flow-name">${_dnEsc(r.name)}</span>

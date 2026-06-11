@@ -111,6 +111,23 @@ function getCachedUserId() {
     return user ? user.id : null;
 }
 
+// ========== DAY / NIGHT THEME ==========
+// Default is the cyber-noir night mode; day mode is a full light skin driven by
+// CSS variable overrides (html.day-mode). Persisted across sessions.
+
+function toggleDayMode() {
+    const isDay = document.documentElement.classList.toggle('day-mode');
+    try { localStorage.setItem('ui_theme', isDay ? 'day' : 'night'); } catch (e) { /* ignore */ }
+    _syncThemeButton();
+}
+
+function _syncThemeButton() {
+    const label = document.getElementById('themeToggleLabel');
+    if (label) label.textContent = document.documentElement.classList.contains('day-mode') ? 'מצב לילה' : 'מצב יום';
+}
+// Sync the button label on load (theme class was applied pre-paint in <head>)
+window.addEventListener('DOMContentLoaded', _syncThemeButton);
+
 // ========== SERVICE WORKER REGISTRATION ==========
 
 if ('serviceWorker' in navigator) {

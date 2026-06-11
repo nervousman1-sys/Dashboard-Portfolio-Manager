@@ -8170,3 +8170,121 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .alloc-bulk-row { margin-bottom: 14px; }
 .alloc-bulk-row .alloc-input-wrap .alloc-input { width: 52px; }
 .alloc-bulk-apply { font-size: 12px; padding: 7px 16px; margin-inline-start: auto; }
+
+/* ════════════════ DAY MODE (light theme) ════════════════
+   Toggled by html.day-mode. Core palette flips via CSS variables; below them,
+   targeted overrides fix components that hardcode dark-theme colors. Chart panels
+   intentionally STAY dark — the chart inks are light and read best on dark. */
+html.day-mode {
+    --bg-primary: #eef1f6;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f3f6fb;
+    --bg-surface: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --border: rgba(15, 23, 42, 0.12);
+    --border-hover: rgba(15, 23, 42, 0.22);
+    --accent-blue: #0369a1;
+    --accent-green: #047857;
+    --accent-red: #dc2626;
+    --risk-high: #dc2626;
+    --risk-medium: #b45309;
+    --risk-low: #047857;
+    --shadow: 0 10px 25px -12px rgba(15, 23, 42, 0.18), 0 4px 10px -6px rgba(15, 23, 42, 0.1);
+    --shadow-glow: 0 0 16px rgba(3, 105, 161, 0.12);
+}
+html.day-mode body {
+    background: var(--bg-primary);
+    background-image: none;
+    color: var(--text-primary);
+}
+/* Surfaces that hardcode dark backgrounds */
+html.day-mode .stat-card,
+html.day-mode .glass-card,
+html.day-mode .modal,
+html.day-mode .mgmt-box,
+html.day-mode .reco-box,
+html.day-mode .header,
+html.day-mode .sidebar,
+html.day-mode .mobile-bottom-nav,
+html.day-mode .quick-watch-bar {
+    background: #ffffff;
+    border-color: var(--border);
+}
+html.day-mode .client-card { background: #ffffff; }
+/* Hardcoded white text → dark ink */
+html.day-mode .stat-value, html.day-mode .stat-label, html.day-mode .stat-sub,
+html.day-mode .dn-content, html.day-mode .dn-vline, html.day-mode .dn-day-title,
+html.day-mode .dn-day-head .dn-when, html.day-mode .dn-opt-vtxt, html.day-mode .dn-opt-ticker,
+html.day-mode .dn-opt-mval, html.day-mode .dn-flow-name, html.day-mode .dn-embed-title,
+html.day-mode .dn-embed-desc, html.day-mode .dn-embed-field, html.day-mode .dn-embed-field b,
+html.day-mode .dn-pc-label, html.day-mode .dn-author,
+html.day-mode .bulk-row-name, html.day-mode .bulk-row-cash, html.day-mode .bulk-summary,
+html.day-mode .bulk-field label, html.day-mode .bulk-risk-label, html.day-mode .alloc-target-wrap,
+html.day-mode .alloc-input-pct, html.day-mode .alloc-detail, html.day-mode .alloc-detail b,
+html.day-mode .reco-tk, html.day-mode .reco-buy, html.day-mode .reco-buy b,
+html.day-mode .adv-cand-tk, html.day-mode .adv-cand-buy b, html.day-mode .adv-cand-buy,
+html.day-mode .fit-name, html.day-mode .fit-why,
+html.day-mode .macro-hw-title, html.day-mode .macro-hw-col-value, html.day-mode .macro-main-title,
+html.day-mode .macro-analysis, html.day-mode .macro-yield-note, html.day-mode .yield-sl-row,
+html.day-mode .pf-news-he, html.day-mode .pf-corr-head h4,
+html.day-mode .corr-table tbody td, html.day-mode .corr-rec-sub, html.day-mode .corr-rec-sub b,
+html.day-mode .risk-table th, html.day-mode .risk-table td,
+html.day-mode .recs-summary-txt h3, html.day-mode .adv-portfolio-name,
+html.day-mode .client-name, html.day-mode .qw-price, html.day-mode .qw-fx-rate,
+html.day-mode .sidebar-label, html.day-mode .sidebar-brand-name, html.day-mode .sidebar-logout-text,
+html.day-mode .section-title, html.day-mode h1, html.day-mode h2, html.day-mode h3, html.day-mode h4 {
+    color: var(--text-primary);
+}
+/* Secondary captions that hardcode light-gray rgba */
+html.day-mode .risk-chart-sub, html.day-mode .reco-sub, html.day-mode .reco-hint,
+html.day-mode .dn-ch, html.day-mode .dn-when, html.day-mode .pf-news-date,
+html.day-mode .adv-cand-sector, html.day-mode .dn-opt-mlabel, html.day-mode .dn-flow-axis,
+html.day-mode .corr-foot, html.day-mode .macro-hw-col-label, html.day-mode .qw-fx-label,
+html.day-mode .corr-table thead th, html.day-mode .pf-corr-head span, html.day-mode .sidebar-brand-sub {
+    color: var(--text-secondary);
+}
+/* Subtle dark-on-dark fills → light fills */
+html.day-mode .dn-msg, html.day-mode .dn-day, html.day-mode .bulk-row, html.day-mode .fit-row,
+html.day-mode .reco-card, html.day-mode .adv-cand, html.day-mode .macro-hw-card,
+html.day-mode .corr-summary, html.day-mode .rpt-portfolio, html.day-mode .alloc-bulk-row,
+html.day-mode .bulk-risk-row, html.day-mode .dn-embed {
+    background: #f8fafc;
+    border-color: var(--border);
+}
+html.day-mode .dn-day-head:hover, html.day-mode .bulk-row:hover { background: #eef4fb; }
+/* Inputs */
+html.day-mode input, html.day-mode select, html.day-mode textarea {
+    background: #ffffff !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+html.day-mode .alloc-input-wrap { background: #ffffff; }
+/* Buttons that assume dark glass */
+html.day-mode .macro-back-btn, html.day-mode .mgmt-btn.secondary, html.day-mode .dn-tab,
+html.day-mode .bulk-mode-btn, html.day-mode .filter-btn, html.day-mode .view-toggle-btn,
+html.day-mode .qw-settings-btn, html.day-mode .header-action-btn {
+    background: #ffffff; color: var(--text-primary); border-color: var(--border);
+}
+html.day-mode .dn-tab.active, html.day-mode .bulk-mode-btn.active {
+    color: var(--accent-blue); background: rgba(3,105,161,0.08); border-color: rgba(3,105,161,0.4);
+}
+/* Chart panels stay DARK by design (chart inks are light) */
+html.day-mode .risk-chart-card, html.day-mode .macro-yield-card,
+html.day-mode .mcs-canvas-wrap, html.day-mode .sectors-chart-wrap {
+    background: #0d1117; border-color: rgba(15,23,42,0.25);
+}
+html.day-mode .macro-yield-card .macro-yield-title, html.day-mode .macro-yield-card .macro-yield-note,
+html.day-mode .macro-yield-card .yield-sl-row, html.day-mode .risk-chart-card h3,
+html.day-mode .risk-chart-card .risk-chart-sub, html.day-mode .risk-chart-card .risk-chart-legend {
+    color: #f5f5f5;
+}
+/* Score rings / verdict blocks keep their accent colors — already variable-driven */
+html.day-mode .dn-opt-verdict { background: #f8fafc; }
+html.day-mode .dn-flow-conc { background: rgba(3,105,161,0.06); border-color: rgba(3,105,161,0.3); }
+html.day-mode .alloc-ok { color: #047857; }
+html.day-mode .dn-vhead { color: var(--accent-blue); }
+html.day-mode .qw-fx-chg.positive { color: #047857; }
+html.day-mode .qw-fx-chg.negative { color: #dc2626; }
