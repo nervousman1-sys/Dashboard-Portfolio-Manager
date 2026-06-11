@@ -8035,3 +8035,13 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .macro-analysis p { margin: 0 0 10px; }
 .macro-analysis b { color: var(--accent-blue); }
 @media (max-width: 900px) { .macro-yield-grid { grid-template-columns: 1fr; } }
+
+/* Allocation-breach chip on portfolio cards */
+.card-alloc-btn {
+    font-family: inherit; font-size: 10px; font-weight: 800; color: #fca5a5; cursor: pointer;
+    background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.45); border-radius: 20px;
+    padding: 3px 10px; white-space: nowrap; transition: background .15s;
+    animation: allocPulse 2.4s ease-in-out infinite;
+}
+.card-alloc-btn:hover { background: rgba(239,68,68,0.25); color: #fff; }
+@keyframes allocPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); } 50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); } }

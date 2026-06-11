@@ -56,7 +56,7 @@ function allocBreachOf(c) {
 
 // ── Page open/close (mirrors the riskmodel-page pattern) ──
 
-function openBulkPage() {
+function openBulkPage(focusAllocId) {
     const page = document.getElementById('bulkPage');
     if (!page) return;
     const header = document.querySelector('.header');
@@ -78,6 +78,20 @@ function openBulkPage() {
     if (typeof updateURLState === 'function') updateURLState({ view: 'bulkmgr' });
     _renderBulkPage();
     window.scrollTo(0, 0);
+
+    // Came from a card's breach chip → open THAT portfolio's rebalance
+    // instructions and scroll straight to them.
+    if (focusAllocId != null && typeof focusAllocId === 'number') {
+        setTimeout(() => {
+            const d = document.getElementById(`allocDetail-${focusAllocId}`);
+            if (d) {
+                d.style.display = '';
+                d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                document.getElementById('allocList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 80);
+    }
 }
 
 function closeBulkPage() {

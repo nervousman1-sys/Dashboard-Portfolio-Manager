@@ -1375,12 +1375,25 @@ function renderClientCards() {
             ? `<button class="card-model-btn" style="--mc:${_mcColor}" onclick="event.stopPropagation(); openModal(${client.id})" title="עמידה במודל CML/SML — לחץ לתוכנית פעולה">מודל ${_mc} · מה לשנות</button>`
             : '';
 
+        // Allocation-breach chip — equities pushed cash below the portfolio's
+        // minimum-cash target. Click → smart page with the rebalance instructions.
+        let _allocChip = '';
+        if (typeof allocBreachOf === 'function') {
+            const _br = allocBreachOf(client);
+            if (_br) {
+                _allocChip = `<button class="card-alloc-btn"
+                    onclick="event.stopPropagation(); if(typeof openBulkPage==='function') openBulkPage(${client.id})"
+                    title="מזומן ${_br.cashPct.toFixed(1)}% מתחת ליעד ${_br.target}% — לחץ להוראות איזון">⚠ חריגה מאלוקציה</button>`;
+            }
+        }
+
         card.innerHTML = `
                 <div class="card-header">
                     <div class="card-header-start">
                         <h3 class="client-name">${client.name}</h3>
                         <span class="risk-badge ${client.risk}">${client.riskLabel}</span>
                         ${_mcChip}
+                        ${_allocChip}
                     </div>
                     <div class="card-header-end">
                         <div class="card-view-toggle">
