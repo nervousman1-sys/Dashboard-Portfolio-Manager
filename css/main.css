@@ -8083,3 +8083,18 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-setup h3 { margin: 0 0 8px; color: #fff; }
 .dn-setup p { color: rgba(245,245,250,0.85); font-size: 13.5px; line-height: 1.7; }
 .dn-img { max-width: 100%; max-height: 420px; border-radius: 9px; margin-top: 8px; border: 1px solid var(--border); display: block; }
+
+/* Discord feed: date-collapsed daily posts + clear options font */
+.dn-day { border: 1px solid var(--border); border-radius: 11px; background: rgba(255,255,255,0.025); margin-bottom: 9px; overflow: hidden; }
+.dn-day-head { display: flex; align-items: center; gap: 10px; padding: 12px 15px; cursor: pointer; list-style: none; }
+.dn-day-head::-webkit-details-marker { display: none; }
+.dn-day-head:hover { background: rgba(255,255,255,0.03); }
+.dn-day[open] > .dn-day-head { border-bottom: 1px solid var(--border); }
+.dn-day-title { font-size: 14px; font-weight: 800; color: #fff; flex: 1; }
+.dn-day-body { padding: 12px 15px; }
+.dn-day .adv-portfolio-chevron { font-size: 12px; }
+.dn-opt-line { font-size: 15px; font-weight: 800; color: #fff; direction: ltr; text-align: left;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em; line-height: 1.9;
+    border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 2px; }
+.dn-opt-line:last-child { border-bottom: none; }
+.dn-msg-opt { padding: 10px 14px; }

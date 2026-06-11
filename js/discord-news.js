@@ -105,18 +105,37 @@ function setDnChannel(id) {
     _dnRender();
 }
 
+// Per-channel display rules:
+//   hidden   — not shown at all (הודעות-מיוחדות, ניתוח-חברות-יומי)
+//   collapse — image-heavy daily posts (חדשות, תנועות-הון): a textual headline line
+//              collapsed by DATE; the image opens only on click
+//   options  — תנועת אופציות: clearer/larger tabular font, collapsed by date
+function _dnChannelKind(name) {
+    const n = String(name || '');
+    if (n.includes('הודעות-מיוחדות') || n.includes('ניתוח-חברות')) return 'hidden';
+    if (n.includes('חדשות') || n.includes('תנועות-הון')) return 'collapse';
+    if (n.includes('אופציות')) return 'options';
+    return 'normal';
+}
+
+function _dnDateOf(m) {
+    const d = m.ts ? new Date(m.ts) : null;
+    return d ? d.toLocaleDateString('he-IL') : '';
+}
+
 function _dnRender() {
     const data = _dnLastData;
     const tabsEl = document.getElementById('dnTabs');
     const feedEl = document.getElementById('dnFeed');
     if (!data || !tabsEl || !feedEl) return;
 
-    const withMsgs = data.channels.filter(c => (c.messages || []).length);
+    const visible = data.channels.filter(c => _dnChannelKind(c.name) !== 'hidden');
+    const withMsgs = visible.filter(c => (c.messages || []).length);
 
-    // Channel tabs (all + each channel)
+    // Channel tabs (all + each visible channel)
     tabsEl.innerHTML = [
         `<button class="dn-tab ${_dnActiveChannel === 'all' ? 'active' : ''}" onclick="setDnChannel('all')">הכל</button>`,
-        ...data.channels.map(c =>
+        ...visible.map(c =>
             `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" onclick="setDnChannel('${c.id}')"># ${_dnEsc(c.name)}${(c.messages || []).length ? ` <span class="dn-tab-n">${c.messages.length}</span>` : ''}</button>`),
     ].join('');
 
@@ -158,20 +177,101 @@ function _dnRender() {
         </div>`;
     };
 
+    // Headline line for an image-only daily post (the text headline replaces the image)
+    const headlineOf = (m, chName) => {
+        const t = (m.content || '').replace(/https?:\/\/\S+/g, '').trim();
+        if (t) return t;
+        const et = (m.embeds || []).map(e => e.title || e.description).find(Boolean);
+        if (et) return et;
+        return chName ? `עדכון ${chName.replace(/-/g, ' ').replace(/[^֐-׿\w ]/g, '').trim()}` : 'עדכון';
+    };
+
+    // A collapsed-by-date item: textual headline (the "title"), image only on expand
+    const renderCollapsed = (m, chName, open) => {
+        const imgs = [];
+        const urls = (m.content || '').match(/https?:\/\/\S+/g) || [];
+        for (const u of urls) if (isImgUrl(u)) imgs.push(u);
+        for (const e of (m.embeds || [])) if (e.image) imgs.push(e.image);
+        for (const a of (m.attachments || [])) if (isImgUrl(a.url) || /\.(png|jpe?g|webp|gif)/i.test(a.name || '')) imgs.push(a.url);
+        const body = imgs.map(u => `<a href="${_dnEsc(u)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(u)}" loading="lazy" alt="" /></a>`).join('')
+            || '<div class="adv-empty">אין תוכן נוסף.</div>';
+        return `
+        <details class="dn-day" ${open ? 'open' : ''}>
+            <summary class="dn-day-head">
+                <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
+                <span class="dn-day-title">${_dnEsc(headlineOf(m, chName))}</span>
+                ${chName ? `<span class="dn-ch"># ${_dnEsc(chName)}</span>` : ''}
+                <span class="dn-when">${_dnDateOf(m)}</span>
+            </summary>
+            <div class="dn-day-body">${body}</div>
+        </details>`;
+    };
+
+    // Options-flow message: clear, large tabular line(s)
+    const renderOption = (m) => {
+        const lines = [];
+        if (m.content) lines.push(m.content);
+        for (const e of (m.embeds || [])) {
+            if (e.title) lines.push(e.title);
+            if (e.description) lines.push(e.description);
+            for (const f of (e.fields || [])) lines.push(`${f.name}: ${f.value}`);
+        }
+        return lines.map(l => `<div class="dn-opt-line">${_dnEsc(l)}</div>`).join('');
+    };
+
+    // Group a channel's messages into collapsed date sections (latest date open)
+    const renderByDate = (msgs, inner) => {
+        const groups = new Map();
+        for (const m of msgs) {
+            const d = _dnDateOf(m);
+            if (!groups.has(d)) groups.set(d, []);
+            groups.get(d).push(m);
+        }
+        let first = true;
+        let out = '';
+        for (const [date, list] of groups) {
+            out += `
+            <details class="dn-day" ${first ? 'open' : ''}>
+                <summary class="dn-day-head">
+                    <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
+                    <span class="dn-day-title">📅 ${_dnEsc(date)}</span>
+                    <span class="dn-when">${list.length} עדכונים</span>
+                </summary>
+                <div class="dn-day-body">${list.map(inner).join('')}</div>
+            </details>`;
+            first = false;
+        }
+        return out || '<div class="adv-empty">אין הודעות בערוץ הזה עדיין.</div>';
+    };
+
     let html = '';
     if (_dnActiveChannel === 'all') {
-        // Merge everything, newest first
+        // Merge everything (visible channels only), newest first
         const all = [];
-        for (const c of withMsgs) for (const m of c.messages) all.push({ m, ch: c.name });
+        for (const c of withMsgs) for (const m of c.messages) all.push({ m, ch: c.name, kind: _dnChannelKind(c.name) });
         all.sort((a, b) => new Date(b.m.ts) - new Date(a.m.ts));
         html = all.length
-            ? all.slice(0, 60).map(x => renderMsg(x.m, x.ch)).join('')
+            ? all.slice(0, 60).map((x, i) => {
+                if (x.kind === 'collapse') return renderCollapsed(x.m, x.ch, false);
+                if (x.kind === 'options') return `<div class="dn-msg dn-msg-opt"><div class="dn-msg-head"><span class="dn-ch"># ${_dnEsc(x.ch)}</span><span class="dn-when">${_dnDateOf(x.m)}</span></div>${renderOption(x.m)}</div>`;
+                return renderMsg(x.m, x.ch);
+            }).join('')
             : '<div class="adv-empty">אין עדיין הודעות בערוצים.</div>';
     } else {
         const c = data.channels.find(x => x.id === _dnActiveChannel);
-        html = (c && c.messages.length)
-            ? c.messages.map(m => renderMsg(m, null)).join('')
-            : '<div class="adv-empty">אין הודעות בערוץ הזה עדיין.</div>';
+        if (!c || !c.messages.length) {
+            html = '<div class="adv-empty">אין הודעות בערוץ הזה עדיין.</div>';
+        } else {
+            const kind = _dnChannelKind(c.name);
+            if (kind === 'collapse') {
+                // Each daily post = its own date-collapsed headline (latest open)
+                html = c.messages.map((m, i) => renderCollapsed(m, null, i === 0)).join('');
+            } else if (kind === 'options') {
+                html = renderByDate(c.messages, (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
+            } else {
+                html = c.messages.map(m => renderMsg(m, null)).join('');
+            }
+        }
     }
     feedEl.innerHTML = html;
 }
