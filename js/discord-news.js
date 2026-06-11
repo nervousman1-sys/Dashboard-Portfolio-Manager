@@ -145,7 +145,7 @@ async function _dnLoadVision(det) {
     const cacheKey = 'dn_vision_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
-        if (cached) { box.innerHTML = _dnVisionHTML(cached, img); return; }
+        if (cached) { box.innerHTML = _dnVisionHTML(cached, img, mode); return; }
     } catch (e) { /* ignore */ }
     box.innerHTML = '<div class="adv-empty">קורא את התוכן מהתמונה…</div>';
     try {
@@ -153,7 +153,7 @@ async function _dnLoadVision(det) {
         const j = await res.json();
         if (j && j.text) {
             try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
-            box.innerHTML = _dnVisionHTML(j.text, img);
+            box.innerHTML = _dnVisionHTML(j.text, img, mode);
         } else if (j && j.error === 'not_configured') {
             box.innerHTML = `<div class="adv-empty">תמלול אוטומטי טרם הוגדר (GEMINI_API_KEY).</div>
                 <a href="${_dnEsc(img)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(img)}" loading="lazy" alt="" /></a>`;
@@ -166,15 +166,45 @@ async function _dnLoadVision(det) {
     }
 }
 
-function _dnVisionHTML(text, img) {
+function _dnVisionHTML(text, img, mode) {
+    const srcLink = `<a class="dn-att" href="${_dnEsc(img)}" target="_blank" rel="noopener">פתח את התמונה המקורית</a>`;
     const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+
+    // FLOWS: structured "סקטור | כיוון | היקף" lines → directional bars + conclusion
+    if (mode === 'flows') {
+        const rows = [];
+        let conclusion = '';
+        for (const l of lines) {
+            const mC = l.match(/^מסקנה\s*:\s*(.+)$/);
+            if (mC) { conclusion = mC[1].trim(); continue; }
+            const mS = l.match(/^סקטור\s*:\s*(.+?)\s*\|\s*כיוון\s*:\s*(.+?)\s*\|\s*היקף\s*:\s*(.+)$/);
+            if (mS) rows.push({ name: mS[1].trim(), inflow: /כניס/.test(mS[2]), amount: mS[3].trim() });
+        }
+        if (rows.length) {
+            // Bar widths relative to the largest numeric amount (fallback: equal)
+            const nums = rows.map(r => parseFloat(String(r.amount).replace(/[^\d.\-]/g, '')) || 0);
+            const maxN = Math.max(...nums, 1);
+            const bars = rows.map((r, i) => {
+                const w = nums[i] > 0 ? Math.max(18, nums[i] / maxN * 100) : 55;
+                return `
+                <div class="dn-flow-row">
+                    <span class="dn-flow-name">${_dnEsc(r.name)}</span>
+                    <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${w.toFixed(0)}%"></div></div>
+                    <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${r.inflow ? '▲ כניסה' : '▼ יציאה'} · ${_dnEsc(r.amount)}</span>
+                </div>`;
+            }).join('');
+            const conc = conclusion ? `<div class="dn-flow-conc"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
+            return `<div class="dn-flow-head">תנועות הון מוסדיות — לפי סקטור</div>${bars}${conc}${srcLink}`;
+        }
+        // fall through to plain lines if parsing failed
+    }
+
+    // HEADLINES / default: clean lines; "ישראל:"/"עולם:" become section headers
     return lines.map(l => {
-        // Strip markdown markers; render **headers** / --- sections --- as emphasized lines
-        const isHead = /^\*\*.+\*\*:?$/.test(l) || /^---.*---$/.test(l);
-        const clean = l.replace(/\*\*/g, '').replace(/^\*\s*/, '• ').replace(/^---\s*|\s*---$/g, '').trim();
+        const isHead = /^\*\*.+\*\*:?$/.test(l) || /^---.*---$/.test(l) || /^(ישראל|עולם|חדשות ישראל|חדשות עולם)\s*:?\s*$/.test(l.replace(/\*\*/g, ''));
+        const clean = l.replace(/\*\*/g, '').replace(/^\*\s*/, '• ').replace(/^---\s*|\s*---$/g, '').replace(/^[-•]\s*/, '• ').trim();
         return `<div class="dn-vline${isHead ? ' dn-vhead' : ''}">${_dnEsc(clean)}</div>`;
-    }).join('')
-        + `<a class="dn-att" href="${_dnEsc(img)}" target="_blank" rel="noopener">🖼 פתח את התמונה המקורית</a>`;
+    }).join('') + srcLink;
 }
 
 function _dnRender() {
@@ -248,13 +278,19 @@ function _dnRender() {
         </div>`;
     };
 
-    // Headline line for an image-only daily post (the text headline replaces the image)
-    const headlineOf = (m, chName) => {
+    // Row title for a collapsed daily post. News rows get the requested fixed title
+    // "כותרות מרכזיות להיום" (todays post) / "כותרות מרכזיות" (older), flows rows get
+    // a money-flow title; otherwise fall back to the message's own text.
+    const headlineOf = (m, chName, kindName) => {
+        const n = String(kindName || chName || '');
+        const isToday = _dnDateOf(m) === new Date().toLocaleDateString('he-IL');
+        if (n.includes('חדשות')) return isToday ? 'כותרות מרכזיות להיום' : 'כותרות מרכזיות';
+        if (n.includes('תנועות-הון')) return 'לאן זורם הכסף — תנועות מוסדיות';
         const t = (m.content || '').replace(/https?:\/\/\S+/g, '').trim();
         if (t) return t;
         const et = (m.embeds || []).map(e => e.title || e.description).find(Boolean);
         if (et) return et;
-        return chName ? `עדכון ${chName.replace(/-/g, ' ').replace(/[^֐-׿\w ]/g, '').trim()}` : 'עדכון';
+        return 'עדכון';
     };
 
     // A collapsed-by-date item: textual headline; on expand the image is READ into
@@ -272,26 +308,102 @@ function _dnRender() {
         <details class="dn-day" ${open ? 'open' : ''} ontoggle="_dnLoadVision(this)">
             <summary class="dn-day-head">
                 <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
-                <span class="dn-day-title">${_dnEsc(headlineOf(m, chName))}</span>
+                <span class="dn-day-title">${_dnEsc(headlineOf(m, chName, visionMode === 'flows' ? 'תנועות-הון' : visionMode === 'headlines' ? 'חדשות' : ''))}</span>
                 ${chName ? `<span class="dn-ch">${_dnEsc(_dnCleanName(chName))}</span>` : ''}
                 <span class="dn-when">${_dnDateOf(m)}</span>
             </summary>
             <div class="dn-day-body">${body}</div>
         </details>`;
     };
-    // vision mode by channel: חדשות → full transcription; תנועות-הון → short summary
-    const visionModeOf = (name) => String(name || '').includes('תנועות-הון') ? 'summary' : 'transcribe';
+    // vision mode by channel: חדשות → headlines only; תנועות-הון → structured flows
+    const visionModeOf = (name) => String(name || '').includes('תנועות-הון') ? 'flows' : 'headlines';
 
-    // Options-flow message: clear, large tabular line(s)
+    // Options analysis: parse the agent's rich embed into a clean VISUAL card —
+    // verdict banner with score gauge, Put/Call gauges, key metrics, support/
+    // resistance chips. All emojis/markdown stripped.
+    const stripJunk = (s) => String(s || '')
+        .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{2BFF}\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}]/gu, '')
+        .replace(/\*\*/g, '').replace(/[ \t]+/g, ' ').trim();
+    const fieldOf = (e, key) => {
+        const f = (e.fields || []).find(f => stripJunk(f.name).includes(key));
+        return f ? stripJunk(f.value) : '';
+    };
     const renderOption = (m) => {
-        const lines = [];
-        if (m.content) lines.push(m.content);
-        for (const e of (m.embeds || [])) {
-            if (e.title) lines.push(e.title);
-            if (e.description) lines.push(e.description);
-            for (const f of (e.fields || [])) lines.push(`${f.name}: ${f.value}`);
-        }
-        return lines.map(l => `<div class="dn-opt-line">${_dnEsc(l)}</div>`).join('');
+        const e = (m.embeds || [])[0];
+        if (!e) return m.content ? `<div class="dn-opt-line">${_dnEsc(stripJunk(m.content))}</div>` : '';
+
+        // Header: "QQQ | $693.69 | 11/06/2026"
+        const tparts = stripJunk(e.title).split('|').map(x => x.trim()).filter(Boolean);
+        const ticker = tparts[0] || '', price = tparts[1] || '', tdate = tparts[2] || '';
+
+        // Verdict + score
+        const concl = fieldOf(e, 'מסקנה');
+        const scoreM = concl.match(/([\d.]+)\s*\/\s*100/);
+        const score = scoreM ? parseFloat(scoreM[1]) : null;
+        const verdictTxt = concl.replace(/\|.*$/, '').replace(/[↘↗→➡️]+/g, '').trim();
+        const dir = /ירידה/.test(concl) ? 'down' : /עלי/.test(concl) ? 'up' : 'side';
+        const dirIcon = dir === 'down' ? '▼' : dir === 'up' ? '▲' : '◄►';
+        const scoreColor = score == null ? '#facc15' : score >= 55 ? '#22c55e' : score >= 45 ? '#facc15' : '#ef4444';
+
+        // Put/Call gauges (scale 0.4 → 1.6; >1 = bearish side)
+        const pcGauge = (label, raw) => {
+            const vM = raw.match(/([\d.]+)/);
+            if (!vM) return '';
+            const v = parseFloat(vM[1]);
+            const pos = Math.max(0, Math.min(100, (v - 0.4) / 1.2 * 100));
+            const cls = v < 0.85 ? 'bull' : v <= 1.15 ? 'neut' : 'bear';
+            const tag = v < 0.85 ? 'נטייה שורית' : v <= 1.15 ? 'ניטרלי' : 'נטייה דובית';
+            return `
+            <div class="dn-pc-row">
+                <span class="dn-pc-label">${_dnEsc(label)}</span>
+                <div class="dn-pc-track"><span class="dn-pc-zones"></span><span class="dn-pc-marker ${cls}" style="right:${pos.toFixed(0)}%"></span></div>
+                <span class="dn-pc-val ${cls}">${v.toFixed(2)} · ${tag}</span>
+            </div>`;
+        };
+        const pcVol = pcGauge('Put/Call נפח מסחר', fieldOf(e, 'נפח מסחר'));
+        const pcOI = pcGauge('Put/Call פוזיציות', fieldOf(e, 'פוזיציות פתוחות'));
+
+        // Key metrics — first line only (the value), without the explainer text below it
+        const firstLine = (s) => String(s).split('\n')[0].trim();
+        const metric = (label, key) => {
+            const v = fieldOf(e, key);
+            return v ? `<div class="dn-opt-metric"><span class="dn-opt-mlabel">${label}</span><span class="dn-opt-mval">${_dnEsc(firstLine(v))}</span></div>` : '';
+        };
+        const metrics = [
+            metric('Max Pain — נקודת משיכה', 'Max Pain'),
+            metric('תנועה צפויה לפקיעה', 'תנועה צפויה'),
+            metric('לחץ גידור (GEX)', 'GEX'),
+            metric('לחץ כיווני (DEX)', 'DEX'),
+            metric('פעילות חריגה', 'חריגה'),
+        ].filter(Boolean).join('');
+
+        // Support / resistance chips, sorted ascending
+        const levels = (key, cls) => {
+            const v = fieldOf(e, key);
+            const nums = (v.match(/\$?([\d,]+\.?\d*)/g) || []).map(x => parseFloat(x.replace(/[$,]/g, ''))).filter(n => n > 0);
+            if (!nums.length) return '';
+            nums.sort((a, b) => a - b);
+            return `<div class="dn-opt-levels"><span class="dn-opt-mlabel">${cls === 'sup' ? 'רמות תמיכה' : 'רמות התנגדות'}</span>
+                ${nums.map(n => `<span class="dn-lvl ${cls}">$${n.toLocaleString('en-US')}</span>`).join('')}</div>`;
+        };
+
+        return `
+        <div class="dn-opt-card">
+            <div class="dn-opt-head">
+                <span class="dn-opt-ticker">${_dnEsc(ticker)}</span>
+                <span class="dn-opt-price">${_dnEsc(price)}</span>
+                <span class="dn-when">${_dnEsc(tdate)}</span>
+            </div>
+            <div class="dn-opt-verdict" style="--vc:${scoreColor}">
+                <span class="dn-opt-dir">${dirIcon}</span>
+                <span class="dn-opt-vtxt">${_dnEsc(verdictTxt)}</span>
+                ${score != null ? `<span class="dn-opt-score">ציון ${score.toFixed(0)}/100</span>
+                <div class="dn-opt-scorebar"><div style="width:${score}%;background:${scoreColor}"></div></div>` : ''}
+            </div>
+            ${pcVol}${pcOI}
+            <div class="dn-opt-metrics">${metrics}</div>
+            ${levels('תמיכה', 'sup')}${levels('התנגדות', 'res')}
+        </div>`;
     };
 
     // Group a channel's messages into collapsed date sections (latest date open)

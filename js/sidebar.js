@@ -70,6 +70,8 @@ function navigateTo(section) {
     const bulkPage = document.getElementById('bulkPage');
     const bulkIsActive = bulkPage && bulkPage.classList.contains('active');
     const closeBulkIfOpen = () => { if (bulkIsActive && typeof closeBulkPage === 'function') closeBulkPage(); };
+    const dnPage = document.getElementById('discordNewsPage');
+    const closeDnIfOpen = () => { if (dnPage && dnPage.classList.contains('active') && typeof closeDiscordNews === 'function') closeDiscordNews(); };
 
     switch (section) {
         case 'dashboard':
@@ -82,6 +84,7 @@ function navigateTo(section) {
                 closeRiskAnalysis();
             }
             closeBulkIfOpen();
+            closeDnIfOpen();
             // Scroll to portfolio grid if coming from "portfolio" link
             if (section === 'portfolio') {
                 const grid = document.getElementById('clientsGrid');
@@ -97,6 +100,7 @@ function navigateTo(section) {
                 closeRiskAnalysis();
             }
             closeBulkIfOpen();
+            closeDnIfOpen();
             if (!macroIsActive && typeof toggleAlerts === 'function') {
                 toggleAlerts();
             }
@@ -108,6 +112,7 @@ function navigateTo(section) {
                 closeMacroPage();
             }
             closeBulkIfOpen();
+            closeDnIfOpen();
             if (typeof openRiskAnalysis === 'function') {
                 openRiskAnalysis();
             }
@@ -121,7 +126,7 @@ function navigateTo(section) {
             if (riskIsActive && typeof closeRiskAnalysis === 'function') {
                 closeRiskAnalysis();
             }
-            if (typeof closeDiscordNews === 'function') closeDiscordNews();
+            closeDnIfOpen();
             if (typeof openBulkPage === 'function') {
                 openBulkPage();
             }

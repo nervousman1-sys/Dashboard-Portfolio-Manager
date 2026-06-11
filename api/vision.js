@@ -17,6 +17,10 @@ const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const PROMPTS = {
     transcribe: 'התמונה מכילה עדכון חדשות כלכלי בעברית. תמלל את כל הטקסט שכתוב בתמונה, בעברית, נאמן למקור, מאורגן בשורות עם כותרות המשנה. אל תוסיף הערות משלך — רק את התוכן שבתמונה.',
     summary: 'התמונה מכילה טבלה/דוח פיננסי. סכם בעברית בקצרה את התוכן: כל פריט/עדכון בשורה נפרדת עם הנתונים המספריים החשובים (שמות, סכומים, כיוונים). בלי הקדמות ובלי הערות — רק השורות.',
+    // News: HEADLINES ONLY — no market indices / commodity prices block
+    headlines: 'התמונה מכילה עדכון חדשות כלכלי בעברית. תמלל אך ורק את כותרות החדשות עצמן — אל תכלול את סיכום השווקים, מדדי מניות, סחורות, קריפטו או מחירים. אם יש חלוקה לקטגוריות (ישראל / עולם) — כתוב שורת כותרת "ישראל:" או "עולם:" לפני הכותרות של אותה קטגוריה. כל כותרת חדשות בשורה נפרדת, ללא מספור וללא תוספות שלך.',
+    // Capital flows: STRUCTURED so the client can render direction bars + a conclusion
+    flows: 'התמונה מציגה תנועות הון / זרימות כספים מוסדיות. החזר אך ורק שורות בפורמט המדויק הבא, בלי שום טקסט אחר:\nסקטור: <שם הסקטור או הנכס> | כיוון: <כניסה או יציאה> | היקף: <הסכום או הערך כפי שמופיע>\nשורה אחת לכל סקטור/נכס שמופיע בתמונה. ובסוף שורה אחת:\nמסקנה: <משפט קצר בעברית — לאן זורם הכסף ומאילו סקטורים הוא יוצא>',
 };
 
 const _memo = new Map();
@@ -39,7 +43,7 @@ module.exports = async (req, res) => {
 
     try {
         const img = String(req.query.img || '');
-        const mode = req.query.mode === 'summary' ? 'summary' : 'transcribe';
+        const mode = PROMPTS[req.query.mode] ? req.query.mode : 'transcribe';
         if (!/^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net|hcti\.io)\//.test(img)) {
             res.status(400).json({ error: 'bad_image_host' });
             return;

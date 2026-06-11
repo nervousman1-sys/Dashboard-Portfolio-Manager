@@ -8108,3 +8108,48 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-embed-desc { font-size: 14px; color: #fff; font-weight: 600; }
 .dn-embed-title { font-size: 14.5px; }
 .dn-vhead { color: var(--accent-blue); font-weight: 800; font-size: 14.5px; border-bottom: none; margin-top: 6px; }
+
+/* Capital-flows visual summary (where the money goes) */
+.dn-flow-head { font-size: 14.5px; font-weight: 800; color: #fff; margin-bottom: 10px; }
+.dn-flow-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+.dn-flow-name { font-size: 13px; font-weight: 700; color: #fff; }
+.dn-flow-track { height: 12px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
+.dn-flow-bar { height: 100%; border-radius: 6px; }
+.dn-flow-bar.in { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.dn-flow-bar.out { background: linear-gradient(90deg, #dc2626, #f87171); }
+.dn-flow-amt { font-size: 12px; font-weight: 800; white-space: nowrap; }
+.dn-flow-amt.in { color: #4ade80; }
+.dn-flow-amt.out { color: #f87171; }
+.dn-flow-conc { margin-top: 12px; padding: 11px 14px; border-radius: 9px; font-size: 13.5px; color: #fff; line-height: 1.6;
+    background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.3); }
+.dn-flow-conc b { color: var(--accent-blue); }
+
+/* Options analysis — clean visual card */
+.dn-opt-card { padding: 4px 2px 10px; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 12px; }
+.dn-opt-card:last-child { border-bottom: none; }
+.dn-opt-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.dn-opt-ticker { font-size: 18px; font-weight: 900; color: #fff; direction: ltr; }
+.dn-opt-price { font-size: 15px; font-weight: 800; color: var(--accent-blue); direction: ltr; }
+.dn-opt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 13px; border-radius: 9px;
+    border: 1px solid var(--vc, #facc15); background: rgba(255,255,255,0.03); margin-bottom: 10px; }
+.dn-opt-dir { font-size: 15px; color: var(--vc); font-weight: 900; }
+.dn-opt-vtxt { font-size: 14px; font-weight: 800; color: #fff; }
+.dn-opt-score { font-size: 12px; font-weight: 800; color: var(--vc); margin-inline-start: auto; }
+.dn-opt-scorebar { flex-basis: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+.dn-opt-scorebar div { height: 100%; border-radius: 4px; }
+.dn-pc-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+.dn-pc-label { font-size: 12px; font-weight: 700; color: #fff; }
+.dn-pc-track { position: relative; height: 10px; border-radius: 5px;
+    background: linear-gradient(-90deg, #16a34a 0 30%, #facc15 30% 62%, #dc2626 62% 100%); opacity: 0.95; }
+.dn-pc-marker { position: absolute; top: -3px; width: 4px; height: 16px; background: #fff; border-radius: 2px; box-shadow: 0 0 4px rgba(0,0,0,0.8); }
+.dn-pc-val { font-size: 12px; font-weight: 800; white-space: nowrap; direction: ltr; }
+.dn-pc-val.bull { color: #4ade80; } .dn-pc-val.neut { color: #facc15; } .dn-pc-val.bear { color: #f87171; }
+.dn-opt-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 16px; margin: 10px 0; }
+.dn-opt-metric { display: flex; flex-direction: column; gap: 2px; }
+.dn-opt-mlabel { font-size: 11px; font-weight: 700; color: rgba(245,245,250,0.6); }
+.dn-opt-mval { font-size: 13.5px; font-weight: 800; color: #fff; }
+.dn-opt-levels { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 7px; }
+.dn-lvl { font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 14px; direction: ltr; }
+.dn-lvl.sup { color: #86efac; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.35); }
+.dn-lvl.res { color: #fca5a5; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.35); }
+@media (max-width: 700px) { .dn-opt-metrics { grid-template-columns: 1fr; } .dn-flow-row, .dn-pc-row { grid-template-columns: 100px 1fr; } .dn-flow-amt, .dn-pc-val { grid-column: 2; } }
