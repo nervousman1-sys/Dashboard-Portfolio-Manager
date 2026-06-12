@@ -199,8 +199,8 @@ const _TECH_FILTERS = [
     { id: 'near_d300', label: '300 יום', test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
     { id: 'near_w200', label: '200 שבועות', test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
     { id: 'near_w300', label: '300 שבועות', test: v => v.ma.w300dist != null && Math.abs(v.ma.w300dist) <= _TECH_NEAR_PCT },
-    { id: 'fvgm', label: 'בתוך FVG חודשי', test: v => v.fvgM && v.fvgM.inside },
-    { id: 'fvgq', label: 'בתוך FVG רבעוני', test: v => v.fvgQ && v.fvgQ.inside },
+    { id: 'fvgm', label: 'FVG חודשי', test: v => v.fvgM && v.fvgM.inside },
+    { id: 'fvgq', label: 'FVG רבעוני', test: v => v.fvgQ && v.fvgQ.inside },
 ];
 
 function setTechFilter(id) {
