@@ -16,7 +16,33 @@ function setCors(res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 }
 
-const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', Accept: 'text/html' };
+const UA = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+    Referer: 'https://www.funder.co.il/',
+};
+
+// funder.co.il 403s datacenter IPs — relay through public fetch proxies when direct fails
+async function fetchFunderHtml(url) {
+    try {
+        const r = await fetch(url, { headers: UA });
+        if (r.ok) return await r.text();
+    } catch (e) { /* try proxies */ }
+    for (const wrap of [
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    ]) {
+        try {
+            const r = await fetch(wrap(url), { headers: { 'User-Agent': UA['User-Agent'] } });
+            if (r.ok) {
+                const html = await r.text();
+                if (html.includes('buyPrice') || html.includes('<title>')) return html;
+            }
+        } catch (e) { /* next proxy */ }
+    }
+    throw new Error('funder unreachable');
+}
 
 module.exports = async (req, res) => {
     setCors(res);
@@ -25,9 +51,7 @@ module.exports = async (req, res) => {
         const id = String(req.query.id || '').trim();
         if (!/^\d{4,9}$/.test(id)) { res.status(400).json({ error: 'bad_id' }); return; }
 
-        const r = await fetch(`https://www.funder.co.il/fund/${id}`, { headers: UA });
-        if (!r.ok) throw new Error(`funder ${r.status}`);
-        const html = await r.text();
+        const html = await fetchFunderHtml(`https://www.funder.co.il/fund/${id}`);
 
         const buy = parseFloat((html.match(/"buyPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
         const sell = parseFloat((html.match(/"sellPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
