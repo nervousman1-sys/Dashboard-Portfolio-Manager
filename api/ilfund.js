@@ -23,26 +23,40 @@ const UA = {
     Referer: 'https://www.funder.co.il/',
 };
 
-// funder.co.il 403s datacenter IPs — relay through public fetch proxies when direct fails
-async function fetchFunderHtml(url) {
-    try {
-        const r = await fetch(url, { headers: UA });
-        if (r.ok) return await r.text();
-    } catch (e) { /* try proxies */ }
-    for (const wrap of [
-        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-    ]) {
-        try {
-            const r = await fetch(wrap(url), { headers: { 'User-Agent': UA['User-Agent'] } });
-            if (r.ok) {
-                const html = await r.text();
-                if (html.includes('buyPrice') || html.includes('<title>')) return html;
-            }
-        } catch (e) { /* next proxy */ }
-    }
-    throw new Error('funder unreachable');
+async function fetchHtml(url, viaProxy) {
+    const target = viaProxy ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
+    const r = await fetch(target, { headers: UA });
+    if (!r.ok) throw new Error(`http ${r.status}`);
+    return await r.text();
 }
+
+// funder embeds clean JSON; bizportal shows the same NAV in markup. Both quote agorot.
+function parseFunder(html, id) {
+    const buy = parseFloat((html.match(/"buyPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
+    const sell = parseFloat((html.match(/"sellPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
+    const agorot = buy > 0 ? buy : sell;
+    if (!(agorot > 0)) return null;
+    const name = ((html.match(/<title>\s*([^<]+?)\s*-\s*\d+\s*<\/title>/) || [])[1] || '').trim();
+    const year1 = parseFloat((html.match(/"1year"\s*:\s*"?(-?[\d.]+)/i) || [])[1]);
+    return { agorot, name, year1, source: 'funder' };
+}
+
+function parseBizportal(html, id) {
+    const flat = html.replace(/<[^>]+>/g, '|');
+    const m = flat.match(/מחיר\s*(?:פדיון|קנייה)\|+\s*([\d,]+\.?\d*)/);
+    const agorot = m ? parseFloat(m[1].replace(/,/g, '')) : NaN;
+    if (!(agorot > 0)) return null;
+    const name = ((html.match(/<title>\s*([^<|]+?)\s*\|/) || [])[1] || '').trim();
+    return { agorot, name, year1: null, source: 'bizportal' };
+}
+
+const ATTEMPTS = [
+    (id) => fetchHtml(`https://www.funder.co.il/fund/${id}`, false).then(h => parseFunder(h, id)),
+    (id) => fetchHtml(`https://www.bizportal.co.il/mutualfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id)),
+    (id) => fetchHtml(`https://www.bizportal.co.il/tradedfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id)),
+    (id) => fetchHtml(`https://www.funder.co.il/fund/${id}`, true).then(h => parseFunder(h, id)),
+    (id) => fetchHtml(`https://www.bizportal.co.il/mutualfunds/quote/generalview/${id}`, true).then(h => parseBizportal(h, id)),
+];
 
 module.exports = async (req, res) => {
     setCors(res);
@@ -51,26 +65,23 @@ module.exports = async (req, res) => {
         const id = String(req.query.id || '').trim();
         if (!/^\d{4,9}$/.test(id)) { res.status(400).json({ error: 'bad_id' }); return; }
 
-        const html = await fetchFunderHtml(`https://www.funder.co.il/fund/${id}`);
-
-        const buy = parseFloat((html.match(/"buyPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
-        const sell = parseFloat((html.match(/"sellPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
-        const agorot = buy > 0 ? buy : sell;
-        if (!(agorot > 0)) throw new Error('no price on page');
-
-        const name = ((html.match(/<title>\s*([^<]+?)\s*-\s*\d+\s*<\/title>/) || [])[1] || '').trim();
-        const week1 = parseFloat((html.match(/"7days"\s*:\s*"?(-?[\d.]+)/i) || [])[1]);
-        const year1 = parseFloat((html.match(/"1year"\s*:\s*"?(-?[\d.]+)/i) || [])[1]);
+        let hit = null, lastErr = '';
+        for (const attempt of ATTEMPTS) {
+            try {
+                hit = await attempt(id);
+                if (hit) break;
+            } catch (e) { lastErr = e.message; }
+        }
+        if (!hit) throw new Error(lastErr || 'no source had a price');
 
         res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=21600');
         res.status(200).json({
             id,
-            name: name || null,
-            price: +(agorot / 100).toFixed(4),   // ₪ per unit
-            priceAgorot: agorot,
-            week1Pct: isFinite(week1) ? week1 : null,
-            year1Pct: isFinite(year1) ? year1 : null,
-            source: 'funder',
+            name: hit.name || null,
+            price: +(hit.agorot / 100).toFixed(4),   // ₪ per unit
+            priceAgorot: hit.agorot,
+            year1Pct: isFinite(hit.year1) ? hit.year1 : null,
+            source: hit.source,
             asOf: new Date().toISOString().slice(0, 10),
         });
     } catch (e) {
