@@ -327,17 +327,9 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         });
     }
 
-    // localStorage logs (instant, no network)
-    txRows.forEach(tx => {
-        _saveTransactionLocal(portfolio.id, {
-            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-            portfolio_id: portfolio.id,
-            created_at: new Date().toISOString(),
-            ...tx
-        });
-    });
-
-    // Supabase transaction log (awaited — must persist before proceeding)
+    // Supabase transaction log (awaited — must persist before proceeding).
+    // NOTE: the old _saveTransactionLocal localStorage mirror was removed in the
+    // Supabase-first migration — calling it here crashed portfolio creation.
     if (_supaTransactionsAvailable) {
         try {
             const { error } = await supabaseClient.from('transactions').insert(txRows);
