@@ -395,6 +395,28 @@ function _resolveYahooSymbol(sym, isIsraeli) {
 // Israeli stocks: Yahoo Finance (via CORS proxy) → Twelve Data → FMP (fallback chain)
 // US stocks: Twelve Data → FMP → Finnhub (fallback chain)
 
+// Israeli funds / קרנות סל by numeric id — real NAV via the /api/ilfund proxy
+// (funder.co.il). These are NOT on Yahoo; without this they fell into the
+// bond-par simulation (~100) and showed absurd prices for transferred positions.
+async function _fetchIlFundPrice(sym) {
+    if (!/^\d{4,9}$/.test(sym)) return null;
+    try {
+        const r = await fetch(`/api/ilfund?id=${encodeURIComponent(sym)}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        if (!j || !(j.price > 0)) return null;
+        return {
+            price: j.price,                 // ₪ per unit
+            previousClose: j.price,         // no intraday feed — show 0 daily change honestly
+            change: 0,
+            changePct: 0,
+            currency: 'ILS',
+            isFund: true,
+            fundName: j.name || null,
+        };
+    } catch (e) { return null; }
+}
+
 async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null) {
     if (!ticker) return null;
     const sym = ticker.toUpperCase().trim();
@@ -426,6 +448,16 @@ async function fetchSingleTickerPrice(ticker, currency = null, basePrice = null)
                 }
             } catch (e) {
                 console.warn('[fetchSingleTickerPrice] Yahoo Finance bond fetch failed for', bondYahooSym, e.message);
+            }
+        }
+
+        // Israeli fund / קרן סל by numeric id? Real NAV beats any simulation.
+        if (/^\d{4,9}$/.test(sym)) {
+            const fundResult = await _fetchIlFundPrice(sym);
+            if (fundResult) {
+                console.log(`[fetchSingleTickerPrice] IL fund ${sym} → ₪${fundResult.price} (${fundResult.fundName || 'funder'})`);
+                if (typeof priceCache !== 'undefined') priceCache[sym] = fundResult;
+                return fundResult;
             }
         }
 
@@ -933,13 +965,28 @@ async function updatePricesFromAPI(onUpdate) {
     // 2a. Israeli stocks → batch Yahoo Finance (parallel, no API key needed)
     if (israeliStockTickers.length > 0) {
         _updateStatus(`מעדכן ${israeliStockTickers.length} מניות ישראליות...`);
-        const yahooPromise = _batchFetchYahooIsraeli(israeliStockTickers).then(yahooPrices => {
+        const yahooPromise = _batchFetchYahooIsraeli(israeliStockTickers).then(async (yahooPrices) => {
             if (yahooPrices && Object.keys(yahooPrices).length > 0) {
                 Object.assign(collectedPrices, yahooPrices);
                 Object.assign(priceCache, yahooPrices);
                 if (_applyPricesToClientsInMemory(yahooPrices) && onUpdate) onUpdate();
                 _updateStatus(`מניות ישראליות: ${Object.keys(yahooPrices).length}/${israeliStockTickers.length} ✓`);
                 console.log(`[PriceService] Israeli batch: ${Object.keys(yahooPrices).length}/${israeliStockTickers.length} from Yahoo`);
+            }
+            // Numeric ids Yahoo doesn't know = Israeli funds/קרנות סל → real NAV
+            const missingFunds = israeliStockTickers.filter(t => !collectedPrices[t] && /^\d{4,9}$/.test(t));
+            if (missingFunds.length > 0) {
+                const fundResults = await Promise.allSettled(missingFunds.map(t => _fetchIlFundPrice(t)));
+                const fundPrices = {};
+                fundResults.forEach((r, i) => {
+                    if (r.status === 'fulfilled' && r.value && r.value.price > 0) fundPrices[missingFunds[i]] = r.value;
+                });
+                if (Object.keys(fundPrices).length > 0) {
+                    Object.assign(collectedPrices, fundPrices);
+                    Object.assign(priceCache, fundPrices);
+                    if (_applyPricesToClientsInMemory(fundPrices) && onUpdate) onUpdate();
+                    console.log(`[PriceService] IL funds: ${Object.keys(fundPrices).length}/${missingFunds.length} from funder`);
+                }
             }
         }).catch(e => console.warn('[PriceService] Israeli batch failed:', e.message));
         fastPromises.push(yahooPromise);
@@ -1118,15 +1165,19 @@ async function _backgroundPriceCompletion(intlTickers, intlSymbols, holdingsMap,
                 bondTickers.map(t => {
                     const bondYahooSym = _resolveBondYahooSymbol(t.toUpperCase());
                     if (!bondYahooSym) {
-                        const h = holdingsMap[t];
-                        const bp = (h && h.price > 0) ? h.price : 100;
-                        const variation = (Math.random() - 0.5) * 0.006;
-                        const price = Math.round(bp * (1 + variation) * 100) / 100;
-                        return Promise.resolve({
-                            ticker: t, price, previousClose: bp,
-                            change: +(price - bp).toFixed(2),
-                            changePct: +((price - bp) / bp * 100).toFixed(2),
-                            currency: 'ILS', isBond: true, unavailable: true
+                        // Unmapped numeric — might be an Israeli fund/קרן סל, try a real NAV first
+                        return _fetchIlFundPrice(t.toUpperCase()).then(fundResult => {
+                            if (fundResult && fundResult.price > 0) return { ticker: t, ...fundResult };
+                            const h = holdingsMap[t];
+                            const bp = (h && h.price > 0) ? h.price : 100;
+                            const variation = (Math.random() - 0.5) * 0.006;
+                            const price = Math.round(bp * (1 + variation) * 100) / 100;
+                            return {
+                                ticker: t, price, previousClose: bp,
+                                change: +(price - bp).toFixed(2),
+                                changePct: +((price - bp) / bp * 100).toFixed(2),
+                                currency: 'ILS', isBond: true, unavailable: true
+                            };
                         });
                     }
                     return _fetchYahooPrice(bondYahooSym)

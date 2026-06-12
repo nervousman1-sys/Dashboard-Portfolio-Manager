@@ -2025,7 +2025,8 @@ function addHoldingRow(prefill = null) {
         <td class="row-ticker-cell">
             <div class="row-ticker-wrapper">
                 <input type="hidden" class="row-ticker-symbol" value="${prefill?.ticker || ''}" />
-                <div class="row-ticker-badge" style="display:${prefill?.ticker ? 'flex' : 'none'}">${prefill?.ticker || ''}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button></div>
+                <input type="hidden" class="row-ticker-name" value="${(prefill?.stockName || '').replace(/"/g, '&quot;')}" />
+                <div class="row-ticker-badge" style="display:${prefill?.ticker ? 'flex' : 'none'}" title="${(prefill?.stockName || '').replace(/"/g, '&quot;')}">${prefill?.stockName && prefill.stockName !== prefill.ticker ? `${prefill.stockName} <span class="badge-secid">${prefill.ticker}</span>` : (prefill?.ticker || '')}<button class="ticker-clear-btn" onclick="clearRowTicker('${rowId}')">&times;</button></div>
                 <input type="text" class="row-ticker-search" placeholder=""
                        style="direction:ltr;text-align:left;${prefill?.ticker ? 'display:none' : ''}"
                        oninput="onRowTickerSearch('${rowId}')" autocomplete="off" />
@@ -2115,6 +2116,8 @@ function clearRowTicker(rowId) {
     const row = document.getElementById(rowId);
     if (!row) return;
     row.querySelector('.row-ticker-symbol').value = '';
+    const nameInp = row.querySelector('.row-ticker-name');
+    if (nameInp) nameInp.value = '';
     row.querySelector('.row-ticker-badge').style.display = 'none';
     row.querySelector('.row-ticker-badge').textContent = '';
     delete row.dataset.currency;

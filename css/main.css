@@ -9105,3 +9105,6 @@ html.day-mode .bh-table th { background: #f1f5f9; }
 html.day-mode .broker-history { background: rgba(15, 23, 42, 0.025); border-color: rgba(15, 23, 42, 0.12); }
 html.day-mode .bh-more-btn { color: #0e7490; border-color: rgba(8, 145, 178, 0.4); background: rgba(8, 145, 178, 0.07); }
 html.day-mode .bh-bonus-badge { color: #a16207; background: rgba(202, 138, 4, 0.1); border-color: rgba(202, 138, 4, 0.4); }
+
+/* Holding row badge — security-number chip next to a resolved Hebrew fund name */
+.badge-secid { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-inline-start: 6px; direction: ltr; }
