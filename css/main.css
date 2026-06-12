@@ -8983,3 +8983,22 @@ html.day-mode #technicalPage .tech-dist,
 html.day-mode #technicalPage .tech-search::placeholder { color: var(--text-secondary) !important; }
 html.day-mode #technicalPage .tech-name-cell span,
 html.day-mode #technicalPage td, html.day-mode #technicalPage th { color: var(--text-primary); }
+
+/* Technical scanner — market toggle (ארה"ב / ישראל) */
+.tech-mkt {
+    display: flex; gap: 0; flex-shrink: 0;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 10px; overflow: hidden;
+}
+.tech-mkt-btn {
+    background: transparent; border: none; cursor: pointer;
+    padding: 6px 14px; font-size: 11.5px; font-weight: 800;
+    color: #fff; white-space: nowrap; font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.tech-mkt-btn + .tech-mkt-btn { border-right: 1px solid rgba(148, 163, 184, 0.25); }
+.tech-mkt-btn.active { background: rgba(34, 211, 238, 0.16); color: #22d3ee; }
+html.day-mode .tech-mkt { border-color: rgba(15, 23, 42, 0.25); }
+html.day-mode .tech-mkt-btn { color: var(--text-primary); }
+html.day-mode .tech-mkt-btn + .tech-mkt-btn { border-right-color: rgba(15, 23, 42, 0.2); }
+html.day-mode .tech-mkt-btn.active { background: rgba(8, 145, 178, 0.12); color: #0e7490; }

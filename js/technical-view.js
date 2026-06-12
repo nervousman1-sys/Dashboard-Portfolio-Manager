@@ -7,12 +7,18 @@
 // a TradingView button per stock for verification. Scan cached per day.
 
 const _TECH_NEAR_PCT = 3;            // "near MA" = within ±3%
-const _TECH_LS_KEY = 'tech_scan_v2';
+// Two markets: US (S&P 500 + Nasdaq-100) and IL (TA-125 + index-tracking ETFs)
+const _TECH_MKT = {
+    us: { ls: 'tech_scan_v2', min: 100, cur: '$', scanLabel: 'מניות (S&P 500 + Nasdaq-100)' },
+    il: { ls: 'tech_scan_il_v1', min: 40, cur: '₪', scanLabel: 'ניירות (ת"א-125 + תעודות סל)' },
+};
 
-let _techData = null;                // { TICKER: {...indicators} }
+let _techMarket = 'us';              // default — US market
+let _techDataMkt = { us: null, il: null };
+let _techData = null;                // alias of _techDataMkt[_techMarket]
 let _techFilter = 'all';
 let _techSearch = '';
-let _techLoading = false;
+let _techLoading = { us: false, il: false };
 
 function openTechnicalPage() {
     const page = document.getElementById('technicalPage');
@@ -32,6 +38,7 @@ function openTechnicalPage() {
     if (typeof updateURLState === 'function') updateURLState({ view: 'technical' });
     if (typeof _setActiveNav === 'function') _setActiveNav('technical');
 
+    _techMarket = 'us'; // always open on the US market
     page.innerHTML = `
     <div dir="rtl">
         <div class="macro-page-header">
@@ -44,6 +51,10 @@ function openTechnicalPage() {
         <div class="macro-content">
             <div class="risk-table-card glass-card">
                 <div class="tech-toolbar">
+                    <div class="tech-mkt" id="techMkt">
+                        <button class="tech-mkt-btn active" data-mkt="us" onclick="setTechMarket('us')">ארה״ב</button>
+                        <button class="tech-mkt-btn" data-mkt="il" onclick="setTechMarket('il')">ישראל</button>
+                    </div>
                     <input type="text" id="techSearch" class="tech-search" autocomplete="off"
                            placeholder="חיפוש מניה (למשל: NVDA)…"
                            oninput="_techSearch=this.value.toUpperCase().trim(); _techRender()" />
@@ -82,41 +93,63 @@ function closeTechnicalPage() {
 }
 
 function _techRescan() {
-    try { localStorage.removeItem(_TECH_LS_KEY); } catch (e) { }
+    try { localStorage.removeItem(_TECH_MKT[_techMarket].ls); } catch (e) { }
+    _techDataMkt[_techMarket] = null;
     _techData = null;
     _techLoad(true);
 }
 
+// ── Market toggle (ארה"ב / ישראל) ──
+function setTechMarket(mkt) {
+    if (!_TECH_MKT[mkt] || mkt === _techMarket) return;
+    _techMarket = mkt;
+    document.querySelectorAll('#techMkt .tech-mkt-btn').forEach(b =>
+        b.classList.toggle('active', b.getAttribute('data-mkt') === mkt));
+    const search = document.getElementById('techSearch');
+    if (search) search.placeholder = mkt === 'il' ? 'חיפוש נייר (למשל: TEVA)…' : 'חיפוש מניה (למשל: NVDA)…';
+    _techData = _techDataMkt[mkt];
+    const tbl = document.getElementById('techTable');
+    if (_techData) {
+        _techRender();
+        if (!_techLoading[mkt]) { const p = document.getElementById('techProgress'); if (p) p.style.display = 'none'; }
+    } else if (tbl) {
+        tbl.innerHTML = '<div class="adv-empty">טוען נתוני סריקה…</div>';
+    }
+    _techLoad();
+}
+
 // ── Load: daily cache → otherwise batch-scan all constituents with progress ──
 async function _techLoad(force) {
-    if (_techLoading) return;
+    const mkt = _techMarket;
+    const cfg = _TECH_MKT[mkt];
+    if (_techLoading[mkt]) return;
     const today = new Date().toISOString().slice(0, 10);
     if (!force) {
         try {
-            const raw = localStorage.getItem(_TECH_LS_KEY);
+            const raw = localStorage.getItem(cfg.ls);
             if (raw) {
                 const c = JSON.parse(raw);
-                if (c && c.day === today && c.data && Object.keys(c.data).length > 100) {
-                    _techData = c.data;
-                    _techRender();
+                if (c && c.day === today && c.data && Object.keys(c.data).length > cfg.min) {
+                    _techDataMkt[mkt] = c.data;
+                    if (_techMarket === mkt) { _techData = c.data; _techRender(); }
                     return;
                 }
             }
         } catch (e) { /* rescan */ }
     }
 
-    _techLoading = true;
+    _techLoading[mkt] = true;
     const prog = document.getElementById('techProgress');
     const fill = document.getElementById('techProgressFill');
     const txt = document.getElementById('techProgressTxt');
-    if (prog) prog.style.display = '';
+    if (prog && _techMarket === mkt) prog.style.display = '';
 
     try {
-        const tr = await fetch('/api/technicals?mode=tickers', { headers: { Accept: 'application/json' } });
+        const tr = await fetch(`/api/technicals?mode=tickers&market=${mkt}`, { headers: { Accept: 'application/json' } });
         const tj = await tr.json();
         if (!tj.tickers || !tj.tickers.length) throw new Error('no tickers');
         const tickers = tj.tickers;
-        if (txt) txt.textContent = `סורק ${tickers.length} מניות (S&P 500 + Nasdaq-100)…`;
+        if (txt && _techMarket === mkt) txt.textContent = `סורק ${tickers.length} ${cfg.scanLabel}…`;
 
         const data = {};
         const BATCH = 50;
@@ -134,19 +167,21 @@ async function _techLoad(force) {
                 } catch (e) { /* skip failed batch */ }
                 done++;
                 const pct = Math.round(done / batches.length * 100);
-                if (fill) fill.style.width = pct + '%';
-                if (txt) txt.textContent = `סורק ${tickers.length} מניות… ${pct}%`;
+                if (_techMarket === mkt) {
+                    if (fill) fill.style.width = pct + '%';
+                    if (txt) txt.textContent = `סורק ${tickers.length} ${cfg.scanLabel}… ${pct}%`;
+                }
             }));
-            _techData = data;
-            _techRender(); // progressive render as batches land
+            _techDataMkt[mkt] = data;
+            if (_techMarket === mkt) { _techData = data; _techRender(); } // progressive render as batches land
         }
-        try { localStorage.setItem(_TECH_LS_KEY, JSON.stringify({ day: today, data })); } catch (e) { /* full */ }
+        try { localStorage.setItem(cfg.ls, JSON.stringify({ day: today, data })); } catch (e) { /* full */ }
     } catch (e) {
         const tbl = document.getElementById('techTable');
-        if (tbl && !_techData) tbl.innerHTML = '<div class="adv-empty">הסריקה נכשלה — נסה שוב בעוד רגע.</div>';
+        if (tbl && _techMarket === mkt && !_techData) tbl.innerHTML = '<div class="adv-empty">הסריקה נכשלה — נסה שוב בעוד רגע.</div>';
     } finally {
-        _techLoading = false;
-        if (prog && _techData && Object.keys(_techData).length > 100) prog.style.display = 'none';
+        _techLoading[mkt] = false;
+        if (prog && _techMarket === mkt && _techData && Object.keys(_techData).length > cfg.min) prog.style.display = 'none';
     }
 }
 
@@ -221,22 +256,28 @@ function _techRender() {
     };
     const fmtVol = (n) => n == null ? '—' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : n;
 
-    const body = rows.slice(0, 250).map(([t, v]) => `
+    const isIL = _techMarket === 'il';
+    const curSym = _TECH_MKT[_techMarket].cur;
+    const body = rows.slice(0, 250).map(([t, v]) => {
+        const disp = isIL ? t.replace(/\.TA$/, '') : t;
+        const tvSym = isIL ? `TASE:${disp}` : t;
+        return `
         <tr>
             <td class="risk-td-name">
                 <div class="tech-name-cell">
-                    <span>${t}</span>
-                    <a class="tech-tv" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(t)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView לאימות">TradingView ↗</a>
+                    <span>${disp}</span>
+                    <a class="tech-tv" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView לאימות">TradingView ↗</a>
                 </div>
             </td>
-            <td>$${(v.price ?? 0).toLocaleString('en-US')}</td>
+            <td>${curSym}${(v.price ?? 0).toLocaleString('en-US')}</td>
             <td>${rsiDCell(v)}</td>
             <td>${rsiWChip(v)}</td>
             ${maCell(v.ma.d200dist)}${maCell(v.ma.d300dist)}${maCell(v.ma.w200dist)}${maCell(v.ma.w300dist)}
             ${fvgCell(v.fvgM)}${fvgCell(v.fvgQ)}
             <td>${v.atrPct != null ? v.atrPct + '%' : '—'}</td>
             <td title="ממוצע 20 ימים: ${fmtVol(v.volAvg)}">${fmtVol(v.vol)}</td>
-        </tr>`).join('');
+        </tr>`;
+    }).join('');
 
     tbl.innerHTML = `
         <table class="risk-table tech-table">
@@ -254,6 +295,7 @@ if (typeof window !== 'undefined') {
     window.openTechnicalPage = openTechnicalPage;
     window.closeTechnicalPage = closeTechnicalPage;
     window.setTechFilter = setTechFilter;
+    window.setTechMarket = setTechMarket;
     window._techRescan = _techRescan;
     window._techRender = _techRender;
 }
