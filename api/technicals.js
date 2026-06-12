@@ -152,8 +152,12 @@ function aggregate(bars, keyFn) {
 }
 
 // FVG: 3-candle gaps. Bullish gap = low[i] > high[i-2] → zone [high[i-2], low[i]];
-// bearish = high[i] < low[i-2] → zone [high[i], low[i-2]]. A later candle whose
-// range covers the whole zone fills it. Returns the zone the price is inside now.
+// bearish = high[i] < low[i-2] → zone [high[i], low[i-2]].
+// Fill rule (matches TradingView FVG indicators): a bullish gap is filled once a
+// later candle trades DOWN through the whole zone (low ≤ zone bottom); a bearish
+// gap once a later candle trades UP through it (high ≥ zone top). The previous
+// rule demanded one candle covering the entire zone in both directions, which
+// kept long-dead gaps "open" and flagged stocks that had no live FVG.
 function fvgInside(bars, price) {
     const zones = [];
     for (let i = 2; i < bars.length; i++) {
@@ -164,7 +168,7 @@ function fvgInside(bars, price) {
         const g = zones[z];
         let filled = false;
         for (let j = g.i + 1; j < bars.length; j++) {
-            if (bars[j].l <= g.lo && bars[j].h >= g.hi) { filled = true; break; }
+            if (g.dir === 'bull' ? bars[j].l <= g.lo : bars[j].h >= g.hi) { filled = true; break; }
         }
         if (!filled && price >= g.lo && price <= g.hi) {
             return { inside: true, lo: +g.lo.toFixed(2), hi: +g.hi.toFixed(2), dir: g.dir };
@@ -174,9 +178,10 @@ function fvgInside(bars, price) {
 }
 
 async function scanOne(sym) {
-    const [daily, weekly] = await Promise.all([
+    const [daily, weekly, monthlyBars] = await Promise.all([
         yahooBars(sym, '2y', '1d'),
         yahooBars(sym, '10y', '1wk'),
+        yahooBars(sym, '10y', '1mo'),
     ]);
     if (!daily || daily.length < 30) return null;
     const dCloses = daily.map(b => b.c);
@@ -188,8 +193,13 @@ async function scanOne(sym) {
     const w300 = wCloses.length ? sma(wCloses, 300) : null;
     const dist = (ma) => ma ? +(((price - ma) / ma) * 100).toFixed(2) : null;
 
-    const monthly = weekly ? aggregate(weekly, d => `${d.getUTCFullYear()}-${d.getUTCMonth()}`) : [];
-    const quarterly = weekly ? aggregate(weekly, d => `${d.getUTCFullYear()}-q${Math.floor(d.getUTCMonth() / 3)}`) : [];
+    // TRUE monthly candles from Yahoo (exact OHLC, like TradingView); quarters are
+    // exact 3-month aggregates of those. Weekly-derived bars distorted boundary
+    // weeks' highs/lows → phantom FVG zones.
+    const monthly = monthlyBars && monthlyBars.length
+        ? monthlyBars
+        : (weekly ? aggregate(weekly, d => `${d.getUTCFullYear()}-${d.getUTCMonth()}`) : []);
+    const quarterly = monthly.length ? aggregate(monthly, d => `${d.getUTCFullYear()}-q${Math.floor(d.getUTCMonth() / 3)}`) : [];
 
     const atr = atr14(daily.slice(-120));
     const vols = daily.map(b => b.v).filter(v => v > 0);

@@ -9,8 +9,8 @@
 const _TECH_NEAR_PCT = 3;            // "near MA" = within ±3%
 // Two markets: US (S&P 500 + Nasdaq-100) and IL (TA-125 + index-tracking ETFs)
 const _TECH_MKT = {
-    us: { ls: 'tech_scan_v2', min: 100, cur: '$', scanLabel: 'מניות (S&P 500 + Nasdaq-100)' },
-    il: { ls: 'tech_scan_il_v1', min: 40, cur: '₪', scanLabel: 'ניירות (ת"א-125 + תעודות סל)' },
+    us: { ls: 'tech_scan_v3', min: 100, cur: '$', scanLabel: 'מניות (S&P 500 + Nasdaq-100)' },
+    il: { ls: 'tech_scan_il_v2', min: 40, cur: '₪', scanLabel: 'ניירות (ת"א-125 + תעודות סל)' },
 };
 
 let _techMarket = 'us';              // default — US market
@@ -161,7 +161,7 @@ async function _techLoad(force) {
             const wave = batches.slice(i, i + 3);
             await Promise.all(wave.map(async (b) => {
                 try {
-                    const r = await fetch(`/api/technicals?mode=scan&symbols=${b.join(',')}&d=${today}`, { headers: { Accept: 'application/json' } });
+                    const r = await fetch(`/api/technicals?mode=scan&symbols=${b.join(',')}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
                     const j = await r.json();
                     if (j.results) Object.assign(data, j.results);
                 } catch (e) { /* skip failed batch */ }

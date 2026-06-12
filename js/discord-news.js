@@ -138,33 +138,78 @@ function _dnCleanName(name) {
 // Lazy vision load: when a collapsed daily post is expanded, transcribe/summarize
 // the image into Hebrew TEXT via /api/vision. Result cached in localStorage —
 // each image is read exactly once per browser (and once globally at the edge).
+// Image list of a .dn-vision box (JSON in data-imgs, legacy single data-img)
+function _dnBoxImgs(box) {
+    try {
+        const arr = JSON.parse(decodeURIComponent(box.dataset.imgs || ''));
+        if (Array.isArray(arr) && arr.length) return arr;
+    } catch (e) { /* legacy */ }
+    return box.dataset.img ? [box.dataset.img] : [];
+}
+
+// Fetch + cache ONE image's Hebrew text (localStorage → edge → Gemini).
+// In-flight dedup so prefetch and an expanded post never double-call Gemini.
+const _dnVisionInflight = {};
+async function _dnVisionText(img, mode) {
+    const cacheKey = 'dn_vision_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) return cached;
+    } catch (e) { /* ignore */ }
+    if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
+    _dnVisionInflight[cacheKey] = (async () => {
+        try {
+            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}`, { headers: { Accept: 'application/json' } });
+            const j = await res.json();
+            if (j && j.text) {
+                try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
+                return j.text;
+            }
+            return null;
+        } catch (e) {
+            return null;
+        } finally {
+            setTimeout(() => { delete _dnVisionInflight[cacheKey]; }, 0);
+        }
+    })();
+    return _dnVisionInflight[cacheKey];
+}
+
 async function _dnLoadVision(det) {
     if (!det || !det.open) return;
     const box = det.querySelector('.dn-vision');
     if (!box || box.dataset.loaded) return;
     box.dataset.loaded = '1';
-    const img = box.dataset.img, mode = box.dataset.mode || 'transcribe';
-    const cacheKey = 'dn_vision_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
-    try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) { box.innerHTML = _dnVisionHTML(cached, img, mode); return; }
-    } catch (e) { /* ignore */ }
+    const mode = box.dataset.mode || 'transcribe';
+    const imgs = _dnBoxImgs(box);
+    if (!imgs.length) { box.innerHTML = '<div class="adv-empty">אין תוכן נוסף.</div>'; return; }
     box.innerHTML = '<div class="adv-empty">קורא את התוכן מהתמונה…</div>';
-    try {
-        const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}`, { headers: { Accept: 'application/json' } });
-        const j = await res.json();
-        if (j && j.text) {
-            try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
-            box.innerHTML = _dnVisionHTML(j.text, img, mode);
-        } else if (j && j.error === 'not_configured') {
-            box.innerHTML = `<div class="adv-empty">תמלול אוטומטי טרם הוגדר (GEMINI_API_KEY).</div>
-                <a href="${_dnEsc(img)}" target="_blank" rel="noopener"><img class="dn-img" src="${_dnEsc(img)}" loading="lazy" alt="" /></a>`;
-        } else {
-            throw new Error((j && j.message) || 'vision failed');
-        }
-    } catch (e) {
+    // ALL the post's images in parallel — flows posts split the data across
+    // several images; reading only the first one showed a partial picture.
+    const texts = await Promise.all(imgs.map(u => _dnVisionText(u, mode)));
+    const ok = texts.filter(Boolean);
+    if (ok.length) {
+        box.innerHTML = _dnVisionHTML(ok.join('\n'), imgs[0], mode);
+    } else {
         box.dataset.loaded = '';
-        box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(img)}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
+        box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(imgs[0])}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
+    }
+}
+
+// Background warm-up: pre-read the visible category's images right after render,
+// so expanding any day is instant instead of waiting on Gemini per click.
+let _dnPrefetchRun = 0;
+async function _dnPrefetchVisions() {
+    const run = ++_dnPrefetchRun;
+    const boxes = Array.from(document.querySelectorAll('#dnFeed .dn-vision')).slice(0, 10);
+    const jobs = [];
+    for (const b of boxes) {
+        const mode = b.dataset.mode || 'transcribe';
+        for (const u of _dnBoxImgs(b)) jobs.push({ u, mode });
+    }
+    for (let i = 0; i < jobs.length; i += 3) {
+        if (run !== _dnPrefetchRun) return; // a newer render superseded this pass
+        await Promise.all(jobs.slice(i, i + 3).map(j => _dnVisionText(j.u, j.mode)));
     }
 }
 
@@ -193,6 +238,15 @@ function _dnVisionHTML(text, img, mode) {
             }
         }
         if (rows.length) {
+            // Multi-image posts can repeat a sector — keep one row per sector+direction
+            const _seen = new Map();
+            for (const r of rows) {
+                const k = r.name + '|' + r.inflow;
+                const ex = _seen.get(k);
+                if (!ex || r.mag > ex.mag) _seen.set(k, r);
+            }
+            rows.length = 0;
+            rows.push(..._seen.values());
             // Adaptive proportional scale: the axis follows the LARGEST move in the
             // list, rounded up to the next 5% step (16%→20, 22%→25, 38%→40). Never a
             // fixed cap — bigger data automatically widens the axis.
@@ -318,7 +372,7 @@ function _dnRender() {
         for (const e of (m.embeds || [])) if (e.image) imgs.push(e.image);
         for (const a of (m.attachments || [])) if (isImgUrl(a.url) || /\.(png|jpe?g|webp|gif)/i.test(a.name || '')) imgs.push(a.url);
         const body = imgs.length
-            ? `<div class="dn-vision" data-img="${_dnEsc(imgs[0])}" data-mode="${visionMode || 'transcribe'}"></div>`
+            ? `<div class="dn-vision" data-imgs="${encodeURIComponent(JSON.stringify(imgs.slice(0, 4)))}" data-mode="${visionMode || 'transcribe'}"></div>`
             : '<div class="adv-empty">אין תוכן נוסף.</div>';
         return `
         <details class="dn-day" ${open ? 'open' : ''} ontoggle="_dnLoadVision(this)">
@@ -466,6 +520,10 @@ function _dnRender() {
         }
     }
     feedEl.innerHTML = html;
+
+    // The open post loads itself via ontoggle; warm the rest in the background
+    document.querySelectorAll('#dnFeed details.dn-day[open]').forEach(d => _dnLoadVision(d));
+    _dnPrefetchVisions();
 }
 
 if (typeof window !== 'undefined') {
