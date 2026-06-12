@@ -164,8 +164,8 @@ function _renderBulkPage() {
                 </div>
                 <div class="bulk-field" id="bulkReduceTickerField" style="${_bulkScope === 'ticker' ? '' : 'display:none'}">
                     <label>סימול לצמצום</label>
-                    <div style="position:relative">
-                        <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
+                    <div style="position:relative;width:100%">
+                        <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left;width:100%;box-sizing:border-box"
                                oninput="this.value=this.value.toUpperCase(); _bulkTickerSuggest(); _bulkRefreshList()"
                                onfocus="_bulkTickerSuggest()" />
                         <div class="row-ticker-dropdown" id="bulkReduceDrop"></div>

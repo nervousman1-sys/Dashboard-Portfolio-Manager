@@ -20,7 +20,7 @@ const PROMPTS = {
     // News: HEADLINES ONLY — no market indices / commodity prices block
     headlines: 'התמונה מכילה עדכון חדשות כלכלי בעברית. תמלל אך ורק את כותרות החדשות עצמן — אל תכלול את סיכום השווקים, מדדי מניות, סחורות, קריפטו או מחירים. אם יש חלוקה לקטגוריות (ישראל / עולם) — כתוב שורת כותרת "ישראל:" או "עולם:" לפני הכותרות של אותה קטגוריה. כל כותרת חדשות בשורה נפרדת, ללא מספור וללא תוספות שלך.',
     // Capital flows: STRUCTURED so the client can render direction bars + a conclusion
-    flows: 'התמונה מציגה תנועות הון / זרימות כספים מוסדיות. החזר אך ורק שורות בפורמט המדויק הבא, בלי שום טקסט אחר:\nסקטור: <שם הסקטור או הנכס> | כיוון: <כניסה או יציאה> | היקף: <הסכום או הערך כפי שמופיע>\nחובה לכלול את כל השורות שמופיעות בתמונה ללא יוצא מן הכלל — גם כניסות וגם יציאות, סרוק את התמונה מלמעלה עד למטה. שורה אחת לכל סקטור/נכס. ובסוף שורה אחת:\nמסקנה: <משפט קצר בעברית — לאן זורם הכסף ומאילו סקטורים הוא יוצא>',
+    flows: 'התמונה מציגה תנועות הון / זרימות כספים מוסדיות, ייתכן בכמה טבלאות/רשימות (למשל: סקטורים באחוזים וגם תעודות סל בדולרים). סרוק את התמונה כולה מלמעלה עד למטה והחזר אך ורק שורות בפורמט המדויק הבא, בלי שום טקסט אחר:\nסקטור: <שם הסקטור או הנכס> | כיוון: <כניסה או יציאה> | היקף: <הסכום או הערך כפי שמופיע>\nחובה לכלול את כל השורות מכל הטבלאות ללא יוצא מן הכלל — גם כניסות וגם יציאות. שורה אחת לכל סקטור/נכס. ובסוף שורה אחת:\nמסקנה: <משפט קצר בעברית — לאן זורם הכסף ומאילו סקטורים הוא יוצא>',
 };
 
 const _memo = new Map();
@@ -70,7 +70,11 @@ module.exports = async (req, res) => {
                     { inline_data: { mime_type: mime, data: buf.toString('base64') } },
                 ],
             }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
+            // thinkingBudget 0: Gemini 2.5 spends "thinking" tokens INSIDE
+            // maxOutputTokens — with thinking on, long tables came back truncated
+            // mid-sentence (the conclusion line was cut). Transcription needs no
+            // reasoning, so give every token to the actual output.
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
         });
 
         let text = '', lastErr = '';

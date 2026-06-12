@@ -151,7 +151,8 @@ function _dnBoxImgs(box) {
 // In-flight dedup so prefetch and an expanded post never double-call Gemini.
 const _dnVisionInflight = {};
 async function _dnVisionText(img, mode) {
-    const cacheKey = 'dn_vision_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    // v2: pre-fix reads (thinking tokens truncated long tables) must not be reused
+    const cacheKey = 'dn_vision2_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) return cached;
@@ -159,7 +160,7 @@ async function _dnVisionText(img, mode) {
     if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
     _dnVisionInflight[cacheKey] = (async () => {
         try {
-            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}`, { headers: { Accept: 'application/json' } });
+            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=2`, { headers: { Accept: 'application/json' } });
             const j = await res.json();
             if (j && j.text) {
                 try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
@@ -376,8 +377,9 @@ function _dnRender() {
     };
     const renderCollapsed = (msgs, chName, open, visionMode) => {
         const m = msgs[0];
-        // Oldest-first within the day so inflows render before outflows
-        const imgs = [...msgs].reverse().flatMap(_msgImgs);
+        // Oldest-first within the day so inflows render before outflows;
+        // the same image often appears as both content-URL and embed — dedupe.
+        const imgs = [...new Set([...msgs].reverse().flatMap(_msgImgs))];
         const body = imgs.length
             ? `<div class="dn-vision" data-imgs="${encodeURIComponent(JSON.stringify(imgs.slice(0, 6)))}" data-mode="${visionMode || 'transcribe'}"></div>`
             : '<div class="adv-empty">אין תוכן נוסף.</div>';
