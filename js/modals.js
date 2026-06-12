@@ -2016,6 +2016,7 @@ function addHoldingRow(prefill = null) {
     const rowId = 'hrow_' + (++_holdingRowCounter);
     const tr = document.createElement('tr');
     tr.id = rowId;
+    const todayIso = new Date().toISOString().slice(0, 10);
     tr.innerHTML = `
         <td class="row-ticker-cell">
             <div class="row-ticker-wrapper">
@@ -2032,7 +2033,22 @@ function addHoldingRow(prefill = null) {
         <td><input type="text" inputmode="decimal" class="row-price" value="${prefill?.avgPrice ? formatPrice(prefill.avgPrice) : ''}" placeholder="0.00"
                    style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></td>
         <td class="row-live-price" style="font-size:12px;color:var(--text-muted);text-align:center">—</td>
-        <td><button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button></td>
+        <td>
+            <div class="row-actions-cell">
+                <button class="holding-action-btn rowdate ${prefill?.buyDate ? 'has-date' : ''}" id="datebtn_${rowId}"
+                        title="${prefill?.buyDate ? 'תאריך קנייה: ' + prefill.buyDate : 'תאריך קנייה (אופציונלי)'}"
+                        onclick="toggleRowDatePop('${rowId}')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </button>
+                <button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button>
+                <div class="row-date-pop" id="datepop_${rowId}" style="display:none">
+                    <label>תאריך קנייה</label>
+                    <input type="date" class="row-buydate" value="${prefill?.buyDate || ''}" max="${todayIso}"
+                           onchange="_onRowBuyDate('${rowId}', this.value)" />
+                    <button type="button" class="row-date-clear" onclick="_onRowBuyDate('${rowId}', '')">נקה</button>
+                </div>
+            </div>
+        </td>
     `;
     tbody.appendChild(tr);
     updateAddClientRisk();
@@ -2055,6 +2071,33 @@ function removeHoldingRow(rowId) {
     if (row) row.remove();
     _updateAddPortfolioPriceHeader();
     updateAddClientRisk();
+}
+
+// ── Per-row purchase-date popover (optional — earliest date becomes the portfolio opening date) ──
+function toggleRowDatePop(rowId) {
+    const pop = document.getElementById('datepop_' + rowId);
+    if (!pop) return;
+    const isOpen = pop.style.display !== 'none';
+    document.querySelectorAll('.row-date-pop').forEach(p => { p.style.display = 'none'; });
+    if (!isOpen) {
+        pop.style.display = 'block';
+        const inp = pop.querySelector('.row-buydate');
+        if (inp) inp.focus();
+    }
+}
+
+function _onRowBuyDate(rowId, value) {
+    const pop = document.getElementById('datepop_' + rowId);
+    const btn = document.getElementById('datebtn_' + rowId);
+    if (pop) {
+        const inp = pop.querySelector('.row-buydate');
+        if (inp && inp.value !== value) inp.value = value;
+        pop.style.display = 'none';
+    }
+    if (btn) {
+        btn.classList.toggle('has-date', !!value);
+        btn.title = value ? 'תאריך קנייה: ' + value : 'תאריך קנייה (אופציונלי)';
+    }
 }
 
 function clearRowTicker(rowId) {
@@ -2261,7 +2304,8 @@ function _collectHoldingRows() {
             stockName: rowName || ticker,
             price,
             quantity: shares,
-            currency
+            currency,
+            buyDate: row.querySelector('.row-buydate')?.value || null
         };
         // Pass bond/fund metadata for correct Supabase insert
         if (classified.assetClass) holding.assetClass = classified.assetClass;
@@ -2367,6 +2411,13 @@ async function handleDropzoneFile(file) {
             if (cashFromFile > 0) statusMsg += ` + $${cashFromFile.toLocaleString()} מזומן`;
             statusMsg += ` מ-${file.name}`;
 
+            // Purchase dates found → earliest becomes the portfolio opening date
+            const buyDates = parsed.map(r => r.buyDate).filter(Boolean).sort();
+            if (buyDates.length) {
+                const [y, m, d] = buyDates[0].split('-');
+                statusMsg += `<br>זוהו תאריכי קנייה ל-${buyDates.length} אחזקות — תאריך פתיחת התיק ייקבע לפי הקנייה הראשונה: <strong>${d}.${m}.${y}</strong>`;
+            }
+
             if (statusEl) {
                 statusEl.innerHTML = `<div class="file-status-success">${statusMsg}</div>`;
             }
@@ -2389,6 +2440,9 @@ async function handleDropzoneFile(file) {
 
 // Close row dropdowns when clicking outside
 document.addEventListener('click', (e) => {
+    if (!e.target.closest('.row-actions-cell')) {
+        document.querySelectorAll('.row-date-pop').forEach(p => { p.style.display = 'none'; });
+    }
     if (!e.target.closest('.row-ticker-wrapper')) {
         document.querySelectorAll('.row-ticker-dropdown').forEach(d => {
             d.style.display = 'none';

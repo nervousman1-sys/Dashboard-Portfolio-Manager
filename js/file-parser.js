@@ -42,6 +42,47 @@ function _loadScript(src) {
 const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'נכס', 'סימול (ticker)'];
 const SHARES_COLUMNS = ['כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
 const PRICE_COLUMNS = ['מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות', 'מחיר שוק'];
+const DATE_COLUMNS = ['תאריך קנייה', 'תאריך רכישה', 'תאריך עסקה', 'תאריך', 'purchase date', 'buy date', 'trade date', 'date', 'acquired'];
+
+// dd/mm/yyyy · dd.mm.yyyy · dd-mm-yyyy · yyyy-mm-dd (Israeli files are day-first)
+const _DATE_TOKEN_RE = /\b(\d{1,4})[./-](\d{1,2})[./-](\d{2,4})\b/;
+
+// Normalizes any cell/token to ISO 'YYYY-MM-DD' (or null).
+// Handles Excel serial numbers, Date objects and day-first strings.
+function _cleanDate(val) {
+    if (val == null || val === '') return null;
+    let d = null;
+    if (val instanceof Date) d = val;
+    else if (typeof val === 'number' && val > 20000 && val < 60000) {
+        d = new Date(Math.round((val - 25569) * 86400000)); // Excel serial → epoch
+    } else {
+        const m = String(val).trim().match(_DATE_TOKEN_RE);
+        if (m) {
+            let [, a, b, c] = m.map(Number);
+            let day, mon, yr;
+            if (a > 1900) { yr = a; mon = b; day = c; }          // yyyy-mm-dd
+            else {
+                day = a; mon = b; yr = c < 100 ? 2000 + c : c;   // dd/mm/yyyy
+                if (mon > 12 && day <= 12) { const t = day; day = mon; mon = t; } // mm/dd fallback
+            }
+            if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) d = new Date(yr, mon - 1, day, 12);
+        }
+    }
+    if (!d || isNaN(d.getTime())) return null;
+    const now = new Date();
+    if (d > now || d.getFullYear() < 1990) return null;
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Finds a purchase-date token among a PDF row's text items
+function _findDateInRow(row) {
+    for (const item of row) {
+        const iso = _cleanDate(item.text);
+        if (iso) return iso;
+    }
+    return null;
+}
 
 // ========== EXCEL / CSV PARSING ==========
 
@@ -66,6 +107,7 @@ async function parseExcelFile(file) {
                 const tickerCol = _findMatchingColumn(headers, TICKER_COLUMNS);
                 const sharesCol = _findMatchingColumn(headers, SHARES_COLUMNS);
                 const priceCol = _findMatchingColumn(headers, PRICE_COLUMNS);
+                const dateCol = _findMatchingColumn(headers, DATE_COLUMNS);
 
                 if (!tickerCol) {
                     console.warn('[FileParser] Could not detect ticker column from headers:', headers);
@@ -80,9 +122,10 @@ async function parseExcelFile(file) {
 
                     const shares = _cleanNumber(sharesCol ? row[sharesCol] : 0);
                     const avgPrice = _cleanNumber(priceCol ? row[priceCol] : 0);
+                    const buyDate = dateCol ? _cleanDate(row[dateCol]) : null;
 
                     if (shares > 0) {
-                        result.push({ ticker, shares, avgPrice: avgPrice || 0 });
+                        result.push({ ticker, shares, avgPrice: avgPrice || 0, buyDate });
                     }
                 }
 
@@ -189,7 +232,8 @@ function _extractFromPositionedItems(items) {
                 results.push({
                     ticker: tickerMatch.ticker,
                     shares: Math.round(shares),
-                    avgPrice: price || 0
+                    avgPrice: price || 0,
+                    buyDate: _findDateInRow(row)
                 });
             }
         }
@@ -245,11 +289,12 @@ function _findTickerInRow(row) {
     return null;
 }
 
-// Find numeric values in a row (excluding the ticker item)
+// Find numeric values in a row (excluding the ticker item and date tokens)
 function _findNumbersInRow(row, tickerIndex) {
     const numbers = [];
     for (let i = 0; i < row.length; i++) {
         if (i === tickerIndex) continue;
+        if (_DATE_TOKEN_RE.test(row[i].text)) continue; // "12/05/2023" is a date, not shares=12
         const cleaned = row[i].text.replace(/[$₪,\s%]/g, '');
         const num = parseFloat(cleaned);
         if (!isNaN(num) && num > 0) {

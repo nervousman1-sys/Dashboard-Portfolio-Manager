@@ -9002,3 +9002,37 @@ html.day-mode .tech-mkt { border-color: rgba(15, 23, 42, 0.25); }
 html.day-mode .tech-mkt-btn { color: var(--text-primary); }
 html.day-mode .tech-mkt-btn + .tech-mkt-btn { border-right-color: rgba(15, 23, 42, 0.2); }
 html.day-mode .tech-mkt-btn.active { background: rgba(8, 145, 178, 0.12); color: #0e7490; }
+
+/* Technical scanner toolbar — sharper text */
+.tech-toolbar { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+.tech-chips .dn-tab { font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.01em; }
+.tech-chips .dn-tab .dn-tab-n { font-weight: 800; opacity: 0.95; }
+.tech-toolbar .tech-search { font-size: 13px; font-weight: 600; color: #fff; }
+.tech-mkt-btn { font-size: 12px; }
+html.day-mode .tech-chips .dn-tab,
+html.day-mode .tech-toolbar .tech-search { color: var(--text-primary); }
+
+/* Holding row — purchase-date button + popover */
+.row-actions-cell { display: flex; gap: 4px; align-items: center; justify-content: center; position: relative; }
+.holding-action-btn.rowdate { color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; }
+.holding-action-btn.rowdate:hover { color: #22d3ee; }
+.holding-action-btn.rowdate.has-date { color: #22d3ee; background: rgba(34, 211, 238, 0.12); border-radius: 6px; }
+.row-date-pop {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    background: #0f172a; border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    display: flex; flex-direction: column; gap: 6px; min-width: 170px;
+}
+.row-date-pop label { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.row-date-pop .row-buydate {
+    background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px; color: #fff; padding: 6px 8px; font-size: 12.5px;
+    font-family: inherit; color-scheme: dark;
+}
+.row-date-pop .row-date-clear {
+    background: transparent; border: none; cursor: pointer; align-self: flex-start;
+    color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 2px 0; font-family: inherit;
+}
+.row-date-pop .row-date-clear:hover { color: #f87171; }
+html.day-mode .row-date-pop { background: #fff; border-color: rgba(15, 23, 42, 0.2); box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+html.day-mode .row-date-pop .row-buydate { color: var(--text-primary); color-scheme: light; background: rgba(15, 23, 42, 0.04); }

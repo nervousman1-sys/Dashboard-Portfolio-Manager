@@ -196,6 +196,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
     // The post-creation price refresh will update them within seconds.
     const aggregated = new Map();
     let totalHoldingsCost = 0;
+    const buyDates = {}; // ticker → earliest 'YYYY-MM-DD' purchase date (from file/manual input)
 
     for (const h of holdings) {
         const type = h.type || 'stock';
@@ -214,6 +215,8 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         const previousClose = (cached && cached.previousClose) ? cached.previousClose : h.price;
         const costBasis = h.price * h.quantity;
         totalHoldingsCost += costBasis;
+
+        if (h.buyDate && (!buyDates[ticker] || h.buyDate < buyDates[ticker])) buyDates[ticker] = h.buyDate;
 
         if (aggregated.has(ticker)) {
             const existing = aggregated.get(ticker);
@@ -264,18 +267,24 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         return null;
     }
 
-    // --- Step 4: Bulk-log all buy transactions ---
-    const txRows = holdingRows.map(row => ({
-        portfolio_id: portfolio.id,
-        type: 'buy',
-        ticker: row.ticker,
-        name: row.name,
-        asset_type: row.type,
-        currency: row.currency || 'USD',
-        shares: row.shares,
-        price: row.cost_basis / row.shares,
-        total: row.cost_basis
-    }));
+    // --- Step 4: Bulk-log all buy transactions (real purchase dates when known) ---
+    const _buyDateIso = (t) => buyDates[t] ? new Date(buyDates[t] + 'T12:00:00').toISOString() : null;
+    const txRows = holdingRows.map(row => {
+        const tx = {
+            portfolio_id: portfolio.id,
+            type: 'buy',
+            ticker: row.ticker,
+            name: row.name,
+            asset_type: row.type,
+            currency: row.currency || 'USD',
+            shares: row.shares,
+            price: row.cost_basis / row.shares,
+            total: row.cost_basis
+        };
+        const iso = _buyDateIso(row.ticker);
+        if (iso) tx.created_at = iso; // backdate to the actual purchase
+        return tx;
+    });
 
     // localStorage logs (instant, no network)
     txRows.forEach(tx => {
@@ -314,10 +323,36 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         return s + (h.cost_basis || 0) * fx;
     }, 0);
     const totalInvestment = totalCashUsdBatch + totalHoldingsCostUsd;
-    await supabaseClient
+    const finalUpdate = { initial_investment: totalInvestment };
+
+    // Earliest purchase date = the portfolio's real opening date:
+    // backdate created_at and seed performance_history there, so returns and
+    // charts start from the day the first stock was actually bought.
+    const allBuyDates = Object.values(buyDates).sort();
+    if (allBuyDates.length) {
+        const od = new Date(allBuyDates[0] + 'T12:00:00');
+        finalUpdate.created_at = od.toISOString();
+        finalUpdate.performance_history = [{
+            date: od.toLocaleDateString('he-IL'),
+            value: totalInvestment,
+            returnPct: 0,
+            year: od.getFullYear(),
+            month: od.getMonth(),
+            yearLabel: od.getFullYear().toString(),
+            monthLabel: od.toLocaleDateString('he-IL', { month: 'short', year: 'numeric' })
+        }];
+    }
+
+    let { error: finalErr } = await supabaseClient
         .from('portfolios')
-        .update({ initial_investment: totalInvestment })
+        .update(finalUpdate)
         .eq('id', portfolio.id);
+    if (finalErr && finalUpdate.created_at) {
+        // created_at may be protected in some schemas — never lose initial_investment over it
+        console.warn('[supaAddClientWithHoldings] created_at backdate rejected:', finalErr.message);
+        delete finalUpdate.created_at;
+        await supabaseClient.from('portfolios').update(finalUpdate).eq('id', portfolio.id);
+    }
 
     await supaRecalcClient(portfolio.id);
     await supaRecordPerformanceSnapshot(portfolio.id);
