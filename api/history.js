@@ -22,7 +22,8 @@ function setCors(res) {
 }
 
 async function fetchYahoo(symbol, range, interval) {
-    const iv = ['1d', '1wk', '1mo'].includes(interval) ? interval : '1d';
+    const iv = ['1d', '1wk', '1mo', '5m', '15m', '30m', '1h'].includes(interval) ? interval : '1d';
+    const intraday = ['5m', '15m', '30m', '1h'].includes(iv);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
         `?range=${encodeURIComponent(range || '1y')}&interval=${iv}`;
     const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
@@ -33,11 +34,14 @@ async function fetchYahoo(symbol, range, interval) {
     const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0]
         && result.indicators.quote[0].close;
     if (!ts || !closes) return [];
+    // Exchange-local timestamps for intraday bars (Yahoo gives the offset)
+    const gmtoff = (result.meta && result.meta.gmtoffset) || 0;
     const out = [];
     for (let i = 0; i < ts.length; i++) {
         const c = closes[i];
         if (c != null && isFinite(c) && c > 0) {
-            out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: c });
+            const d = new Date((ts[i] + (intraday ? gmtoff : 0)) * 1000).toISOString();
+            out.push({ date: intraday ? d.slice(0, 19).replace('T', ' ') : d.slice(0, 10), close: c });
         }
     }
     return out;

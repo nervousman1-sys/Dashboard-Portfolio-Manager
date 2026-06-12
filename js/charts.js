@@ -194,6 +194,33 @@ function _logBenchmarkDiag() {
     }
 }
 
+// ── Yahoo via the same-origin /api/history proxy — PRIMARY benchmark source ──
+// No API keys, no rate limits, and it serves the TASE indices (TA35.TA/TA125.TA)
+// that the keyed providers fail on. Failures here were what froze the Israeli
+// index lines weeks in the past (stale static fallback).
+const _YAHOO_BENCH_RANGE = {
+    '1d': ['1d', '5m'], '5d': ['5d', '1h'], '1m': ['1mo', '1d'], '3m': ['3mo', '1d'],
+    '6m': ['6mo', '1d'], 'ytd': ['ytd', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'],
+    'max': ['10y', '1wk'], 'all': ['10y', '1wk'],
+};
+async function _fetchYahooBenchmark(symbol, range) {
+    try {
+        const [yr, iv] = _YAHOO_BENCH_RANGE[range] || ['1y', '1d'];
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${yr}&interval=${iv}`,
+            { headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        const j = await res.json();
+        const pts = ((j && j.points) || []).filter(p => p && p.close > 0);
+        if (pts.length < 2) return null;
+        const first = pts[0].close;
+        return pts.map(p => ({
+            date: p.date,
+            close: p.close,
+            returnPct: ((p.close - first) / first) * 100
+        }));
+    } catch (e) { return null; }
+}
+
 async function fetchBenchmarkData(symbol, range) {
     _logBenchmarkDiag();
     const cacheKey = `${symbol}_${range}`;
@@ -210,31 +237,40 @@ async function fetchBenchmarkData(symbol, range) {
 
     // Check localStorage cache — only use if data is valid (non-empty array)
     try {
-        const stored = localStorage.getItem('benchmark_' + cacheKey);
+        const stored = localStorage.getItem('benchmark2_' + cacheKey);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Date.now() - parsed.timestamp < effectiveTTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 _benchmarkCache[cacheKey] = parsed;
                 return parsed.data;
             } else {
-                localStorage.removeItem('benchmark_' + cacheKey);
+                localStorage.removeItem('benchmark2_' + cacheKey);
             }
         }
     } catch (e) { /* ignore */ }
 
     console.log(`[Benchmark] Fetching ${symbol} (range=${range}) — no cache, calling APIs...`);
 
-    // ── Strategy: FMP FIRST (more reliable for US ETFs, no strict rate limit),
-    //    then Twelve Data as fallback (rate-limited to 8 req/min on free plan).
-    //    This order prevents the "only SPY works" bug caused by Twelve Data rate limits
-    //    exhausting the quota on the first benchmark, leaving the rest dead.
+    // ── Strategy: YAHOO FIRST (same-origin proxy — keyless, unlimited, full
+    //    TASE coverage so TA-35/TA-125 are always current to the last close),
+    //    then FMP, then Twelve Data, then the static fallback as a last resort.
+
+    const yahooData = await _fetchYahooBenchmark(symbol, range);
+    if (yahooData && yahooData.length > 0) {
+        console.log(`[Benchmark] Yahoo success for ${symbol}: ${yahooData.length} points`);
+        const cacheEntry = { data: yahooData, timestamp: Date.now() };
+        _benchmarkCache[cacheKey] = cacheEntry;
+        try { localStorage.setItem('benchmark2_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        return yahooData;
+    }
+    console.warn(`[Benchmark] Yahoo failed for ${symbol} — trying FMP...`);
 
     const fmpData = await _fetchFMPBenchmark(symbol, range);
     if (fmpData && fmpData.length > 0) {
         console.log(`[Benchmark] FMP success for ${symbol}: ${fmpData.length} points`);
         const cacheEntry = { data: fmpData, timestamp: Date.now() };
         _benchmarkCache[cacheKey] = cacheEntry;
-        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        try { localStorage.setItem('benchmark2_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
         return fmpData;
     }
     console.warn(`[Benchmark] FMP failed for ${symbol} — trying Twelve Data...`);
@@ -244,7 +280,7 @@ async function fetchBenchmarkData(symbol, range) {
         console.log(`[Benchmark] Twelve Data success for ${symbol}: ${data.length} points`);
         const cacheEntry = { data, timestamp: Date.now() };
         _benchmarkCache[cacheKey] = cacheEntry;
-        try { localStorage.setItem('benchmark_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
+        try { localStorage.setItem('benchmark2_' + cacheKey, JSON.stringify(cacheEntry)); } catch (e) { /* quota */ }
         return data;
     }
 
@@ -333,8 +369,9 @@ async function _fetchTwelveDataBenchmark(symbol, range) {
                 continue; // Try next alias
             }
 
-            // Twelve Data returns newest first — reverse to chronological order
-            let values = json.values.reverse();
+            // Twelve Data returns newest first — reverse to chronological order.
+            // Drop zero/garbage closes (a partial last bar paints a fake cliff).
+            let values = json.values.reverse().filter(v => parseFloat(v.close) > 0);
 
             // For 1D: filter to only the last trading day's data
             if (range === '1d' && values.length > 0) {
@@ -1388,6 +1425,35 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             { date: now.toLocaleDateString('he-IL'), _dateObj: now, value: endValue, returnPct: retPct }
         ];
         console.log(`[PerfChart] Last-resort fallback: ${startValue.toFixed(0)} → ${endValue.toFixed(0)} (${retPct >= 0 ? '+' : ''}${retPct.toFixed(2)}%)`);
+    }
+
+    // ── 2e. ENDPOINT SANITY — kill the "fake cliff" at the chart's end ──
+    // A mid-load snapshot or a partial last bar can leave a final point that
+    // nosedives away from reality. If the LAST point is from today, jumps >8%
+    // off the previous point, and the LIVE portfolio value agrees with the
+    // previous point rather than the dive — snap the endpoint to the live value.
+    // A genuine crash is preserved: there the live value agrees with the dive.
+    if (hist && hist.length >= 3 && range !== '1d' && range !== '5d') {
+        const pv = client.portfolioValue
+            || (client.holdings || []).reduce((s, h) => s + (h.value || 0), 0) + (client.cashBalance || 0);
+        const last = hist[hist.length - 1], prev = hist[hist.length - 2];
+        const _isToday = (p) => {
+            if (p._dateObj) return new Date(p._dateObj).toDateString() === new Date().toDateString();
+            const sd = String(p.date || '');
+            const now = new Date();
+            return sd === now.toISOString().slice(0, 10) || sd === now.toLocaleDateString('he-IL') || sd.startsWith(now.toISOString().slice(0, 10));
+        };
+        if (pv > 0 && prev.value > 0 && _isToday(last)) {
+            const jump = Math.abs(last.value - prev.value) / prev.value;
+            const liveVsPrev = Math.abs(pv - prev.value) / prev.value;
+            const liveVsLast = Math.abs(pv - last.value) / Math.max(last.value, 1);
+            if (jump > 0.08 && liveVsLast > 0.05 && liveVsPrev < jump * 0.5) {
+                console.warn(`[PerfChart] Endpoint anomaly: last=${last.value.toFixed(0)} prev=${prev.value.toFixed(0)} live=${pv.toFixed(0)} — snapping to live value`);
+                last.value = pv;
+                const base = (hist[0] && hist[0].value > 0 && Math.abs(hist[0].returnPct || 0) < 0.005) ? hist[0].value : null;
+                if (base) last.returnPct = ((pv - base) / base) * 100;
+            }
+        }
     }
 
     // ── 3. Empty/insufficient data → "No Data" overlay, abort ──

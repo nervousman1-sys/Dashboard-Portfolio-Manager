@@ -838,6 +838,22 @@ async function supaRecordPerformanceSnapshot(clientId) {
         // Skip if we already have a snapshot for today
         if (history.length > 0 && history[history.length - 1].date === dateStr) return;
 
+        // Anomaly guard: a value that jumps >18% off the last snapshot is usually a
+        // mid-load artifact (prices not applied yet) and would paint a permanent fake
+        // cliff on the chart. Skip it ONCE — if the deviation is real (deposit, crash)
+        // the next snapshot attempt records it normally.
+        const prevSnap = history[history.length - 1];
+        if (prevSnap && prevSnap.value > 0) {
+            const dev = Math.abs(portfolio.portfolio_value - prevSnap.value) / prevSnap.value;
+            const skipKey = `${clientId}_${dateStr}`;
+            window._snapSkippedOnce = window._snapSkippedOnce || {};
+            if (dev > 0.18 && !window._snapSkippedOnce[skipKey]) {
+                window._snapSkippedOnce[skipKey] = true;
+                console.warn(`[Snapshot] ${clientId}: value ${portfolio.portfolio_value.toFixed(0)} deviates ${(dev * 100).toFixed(1)}% from last snapshot ${prevSnap.value.toFixed(0)} — skipping once (mid-load artifact guard)`);
+                return;
+            }
+        }
+
         const costBasis = portfolio.initial_investment || 1;
         const returnPct = ((portfolio.portfolio_value - costBasis) / costBasis) * 100;
 
