@@ -60,6 +60,7 @@ function mapHolding(h) {
         currency: h.currency,
         assetClass: h.asset_class || _inferAssetClass(h.type),
         bondType: h.bond_type || null,
+        buyDate: h.buy_date || null,   // real purchase date ('YYYY-MM-DD') when known
         _livePriceResolved: (h.type !== 'stock') || !priceMatchesPurchase
     };
 }
@@ -247,16 +248,27 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
 
     const holdingRows = Array.from(aggregated.values());
 
+    // Persist each holding's real purchase date (drives true chart history)
+    holdingRows.forEach(r => { if (buyDates[r.ticker]) r.buy_date = buyDates[r.ticker]; });
+
     // --- Step 3: SINGLE bulk insert for all holdings (1 Supabase call) ---
     if (onProgress) onProgress('שומר נכסים...');
     let { error: bulkErr } = await supabaseClient
         .from('holdings')
         .insert(holdingRows);
 
+    // Retry without buy_date if column doesn't exist
+    if (bulkErr && bulkErr.message && bulkErr.message.includes('buy_date')) {
+        console.warn('[supaAddClientWithHoldings] buy_date column missing — retrying without it');
+        holdingRows.forEach(r => delete r.buy_date);
+        const retry = await supabaseClient.from('holdings').insert(holdingRows);
+        bulkErr = retry.error;
+    }
+
     // Retry without bond_type if column doesn't exist
     if (bulkErr && bulkErr.message && bulkErr.message.includes('bond_type')) {
         console.warn('[supaAddClientWithHoldings] bond_type column missing — retrying without it');
-        holdingRows.forEach(r => delete r.bond_type);
+        holdingRows.forEach(r => { delete r.bond_type; delete r.buy_date; });
         const retry = await supabaseClient.from('holdings').insert(holdingRows);
         bulkErr = retry.error;
     }

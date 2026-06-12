@@ -68,7 +68,9 @@ function _getTickerFromLS(ticker, outputSize) {
         // Only use if the stored series is long enough for the requested range. The
         // risk model asks for a full trading year (~260) — accepting a short 30-point
         // cache here would silently compute β/σ/correlation on far too few days.
-        if (entry.data && entry.data.length >= Math.min(outputSize, 200)) {
+        // Long ranges (5Y/MAX) need a genuinely deep series, not last year's cache.
+        const needed = outputSize > 600 ? Math.min(outputSize, 1000) : Math.min(outputSize, 200);
+        if (entry.data && entry.data.length >= needed) {
             return entry.data;
         }
         return null;
@@ -111,10 +113,19 @@ const _SYNTH_YAHOO_PROXIES = [
     (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
     (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
 ];
+// Map requested depth to a Yahoo range — long ranges (5Y/MAX, backdated portfolios)
+// need real multi-year series, not a 2y cap.
+function _synthRangeFor(outputSize) {
+    if (outputSize > 1825) return '10y';
+    if (outputSize > 600) return '5y';
+    if (outputSize > 300) return '2y';
+    return '1y';
+}
+
 async function _fetchYahooHistory(ticker, currency, outputSize) {
     let sym = ticker;
     if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
-    const range = outputSize > 300 ? '2y' : '1y';
+    const range = _synthRangeFor(outputSize);
 
     // PRIMARY: same-origin serverless proxy (server-side Yahoo fetch — 100% reliable,
     // no CORS, no flaky public proxy). This is what makes the deployed risk model
@@ -168,7 +179,7 @@ async function prefetchTickerHistories(specs, outputSize) {
         todo.push({ ticker: s.ticker, sym });
     }
     if (!todo.length) return 0;
-    const range = outputSize > 300 ? '2y' : '1y';
+    const range = _synthRangeFor(outputSize);
     let seeded = 0;
     for (let i = 0; i < todo.length; i += 40) {
         const chunk = todo.slice(i, i + 40);
@@ -384,6 +395,16 @@ async function fetchSyntheticHistory(client, range) {
 
     if (backbone.length < 2) return null;
 
+    // Real opening date: portfolios created with purchase dates start their
+    // history at the FIRST buy — no flat pre-history before the portfolio existed.
+    const _knownBuyDates = client.holdings.map(h => h.buyDate).filter(Boolean).sort();
+    if (_knownBuyDates.length) {
+        const openIso = _knownBuyDates[0];
+        const startIdx = backbone.findIndex(p => p.date >= openIso);
+        if (startIdx > 0) backbone = backbone.slice(startIdx);
+        if (backbone.length < 2) return null;
+    }
+
     // Step 4: Create O(1) date→close lookup Maps
     //         Map is more memory-efficient than plain object for many keys
     const priceLookup = new Map();
@@ -414,6 +435,14 @@ async function fetchSyntheticHistory(client, range) {
 
         for (let j = 0; j < allStockFundHoldings.length; j++) {
             const h = allStockFundHoldings[j];
+
+            // Position not bought yet at this date → the money sat as capital
+            // (cost basis), so the line moves only from the real purchase day.
+            if (h.buyDate && date < h.buyDate) {
+                totalValue += h.costBasis || 0;
+                continue;
+            }
+
             const dateMap = priceLookup.get(h.ticker);
 
             if (dateMap) {

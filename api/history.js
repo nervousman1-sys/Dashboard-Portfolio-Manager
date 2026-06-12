@@ -21,9 +21,10 @@ function setCors(res) {
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
 }
 
-async function fetchYahoo(symbol, range) {
+async function fetchYahoo(symbol, range, interval) {
+    const iv = ['1d', '1wk', '1mo'].includes(interval) ? interval : '1d';
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
-        `?range=${encodeURIComponent(range || '1y')}&interval=1d`;
+        `?range=${encodeURIComponent(range || '1y')}&interval=${iv}`;
     const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
     if (!r.ok) throw new Error(`Yahoo HTTP ${r.status}`);
     const j = await r.json();
@@ -49,11 +50,12 @@ module.exports = async (req, res) => {
     try {
         const q = req.query || {};
         const range = q.range || '1y';
+        const interval = q.interval;
 
         if (q.symbols) {
             const syms = String(q.symbols).split(',').map(s => s.trim()).filter(Boolean).slice(0, 40);
             const entries = await Promise.all(syms.map(async (s) => {
-                try { return [s, await fetchYahoo(s, range)]; } catch (e) { return [s, null]; }
+                try { return [s, await fetchYahoo(s, range, interval)]; } catch (e) { return [s, null]; }
             }));
             const out = {};
             for (const [s, v] of entries) out[s] = v;
@@ -63,7 +65,7 @@ module.exports = async (req, res) => {
 
         const symbol = q.symbol;
         if (!symbol) { res.status(400).json({ error: 'missing symbol or symbols' }); return; }
-        const points = await fetchYahoo(symbol, range);
+        const points = await fetchYahoo(symbol, range, interval);
         res.status(200).json({ symbol, points });
     } catch (e) {
         res.status(502).json({ error: 'history_proxy_failed', message: e.message });

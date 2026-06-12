@@ -2043,9 +2043,12 @@ function addHoldingRow(prefill = null) {
                 <button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button>
                 <div class="row-date-pop" id="datepop_${rowId}" style="display:none">
                     <label>תאריך קנייה</label>
-                    <input type="date" class="row-buydate" value="${prefill?.buyDate || ''}" max="${todayIso}"
-                           onchange="_onRowBuyDate('${rowId}', this.value)" />
-                    <button type="button" class="row-date-clear" onclick="_onRowBuyDate('${rowId}', '')">נקה</button>
+                    <input type="date" class="row-buydate" value="${prefill?.buyDate || ''}" min="1990-01-01" max="${todayIso}"
+                           onchange="_onRowBuyDate('${rowId}', this.value, true)" />
+                    <div class="row-date-btns">
+                        <button type="button" class="row-date-ok" onclick="_onRowBuyDate('${rowId}', document.querySelector('#datepop_${rowId} .row-buydate').value)">אישור</button>
+                        <button type="button" class="row-date-clear" onclick="_onRowBuyDate('${rowId}', '')">נקה</button>
+                    </div>
                 </div>
             </div>
         </td>
@@ -2086,17 +2089,21 @@ function toggleRowDatePop(rowId) {
     }
 }
 
-function _onRowBuyDate(rowId, value) {
+function _onRowBuyDate(rowId, value, keepOpen) {
+    // Mid-typing the browser commits partial years like 0002 — ignore until plausible
+    const valid = !!value && Number(value.slice(0, 4)) >= 1990;
+    if (value && !valid) return; // user is still typing the year — don't react, don't close
+
     const pop = document.getElementById('datepop_' + rowId);
     const btn = document.getElementById('datebtn_' + rowId);
     if (pop) {
         const inp = pop.querySelector('.row-buydate');
         if (inp && inp.value !== value) inp.value = value;
-        pop.style.display = 'none';
+        if (!keepOpen) pop.style.display = 'none';
     }
     if (btn) {
-        btn.classList.toggle('has-date', !!value);
-        btn.title = value ? 'תאריך קנייה: ' + value : 'תאריך קנייה (אופציונלי)';
+        btn.classList.toggle('has-date', valid);
+        btn.title = valid ? 'תאריך קנייה: ' + value : 'תאריך קנייה (אופציונלי)';
     }
 }
 
@@ -2305,7 +2312,10 @@ function _collectHoldingRows() {
             price,
             quantity: shares,
             currency,
-            buyDate: row.querySelector('.row-buydate')?.value || null
+            buyDate: (() => {
+                const bd = row.querySelector('.row-buydate')?.value || '';
+                return bd && Number(bd.slice(0, 4)) >= 1990 ? bd : null;
+            })()
         };
         // Pass bond/fund metadata for correct Supabase insert
         if (classified.assetClass) holding.assetClass = classified.assetClass;
