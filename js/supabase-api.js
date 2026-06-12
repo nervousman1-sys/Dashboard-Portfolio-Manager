@@ -178,7 +178,7 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
 // ZERO external API calls during creation — uses purchase price as placeholder.
 // Live prices are fetched AFTER creation by the normal updatePricesFromAPI cycle.
 // Total: 1 portfolio insert + 1 bulk holdings insert + 1 recalc + 1 fetch = ~5 Supabase calls
-async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onProgress) {
+async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onProgress, brokerTxs) {
     const TYPE_LABELS = { stock: 'מניה', bond: 'אג"ח', fund: 'קרן נאמנות', mmf: 'כספית' };
 
     // --- Step 1: Create the empty portfolio shell (1 Supabase call) ---
@@ -279,24 +279,53 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         return null;
     }
 
-    // --- Step 4: Bulk-log all buy transactions (real purchase dates when known) ---
+    // --- Step 4: Bulk-log transactions ---
+    // Broker import → the FULL real history (every trade, FX conversion, deposit,
+    // tax op and bonus, each at its true date) replaces the synthesized aggregate.
     const _buyDateIso = (t) => buyDates[t] ? new Date(buyDates[t] + 'T12:00:00').toISOString() : null;
-    const txRows = holdingRows.map(row => {
-        const tx = {
-            portfolio_id: portfolio.id,
-            type: 'buy',
-            ticker: row.ticker,
-            name: row.name,
-            asset_type: row.type,
-            currency: row.currency || 'USD',
-            shares: row.shares,
-            price: row.cost_basis / row.shares,
-            total: row.cost_basis
-        };
-        const iso = _buyDateIso(row.ticker);
-        if (iso) tx.created_at = iso; // backdate to the actual purchase
-        return tx;
-    });
+    let txRows;
+    if (brokerTxs && brokerTxs.length) {
+        txRows = brokerTxs.map(t => {
+            const created = new Date(t.date + 'T12:00:00').toISOString();
+            const base = { portfolio_id: portfolio.id, created_at: created, currency: t.currency || 'ILS' };
+            switch (t.kind) {
+                case 'buy':
+                case 'secdeposit':
+                    return { ...base, type: 'buy', ticker: t.ticker, name: t.stockName || t.ticker, asset_type: 'stock', shares: t.shares, price: t.unitCost || t.price, total: t.shares * (t.unitCost || t.price), description: t.kind === 'secdeposit' ? 'העברת נייר ערך לתיק' : (t.fee ? `כולל עמלה ${t.fee}` : null) };
+                case 'sell':
+                    return { ...base, type: 'sell', ticker: t.ticker, name: t.stockName || t.ticker, asset_type: 'stock', shares: t.shares, price: t.price, total: t.shares * t.price, description: t.fee ? `כולל עמלה ${t.fee}` : null };
+                case 'fx':
+                    return { ...base, type: 'fx', ticker: '-', name: `המרת מט"ח: $${t.usd} בשער ${(t.fxRate || 0).toFixed(3)}`, asset_type: 'cash', shares: 0, price: t.fxRate || 0, total: t.ils || 0, description: 'המרה משקלים לדולרים' };
+                case 'deposit':
+                    return { ...base, type: 'deposit', ticker: '-', name: t.name || 'הפקדה', asset_type: 'cash', shares: 0, price: 0, total: Math.abs(t.amount || 0), description: null };
+                case 'withdraw':
+                    return { ...base, type: 'withdraw', ticker: '-', name: t.name || 'משיכה', asset_type: 'cash', shares: 0, price: 0, total: Math.abs(t.amount || 0), description: null };
+                case 'tax':
+                    return { ...base, type: 'tax', ticker: '-', name: `${t.name} (${t.dirOut ? 'חיוב' : 'זיכוי'})`, asset_type: 'cash', shares: 0, price: 0, total: Math.abs(t.amount || 0), description: 'פעולת מס מדוח הברוקר' };
+                case 'bonus':
+                    return { ...base, type: 'bonus', ticker: '-', name: t.name || 'הטבה', asset_type: 'cash', shares: 0, price: 0, total: Math.abs(t.amount || 0), description: 'הטבה — ' + (t.name || '') };
+                default:
+                    return null;
+            }
+        }).filter(Boolean);
+    } else {
+        txRows = holdingRows.map(row => {
+            const tx = {
+                portfolio_id: portfolio.id,
+                type: 'buy',
+                ticker: row.ticker,
+                name: row.name,
+                asset_type: row.type,
+                currency: row.currency || 'USD',
+                shares: row.shares,
+                price: row.cost_basis / row.shares,
+                total: row.cost_basis
+            };
+            const iso = _buyDateIso(row.ticker);
+            if (iso) tx.created_at = iso; // backdate to the actual purchase
+            return tx;
+        });
+    }
 
     // localStorage logs (instant, no network)
     txRows.forEach(tx => {

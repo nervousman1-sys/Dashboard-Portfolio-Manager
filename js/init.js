@@ -332,6 +332,13 @@ async function init() {
 
         document.getElementById('lastUpdate').textContent = 'מעדכן מחירים...';
 
+        // New computer? Pull today's CML/SML model from the cloud cache BEFORE the
+        // first build — the page then renders the model instantly instead of
+        // refetching ~70 ticker histories and recomputing from scratch.
+        if (typeof rmHydrateModelFromCloud === 'function') {
+            rmHydrateModelFromCloud().catch(() => { });
+        }
+
         // onUpdate callback — called incrementally as each price batch arrives
         const onPriceUpdate = () => {
             renderSummaryBar();

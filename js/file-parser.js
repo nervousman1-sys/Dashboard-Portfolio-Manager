@@ -86,6 +86,25 @@ function _findDateInRow(row) {
 
 // ========== EXCEL / CSV PARSING ==========
 
+// Raw sheet rows (header-keyed objects) — shared by the generic and broker parsers
+async function _readExcelRows(file) {
+    if (!await _ensureXLSX()) { return []; }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                if (!sheetName) { resolve([]); return; }
+                resolve(XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) || []);
+            } catch (err) { reject(err); }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 async function parseExcelFile(file) {
     if (!await _ensureXLSX()) { return []; }
     return new Promise((resolve, reject) => {
@@ -557,6 +576,133 @@ function separateCashFromHoldings(parsedRows) {
     return { holdings, cashTotal };
 }
 
+// ========== BROKER STATEMENT PARSER (מיטב טרייד / Israeli broker exports) ==========
+//
+// Detects a raw broker activity export (תאריך / סוג פעולה / שער ביצוע …) and
+// reconstructs the WHOLE portfolio from it:
+//   • trades (קניה/מכירה, שח + חו"ל) → current holdings (net shares, true avg
+//     cost incl. fees, per-ticker first-buy date) + full trade history
+//   • FX conversions (B USD/ILS), deposits/withdrawals/transfers, tax ops
+//     (מגן מס / מס עתידי / מס לשלם), and special perks (מבצע חבר מביא חבר —
+//     marked as a bonus) → the "extra operations" history
+//   • cash: ILS = the latest running balance (יתרה שקלית); USD = Σ converted
+//     dollars + Σ foreign-currency cashflows
+//
+// Israeli securities quote in AGOROT (שער 273.53 = ₪2.7353); US legs are in $.
+
+const _BROKER_HEADERS = ['תאריך', 'סוג פעולה', 'שער ביצוע'];
+
+function _isBrokerExport(headers) {
+    const hs = headers.map(h => String(h).trim());
+    return _BROKER_HEADERS.every(req => hs.some(h => h.includes(req)));
+}
+
+function _brokerNum(v) {
+    if (typeof v === 'number') return v;
+    if (!v) return 0;
+    const n = parseFloat(String(v).replace(/[₪$,\s]/g, ''));
+    return isNaN(n) ? 0 : n;
+}
+
+function parseBrokerStatement(rows) {
+    const col = (r, name) => {
+        const k = Object.keys(r).find(h => String(h).includes(name));
+        return k !== undefined ? r[k] : '';
+    };
+
+    const txs = [];
+    for (const r of rows) {
+        const date = _cleanDate(col(r, 'תאריך'));
+        const action = String(col(r, 'סוג פעולה')).trim();
+        const name = String(col(r, 'שם נייר')).trim();
+        const symRaw = col(r, 'סימבול') !== '' ? col(r, 'סימבול') : col(r, "מס' נייר");
+        const sym = String(symRaw).trim();
+        const qty = _brokerNum(col(r, 'כמות'));
+        const rate = _brokerNum(col(r, 'שער ביצוע'));
+        const isUsd = String(col(r, 'מטבע')).includes('$');
+        const fee = _brokerNum(col(r, 'עמלת פעולה')) + _brokerNum(col(r, 'עמלות נלוות'));
+        const fxAmt = _brokerNum(col(r, 'תמורה במט'));
+        const ilsAmt = _brokerNum(col(r, 'תמורה בשקל'));
+        const ilsBal = _brokerNum(col(r, 'יתרה שקלית'));
+        if (!date || !action) continue;
+
+        const isTaxName = /מגן מס|מס עתידי|מס לשלם/.test(name);
+        const isFxName = /^B\s+(USD|EUR|GBP)/i.test(name);
+        const isAlphaSym = /^[A-Z][A-Z0-9.]{0,6}$/i.test(sym) && !/^\d+$/.test(sym);
+        const isSecNum = /^\d{5,9}$/.test(sym) && !/^999\d+$/.test(sym) && sym !== '900';
+
+        const base = { date, action, name, sym, qty, rate, fee, fxAmt, ilsAmt, ilsBal, currency: isUsd ? 'USD' : 'ILS' };
+
+        if (isFxName) {
+            // המרת מט"ח: qty = הדולרים שנקנו, התמורה בשקלים = העלות
+            txs.push({ ...base, kind: 'fx', usd: qty, ils: Math.abs(ilsAmt), fxRate: rate / 100 });
+        } else if (isTaxName) {
+            const out = /משיכה/.test(action);
+            txs.push({ ...base, kind: 'tax', dirOut: out, amount: qty });
+        } else if (/קניה|מכירה/.test(action) && (isAlphaSym || isSecNum)) {
+            const sell = /מכירה/.test(action);
+            const ticker = isAlphaSym ? sym.toUpperCase() : sym;
+            const price = isUsd ? rate : rate / 100; // אגורות → ש"ח
+            // עלות יחידה אמיתית כולל עמלות — מתוך התמורה בפועל
+            const gross = isUsd ? Math.abs(fxAmt) : Math.abs(ilsAmt);
+            const unitCost = qty > 0 && gross > 0 ? gross / qty : price;
+            txs.push({ ...base, kind: sell ? 'sell' : 'buy', ticker, shares: qty, price, unitCost, stockName: name });
+        } else if (/הפקדה/.test(action) && isSecNum && qty > 0) {
+            // העברת נייר ערך לתיק (יחידות, לא מזומן) — נספרת כקנייה לצורך האחזקות
+            const price = isUsd ? rate : rate / 100;
+            txs.push({ ...base, kind: 'secdeposit', ticker: sym, shares: qty, price, unitCost: price, stockName: name });
+        } else if (/שונות מזומן/.test(action) || /מבצע/.test(name)) {
+            txs.push({ ...base, kind: 'bonus', amount: ilsAmt, special: true });
+        } else if (/העברה|הפקדה/.test(action)) {
+            txs.push({ ...base, kind: 'deposit', amount: ilsAmt || qty });
+        } else if (/משיכה/.test(action)) {
+            txs.push({ ...base, kind: 'withdraw', amount: Math.abs(ilsAmt || qty) });
+        } else {
+            txs.push({ ...base, kind: 'other' });
+        }
+    }
+    if (!txs.length) return null;
+
+    // ── Holdings: net positions from the trade history (oldest first) ──
+    const chron = [...txs].sort((a, b) => a.date.localeCompare(b.date));
+    const pos = new Map(); // ticker → {bought, cost, sold, currency, name, firstBuy}
+    for (const t of chron) {
+        if (t.kind !== 'buy' && t.kind !== 'sell' && t.kind !== 'secdeposit') continue;
+        if (!pos.has(t.ticker)) pos.set(t.ticker, { bought: 0, cost: 0, sold: 0, currency: t.currency, name: t.stockName || t.ticker, firstBuy: t.date });
+        const p = pos.get(t.ticker);
+        if (t.kind === 'sell') p.sold += t.shares;
+        else { p.bought += t.shares; p.cost += t.shares * (t.unitCost || t.price); }
+    }
+    const holdings = [];
+    for (const [ticker, p] of pos) {
+        const net = +(p.bought - p.sold).toFixed(4);
+        if (net <= 0.0001) continue; // נמכר במלואו — נשאר בהיסטוריה בלבד
+        holdings.push({
+            ticker,
+            shares: net,
+            avgPrice: p.bought > 0 ? +(p.cost / p.bought).toFixed(4) : 0,
+            currency: p.currency,
+            stockName: p.name,
+            buyDate: p.firstBuy,
+        });
+    }
+
+    // ── Cash ──
+    // ILS: the most recent row's running balance is authoritative
+    const newest = [...txs].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const cashIls = Math.max(0, newest ? newest.ilsBal : 0);
+    // USD: dollars converted in, minus/plus every foreign-currency cashflow
+    let cashUsd = 0;
+    for (const t of txs) {
+        if (t.kind === 'fx') cashUsd += t.usd;
+        else if (t.currency === 'USD') cashUsd += t.fxAmt; // קניות שליליות, מכירות חיוביות
+    }
+    cashUsd = Math.max(0, +cashUsd.toFixed(2));
+
+    const openDate = chron.length ? chron[0].date : null;
+    return { broker: true, holdings, cashUsd, cashIls, openDate, txs };
+}
+
 // ========== FILE HANDLER (entry point from dropzone) ==========
 
 async function handleImportFile(file) {
@@ -565,6 +711,17 @@ async function handleImportFile(file) {
 
     let rawRows;
     if (['xlsx', 'xls', 'csv'].includes(ext)) {
+        // Broker activity export? (raw rows keyed by the Hebrew headers)
+        try {
+            const sheetRows = await _readExcelRows(file);
+            if (sheetRows.length && _isBrokerExport(Object.keys(sheetRows[0]))) {
+                const broker = parseBrokerStatement(sheetRows);
+                if (broker && (broker.holdings.length || broker.txs.length)) {
+                    console.log(`[FileParser] Broker statement: ${broker.txs.length} ops → ${broker.holdings.length} holdings, ₪${broker.cashIls} + $${broker.cashUsd}`);
+                    return broker;
+                }
+            }
+        } catch (e) { console.warn('[FileParser] broker detect failed, falling back:', e.message); }
         rawRows = await parseExcelFile(file);
     } else if (ext === 'pdf') {
         rawRows = await parsePDFFile(file);

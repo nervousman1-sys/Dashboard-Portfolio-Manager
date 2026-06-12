@@ -570,7 +570,7 @@ async function _loadTransactionHistory(portfolioId) {
         let rows = '';
         transactions.forEach(t => {
             const dateStr = t.date.toLocaleDateString('he-IL');
-            const TYPE_LABEL_MAP = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
+            const TYPE_LABEL_MAP = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', fx: 'המרת מט"ח', tax: 'פעולת מס', bonus: 'הטבה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
             const typeLabel = TYPE_LABEL_MAP[t.type] || t.type;
             let pnlCell = '-';
             if (t.type === 'sell' && t.realizedPnl !== null && t.realizedPnl !== undefined) {
@@ -905,7 +905,7 @@ function generateAllPortfoliosReport() {
 
     // Per portfolio (async, parallel): "transactions this month" count + a detailed
     // table of the latest transactions with their actual buy/sell prices.
-    const TX_LABEL = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
+    const TX_LABEL = { buy: 'קנייה', sell: 'מכירה', deposit: 'הפקדה', withdraw: 'משיכה', fx: 'המרת מט"ח', tax: 'פעולת מס', bonus: 'הטבה', edit_settings: 'עדכון הגדרות', edit_holding: 'עריכת נכס' };
     const txTableHTML = (txs) => {
         const shown = (txs || []).filter(t => t.type === 'buy' || t.type === 'sell' || t.type === 'deposit' || t.type === 'withdraw').slice(0, 10);
         if (!shown.length) return '<p class="rpt-sectors" style="color:#888">אין עסקאות בתיק.</p>';
@@ -973,6 +973,7 @@ function openMgmtModal(action, data) {
     let html = '';
 
     if (action === 'addClient') {
+        window._brokerImport = null; // fresh modal — never reuse a previous file's history
         html = `
             <div class="mgmt-header"><h3>הוספת תיק חדש</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body" style="max-height:65vh;overflow-y:auto">
@@ -1750,8 +1751,10 @@ async function addClient() {
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('timeout')), 30000)
             );
+            // Broker import → persist the FULL operation history with real dates
+            const brokerTxs = (window._brokerImport && window._brokerImport.txs) ? window._brokerImport.txs : null;
             const supaPromise = holdingsData.length > 0
-                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress)
+                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress, brokerTxs)
                 : supaAddClient(name, cashUsd, cashIls);
 
             finalClient = await Promise.race([supaPromise, timeoutPromise]);
@@ -1767,6 +1770,7 @@ async function addClient() {
         }
 
         clients.push(finalClient);
+        window._brokerImport = null;
         closeMgmtModal();
         refreshDashboard();
 
@@ -2395,6 +2399,30 @@ async function handleDropzoneFile(file) {
     try {
         const result = await handleImportFile(file);
 
+        // ── Broker activity export: full reconstruction (holdings + cash + history) ──
+        if (result && result.broker) {
+            window._brokerImport = result;
+            const tbody = document.getElementById('mgmt-holdings-tbody');
+            if (tbody) tbody.innerHTML = '';
+            result.holdings.forEach(h => addHoldingRow(h));
+
+            // The statement is authoritative — SET the cash buckets (not add)
+            const cu = document.getElementById('mgmt-cash-usd');
+            const ci = document.getElementById('mgmt-cash-ils');
+            if (cu) cu.value = formatPrice(result.cashUsd || 0);
+            if (ci) ci.value = formatPrice(result.cashIls || 0);
+
+            const [oy, om, od] = (result.openDate || '').split('-');
+            if (statusEl) {
+                statusEl.innerHTML = `<div class="file-status-success">דוח ברוקר זוהה: ${result.txs.length} פעולות → ${result.holdings.length} אחזקות פעילות
+                    ${result.openDate ? `<br>תאריך פתיחת התיק (קנייה ראשונה): <strong>${od}.${om}.${oy}</strong>` : ''}</div>`;
+            }
+            _renderBrokerHistory(result);
+            updateAddClientRisk();
+            if (dropzone) dropzone.style.opacity = '1';
+            return;
+        }
+
         // handleImportFile returns { holdings: [...], cashTotal: number }
         const parsed = result.holdings || [];
         const cashFromFile = result.cashTotal || 0;
@@ -2446,6 +2474,70 @@ async function handleDropzoneFile(file) {
     }
 
     if (dropzone) dropzone.style.opacity = '1';
+}
+
+// ── Broker import: history panel inside the add-portfolio modal ──
+// Trades (קניות/מכירות) shown by default; everything else (המרות מט"ח, הפקדות,
+// משיכות, פעולות מס, הטבות) behind a "פעולות נוספות" button. Bonuses get a
+// special gold badge.
+function _renderBrokerHistory(result) {
+    const host = document.getElementById('addClientFileStatus');
+    if (!host) return;
+    let panel = document.getElementById('brokerHistoryPanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'brokerHistoryPanel';
+        host.after(panel);
+    }
+    const heDate = (iso) => { const [y, m, d] = (iso || '').split('-'); return `${d}.${m}.${y}`; };
+    const money = (n, cur) => (cur === 'USD' ? '$' : '₪') + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+    const trades = result.txs.filter(t => t.kind === 'buy' || t.kind === 'sell' || t.kind === 'secdeposit')
+        .sort((a, b) => b.date.localeCompare(a.date));
+    const others = result.txs.filter(t => !['buy', 'sell', 'secdeposit', 'other'].includes(t.kind))
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+    const tradeRows = trades.map(t => `
+        <tr>
+            <td>${heDate(t.date)}</td>
+            <td><span class="bh-kind ${t.kind === 'sell' ? 'sell' : 'buy'}">${t.kind === 'sell' ? 'מכירה' : t.kind === 'secdeposit' ? 'העברת נייר' : 'קנייה'}</span></td>
+            <td style="direction:ltr">${t.ticker}</td>
+            <td>${Number(t.shares).toLocaleString('en-US')}</td>
+            <td>${money(t.price, t.currency)}</td>
+            <td>${t.fee ? money(t.fee, t.currency) : '—'}</td>
+        </tr>`).join('');
+
+    const otherLabel = { fx: 'המרת מט"ח', deposit: 'הפקדה', withdraw: 'משיכה', tax: 'פעולת מס', bonus: 'הטבה' };
+    const otherRows = others.map(t => {
+        const what = t.kind === 'fx'
+            ? `$${Number(t.usd).toLocaleString('en-US')} בשער ${Number(t.fxRate).toFixed(3)} (₪${Number(t.ils).toLocaleString('en-US')})`
+            : t.kind === 'tax'
+                ? `${t.name} — ${t.dirOut ? 'חיוב' : 'זיכוי'} ₪${Number(t.amount).toLocaleString('en-US')}`
+                : `${t.name || ''} ₪${Number(Math.abs(t.amount || 0)).toLocaleString('en-US')}`;
+        return `
+        <tr class="${t.kind === 'bonus' ? 'bh-bonus-row' : ''}">
+            <td>${heDate(t.date)}</td>
+            <td>${t.kind === 'bonus' ? '<span class="bh-bonus-badge">★ הטבה</span>' : `<span class="bh-kind misc">${otherLabel[t.kind] || t.kind}</span>`}</td>
+            <td colspan="4">${what}</td>
+        </tr>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div class="broker-history">
+            <div class="bh-title">היסטוריית קניות ומכירות (${trades.length})</div>
+            <div class="bh-scroll">
+                <table class="bh-table">
+                    <thead><tr><th>תאריך</th><th>פעולה</th><th>נייר</th><th>כמות</th><th>מחיר</th><th>עמלה</th></tr></thead>
+                    <tbody>${tradeRows || '<tr><td colspan="6">אין עסקאות</td></tr>'}</tbody>
+                </table>
+            </div>
+            <button type="button" class="bh-more-btn" onclick="const x=document.getElementById('bhOthers'); const on=x.style.display==='none'; x.style.display=on?'':'none'; this.textContent=on?'הסתר פעולות נוספות':'הצג פעולות נוספות (${others.length}) — המרות מט"ח, הפקדות, מסים והטבות';">הצג פעולות נוספות (${others.length}) — המרות מט"ח, הפקדות, מסים והטבות</button>
+            <div id="bhOthers" style="display:none">
+                <div class="bh-scroll">
+                    <table class="bh-table"><tbody>${otherRows || '<tr><td>אין פעולות נוספות</td></tr>'}</tbody></table>
+                </div>
+            </div>
+        </div>`;
 }
 
 // Close row dropdowns when clicking outside

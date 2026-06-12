@@ -377,7 +377,16 @@ async function executeBulkAction() {
         document.getElementById('bulkExecBtn').disabled = true;
         if (progEl) progEl.innerHTML = '';
         log(`מאתר מחיר עדכני ל-${ticker}…`);
-        const q = await fetchSingleTickerPrice(ticker, 'USD');
+        let q = null;
+        try { q = await fetchSingleTickerPrice(ticker, 'USD'); } catch (e) { /* fallback below */ }
+        if (!q || !(q.price > 0)) {
+            // Same-origin Yahoo proxy — works on any machine, no API keys involved
+            try {
+                const r = await fetch(`/api/quote?symbols=${encodeURIComponent(ticker)}`, { headers: { Accept: 'application/json' } });
+                const j = await r.json();
+                if (j && j[ticker] && j[ticker].price > 0) q = j[ticker];
+            } catch (e) { /* handled below */ }
+        }
         if (!q || !(q.price > 0)) {
             log(`✗ לא נמצא מחיר ל-${ticker} — הפעולה בוטלה`);
             _bulkBusy = false; document.getElementById('bulkExecBtn').disabled = false;

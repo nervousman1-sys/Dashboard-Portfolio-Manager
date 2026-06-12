@@ -720,10 +720,47 @@ const _RM_PERSIST_KEY = 'risk_model_persist_v1';
 const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
 
 function _rmPersistModel(sig, model) {
+    const entry = { sig, ts: Date.now(), model };
     try {
-        localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify({ sig, ts: Date.now(), model }));
+        localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify(entry));
     } catch (e) { /* localStorage full — skip persistence */ }
+    // Cross-device: mirror to Supabase so a NEW computer gets the model instantly
+    // instead of refetching ~70 ticker-years and recomputing (fire-and-forget).
+    try {
+        if (typeof supabaseClient !== 'undefined' && typeof supabaseConnected !== 'undefined' && supabaseConnected) {
+            supabaseClient.auth.getUser().then(({ data: { user } }) => {
+                if (!user) return;
+                return supabaseClient.from('user_cache').upsert(
+                    { user_id: user.id, key: 'risk_model', value: entry, updated_at: new Date().toISOString() },
+                    { onConflict: 'user_id,key' });
+            }).then(r => { if (r && r.error) console.warn('[RiskModel] cloud persist:', r.error.message); })
+                .catch(() => { /* table missing / offline — local cache still works */ });
+        }
+    } catch (e) { /* non-fatal */ }
 }
+
+// Boot-time hydration: if this browser has no fresh local model, pull the one the
+// user's other device computed today and seed localStorage BEFORE the first build.
+async function rmHydrateModelFromCloud() {
+    try {
+        if (typeof supabaseClient === 'undefined') return;
+        const raw = localStorage.getItem(_RM_PERSIST_KEY);
+        if (raw) {
+            const e = JSON.parse(raw);
+            if (e && Date.now() - e.ts < _RM_PERSIST_TTL) return; // local is fresh
+        }
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return;
+        const { data, error } = await supabaseClient
+            .from('user_cache').select('value').eq('user_id', user.id).eq('key', 'risk_model').maybeSingle();
+        if (error || !data || !data.value) return;
+        const entry = data.value;
+        if (!entry.sig || !entry.model || Date.now() - entry.ts > _RM_PERSIST_TTL) return;
+        localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify(entry));
+        console.log('[RiskModel] Hydrated model from cloud cache (cross-device)');
+    } catch (e) { /* silent — model will just build normally */ }
+}
+if (typeof window !== 'undefined') window.rmHydrateModelFromCloud = rmHydrateModelFromCloud;
 
 function _rmLoadPersistedModel(sig) {
     try {
@@ -745,6 +782,14 @@ function invalidateRiskModel() {
     _riskModelInflight = null;
     try { localStorage.removeItem(_RM_PERSIST_KEY); } catch (e) { /* ignore */ }
     if (typeof window !== 'undefined') window._lastRiskModel = null;
+    // Drop the cloud mirror too — holdings changed, other devices must not rehydrate it
+    try {
+        if (typeof supabaseClient !== 'undefined' && typeof supabaseConnected !== 'undefined' && supabaseConnected) {
+            supabaseClient.auth.getUser().then(({ data: { user } }) => {
+                if (user) return supabaseClient.from('user_cache').delete().eq('user_id', user.id).eq('key', 'risk_model');
+            }).catch(() => { });
+        }
+    } catch (e) { /* non-fatal */ }
 }
 
 let _modelRiskApplying = false;
