@@ -363,19 +363,27 @@ function _dnRender() {
         return 'עדכון';
     };
 
-    // A collapsed-by-date item: textual headline; on expand the image is READ into
-    // Hebrew text (vision) — transcription for חדשות, short summary for תנועות-הון.
-    const renderCollapsed = (m, chName, open, visionMode) => {
+    // A collapsed-by-date item: textual headline; on expand the images are READ into
+    // Hebrew text (vision). Takes ALL the day's messages — agents sometimes split one
+    // update (e.g. inflows / outflows / conclusion) across several posts and images.
+    const _msgImgs = (m) => {
         const imgs = [];
         const urls = (m.content || '').match(/https?:\/\/\S+/g) || [];
         for (const u of urls) if (isImgUrl(u)) imgs.push(u);
         for (const e of (m.embeds || [])) if (e.image) imgs.push(e.image);
         for (const a of (m.attachments || [])) if (isImgUrl(a.url) || /\.(png|jpe?g|webp|gif)/i.test(a.name || '')) imgs.push(a.url);
+        return imgs;
+    };
+    const renderCollapsed = (msgs, chName, open, visionMode) => {
+        const m = msgs[0];
+        // Oldest-first within the day so inflows render before outflows
+        const imgs = [...msgs].reverse().flatMap(_msgImgs);
         const body = imgs.length
-            ? `<div class="dn-vision" data-imgs="${encodeURIComponent(JSON.stringify(imgs.slice(0, 4)))}" data-mode="${visionMode || 'transcribe'}"></div>`
+            ? `<div class="dn-vision" data-imgs="${encodeURIComponent(JSON.stringify(imgs.slice(0, 6)))}" data-mode="${visionMode || 'transcribe'}"></div>`
             : '<div class="adv-empty">אין תוכן נוסף.</div>';
+        const dkey = `${_dnActiveChannel}|${_dnDateOf(m)}`;
         return `
-        <details class="dn-day" ${open ? 'open' : ''} ontoggle="_dnLoadVision(this)">
+        <details class="dn-day" data-dkey="${_dnEsc(dkey)}" ${open ? 'open' : ''} ontoggle="_dnLoadVision(this)">
             <summary class="dn-day-head">
                 <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
                 <span class="dn-day-title">${_dnEsc(headlineOf(m, chName, visionMode === 'flows' ? 'תנועות-הון' : visionMode === 'headlines' ? 'חדשות' : ''))}</span>
@@ -488,7 +496,7 @@ function _dnRender() {
         let out = '';
         for (const [date, list] of groups) {
             out += `
-            <details class="dn-day" ${first ? 'open' : ''}>
+            <details class="dn-day" data-dkey="${_dnEsc(`${_dnActiveChannel}|${date}`)}" ${first ? 'open' : ''}>
                 <summary class="dn-day-head">
                     <span class="adv-portfolio-chevron" aria-hidden="true">▾</span>
                     <span class="dn-day-title">📅 ${_dnEsc(date)}</span>
@@ -510,8 +518,14 @@ function _dnRender() {
         } else {
             const kind = _dnChannelKind(c.name);
             if (kind === 'collapse') {
-                // Each daily post = its own date-collapsed headline (latest open)
-                html = c.messages.map((m, i) => renderCollapsed(m, null, i === 0, visionModeOf(c.name))).join('');
+                // ONE collapsed row per DATE (latest open) — all of that day's posts merged
+                const byDate = new Map();
+                for (const m of c.messages) {
+                    const d = _dnDateOf(m);
+                    if (!byDate.has(d)) byDate.set(d, []);
+                    byDate.get(d).push(m);
+                }
+                html = [...byDate.values()].map((msgs, i) => renderCollapsed(msgs, null, i === 0, visionModeOf(c.name))).join('');
             } else if (kind === 'options') {
                 html = renderByDate(c.messages, (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
             } else {
@@ -519,7 +533,19 @@ function _dnRender() {
             }
         }
     }
+    // Auto-refresh must NOT touch what the user opened/closed by hand:
+    // remember each day's state before the re-render and restore it after.
+    const prevState = new Map();
+    feedEl.querySelectorAll('details.dn-day[data-dkey]').forEach(d => prevState.set(d.dataset.dkey, d.open));
+
     feedEl.innerHTML = html;
+
+    if (prevState.size) {
+        feedEl.querySelectorAll('details.dn-day[data-dkey]').forEach(d => {
+            const was = prevState.get(d.dataset.dkey);
+            if (was !== undefined && was !== d.open) d.open = was;
+        });
+    }
 
     // The open post loads itself via ontoggle; warm the rest in the background
     document.querySelectorAll('#dnFeed details.dn-day[open]').forEach(d => _dnLoadVision(d));

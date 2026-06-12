@@ -164,8 +164,12 @@ function _renderBulkPage() {
                 </div>
                 <div class="bulk-field" id="bulkReduceTickerField" style="${_bulkScope === 'ticker' ? '' : 'display:none'}">
                     <label>סימול לצמצום</label>
-                    <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
-                           oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
+                    <div style="position:relative">
+                        <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left"
+                               oninput="this.value=this.value.toUpperCase(); _bulkTickerSuggest(); _bulkRefreshList()"
+                               onfocus="_bulkTickerSuggest()" />
+                        <div class="row-ticker-dropdown" id="bulkReduceDrop"></div>
+                    </div>
                 </div>
                 <div class="bulk-field">
                     <label>אחוז צמצום (%)</label>
@@ -259,6 +263,60 @@ function _bulkEligibility(c) {
     return { ok: true };
 }
 
+// Suggest ONLY tickers actually held in the portfolios (filtered by what's typed) —
+// the reduce box accepts existing symbols, like the buy windows' search.
+function _bulkTickerSuggest() {
+    const inp = document.getElementById('bulkReduceTicker');
+    const drop = document.getElementById('bulkReduceDrop');
+    if (!inp || !drop) return;
+    const q = (inp.value || '').toUpperCase().trim();
+
+    // ticker → { name, portfolios held in }
+    const held = new Map();
+    for (const c of (typeof clients !== 'undefined' ? clients : [])) {
+        for (const h of (c.holdings || [])) {
+            if (h.type !== 'stock' || !(h.shares > 0) || !h.ticker) continue;
+            const t = h.ticker.toUpperCase();
+            if (!held.has(t)) held.set(t, { name: h.name || t, count: 0 });
+            held.get(t).count++;
+        }
+    }
+    const matches = [...held.entries()]
+        .filter(([t, v]) => !q || t.includes(q) || String(v.name).toUpperCase().includes(q))
+        .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+        .slice(0, 8);
+
+    if (!matches.length) {
+        drop.innerHTML = q ? '<div class="ticker-search-empty">אין נכס כזה בתיקים</div>' : '';
+        drop.style.display = q ? 'block' : 'none';
+        return;
+    }
+    drop.innerHTML = matches.map(([t, v]) => `
+        <div class="ticker-search-item" onclick="_bulkPickTicker('${t}')">
+            <div class="search-row-grid">
+                <div class="search-col-name"><span class="search-name-primary">${v.name}</span></div>
+                <div class="search-col-ticker">${t}</div>
+                <div class="search-col-exchange">${v.count} תיקים</div>
+            </div>
+        </div>`).join('');
+    drop.style.display = 'block';
+}
+
+function _bulkPickTicker(t) {
+    const inp = document.getElementById('bulkReduceTicker');
+    const drop = document.getElementById('bulkReduceDrop');
+    if (inp) inp.value = t;
+    if (drop) { drop.innerHTML = ''; drop.style.display = 'none'; }
+    _bulkRefreshList();
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#bulkReduceTickerField')) {
+        const drop = document.getElementById('bulkReduceDrop');
+        if (drop) { drop.innerHTML = ''; drop.style.display = 'none'; }
+    }
+});
+
 function _bulkRefreshList() {
     const listEl = document.getElementById('bulkList');
     if (!listEl) return;
@@ -350,6 +408,12 @@ async function executeBulkAction() {
         const scopeTicker = _bulkScope === 'ticker'
             ? (document.getElementById('bulkReduceTicker')?.value || '').toUpperCase().trim() : null;
         if (_bulkScope === 'ticker' && !scopeTicker) { alert('נא להזין סימול לצמצום'); return; }
+        // Only symbols that actually exist in the portfolios are actionable
+        if (scopeTicker && !(typeof clients !== 'undefined' ? clients : []).some(c =>
+            (c.holdings || []).some(h => h.type === 'stock' && (h.shares || 0) > 0 && (h.ticker || '').toUpperCase() === scopeTicker))) {
+            alert(`הסימול ${scopeTicker} לא מוחזק באף תיק — בחר נכס קיים מהרשימה`);
+            return;
+        }
         const what = scopeTicker ? scopeTicker : 'כל המניות';
         if (!confirm(`לצמצם ${pct}% מ-${what} ב-${selected.length} תיקים?`)) return;
 
