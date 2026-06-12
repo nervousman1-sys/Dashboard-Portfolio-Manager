@@ -166,8 +166,7 @@ function _renderBulkPage() {
                     <label>סימול לצמצום</label>
                     <div style="position:relative;width:100%">
                         <input type="text" autocomplete="off" id="bulkReduceTicker" placeholder="למשל: NVDA" style="direction:ltr;text-align:left;width:100%;box-sizing:border-box"
-                               oninput="this.value=this.value.toUpperCase(); _bulkTickerSuggest(); _bulkRefreshList()"
-                               onfocus="_bulkTickerSuggest()" />
+                               oninput="this.value=this.value.toUpperCase(); _bulkTickerSuggest(); _bulkRefreshList()" />
                         <div class="row-ticker-dropdown" id="bulkReduceDrop"></div>
                     </div>
                 </div>
@@ -270,6 +269,8 @@ function _bulkTickerSuggest() {
     const drop = document.getElementById('bulkReduceDrop');
     if (!inp || !drop) return;
     const q = (inp.value || '').toUpperCase().trim();
+    // Suggestions appear only once typing starts — never on a bare click
+    if (!q) { drop.innerHTML = ''; drop.style.display = 'none'; return; }
 
     // ticker → { name, portfolios held in }
     const held = new Map();

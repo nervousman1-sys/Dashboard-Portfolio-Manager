@@ -230,6 +230,7 @@ function _dnVisionHTML(text, img, mode) {
             const mS = l.match(/^סקטור\s*:\s*(.+?)\s*\|\s*כיוון\s*:\s*(.+?)\s*\|\s*היקף\s*:\s*(.+)$/);
             if (mS) {
                 const amount = mS[3].trim();
+                if (!amount.includes('%')) continue; // percentages only — no $B ETF rows
                 rows.push({
                     name: mS[1].trim(),
                     inflow: /כניס/.test(mS[2]),
