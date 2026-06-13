@@ -119,6 +119,9 @@ async function openModal(clientId) {
     let totalHoldingsValue = 0;   // FX-converted to USD for correct cross-currency totals
     let totalHoldingsPnL = 0;     // FX-converted to USD
     let totalDailyPnL = 0;        // FX-converted to USD — sum of per-asset daily profit
+    // Total portfolio value (holdings + cash, FX→USD) — denominator for each asset's weight
+    const _portTotalForPct = client.holdings.reduce((s, hh) => s + (hh.value || 0) * _fxR(hh.currency), 0)
+        + ((client.cash?.usd || 0) + (client.cash?.ils || 0) * _fxR('ILS'));
     client.holdings.forEach((h, hIdx) => {
         const isStale = h.type === 'stock' && !h._livePriceResolved;
         const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
@@ -154,6 +157,13 @@ async function openModal(clientId) {
         totalDailyPnL += isStale ? 0 : dailyProfit * _hFx;
         const dailyProfitClass = dailyProfit >= 0 ? 'positive' : 'negative';
         const dailyProfitSign = dailyProfit >= 0 ? '+' : '';
+        // β from the CML/SML model (stocks only); % weight of the whole portfolio
+        const _betaCell = (() => {
+            const m = window._lastRiskModel;
+            const a = m && m.assets && h.type === 'stock' ? m.assets[h.ticker] : null;
+            return (a && a.beta != null && isFinite(a.beta)) ? a.beta.toFixed(2) : '<span style="color:var(--text-muted)">—</span>';
+        })();
+        const _pctOfPort = _portTotalForPct > 0 ? (h.value * _hFx / _portTotalForPct * 100) : 0;
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
@@ -167,18 +177,19 @@ async function openModal(clientId) {
             </td>
             <td>${formatPrice(purchasePrice)} ${currSymbol}</td>
             <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${formatPrice(h.price)} ${currSymbol}</span>` : `${formatPrice(h.price)} ${currSymbol}`}</td>
-            <td>${h.yearHigh ? `${formatPrice(h.yearHigh)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td>${h.yearLow ? `${formatPrice(h.yearLow)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td id="yh_${h.id}">${h.yearHigh ? `${formatPrice(h.yearHigh)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td id="yl_${h.id}">${h.yearLow ? `${formatPrice(h.yearLow)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
+            <td style="font-weight:600">${_pctOfPort >= 0.05 ? _pctOfPort.toFixed(1) + '%' : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td>${_betaCell}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : dailyProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${dailyProfitSign}${formatCurrency(Math.abs(dailyProfit), h.currency)}`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}" style="font-weight:700">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${holdingReturn.toFixed(2)}%`}</td>
             <td>
+                <button class="holding-action-btn buy" onclick="openMgmtModal('buyHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">קנה</button>
                 <button class="holding-action-btn sell" onclick="openMgmtModal('sellHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">מכור</button>
-                <button class="holding-action-btn" onclick="openMgmtModal('editHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">ערוך</button>
-                <button class="holding-action-btn delete" onclick="openMgmtModal('removeHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">הסר</button>
             </td>
         </tr>`;
     });
@@ -198,6 +209,8 @@ async function openModal(clientId) {
         <td></td>
         <td></td>
         <td style="font-weight:700;color:var(--text-primary)">${formatCurrency(totalHoldingsValue)}</td>
+        <td></td>
+        <td></td>
         <td class="price-change ${totalDailyClass}" style="font-weight:700">${totalDailySign}${totalDailyPct.toFixed(2)}%</td>
         <td class="price-change ${totalDailyClass}" style="font-weight:700">${totalDailySign}${formatCurrency(Math.abs(totalDailyPnL))}</td>
         <td class="price-change ${totalPnLClass}" style="font-weight:700">${totalPnLSign}${formatCurrency(Math.abs(totalHoldingsPnL))}</td>
@@ -416,14 +429,14 @@ async function openModal(clientId) {
                 <div class="mcs-charts">
                     <div class="mcs-chart-card">
                         <div class="mcs-chart-head">
-                            <h4>קו שוק ההון (CML)</h4>
+                            <h4>קו שוק ההון (CML) <button class="chart-info-btn" onclick="openChartInfo('cml')" title="הסבר על הגרף" aria-label="הסבר על גרף ה-CML">i</button></h4>
                             <span>החזית היעילה (עקומה) · מיקום התיק שלך עליה</span>
                         </div>
                         <div class="mcs-canvas-wrap"><canvas id="modal-cml-chart"></canvas></div>
                     </div>
                     <div class="mcs-chart-card">
                         <div class="mcs-chart-head">
-                            <h4>קו שוק נייר הערך (SML)</h4>
+                            <h4>קו שוק נייר הערך (SML) <button class="chart-info-btn" onclick="openChartInfo('sml')" title="הסבר על הגרף" aria-label="הסבר על גרף ה-SML">i</button></h4>
                             <span>תשואה מול β · מעל הקו = מתומחר בחסר, מתחת = ביתר</span>
                         </div>
                         <div class="mcs-canvas-wrap"><canvas id="modal-sml-chart"></canvas></div>
@@ -442,7 +455,7 @@ async function openModal(clientId) {
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
                 <div class="holdings-table-wrapper">
                 <table class="holdings-table">
-                    <thead><tr><th>נכס</th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-price">שנתי גבוה</th><th class="col-price">שנתי נמוך</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">תשואה יומית</th><th>רווח יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה כוללת</th><th>פעולות</th></tr></thead>
+                    <thead><tr><th>נכס</th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-price">שנתי גבוה</th><th class="col-price">שנתי נמוך</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">% מהתיק</th><th class="col-pct">β</th><th class="col-pct">תשואה יומית</th><th>רווח יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה כוללת</th><th>פעולות</th></tr></thead>
                     <tbody>${holdingsRows}${holdingsFooter}</tbody>
                 </table>
                 </div>
@@ -484,6 +497,9 @@ async function openModal(clientId) {
 
     document.getElementById('modalOverlay').classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+
+    // Fill any missing 52-week high/low cells in the holdings table (Yahoo proxy)
+    _enrichHoldings52w(client);
 
     // Create modal charts
     setTimeout(() => {
@@ -966,6 +982,107 @@ function generateAllPortfoliosReport() {
     }
 }
 
+// Fill missing 52-week high/low cells in the holdings table via the same-origin
+// Yahoo quote proxy (most reliable, keyless). TASE quotes arrive in agorot (ILA)
+// → scaled to shekels. Cells are patched in place by id, no full re-render.
+async function _enrichHoldings52w(client) {
+    if (!client || !Array.isArray(client.holdings)) return;
+    const targets = client.holdings.filter(h => h.type === 'stock' && h.id != null && !(h.yearHigh > 0 && h.yearLow > 0));
+    if (!targets.length) return;
+    const symOf = (h) => {
+        const t = (h.ticker || '').toUpperCase();
+        if (!t) return '';
+        if (h.currency === 'ILS') {
+            return (typeof _resolveYahooSymbol === 'function') ? _resolveYahooSymbol(t, true) : t.replace(/\.TA$/, '') + '.TA';
+        }
+        return t;
+    };
+    const bySym = {};
+    for (const h of targets) { const s = symOf(h); if (s) (bySym[s] = bySym[s] || []).push(h); }
+    const syms = Object.keys(bySym);
+    if (!syms.length) return;
+    try {
+        const r = await fetch(`/api/quote?symbols=${encodeURIComponent(syms.join(','))}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return;
+        const data = await r.json();
+        for (const s of syms) {
+            const q = data[s];
+            if (!q) continue;
+            const k = (q.currency === 'ILA') ? 0.01 : 1; // agorot → shekels
+            const yh = q.yearHigh > 0 ? q.yearHigh * k : null;
+            const yl = q.yearLow > 0 ? q.yearLow * k : null;
+            for (const h of bySym[s]) {
+                const cur = h.currency === 'ILS' ? '₪' : '$';
+                if (yh) { h.yearHigh = yh; const c = document.getElementById('yh_' + h.id); if (c) c.innerHTML = `${formatPrice(yh)} ${cur}`; }
+                if (yl) { h.yearLow = yl; const c = document.getElementById('yl_' + h.id); if (c) c.innerHTML = `${formatPrice(yl)} ${cur}`; }
+            }
+        }
+    } catch (e) { /* leave dashes */ }
+}
+
+// Small HTML-escaper for values interpolated into modal markup
+function _mEsc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ========== CHART INFO POPUP (CML / SML explanations) ==========
+const _CHART_INFO = {
+    cml: {
+        title: 'קו שוק ההון (CML) — מה הוא מראה',
+        body: `
+            <p><b>הרעיון:</b> הגרף מודד את התיק שלך מול ה<b>סיכון הכולל</b> שלו (סטיית תקן, σ — התנודתיות של כל התיק). זהו מבחן היעילות: כמה תשואה אתה מקבל על כל יחידת סיכון שאתה לוקח.</p>
+            <ul>
+                <li><b>העקומה הירוקה</b> = החזית היעילה (Markowitz) — צירופי הנכסים הטובים ביותר שאפשר להרכיב לכל רמת סיכון.</li>
+                <li><b>הקו הכחול המקווקו (CML)</b> = שילוב בין נכס חסר-סיכון (מזומן/אג"ח קצר) לבין תיק השוק. כל תיק <b>על הקו או מעליו</b> הוא יעיל; תיק <b>מתחת לקו</b> מקבל פחות תשואה ממה שמגיע לו לרמת הסיכון.</li>
+                <li><b>הנקודה התכולה</b> = התיק שלך, במיקומו האמיתי (σ, תשואה צפויה).</li>
+                <li><b>היהלום הסגול</b> = מדד השוק (S&P 500). <b>הקו המקווקו האפור</b> = הפער מהחזית — כמה סיכון אפשר לחסוך באיזון מחדש מבלי לוותר על תשואה.</li>
+            </ul>
+            <p><b>המסקנה:</b> ככל שהנקודה התכולה קרובה יותר לקו הכחול / לעקומה הירוקה — התיק יעיל יותר. אם היא מתחת, יש מקום לאזן אותו לאזור היעיל.</p>`,
+    },
+    sml: {
+        title: 'קו שוק נייר הערך (SML) — מה הוא מראה',
+        body: `
+            <p><b>הרעיון:</b> כאן כל נקודה היא <b>נכס בודד</b> בתיק, ממוקמת לפי ה<b>ביטא (β)</b> שלו — הסיכון השיטתי, כלומר כמה הנכס זז ביחס לשוק — מול התשואה הצפויה ממנו.</p>
+            <ul>
+                <li><b>הקו הכחול (SML)</b> = התשואה ה"הוגנת" שמודל CAPM דורש מנכס לפי הביטא שלו.</li>
+                <li><b>נקודה מעל הקו</b> = הנכס נותן יותר מהנדרש → <span style="color:#22c55e;font-weight:700">מתומחר בחסר (מומלץ)</span>.</li>
+                <li><b>נקודה על הקו</b> = מתומחר הוגן → <span style="color:#eab308;font-weight:700">ניטרלי</span>.</li>
+                <li><b>נקודה מתחת לקו</b> = נותן פחות מהנדרש → <span style="color:#ef4444;font-weight:700">מתומחר ביתר (לא מומלץ)</span>.</li>
+            </ul>
+            <p><b>חשוב:</b> הנקודות הירוקות, הצהובות <u>והאדומות</u> — כולן נכסים שאתה כבר מחזיק בתיק. הצבע מציין רק את חוות הדעת לגביהן: ירוק = להחזיק/להגדיל, אדום = לשקול צמצום. היהלום הסגול = השוק (β=1), הנקודה התכולה = התיק כולו.</p>`,
+    },
+};
+
+function openChartInfo(which) {
+    const info = _CHART_INFO[which];
+    if (!info) return;
+    let ov = document.getElementById('chartInfoOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'chartInfoOverlay';
+        ov.className = 'chart-info-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeChartInfo(); });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = `
+        <div class="chart-info-dialog" dir="rtl">
+            <div class="chart-info-head">
+                <h3>${info.title}</h3>
+                <button class="chart-info-close" onclick="closeChartInfo()" aria-label="סגור">&times;</button>
+            </div>
+            <div class="chart-info-body">${info.body}</div>
+        </div>`;
+    ov.classList.add('active');
+}
+function closeChartInfo() {
+    const ov = document.getElementById('chartInfoOverlay');
+    if (ov) ov.classList.remove('active');
+}
+if (typeof window !== 'undefined') {
+    window.openChartInfo = openChartInfo;
+    window.closeChartInfo = closeChartInfo;
+}
+
 // ========== PORTFOLIO & ASSET MANAGEMENT ==========
 
 function openMgmtModal(action, data) {
@@ -1092,6 +1209,42 @@ function openMgmtModal(action, data) {
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
                     <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
+                    <div class="insufficient-cash-warning" id="mgmt-cash-warning" style="display:none">אין מספיק מזומן בתיק</div>
+                </div>
+            </div>
+            <div class="mgmt-footer">
+                <button class="mgmt-btn primary" id="mgmt-buy-btn" onclick="addHolding(${c.id})">קנה נכס</button>
+                <button class="mgmt-btn secondary" onclick="closeMgmtModal()">ביטול</button>
+            </div>`;
+    }
+    else if (action === 'buyHolding') {
+        // Buy MORE of an asset already held — same flow as addHolding but the
+        // ticker is locked to this holding (no search).
+        const { client: c, holding: h } = data;
+        const cashUsd = c.cash?.usd || 0;
+        const cashIls = c.cash?.ils || 0;
+        const buyHeName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';
+        const buyDisplayName = buyHeName || (h.type === 'stock' ? h.ticker : h.name);
+        const buyCurLabel = h.currency === 'ILS' ? '₪' : '$';
+        html = `
+            <div class="mgmt-header"><h3>קניית ${_mEsc(buyDisplayName)}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
+            <div class="mgmt-body">
+                <div class="cash-balance-display"><span>מזומן (USD):</span><span class="cash-amount">${formatCurrency(cashUsd, 'USD')}</span></div>
+                <div class="cash-balance-display"><span>מזומן (ILS):</span><span class="cash-amount">${formatCurrency(cashIls, 'ILS')}</span></div>
+                <input type="hidden" id="mgmt-available-cash-usd" value="${cashUsd}" />
+                <input type="hidden" id="mgmt-available-cash-ils" value="${cashIls}" />
+                <input type="hidden" id="mgmt-asset-type" value="${h.type}" />
+                <input type="hidden" id="mgmt-ticker-symbol" value="${_mEsc(h.ticker)}" />
+                <input type="hidden" id="mgmt-ticker-currency" value="${h.currency || 'USD'}" />
+                <input type="hidden" id="mgmt-ticker-name" value="${_mEsc(h.name || h.ticker)}" />
+                <input type="hidden" id="mgmt-asset-class" value="${h.assetClass || 'Gov Bond'}" />
+                <div class="mgmt-field"><label>נכס</label><div class="ticker-selected-badge" style="display:flex">${_mEsc(buyDisplayName)} <span style="direction:ltr;opacity:.7">${_mEsc(h.ticker)}</span></div></div>
+                <div id="mgmt-live-price-preview" style="display:none"></div>
+                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">${buyCurLabel}</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" value="${formatPrice(h.price || 0)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-qty" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
+                <div class="buy-cost-summary">
+                    <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">${buyCurLabel}0</span></div>
+                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(h.currency === 'ILS' ? cashIls : cashUsd, h.currency || 'USD')}</span></div>
                     <div class="insufficient-cash-warning" id="mgmt-cash-warning" style="display:none">אין מספיק מזומן בתיק</div>
                 </div>
             </div>

@@ -31,6 +31,8 @@ async function fetchQuote(symbol) {
         price: m.regularMarketPrice,
         prevClose: m.chartPreviousClose || m.previousClose || m.regularMarketPrice,
         currency: m.currency || 'USD',
+        yearHigh: m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh : null,
+        yearLow: m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow : null,
     };
 }
 

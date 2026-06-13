@@ -8111,7 +8111,9 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 
 /* Capital-flows visual summary (where the money goes) */
 .dn-flow-head { font-size: 14.5px; font-weight: 800; color: #fff; margin-bottom: 10px; }
-.dn-flow-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+/* Narrower histogram: cap the bar track so the % sits close to the name/group,
+   and pack the row to the inline-start (right, in RTL) instead of stretching. */
+.dn-flow-row { display: grid; grid-template-columns: 120px minmax(70px, 280px) auto; gap: 10px; align-items: center; margin-bottom: 8px; justify-content: start; }
 .dn-flow-name { font-size: 13px; font-weight: 700; color: #fff; }
 .dn-flow-track { height: 12px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
 .dn-flow-bar { height: 100%; border-radius: 6px; }
@@ -9108,3 +9110,53 @@ html.day-mode .bh-bonus-badge { color: #a16207; background: rgba(202, 138, 4, 0.
 
 /* Holding row badge — security-number chip next to a resolved Hebrew fund name */
 .badge-secid { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-inline-start: 6px; direction: ltr; }
+
+/* ===== Chart info icon + explanation popup (CML / SML) ===== */
+.chart-info-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; margin-inline-start: 6px; vertical-align: middle;
+    border-radius: 50%; border: 1.4px solid #38bdf8; background: transparent;
+    color: #38bdf8; font-size: 11px; font-weight: 800; font-style: italic;
+    font-family: Georgia, serif; cursor: pointer; line-height: 1; padding: 0;
+    transition: background .15s, color .15s;
+}
+.chart-info-btn:hover { background: #38bdf8; color: #061018; }
+html.day-mode .chart-info-btn { border-color: #0e7490; color: #0e7490; }
+html.day-mode .chart-info-btn:hover { background: #0e7490; color: #fff; }
+.chart-info-overlay {
+    position: fixed; inset: 0; z-index: 4000; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(2, 6, 16, 0.72); backdrop-filter: blur(3px);
+}
+.chart-info-overlay.active { display: flex; }
+.chart-info-dialog {
+    width: min(560px, 94vw); max-height: 86vh; overflow-y: auto;
+    background: #0d1426; border: 1px solid rgba(56, 189, 248, 0.28);
+    border-radius: 16px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+.chart-info-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    position: sticky; top: 0; background: #0d1426; border-radius: 16px 16px 0 0;
+}
+.chart-info-head h3 { margin: 0; font-size: 15.5px; font-weight: 800; color: #e2e8f0; }
+.chart-info-close {
+    background: transparent; border: none; color: #94a3b8; font-size: 24px;
+    cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.chart-info-close:hover { color: #f87171; }
+.chart-info-body { padding: 16px 20px 20px; color: #cbd5e1; font-size: 13.5px; line-height: 1.75; }
+.chart-info-body p { margin: 0 0 12px; }
+.chart-info-body ul { margin: 0 0 12px; padding-inline-start: 20px; }
+.chart-info-body li { margin-bottom: 7px; }
+.chart-info-body b { color: #f1f5f9; }
+html.day-mode .chart-info-dialog { background: #fff; border-color: rgba(8, 145, 178, 0.3); }
+html.day-mode .chart-info-head { background: #fff; }
+html.day-mode .chart-info-head h3 { color: #0f172a; }
+html.day-mode .chart-info-body { color: #334155; }
+html.day-mode .chart-info-body b { color: #0f172a; }
+
+/* Holdings buy action — green to match the buy/sell split */
+.holding-action-btn.buy { color: #22c55e; }
+.holding-action-btn.buy:hover { background: rgba(34, 197, 94, 0.14); border-color: rgba(34, 197, 94, 0.4); }
+html.day-mode .holding-action-btn.buy { color: #15803d; }

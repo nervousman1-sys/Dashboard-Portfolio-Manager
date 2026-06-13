@@ -761,11 +761,24 @@ function _drawModalSML(model, client) {
     const yMax = Math.min(190, yHi + yRange * 0.18 + 10);
     const yMin = Math.max(-130, yLo - yRange * 0.18 - 10);
 
+    // Portfolio holdings, split by SML verdict into THREE legend entries (green =
+    // suitable, yellow = neutral, red = unsuitable) so it's clear the red dots are
+    // ALSO portfolio assets — not a different series.
+    const _smlGroups = [
+        { key: 'buy', label: 'נכס מתאים (מעל/על SML)', color: '#22c55e' },
+        { key: 'neutral', label: 'נכס ניטרלי (על SML)', color: '#eab308' },
+        { key: 'avoid', label: 'נכס לא מתאים (מתחת SML)', color: '#ef4444' },
+    ];
     const datasets = [
         { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },
-        { type: 'scatter', label: 'נכסי התיק', data: holdPts, pointRadius: 6, pointHoverRadius: 8, backgroundColor: holdPts.map(q => rmRecColor(q.rec)), borderColor: '#0b0b0f', borderWidth: 1, order: 2 },
-        { type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1 },
     ];
+    for (const g of _smlGroups) {
+        const pts = holdPts.filter(q => q.rec === g.key);
+        if (pts.length) datasets.push({ type: 'scatter', label: g.label, data: pts, pointRadius: 6, pointHoverRadius: 8, backgroundColor: g.color, borderColor: '#0b0b0f', borderWidth: 1, order: 2 });
+    }
+    const _smlOther = holdPts.filter(q => !['buy', 'neutral', 'avoid'].includes(q.rec));
+    if (_smlOther.length) datasets.push({ type: 'scatter', label: 'נכס בתיק (ללא דירוג)', data: _smlOther, pointRadius: 6, pointHoverRadius: 8, backgroundColor: '#64748b', borderColor: '#0b0b0f', borderWidth: 1, order: 2 });
+    datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1 });
     if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
