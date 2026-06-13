@@ -125,6 +125,21 @@ function _dnDateOf(m) {
     return d ? d.toLocaleDateString('he-IL') : '';
 }
 
+// Keep only the most recent N calendar days of updates (חדשות / תנועות הון /
+// אופציות). Counts DISTINCT dates that actually have posts — so a weekend gap
+// doesn't shrink the window — and drops everything older than the Nth day.
+const _DN_HISTORY_DAYS = 3;
+function _dnLastNDays(messages, n = _DN_HISTORY_DAYS) {
+    if (!Array.isArray(messages) || !messages.length) return messages || [];
+    const keyOf = (m) => {
+        const d = m.ts ? new Date(m.ts) : null;
+        return d ? d.toISOString().slice(0, 10) : ''; // sortable YYYY-MM-DD
+    };
+    const distinct = [...new Set(messages.map(keyOf).filter(Boolean))].sort().reverse();
+    const keep = new Set(distinct.slice(0, n));
+    return messages.filter(m => keep.has(keyOf(m)));
+}
+
 // Clean channel name for display: no '#', no emojis/symbols, dashes → spaces
 function _dnCleanName(name) {
     return String(name || '')
@@ -521,16 +536,18 @@ function _dnRender() {
         } else {
             const kind = _dnChannelKind(c.name);
             if (kind === 'collapse') {
-                // ONE collapsed row per DATE (latest open) — all of that day's posts merged
+                // Keep only the last 3 days of updates, then ONE collapsed row per
+                // DATE (latest open) — all of that day's posts merged
+                const recent = _dnLastNDays(c.messages);
                 const byDate = new Map();
-                for (const m of c.messages) {
+                for (const m of recent) {
                     const d = _dnDateOf(m);
                     if (!byDate.has(d)) byDate.set(d, []);
                     byDate.get(d).push(m);
                 }
                 html = [...byDate.values()].map((msgs, i) => renderCollapsed(msgs, null, i === 0, visionModeOf(c.name))).join('');
             } else if (kind === 'options') {
-                html = renderByDate(c.messages, (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
+                html = renderByDate(_dnLastNDays(c.messages), (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
             } else {
                 html = c.messages.map(m => renderMsg(m, null)).join('');
             }
