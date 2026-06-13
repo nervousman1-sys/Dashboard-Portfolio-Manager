@@ -1074,7 +1074,7 @@ function openStockRecommendations(clientId) {
 
     ov.innerHTML = `<div class="reco-box" dir="rtl">
         <div class="reco-head">
-            <div><h3>המלצות מניות לאיזון התיק לאזור היעיל</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
+            <div><h3>המלצות לאיזון התיק וייעולו</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
             <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
         </div>
         ${effHTML}
