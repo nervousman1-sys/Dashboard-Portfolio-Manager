@@ -166,8 +166,8 @@ function _dnBoxImgs(box) {
 // In-flight dedup so prefetch and an expanded post never double-call Gemini.
 const _dnVisionInflight = {};
 async function _dnVisionText(img, mode) {
-    // v3: pre-Hebrew-correction reads must not be reused (e.g. "מונפק"→"מזנק")
-    const cacheKey = 'dn_vision3_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    // v4: flows prompt now returns institutional + analysis lines — re-read
+    const cacheKey = 'dn_vision4_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) return cached;
@@ -175,7 +175,7 @@ async function _dnVisionText(img, mode) {
     if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
     _dnVisionInflight[cacheKey] = (async () => {
         try {
-            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=3`, { headers: { Accept: 'application/json' } });
+            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=4`, { headers: { Accept: 'application/json' } });
             const j = await res.json();
             if (j && j.text) {
                 try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
@@ -239,9 +239,15 @@ function _dnVisionHTML(text, img, mode) {
     if (mode === 'flows') {
         const rows = [];
         let conclusion = '';
+        const analysis = [];     // "ניתוח:" lines — the reasoning shown in the empty space
+        const institutions = []; // "מוסדי:" lines — named movers, if the image had any
         for (const l of lines) {
             const mC = l.match(/^מסקנה\s*:\s*(.+)$/);
             if (mC) { conclusion = mC[1].trim(); continue; }
+            const mA = l.match(/^ניתוח\s*:\s*(.+)$/);
+            if (mA) { analysis.push(mA[1].trim()); continue; }
+            const mI = l.match(/^מוסדי\s*:\s*(.+)$/);
+            if (mI) { institutions.push(mI[1].trim()); continue; }
             const mS = l.match(/^סקטור\s*:\s*(.+?)\s*\|\s*כיוון\s*:\s*(.+?)\s*\|\s*היקף\s*:\s*(.+)$/);
             if (mS) {
                 const amount = mS[3].trim();
@@ -282,7 +288,15 @@ function _dnVisionHTML(text, img, mode) {
             const insHTML = ins.length ? `<div class="dn-flow-group in">▲ כניסת כסף</div>${ins.map(bar).join('')}` : '';
             const outsHTML = outs.length ? `<div class="dn-flow-group out">▼ יציאת כסף</div>${outs.map(bar).join('')}` : '';
             const conc = conclusion ? `<div class="dn-flow-conc"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            return `${insHTML}${outsHTML}${axisNote}${conc}`;
+            // Named institutional movers (only if the image actually listed them)
+            const instHTML = institutions.length
+                ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
+                : '';
+            // Reasoning — fills the empty space with the "why" behind the rotation
+            const analHTML = analysis.length
+                ? `<div class="dn-flow-analysis"><div class="dn-flow-analysis-h">למה הכסף זורם כך — ניתוח</div>${analysis.map(s => `<div class="dn-flow-analysis-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
+                : '';
+            return `<div class="dn-flow-wrap">${insHTML}${outsHTML}${axisNote}${conc}${instHTML}${analHTML}</div>`;
         }
         // fall through to plain lines if parsing failed
     }

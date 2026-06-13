@@ -137,15 +137,18 @@ function _renderBulkPage() {
                 <span class="risk-chart-sub">תיקים ללא מספיק מזומן לקנייה מוסרים אוטומטית · ניתן להחריג רמות סיכון שלמות</span></div>
 
             <div class="bulk-mode-row">
-                <button class="bulk-mode-btn ${_bulkMode === 'buy' ? 'active' : ''}" id="bulkModeBuy" onclick="setBulkMode('buy')">קנייה מקבילה (לקיחת סיכון)</button>
+                <button class="bulk-mode-btn ${_bulkMode === 'buy' ? 'active' : ''}" id="bulkModeBuy" onclick="setBulkMode('buy')">קנייה מקבילה</button>
                 <button class="bulk-mode-btn ${_bulkMode === 'reduce' ? 'active' : ''}" id="bulkModeReduce" onclick="setBulkMode('reduce')">צמצום סיכון (מכירה ב-%)</button>
             </div>
 
             <div id="bulkBuyControls" class="bulk-controls" style="${_bulkMode === 'buy' ? '' : 'display:none'}">
                 <div class="bulk-field">
                     <label>סימול לקנייה (ארה"ב)</label>
-                    <input type="text" autocomplete="off" id="bulkTicker" placeholder="למשל: SPY" style="direction:ltr;text-align:left"
-                           oninput="this.value=this.value.toUpperCase(); _bulkRefreshList()" />
+                    <div style="position:relative;width:100%">
+                        <input type="text" autocomplete="off" id="bulkTicker" placeholder="למשל: SPY, AAPL, NVDA" style="direction:ltr;text-align:left;width:100%;box-sizing:border-box"
+                               oninput="this.value=this.value.toUpperCase(); _bulkBuyTickerSuggest(); _bulkRefreshList()" />
+                        <div class="row-ticker-dropdown" id="bulkBuyDrop"></div>
+                    </div>
                 </div>
                 <div class="bulk-field">
                     <label>סכום קנייה לכל תיק ($)</label>
@@ -311,9 +314,53 @@ function _bulkPickTicker(t) {
     _bulkRefreshList();
 }
 
+// Parallel-BUY ticker autocomplete — same technique as the reduce box, but it
+// searches the full US universe (Hebrew/English names) so you can buy new assets.
+function _bulkBuyTickerSuggest() {
+    const inp = document.getElementById('bulkTicker');
+    const drop = document.getElementById('bulkBuyDrop');
+    if (!inp || !drop) return;
+    const q = (inp.value || '').toUpperCase().trim();
+    if (!q) { drop.innerHTML = ''; drop.style.display = 'none'; return; }
+
+    let results = (typeof searchHebrewNames === 'function') ? searchHebrewNames(q) : [];
+    // US tickers only (this box is "סימול לקנייה (ארה"ב)")
+    results = results.filter(r => r && r.symbol && !String(r.symbol).includes('.TA') && r.exchange !== 'TASE').slice(0, 8);
+
+    if (!results.length) {
+        drop.innerHTML = '<div class="ticker-search-empty">המשך להקליד סימול…</div>';
+        drop.style.display = 'block';
+        return;
+    }
+    drop.innerHTML = results.map(r => {
+        const he = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').toUpperCase()] : '') || '';
+        const primary = he || r.name || r.symbol;
+        return `<div class="ticker-search-item" onclick="_bulkPickBuyTicker('${r.symbol}')">
+            <div class="search-row-grid">
+                <div class="search-col-name"><span class="search-name-primary">${primary}</span></div>
+                <div class="search-col-ticker">${r.symbol}</div>
+                <div class="search-col-exchange">${r.exchange || 'US'}</div>
+            </div>
+        </div>`;
+    }).join('');
+    drop.style.display = 'block';
+}
+
+function _bulkPickBuyTicker(t) {
+    const inp = document.getElementById('bulkTicker');
+    const drop = document.getElementById('bulkBuyDrop');
+    if (inp) inp.value = (t || '').toUpperCase();
+    if (drop) { drop.innerHTML = ''; drop.style.display = 'none'; }
+    _bulkRefreshList();
+}
+
 document.addEventListener('click', (e) => {
     if (!e.target.closest('#bulkReduceTickerField')) {
         const drop = document.getElementById('bulkReduceDrop');
+        if (drop) { drop.innerHTML = ''; drop.style.display = 'none'; }
+    }
+    if (!e.target.closest('#bulkBuyControls')) {
+        const drop = document.getElementById('bulkBuyDrop');
         if (drop) { drop.innerHTML = ''; drop.style.display = 'none'; }
     }
 });

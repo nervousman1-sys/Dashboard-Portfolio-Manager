@@ -98,20 +98,23 @@ function _calcReturn(client) {
     const currentRate = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0)
         ? _fxRates.USDILS
         : (typeof FX_HARDCODED_USDILS !== 'undefined' ? FX_HARDCODED_USDILS : 3.65);
-    // Reference rate = the ILS price the client ACTUALLY paid per dollar (weighted
-    // average of recorded ILS→USD conversions at deposit time). Falls back to 3.9
-    // (approx. mid-2023) only when no conversion was ever recorded for this client.
-    const clientRef = (typeof getClientFxRefRate === 'function') ? getClientFxRefRate(client.id) : null;
-    const refRate = (clientRef && clientRef > 0) ? clientRef : 3.9;
+    // Basis = the ₪ price the portfolio's dollars were bought at (real weighted avg
+    // when conversions are recorded — e.g. ליאור; otherwise a persisted 2.8–3.5
+    // placeholder per portfolio).
+    const basis = (typeof getPortfolioAvgUsdRate === 'function') ? getPortfolioAvgUsdRate(client.id) : { rate: 3.4 };
+    const refRate = (basis && basis.rate > 0) ? basis.rate : 3.4;
+    // FX factor for an ILS investor: value in ₪ now / ₪ paid = r_now / r_buy.
+    // Dollar DOWN (r_now < r_buy) → factor < 1 → return correctly REDUCED.
     const fxFactor = currentRate / refRate;
     const fxAdj = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-    const totalValue = client.holdings.reduce((s, h) => s + (h.value || 0) * fxAdj(h.currency), 0);
-    const totalCost  = client.holdings.reduce((s, h) => {
-        const base = (h.costBasis || 0) * fxAdj(h.currency);
-        // Apply FX adjustment only to USD-denominated holdings
+    // Adjust the VALUE of USD holdings by the FX move (not the cost) — that's what
+    // makes a falling dollar shrink the return instead of inflating it.
+    const totalValue = client.holdings.reduce((s, h) => {
+        const v = (h.value || 0) * fxAdj(h.currency);
         const isUSD = (h.currency || 'USD').toUpperCase() === 'USD';
-        return s + (isUSD ? base * fxFactor : base);
+        return s + (isUSD ? v * fxFactor : v);
     }, 0);
+    const totalCost = client.holdings.reduce((s, h) => s + (h.costBasis || 0) * fxAdj(h.currency), 0);
     const profit = totalValue - totalCost;
     const returnPct = totalCost > 0 ? (profit / totalCost * 100) : 0;
     return { totalValue, totalCost, profit, returnPct };

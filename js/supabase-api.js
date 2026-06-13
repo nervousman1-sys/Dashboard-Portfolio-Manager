@@ -186,6 +186,14 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
     const portfolio = await supaAddClient(name, cashUsd, cashIls);
     if (!portfolio) return null;
 
+    // Broker import: record the REAL ILS→USD conversions so the FX-adjusted return
+    // uses this portfolio's true average dollar purchase rate (no placeholder).
+    if (brokerTxs && brokerTxs.length && typeof addClientFxBasis === 'function') {
+        for (const t of brokerTxs) {
+            if (t.kind === 'fx' && t.usd > 0 && t.fxRate > 0) addClientFxBasis(portfolio.id, t.usd, t.fxRate);
+        }
+    }
+
     const _ilsFxBatch = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
     const totalCashUsdBatch = cashUsd + cashIls * _ilsFxBatch;
 

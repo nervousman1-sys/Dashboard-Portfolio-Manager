@@ -728,7 +728,7 @@ function _drawModalCML(model, client) {
             });
         }
     }
-    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: 'rgba(0,229,255,0.5)', borderColor: '#00e5ff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
     opts.scales.x.min = 0; opts.scales.x.max = maxX;
@@ -779,7 +779,9 @@ function _drawModalSML(model, client) {
     const _smlOther = holdPts.filter(q => !['buy', 'neutral', 'avoid'].includes(q.rec));
     if (_smlOther.length) datasets.push({ type: 'scatter', label: 'נכס בתיק (ללא דירוג)', data: _smlOther, pointRadius: 6, pointHoverRadius: 8, backgroundColor: '#64748b', borderColor: '#0b0b0f', borderWidth: 1, order: 2 });
     datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1 });
-    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
+    // Semi-transparent fill so an asset point sitting under the big portfolio dot
+    // still shows through (the dot no longer hides data).
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: 'rgba(0,229,255,0.5)', borderColor: '#00e5ff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
     opts.scales.x.min = xMin; opts.scales.x.max = xMax;

@@ -9160,3 +9160,46 @@ html.day-mode .chart-info-body b { color: #0f172a; }
 .holding-action-btn.buy { color: #22c55e; }
 .holding-action-btn.buy:hover { background: rgba(34, 197, 94, 0.14); border-color: rgba(34, 197, 94, 0.4); }
 html.day-mode .holding-action-btn.buy { color: #15803d; }
+
+/* ===== Sharper holdings table — brighter headers & numbers (night), dark (day) ===== */
+.holdings-table th { color: #cbd5e1; font-weight: 700; }
+.holdings-table td { color: #f8fafc; }
+/* inline "—" / stale muted spans → readable gray instead of near-black */
+.holdings-table td [style*="text-muted"],
+.holdings-table td[style*="text-muted"] { color: #94a3b8 !important; }
+html.day-mode .holdings-table th { color: #475569; }
+html.day-mode .holdings-table td { color: #0f172a; }
+html.day-mode .holdings-table td [style*="text-muted"],
+html.day-mode .holdings-table td[style*="text-muted"] { color: #64748b !important; }
+
+/* Portfolio average USD-rate note in the modal hero */
+.ov-fx-note { margin-top: 10px; font-size: 12px; color: #cbd5e1; text-align: center; }
+.ov-fx-note b { color: #fff; font-size: 13px; }
+.ov-fx-tag {
+    display: inline-block; margin-inline-start: 6px; padding: 1px 8px; border-radius: 8px;
+    font-size: 10px; font-weight: 800; color: #fbbf24; background: rgba(251, 191, 36, 0.14);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.ov-fx-tag.real { color: #4ade80; background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.3); }
+html.day-mode .ov-fx-note { color: #334155; }
+html.day-mode .ov-fx-note b { color: #0f172a; }
+
+/* ===== Flows: institutional movers + reasoning fill the empty space ===== */
+.dn-flow-wrap { width: 100%; }
+.dn-flow-inst { margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.18); }
+.dn-flow-inst-h { font-size: 12.5px; font-weight: 800; color: #7dd3fc; margin-bottom: 8px; }
+.dn-flow-inst-row { font-size: 13px; color: #e2e8f0; line-height: 1.7; }
+.dn-flow-analysis { margin-top: 12px; padding: 13px 15px; border-radius: 12px;
+    background: rgba(148, 163, 184, 0.06); border: 1px solid rgba(148, 163, 184, 0.16); }
+.dn-flow-analysis-h { font-size: 12.5px; font-weight: 800; color: #cbd5e1; margin-bottom: 8px;
+    padding-bottom: 6px; border-bottom: 1px solid rgba(148, 163, 184, 0.14); }
+.dn-flow-analysis-row { font-size: 13.5px; color: #f1f5f9; line-height: 1.85; margin-bottom: 6px;
+    padding-inline-start: 14px; position: relative; }
+.dn-flow-analysis-row::before { content: '•'; position: absolute; inset-inline-start: 0; color: #60a5fa; font-weight: 900; }
+html.day-mode .dn-flow-inst { background: rgba(8, 145, 178, 0.05); border-color: rgba(8, 145, 178, 0.2); }
+html.day-mode .dn-flow-inst-h { color: #0e7490; }
+html.day-mode .dn-flow-inst-row { color: #1e293b; }
+html.day-mode .dn-flow-analysis { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.12); }
+html.day-mode .dn-flow-analysis-h { color: #334155; }
+html.day-mode .dn-flow-analysis-row { color: #0f172a; }

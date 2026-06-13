@@ -143,6 +143,32 @@ function getClientFxRefRate(clientId) {
     return b ? (b.ils / b.usd) : null;
 }
 
+// ── Per-portfolio average USD purchase rate (שער דולר ממוצע בתיק) ──
+// The rate the portfolio's dollars were effectively bought at, used as the basis
+// for the FX-adjusted return. Priority:
+//   1. REAL recorded basis (weighted avg of actual ILS→USD conversions — e.g. the
+//      broker-imported "ליאור" portfolio). This is exact.
+//   2. A persisted PLACEHOLDER in [2.8, 3.5] generated once per portfolio, until
+//      real conversion data is uploaded for it.
+// Returns { rate, real }.
+const _FX_AVG_PREFIX = 'fx_avg_rate_v1_';
+
+function getPortfolioAvgUsdRate(clientId) {
+    const real = getClientFxRefRate(clientId);
+    if (real && real > 0) return { rate: real, real: true };
+    try {
+        const raw = localStorage.getItem(_FX_AVG_PREFIX + clientId);
+        if (raw) { const v = parseFloat(raw); if (v >= 2.5 && v <= 4) return { rate: v, real: false }; }
+    } catch (e) { /* ignore */ }
+    const rnd = +(2.8 + Math.random() * 0.7).toFixed(3); // 2.800–3.500
+    try { localStorage.setItem(_FX_AVG_PREFIX + clientId, String(rnd)); } catch (e) { /* full */ }
+    return { rate: rnd, real: false };
+}
+
+if (typeof window !== 'undefined') {
+    window.getPortfolioAvgUsdRate = getPortfolioAvgUsdRate;
+}
+
 // ========== FX RATE ACCESSORS ==========
 
 // Get the conversion rate between two currencies.
