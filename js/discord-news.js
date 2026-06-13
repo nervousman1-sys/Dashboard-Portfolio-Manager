@@ -166,8 +166,8 @@ function _dnBoxImgs(box) {
 // In-flight dedup so prefetch and an expanded post never double-call Gemini.
 const _dnVisionInflight = {};
 async function _dnVisionText(img, mode) {
-    // v4: flows prompt now returns institutional + analysis lines — re-read
-    const cacheKey = 'dn_vision4_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    // v5: flows prompt now returns clean sectors + tickers + analysis + catalysts
+    const cacheKey = 'dn_vision5_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) return cached;
@@ -175,7 +175,7 @@ async function _dnVisionText(img, mode) {
     if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
     _dnVisionInflight[cacheKey] = (async () => {
         try {
-            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=4`, { headers: { Accept: 'application/json' } });
+            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=5`, { headers: { Accept: 'application/json' } });
             const j = await res.json();
             if (j && j.text) {
                 try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
@@ -252,8 +252,18 @@ function _dnVisionHTML(text, img, mode) {
             if (mS) {
                 const amount = mS[3].trim();
                 if (!amount.includes('%')) continue; // percentages only — no $B ETF rows
+                // Split a sector label into a clean name + the tickers in its parens.
+                // "מניות בולטות (NVDA, AMD, AVGO)" → base="מניות בולטות", tickers=[NVDA,AMD,AVGO]
+                const raw = mS[1].trim();
+                let base = raw, tickers = [];
+                const pm = raw.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+                if (pm) {
+                    const inside = pm[2].split(/[,\s]+/).map(t => t.replace(/[^A-Za-z.]/g, '').toUpperCase())
+                        .filter(t => /^[A-Z]{1,5}(\.[A-Z]+)?$/.test(t));
+                    if (inside.length) { tickers = inside; base = (pm[1].trim() || raw); }
+                }
                 rows.push({
-                    name: mS[1].trim(),
+                    name: base, tickers,
                     inflow: /כניס/.test(mS[2]),
                     amount,
                     mag: Math.abs(parseFloat(String(amount).replace(/[^\d.\-]/g, ''))) || 0,
@@ -270,33 +280,43 @@ function _dnVisionHTML(text, img, mode) {
             }
             rows.length = 0;
             rows.push(..._seen.values());
-            // Adaptive proportional scale: the axis follows the LARGEST move in the
-            // list, rounded up to the next 5% step (16%→20, 22%→25, 38%→40). Never a
-            // fixed cap — bigger data automatically widens the axis.
             const maxN = Math.max(...rows.map(r => r.mag), 0.001);
             let axisMax = Math.max(5, Math.ceil(maxN / 5) * 5);
-            if (axisMax - maxN < maxN * 0.05) axisMax += 5; // keep a sliver of headroom
-            const bar = (r) => `
+            if (axisMax - maxN < maxN * 0.05) axisMax += 5;
+            window._dnFlowSectors = window._dnFlowSectors || {};
+            const bar = (r) => {
+                let stocksBtn = '';
+                if (r.tickers && r.tickers.length) {
+                    const sid = 'fs_' + Math.random().toString(36).slice(2, 9);
+                    window._dnFlowSectors[sid] = { sector: r.name, tickers: r.tickers, inflow: r.inflow };
+                    stocksBtn = `<button class="dn-sec-stocks-btn" onclick="openSectorStocks('${sid}')">רשימת מניות (${r.tickers.length})</button>`;
+                }
+                return `
                 <div class="dn-flow-row">
-                    <span class="dn-flow-name">${_dnEsc(r.name)}</span>
+                    <span class="dn-flow-name"><span class="dn-flow-secname">${_dnEsc(r.name)}</span>${stocksBtn}</span>
                     <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${Math.max(4, r.mag / axisMax * 100).toFixed(1)}%"></div></div>
                     <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${_dnEsc(r.amount)}</span>
                 </div>`;
+            };
             const axisNote = `<div class="dn-flow-axis">סקאלה: 0% – ${axisMax}%</div>`;
             const ins = rows.filter(r => r.inflow).sort((a, b) => b.mag - a.mag);
             const outs = rows.filter(r => !r.inflow).sort((a, b) => b.mag - a.mag);
             const insHTML = ins.length ? `<div class="dn-flow-group in">▲ כניסת כסף</div>${ins.map(bar).join('')}` : '';
             const outsHTML = outs.length ? `<div class="dn-flow-group out">▼ יציאת כסף</div>${outs.map(bar).join('')}` : '';
-            const conc = conclusion ? `<div class="dn-flow-conc"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            // Named institutional movers (only if the image actually listed them)
+            const barsCol = `<div class="dn-flow-bars">${insHTML}${outsHTML}${axisNote}</div>`;
+
+            // LEFT column — the words: conclusion, named institutions (if shown), and
+            // the reasoning for the rotation.
+            const conc = conclusion ? `<div class="dn-flow-conc" dir="rtl"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
             const instHTML = institutions.length
                 ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
                 : '';
-            // Reasoning — fills the empty space with the "why" behind the rotation
             const analHTML = analysis.length
                 ? `<div class="dn-flow-analysis"><div class="dn-flow-analysis-h">למה הכסף זורם כך — ניתוח</div>${analysis.map(s => `<div class="dn-flow-analysis-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
-                : '';
-            return `<div class="dn-flow-wrap">${insHTML}${outsHTML}${axisNote}${conc}${instHTML}${analHTML}</div>`;
+                : '<div class="dn-flow-analysis"><div class="adv-empty">הניתוח ייטען עם קריאת התמונה…</div></div>';
+            const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${instHTML}</div>`;
+
+            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>`;
         }
         // fall through to plain lines if parsing failed
     }
@@ -586,8 +606,91 @@ function _dnRender() {
     _dnPrefetchVisions();
 }
 
+// ── Sector stock-list popup: GF links + CML/SML compliance + buy into a portfolio ──
+function openSectorStocks(sid) {
+    const data = (window._dnFlowSectors || {})[sid];
+    if (!data) return;
+    const model = window._lastRiskModel;
+    const recOf = (t) => {
+        const a = model && model.assets ? model.assets[t.toUpperCase()] : null;
+        if (!a || !a.hasData || a.recommendation === 'unknown') return { label: 'לא נסרק במודל', color: '#64748b' };
+        const label = (typeof rmRecLabel === 'function') ? rmRecLabel(a.recommendation) : a.recommendation;
+        const color = (typeof rmRecColor === 'function') ? rmRecColor(a.recommendation) : '#64748b';
+        const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;
+        return { label: label + (a.recommendation === 'buy' ? ' (עומד ב-SML)' : a.recommendation === 'avoid' ? ' (מתחת ל-SML)' : ''), color, tip };
+    };
+    const gf = (t) => (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(t) : `https://www.google.com/search?q=${encodeURIComponent(t + ' stock')}`;
+
+    const rows = data.tickers.map(t => {
+        const r = recOf(t);
+        return `
+        <div class="secst-row">
+            <span class="secst-tk">${_dnEsc(t)}</span>
+            <span class="secst-rec" style="--rc:${r.color}" title="${r.tip || ''}">${_dnEsc(r.label)}</span>
+            <a class="secst-gf" href="${gf(t)}" target="_blank" rel="noopener">Google Finance ↗</a>
+            <button class="secst-buy" onclick="_sectorBuyPick('${_dnEsc(t)}', this)">קנה לתיק ▾</button>
+        </div>`;
+    }).join('');
+
+    let ov = document.getElementById('secStockOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'secStockOverlay';
+        ov.className = 'chart-info-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('active'); });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = `
+        <div class="chart-info-dialog" dir="rtl">
+            <div class="chart-info-head">
+                <h3>מניות בסקטור: ${_dnEsc(data.sector)}</h3>
+                <button class="chart-info-close" onclick="document.getElementById('secStockOverlay').classList.remove('active')">&times;</button>
+            </div>
+            <div class="chart-info-body">
+                <p style="margin-bottom:10px">לחץ על מנייה לבדיקה בגוגל פיננס, או "קנה לתיק" כדי להוסיף לאחד התיקים. הסימון מציין אם המנייה עומדת במודל ה-CML/SML.</p>
+                <div class="secst-list">${rows}</div>
+            </div>
+        </div>`;
+    ov.classList.add('active');
+}
+
+// Reveal an inline portfolio picker under the clicked stock's buy button.
+function _sectorBuyPick(ticker, btn) {
+    const existing = btn.parentElement.querySelector('.secst-pick');
+    if (existing) { existing.remove(); return; }
+    const list = (typeof clients !== 'undefined' ? clients : []);
+    if (!list.length) return;
+    const opts = list.map(c => `<button class="secst-pick-opt" onclick="_sectorBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('');
+    const box = document.createElement('div');
+    box.className = 'secst-pick';
+    box.innerHTML = `<div class="secst-pick-h">בחר תיק לקנייה:</div>${opts}`;
+    btn.parentElement.appendChild(box);
+}
+
+async function _sectorBuy(ticker, clientId) {
+    const client = (typeof clients !== 'undefined' ? clients : []).find(c => c.id === clientId);
+    if (!client) return;
+    document.getElementById('secStockOverlay')?.classList.remove('active');
+    // Pre-fetch a live price so the buy modal opens ready to confirm
+    let price = 0;
+    try {
+        const r = await fetch(`/api/quote?symbols=${encodeURIComponent(ticker)}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        if (j && j[ticker] && j[ticker].price > 0) price = j[ticker].price;
+    } catch (e) { /* user can type it */ }
+    if (typeof openModal === 'function') openModal(clientId);
+    setTimeout(() => {
+        if (typeof openMgmtModal === 'function') {
+            openMgmtModal('buyHolding', { client, holding: { ticker, name: ticker, type: 'stock', currency: 'USD', price } });
+        }
+    }, 120);
+}
+
 if (typeof window !== 'undefined') {
     window.openDiscordNews = openDiscordNews;
     window.closeDiscordNews = closeDiscordNews;
     window.setDnChannel = setDnChannel;
+    window.openSectorStocks = openSectorStocks;
+    window._sectorBuyPick = _sectorBuyPick;
+    window._sectorBuy = _sectorBuy;
 }

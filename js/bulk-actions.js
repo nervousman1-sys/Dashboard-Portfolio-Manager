@@ -314,8 +314,19 @@ function _bulkPickTicker(t) {
     _bulkRefreshList();
 }
 
-// Parallel-BUY ticker autocomplete — same technique as the reduce box, but it
-// searches the full US universe (Hebrew/English names) so you can buy new assets.
+// Parallel-BUY ticker autocomplete. searchHebrewNames returns ONLY TASE names, so
+// for a US-ticker box it's useless — instead we offer the typed symbol directly
+// (instant, always works) and enrich with real US matches from Twelve Data.
+let _bulkBuyTimer = null;
+function _bulkBuyItem(symbol, name, exch) {
+    return `<div class="ticker-search-item" onclick="_bulkPickBuyTicker('${symbol}')">
+        <div class="search-row-grid">
+            <div class="search-col-name"><span class="search-name-primary">${name}</span></div>
+            <div class="search-col-ticker">${symbol}</div>
+            <div class="search-col-exchange">${exch || 'US'}</div>
+        </div>
+    </div>`;
+}
 function _bulkBuyTickerSuggest() {
     const inp = document.getElementById('bulkTicker');
     const drop = document.getElementById('bulkBuyDrop');
@@ -323,27 +334,22 @@ function _bulkBuyTickerSuggest() {
     const q = (inp.value || '').toUpperCase().trim();
     if (!q) { drop.innerHTML = ''; drop.style.display = 'none'; return; }
 
-    let results = (typeof searchHebrewNames === 'function') ? searchHebrewNames(q) : [];
-    // US tickers only (this box is "סימול לקנייה (ארה"ב)")
-    results = results.filter(r => r && r.symbol && !String(r.symbol).includes('.TA') && r.exchange !== 'TASE').slice(0, 8);
-
-    if (!results.length) {
-        drop.innerHTML = '<div class="ticker-search-empty">המשך להקליד סימול…</div>';
-        drop.style.display = 'block';
-        return;
-    }
-    drop.innerHTML = results.map(r => {
-        const he = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').toUpperCase()] : '') || '';
-        const primary = he || r.name || r.symbol;
-        return `<div class="ticker-search-item" onclick="_bulkPickBuyTicker('${r.symbol}')">
-            <div class="search-row-grid">
-                <div class="search-col-name"><span class="search-name-primary">${primary}</span></div>
-                <div class="search-col-ticker">${r.symbol}</div>
-                <div class="search-col-exchange">${r.exchange || 'US'}</div>
-            </div>
-        </div>`;
-    }).join('');
+    const looksTicker = /^[A-Z][A-Z.]{0,5}$/.test(q);
+    const directRow = looksTicker ? _bulkBuyItem(q, 'קנה ' + q, 'US') : '';
+    drop.innerHTML = directRow || '<div class="ticker-search-loading">מחפש…</div>';
     drop.style.display = 'block';
+
+    // Async enrich with real US symbol names (debounced)
+    if (_bulkBuyTimer) clearTimeout(_bulkBuyTimer);
+    _bulkBuyTimer = setTimeout(async () => {
+        let results = [];
+        try { if (typeof searchTwelveDataSymbols === 'function') results = await searchTwelveDataSymbols(q); } catch (e) { /* keep direct */ }
+        if ((inp.value || '').toUpperCase().trim() !== q) return; // input moved on
+        results = (results || []).filter(r => r && r.symbol && !String(r.symbol).includes('.TA') && r.symbol.toUpperCase() !== q).slice(0, 7);
+        const rich = results.map(r => _bulkBuyItem(r.symbol, r.name || r.symbol, r.exchange || 'US')).join('');
+        drop.innerHTML = directRow + rich;
+        drop.style.display = 'block';
+    }, 300);
 }
 
 function _bulkPickBuyTicker(t) {

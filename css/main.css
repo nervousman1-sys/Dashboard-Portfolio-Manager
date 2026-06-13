@@ -9203,3 +9203,53 @@ html.day-mode .dn-flow-inst-row { color: #1e293b; }
 html.day-mode .dn-flow-analysis { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.12); }
 html.day-mode .dn-flow-analysis-h { color: #334155; }
 html.day-mode .dn-flow-analysis-row { color: #0f172a; }
+
+/* ===== Flows: two-column layout (bars right, analysis left) ===== */
+.dn-flow-2col { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr); gap: 20px; align-items: start; }
+@media (max-width: 820px) { .dn-flow-2col { grid-template-columns: 1fr; } }
+.dn-flow-bars, .dn-flow-side { min-width: 0; }
+/* inside the bars column the track fills available width */
+.dn-flow-bars .dn-flow-row { grid-template-columns: 140px minmax(40px, 1fr) auto; justify-content: stretch; }
+.dn-flow-name { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.dn-flow-secname { font-size: 13px; font-weight: 700; color: #fff; }
+.dn-sec-stocks-btn {
+    background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3);
+    color: #7dd3fc; border-radius: 7px; font-size: 10px; font-weight: 700;
+    padding: 2px 7px; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.dn-sec-stocks-btn:hover { background: rgba(56, 189, 248, 0.2); }
+html.day-mode .dn-flow-secname { color: #0f172a; }
+html.day-mode .dn-sec-stocks-btn { color: #0e7490; border-color: rgba(8, 145, 178, 0.35); }
+
+/* ===== Sector stock-list popup rows ===== */
+.secst-list { display: flex; flex-direction: column; gap: 8px; }
+.secst-row {
+    display: grid; grid-template-columns: 64px 1fr auto auto; gap: 10px; align-items: center;
+    padding: 8px 10px; border-radius: 10px; background: rgba(148, 163, 184, 0.06);
+    border: 1px solid rgba(148, 163, 184, 0.12); position: relative;
+}
+.secst-tk { font-weight: 800; font-size: 14px; color: #fff; direction: ltr; }
+.secst-rec { font-size: 11px; font-weight: 800; color: var(--rc); white-space: nowrap; }
+.secst-gf { font-size: 11px; font-weight: 700; color: #60a5fa; text-decoration: none; white-space: nowrap; }
+.secst-gf:hover { text-decoration: underline; }
+.secst-buy {
+    background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.4);
+    color: #22c55e; border-radius: 8px; font-size: 11.5px; font-weight: 800;
+    padding: 4px 10px; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.secst-buy:hover { background: rgba(34, 197, 94, 0.24); }
+.secst-pick {
+    grid-column: 1 / -1; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px;
+    padding-top: 8px; border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+.secst-pick-h { width: 100%; font-size: 11px; font-weight: 700; color: #94a3b8; }
+.secst-pick-opt {
+    background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3);
+    color: #7dd3fc; border-radius: 8px; font-size: 12px; font-weight: 700;
+    padding: 5px 11px; cursor: pointer; font-family: inherit;
+}
+.secst-pick-opt:hover { background: rgba(56, 189, 248, 0.22); }
+html.day-mode .secst-row { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.1); }
+html.day-mode .secst-tk { color: #0f172a; }
+html.day-mode .secst-pick-opt { color: #0e7490; }
+html.day-mode .secst-buy { color: #15803d; }

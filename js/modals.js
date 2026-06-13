@@ -298,13 +298,6 @@ async function openModal(clientId) {
                                 })()}</span>
                             </div>
                         </div>
-                        ${(() => {
-                            if (typeof getPortfolioAvgUsdRate !== 'function') return '';
-                            const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
-                            if (!hasUsd) return '';
-                            const b = getPortfolioAvgUsdRate(client.id);
-                            return `<div class="ov-fx-note">שער דולר ממוצע בתיק (בסיס לתשואה מתואמת מט"ח): <b>₪${b.rate.toFixed(3)}</b> <span class="ov-fx-tag ${b.real ? 'real' : ''}">${b.real ? 'נתוני אמת' : 'הערכה זמנית'}</span></div>`;
-                        })()}
                     </div>
                 </div>
 
@@ -416,6 +409,13 @@ async function openModal(clientId) {
                         <span class="ov-curbar-symbol ils">₪</span>
                     </div>
                 </div>
+                ${(() => {
+                    if (typeof getPortfolioAvgUsdRate !== 'function') return '';
+                    const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
+                    if (!hasUsd) return '';
+                    const b = getPortfolioAvgUsdRate(client.id);
+                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (בסיס לתשואה מתואמת מט"ח): <b>₪${b.rate.toFixed(3)}</b></div>`;
+                })()}
 
                 <!-- Performance chart intentionally lives OUTSIDE the modal — open it
                      from the portfolio card's expand button on the dashboard. -->
