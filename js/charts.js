@@ -203,10 +203,16 @@ const _YAHOO_BENCH_RANGE = {
     '6m': ['6mo', '1d'], 'ytd': ['ytd', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'],
     'max': ['10y', '1wk'], 'all': ['10y', '1wk'],
 };
+// Yahoo's TASE index symbols are inconsistent: TA-35 is plain TA35.TA but
+// TA-125 only resolves as the ^TA125.TA index form (verified live — TA125.TA
+// returns "No data found"). This mismatch was a second reason the TA-125 line
+// went stale.
+const _YAHOO_BENCH_SYMBOL = { 'TA125.TA': '^TA125.TA' };
 async function _fetchYahooBenchmark(symbol, range) {
     try {
+        const ySym = _YAHOO_BENCH_SYMBOL[symbol] || symbol;
         const [yr, iv] = _YAHOO_BENCH_RANGE[range] || ['1y', '1d'];
-        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${yr}&interval=${iv}`,
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(ySym)}&range=${yr}&interval=${iv}`,
             { headers: { Accept: 'application/json' } });
         if (!res.ok) return null;
         const j = await res.json();
