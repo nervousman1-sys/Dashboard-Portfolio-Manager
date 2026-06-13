@@ -663,7 +663,7 @@ function renderSummaryBar() {
             <div class="stat-card">
                 <span class="stat-label">רווח / הפסד ממומש</span>
                 <span class="stat-value ${hasRealized ? (realizedPnl >= 0 ? 'stat-val-green' : 'stat-val-red') : ''}">${hasRealized ? `${realizedSign}${formatCurrency(Math.abs(realizedPnl))}` : '—'}</span>
-                <span class="stat-sub">מחילת שנה</span>
+                <span class="stat-sub">מתחילת שנה</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">תשואת דיבידנד</span>

@@ -166,8 +166,8 @@ function _dnBoxImgs(box) {
 // In-flight dedup so prefetch and an expanded post never double-call Gemini.
 const _dnVisionInflight = {};
 async function _dnVisionText(img, mode) {
-    // v2: pre-fix reads (thinking tokens truncated long tables) must not be reused
-    const cacheKey = 'dn_vision2_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    // v3: pre-Hebrew-correction reads must not be reused (e.g. "מונפק"→"מזנק")
+    const cacheKey = 'dn_vision3_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) return cached;
@@ -175,7 +175,7 @@ async function _dnVisionText(img, mode) {
     if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
     _dnVisionInflight[cacheKey] = (async () => {
         try {
-            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=2`, { headers: { Accept: 'application/json' } });
+            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=3`, { headers: { Accept: 'application/json' } });
             const j = await res.json();
             if (j && j.text) {
                 try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }

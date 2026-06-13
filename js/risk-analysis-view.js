@@ -677,7 +677,9 @@ async function _renderModalRiskCharts(clientId) {
     if (advBox && typeof buildPortfolioAdvisory === 'function' && typeof renderAdvisoryHTML === 'function') {
         try {
             const adv = buildPortfolioAdvisory(client, model);
-            advBox.innerHTML = renderAdvisoryHTML(adv, { clientId });
+            // The candidate grid is reachable via the "המלצות מניות לאיזון התיק" button
+            // above — don't duplicate it inline in this tab.
+            advBox.innerHTML = renderAdvisoryHTML(adv, { clientId, noCandidates: true });
         } catch (e) {
             advBox.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח כרגע.</div>';
         }
@@ -1072,7 +1074,7 @@ function openStockRecommendations(clientId) {
 
     ov.innerHTML = `<div class="reco-box" dir="rtl">
         <div class="reco-head">
-            <div><h3>מניות מומלצות לתיק האופטימלי</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
+            <div><h3>המלצות מניות לאיזון התיק לאזור היעיל</h3><span class="reco-sub">${esc(client.name)} — בחר מניה להוספה</span></div>
             <button class="reco-close" onclick="closeStockRecommendations()">✕</button>
         </div>
         ${effHTML}
