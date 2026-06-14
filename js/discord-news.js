@@ -342,7 +342,7 @@ function _dnVisionHTML(text, img, mode) {
                         <span class="dn-inst-tk">${_dnEsc(e.t)}</span>
                         <span class="dn-inst-sector">${_dnEsc(e.sector)}</span>
                         <span class="dn-inst-name">${_dnEsc(e.issuer)}</span>
-                        <a class="dn-inst-src" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener">זרימות וביצועים ↗</a>
+                        <a class="dn-inst-src" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener">זרימות הקרן ↗</a>
                     </div>`).join('')}</div>`
                 : (institutions.length
                     ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
@@ -683,8 +683,9 @@ const SECTOR_ETF_GROUP = {
     QQQ: [['QQQ', 'Invesco'], ['QQQM', 'Invesco'], ['ONEQ', 'Fidelity']],
     SPY: [['SPY', 'SPDR · State Street'], ['VOO', 'Vanguard'], ['IVV', 'iShares · BlackRock']],
 };
-// Live fund page (performance, holdings & flows) — the "direct place to see it".
-const fundFlowsUrl = (t) => `https://stockanalysis.com/etf/${String(t).toLowerCase()}/`;
+// Lands DIRECTLY on the ETF's Fund Flows section (net creation/redemption flows),
+// not the performance page — etf.com's dedicated flows anchor.
+const fundFlowsUrl = (t) => `https://www.etf.com/${String(t).toUpperCase()}#fund-page-fund-flows`;
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.
