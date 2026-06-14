@@ -351,7 +351,31 @@ function _dnVisionHTML(text, img, mode) {
                 }
                 if (flowEtfs.length >= 18) break;
             }
-            const instHTML = flowEtfs.length
+            // (a) NAMED movers the image itself called out (BlackRock, Vanguard…) —
+            // structured into direction · name · destination · amount, each with an SEC
+            // 13F source so the reader can verify who bought and (via the filing) into what.
+            const moversHTML = institutions.length
+                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => {
+                    const m = _dnParseInstMover(s);
+                    const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : '');
+                    const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '•');
+                    const dirWord = m.dir === 'in' ? 'כניסה' : (m.dir === 'out' ? 'יציאה' : '');
+                    const destHtml = m.dest
+                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}</span>`
+                        : '';
+                    const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '';
+                    return `<div class="dn-mover-row ${cls}" dir="rtl">
+                        <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
+                        <span class="dn-mover-name">${_dnEsc(m.name)}</span>
+                        ${destHtml}
+                        ${amtHtml}
+                        <a class="dn-inst-src" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="דיווחי 13F של הגוף ב-SEC — האחזקות והקניות/מכירות בפועל, ולאן הכסף נכנס">מקור 13F ↗</a>
+                    </div>`;
+                  }).join('')}</div>`
+                : '';
+            // (b) FACTUAL asset-manager attribution — the ETFs behind each moving sector,
+            // each linking to the live holders + flows pages. Shown alongside (a).
+            const factualHTML = flowEtfs.length
                 ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">מנהלי הנכסים מאחורי התנועות (נתוני אמת · מעודכן יומית)</div>${flowEtfs.map(e => `
                     <div class="dn-flow-inst-row" dir="rtl">
                         <span class="dn-inst-dir ${e.dir ? 'in' : 'out'}">${e.dir ? '▲' : '▼'}</span>
@@ -361,9 +385,8 @@ function _dnVisionHTML(text, img, mode) {
                         <a class="dn-inst-src" href="${holdersUrl(e.t)}" target="_blank" rel="noopener" title="המוסדיים שמחזיקים בקרן והקניות/מכירות האחרונות שלהם">מי קנה (מוסדיים) ↗</a>
                         <a class="dn-inst-src dn-inst-src2" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener" title="זרימת ההון נטו לקרן">זרימות ↗</a>
                     </div>`).join('')}</div>`
-                : (institutions.length
-                    ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
-                    : '');
+                : '';
+            const instHTML = moversHTML + factualHTML;
             const analHTML = analysis.length
                 ? `<div class="dn-flow-analysis"><div class="dn-flow-analysis-h">למה הכסף זורם כך — ניתוח</div>${analysis.map(s => `<div class="dn-flow-analysis-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
                 : '<div class="dn-flow-analysis"><div class="adv-empty">הניתוח ייטען עם קריאת התמונה…</div></div>';
@@ -707,6 +730,36 @@ const fundFlowsUrl = (t) => `https://etfdb.com/etf/${String(t).toUpperCase()}/#f
 // buys/sells — i.e. WHO put money in (e.g. BlackRock, Morgan Stanley…). Fintel's
 // per-ticker ownership page (ticker-only, no exchange guesswork; loads in-browser).
 const holdersUrl = (t) => `https://fintel.io/so/us/${String(t).toLowerCase()}`;
+
+// Authoritative source for a NAMED institutional mover (BlackRock, Vanguard, Morgan
+// Stanley…): its 13F-HR filings on SEC EDGAR — the legally-filed quarterly holdings
+// where its actual buys and sells are public. Company-name search, so it works for any
+// manager the image names without us hard-coding CIKs.
+const institutionSourceUrl = (name) => {
+    const q = encodeURIComponent(String(name || '').replace(/[^\w\s&.-]/g, ' ').replace(/\s+/g, ' ').trim());
+    return `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${q}&type=13F&dateb=&owner=include&count=40`;
+};
+
+// Parse a parsed "מוסדי:" line into structured fields. Accepts, in order of richness:
+//   "<גוף> | <כניסה/יציאה> | <יעד/נכס> | <היקף>"   (new, with destination)
+//   "<גוף> | <כניסה/יציאה> | <היקף>"                (legacy)
+//   freeform text                                    (best-effort)
+// The direction and amount tokens are detected by content (not position), so a missing
+// destination never shifts the amount into the wrong slot.
+function _dnParseInstMover(s) {
+    const parts = String(s).split('|').map(x => x.trim()).filter(Boolean);
+    const name = parts[0] || String(s).trim();
+    let dir = '', dest = '', amount = '';
+    const isDir = (x) => /כניס|נכנס|יציא|יוצא|קנ|מכ(ר|ירה)|הגדל|הקטנ|inflow|outflow|buy|sell/i.test(x);
+    const isAmt = (x) => /\d/.test(x) && /[$₪%]|[\d.](\s?)(b|m|k|bn|mn)\b|מיליארד|מיליון|מיל'|אלף/i.test(x);
+    for (let i = 1; i < parts.length; i++) {
+        const p = parts[i];
+        if (!dir && isDir(p)) { dir = /כניס|נכנס|קנ|הגדל|inflow|buy/i.test(p) ? 'in' : 'out'; continue; }
+        if (!amount && isAmt(p)) { amount = p; continue; }
+        dest = dest ? `${dest} ${p}` : p;
+    }
+    return { name, dir, dest, amount };
+}
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.
