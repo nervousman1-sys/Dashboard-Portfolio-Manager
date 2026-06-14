@@ -150,6 +150,22 @@ async function newsFor(symbol, perSymbol) {
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
+    // TEMP diagnostic: surface exactly why Gemini translation might be failing.
+    if (req.query.debug === 'gem') {
+        const probe = async (model) => {
+            try {
+                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: 'תרגם לעברית טבעית: 1. Are You Missing the Boat on This AI Stock?' }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 200 } }),
+                });
+                const body = await r.text();
+                return { model, status: r.status, body: body.slice(0, 500) };
+            } catch (e) { return { model, error: String(e && e.message) }; }
+        };
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(200).json({ hasKey: !!GEMINI_KEY, keyLen: (GEMINI_KEY || '').length, p25: await probe('gemini-2.5-flash'), p20: await probe('gemini-2.0-flash') });
+        return;
+    }
     try {
         const perSymbol = Math.min(parseInt(req.query.perSymbol, 10) || 1, 2);
         const syms = String(req.query.symbols || '')
