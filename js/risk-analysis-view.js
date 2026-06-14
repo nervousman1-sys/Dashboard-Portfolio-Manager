@@ -728,7 +728,7 @@ function _drawModalCML(model, client) {
             });
         }
     }
-    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: 'rgba(0,229,255,0.5)', borderColor: '#00e5ff', borderWidth: 2.5, order: 0 });
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
     opts.scales.x.min = 0; opts.scales.x.max = maxX;
@@ -754,11 +754,15 @@ function _drawModalSML(model, client) {
     const xMin = -0.8, xMax = 2.8;
     const smlLine = [{ x: xMin, y: rfPct + xMin * (rmPct - rfPct) }, { x: xMax, y: rfPct + xMax * (rmPct - rfPct) }];
 
-    // Zoom OUT so every asset point is comfortably inside the frame (extra margin)
+    // Zoom OUT so every asset point is comfortably inside the frame. Give a GENEROUS
+    // top margin (matching the CML chart) so the portfolio dot never sits up against
+    // the top axis number.
     const ys = holdPts.map(q => q.y).concat([marketPt.y, rfPct, portPt ? portPt.y : rfPct, smlLine[0].y, smlLine[1].y]);
     const yLo = Math.min(...ys), yHi = Math.max(...ys);
     const yRange = (yHi - yLo) || 50;
-    const yMax = Math.min(190, yHi + yRange * 0.18 + 10);
+    // Ensure the portfolio point specifically keeps ~15% clearance below the top.
+    const topAnchor = Math.max(yHi, portPt ? portPt.y * 1.15 : yHi);
+    const yMax = Math.min(205, topAnchor + yRange * 0.28 + 14);
     const yMin = Math.max(-130, yLo - yRange * 0.18 - 10);
 
     // Portfolio holdings, split by SML verdict into THREE legend entries (green =
@@ -781,7 +785,7 @@ function _drawModalSML(model, client) {
     datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1 });
     // Semi-transparent fill so an asset point sitting under the big portfolio dot
     // still shows through (the dot no longer hides data).
-    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: 'rgba(0,229,255,0.5)', borderColor: '#00e5ff', borderWidth: 2.5, order: 0 });
+    if (portPt) datasets.push({ type: 'scatter', label: 'התיק שלך', data: [portPt], pointRadius: 11, pointHoverRadius: 13, backgroundColor: '#00e5ff', borderColor: '#fff', borderWidth: 2.5, order: 0 });
 
     const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
     opts.scales.x.min = xMin; opts.scales.x.max = xMax;

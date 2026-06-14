@@ -206,6 +206,7 @@ async function _dnLoadVision(det) {
     const ok = texts.filter(Boolean);
     if (ok.length) {
         box.innerHTML = _dnVisionHTML(ok.join('\n'), imgs[0], mode);
+        if (mode === 'flows') _dnFillFlowsNews(box); // pull real headlines for the side
     } else {
         box.dataset.loaded = '';
         box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(imgs[0])}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
@@ -285,15 +286,15 @@ function _dnVisionHTML(text, img, mode) {
             if (axisMax - maxN < maxN * 0.05) axisMax += 5;
             window._dnFlowSectors = window._dnFlowSectors || {};
             const bar = (r) => {
-                let stocksBtn = '';
-                if (r.tickers && r.tickers.length) {
-                    const sid = 'fs_' + Math.random().toString(36).slice(2, 9);
-                    window._dnFlowSectors[sid] = { sector: r.name, tickers: r.tickers, inflow: r.inflow };
-                    stocksBtn = `<button class="dn-sec-stocks-btn" onclick="openSectorStocks('${sid}')">רשימת מניות (${r.tickers.length})</button>`;
-                }
+                // The sector name itself is the click target — opens its stock list
+                // (no extra button → cleaner, more compact histogram).
+                let nameHtml = `<span class="dn-flow-secname">${_dnEsc(r.name)}</span>`;
+                const sid = 'fs_' + Math.random().toString(36).slice(2, 9);
+                window._dnFlowSectors[sid] = { sector: r.name, tickers: r.tickers || [] };
+                nameHtml = `<span class="dn-flow-secname clickable" onclick="openSectorStocks('${sid}')" title="לחץ לרשימת המניות בסקטור">${_dnEsc(r.name)} <span class="dn-flow-secname-ind">▾</span></span>`;
                 return `
                 <div class="dn-flow-row">
-                    <span class="dn-flow-name"><span class="dn-flow-secname">${_dnEsc(r.name)}</span>${stocksBtn}</span>
+                    <span class="dn-flow-name">${nameHtml}</span>
                     <div class="dn-flow-track"><div class="dn-flow-bar ${r.inflow ? 'in' : 'out'}" style="width:${Math.max(4, r.mag / axisMax * 100).toFixed(1)}%"></div></div>
                     <span class="dn-flow-amt ${r.inflow ? 'in' : 'out'}">${_dnEsc(r.amount)}</span>
                 </div>`;
@@ -314,7 +315,19 @@ function _dnVisionHTML(text, img, mode) {
             const analHTML = analysis.length
                 ? `<div class="dn-flow-analysis"><div class="dn-flow-analysis-h">למה הכסף זורם כך — ניתוח</div>${analysis.map(s => `<div class="dn-flow-analysis-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
                 : '<div class="dn-flow-analysis"><div class="adv-empty">הניתוח ייטען עם קריאת התמונה…</div></div>';
-            const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${instHTML}</div>`;
+
+            // Real news symbols: the ETF/leading stock of the top in/out sectors —
+            // used to pull ACTUAL recent headlines (Finnhub/Yahoo) as live evidence.
+            const newsSyms = [];
+            for (const r of [...ins.slice(0, 3), ...outs.slice(0, 3)]) {
+                let t = (r.tickers || []).find(x => /^[A-Z]{2,5}$/.test(x));
+                if (!t) { const tops = _sectorTopStocks(r.name, r.tickers); t = tops[0]; }
+                if (t && !newsSyms.includes(t)) newsSyms.push(t);
+            }
+            const newsBox = newsSyms.length
+                ? `<div class="dn-flow-news" data-syms="${newsSyms.join(',')}"><div class="dn-flow-news-h">רקע חדשותי — נתוני אמת מהשוק</div><div class="dn-flow-news-list"><div class="adv-empty">טוען חדשות עדכניות…</div></div></div>`
+                : '';
+            const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}${instHTML}</div>`;
 
             return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>`;
         }
@@ -606,10 +619,56 @@ function _dnRender() {
     _dnPrefetchVisions();
 }
 
+// Largest real constituents per sector (top names in each sector's leading ETF),
+// keyed by the ETF ticker and by the Hebrew sector keyword. Used to enrich the
+// stock list beyond the single ETF the image lists.
+const SECTOR_TOP_STOCKS = {
+    XLK: ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'ORCL'],
+    XLV: ['LLY', 'UNH', 'JNJ', 'MRK', 'ABBV'],
+    XLF: ['BRK.B', 'JPM', 'V', 'MA', 'BAC'],
+    XLE: ['XOM', 'CVX', 'COP', 'EOG', 'SLB'],
+    XLY: ['AMZN', 'TSLA', 'HD', 'MCD', 'NKE'],
+    XLP: ['PG', 'COST', 'KO', 'WMT', 'PEP'],
+    XLI: ['GE', 'CAT', 'RTX', 'HON', 'UNP'],
+    XLC: ['META', 'GOOGL', 'NFLX', 'DIS', 'TMUS'],
+    XLB: ['LIN', 'SHW', 'FCX', 'ECL', 'NEM'],
+    XLU: ['NEE', 'SO', 'DUK', 'CEG', 'AEP'],
+    XLRE: ['PLD', 'AMT', 'EQIX', 'WELL', 'SPG'],
+    SOXX: ['NVDA', 'AVGO', 'AMD', 'TSM', 'ASML'],
+    SMH: ['NVDA', 'TSM', 'AVGO', 'AMD', 'ASML'],
+};
+const SECTOR_HE_TO_ETF = [
+    [/שבב|סמיקונדקטור|semicon/i, 'SOXX'],
+    [/בריאות|פארמה|תרופ/i, 'XLV'],
+    [/ביוטכ|biotech/i, 'XLV'],
+    [/פיננס|בנק|ביטוח/i, 'XLF'],
+    [/אנרגי|נפט|גז/i, 'XLE'],
+    [/טכנולוגי|tech/i, 'XLK'],
+    [/בינה מלאכותית|\bai\b|genai/i, 'XLK'],
+    [/צרכנות בסיסית|staples/i, 'XLP'],
+    [/צרכנות מחזורית|צרכנות|discretionary/i, 'XLY'],
+    [/תעשיי|industrial/i, 'XLI'],
+    [/תקשורת|communication/i, 'XLC'],
+    [/חומרי גלם|materials/i, 'XLB'],
+    [/תשתיות|utilit/i, 'XLU'],
+    [/נדל|real estate/i, 'XLRE'],
+];
+function _sectorTopStocks(sectorName, tickers) {
+    // Prefer the ETF ticker present in the row; else map the Hebrew sector name
+    let etf = (tickers || []).find(t => SECTOR_TOP_STOCKS[t.toUpperCase()]);
+    if (!etf) { const hit = SECTOR_HE_TO_ETF.find(([re]) => re.test(sectorName || '')); if (hit) etf = hit[1]; }
+    return etf ? (SECTOR_TOP_STOCKS[etf.toUpperCase()] || []) : [];
+}
+
 // ── Sector stock-list popup: GF links + CML/SML compliance + buy into a portfolio ──
 function openSectorStocks(sid) {
     const data = (window._dnFlowSectors || {})[sid];
     if (!data) return;
+    // Merge the image's tickers (ETF) with the sector's largest real constituents
+    const etfTickers = (data.tickers || []).map(t => t.toUpperCase());
+    const tops = _sectorTopStocks(data.sector, etfTickers);
+    const allTickers = [...new Set([...etfTickers, ...tops])];
+    const sectorName = data.sector;
     const model = window._lastRiskModel;
     const recOf = (t) => {
         const a = model && model.assets ? model.assets[t.toUpperCase()] : null;
@@ -621,11 +680,13 @@ function openSectorStocks(sid) {
     };
     const gf = (t) => (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(t) : `https://www.google.com/search?q=${encodeURIComponent(t + ' stock')}`;
 
-    const rows = data.tickers.map(t => {
+    const isEtf = (t) => etfTickers.includes(t);
+    const rows = allTickers.map(t => {
         const r = recOf(t);
+        const tag = isEtf(t) ? '<span class="secst-etf-tag">תעודת סל</span>' : '';
         return `
         <div class="secst-row">
-            <span class="secst-tk">${_dnEsc(t)}</span>
+            <span class="secst-tk">${_dnEsc(t)}${tag}</span>
             <span class="secst-rec" style="--rc:${r.color}" title="${r.tip || ''}">${_dnEsc(r.label)}</span>
             <a class="secst-gf" href="${gf(t)}" target="_blank" rel="noopener">Google Finance ↗</a>
             <button class="secst-buy" onclick="_sectorBuyPick('${_dnEsc(t)}', this)">קנה לתיק ▾</button>
@@ -643,11 +704,11 @@ function openSectorStocks(sid) {
     ov.innerHTML = `
         <div class="chart-info-dialog" dir="rtl">
             <div class="chart-info-head">
-                <h3>מניות בסקטור: ${_dnEsc(data.sector)}</h3>
+                <h3>מניות בסקטור: ${_dnEsc(sectorName)}</h3>
                 <button class="chart-info-close" onclick="document.getElementById('secStockOverlay').classList.remove('active')">&times;</button>
             </div>
             <div class="chart-info-body">
-                <p style="margin-bottom:10px">לחץ על מנייה לבדיקה בגוגל פיננס, או "קנה לתיק" כדי להוסיף לאחד התיקים. הסימון מציין אם המנייה עומדת במודל ה-CML/SML.</p>
+                <p style="margin-bottom:10px">תעודת הסל של הסקטור לצד המניות הגדולות בו. לחץ על Google Finance לבדיקה, או "קנה לתיק" להוספה לאחד התיקים. הסימון מציין אם המנייה עומדת במודל ה-CML/SML.</p>
                 <div class="secst-list">${rows}</div>
             </div>
         </div>`;
@@ -684,6 +745,44 @@ async function _sectorBuy(ticker, clientId) {
             openMgmtModal('buyHolding', { client, holding: { ticker, name: ticker, type: 'stock', currency: 'USD', price } });
         }
     }, 120);
+}
+
+// Fetch REAL recent headlines for the flow's leading sectors and render them as
+// live supporting evidence under the analysis. Source: /api/news (Finnhub→Yahoo),
+// already translated to Hebrew — no fabricated content.
+async function _dnFillFlowsNews(scope) {
+    const root = scope || document;
+    const box = root.querySelector('.dn-flow-news[data-syms]');
+    if (!box || box.dataset.loaded) return;
+    box.dataset.loaded = '1';
+    const list = box.querySelector('.dn-flow-news-list');
+    const syms = (box.dataset.syms || '').split(',').filter(Boolean);
+    if (!syms.length) { box.remove(); return; }
+    try {
+        const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}`, { headers: { Accept: 'application/json' } });
+        const data = await r.json();
+        // Flatten to the most recent headlines across the sectors, dedup by title
+        const items = [];
+        const seen = new Set();
+        for (const s of syms) {
+            for (const n of (data[s] || [])) {
+                const t = (n.he || n.en || '').trim();
+                if (!t || seen.has(t)) continue;
+                seen.add(t);
+                items.push({ t, sym: s, date: n.date || '', url: n.url || '', source: n.source || '' });
+            }
+        }
+        items.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const top = items.slice(0, 5);
+        if (!top.length) { box.remove(); return; }
+        if (list) list.innerHTML = top.map(n => `
+            <a class="dn-flow-news-item" href="${_dnEsc(n.url)}" target="_blank" rel="noopener" dir="rtl">
+                <span class="dn-flow-news-txt">${_dnEsc(n.t)}</span>
+                <span class="dn-flow-news-meta">${_dnEsc(n.sym)}${n.source ? ' · ' + _dnEsc(n.source) : ''}${n.date ? ' · ' + _dnEsc(n.date) : ''}</span>
+            </a>`).join('');
+    } catch (e) {
+        box.remove();
+    }
 }
 
 if (typeof window !== 'undefined') {

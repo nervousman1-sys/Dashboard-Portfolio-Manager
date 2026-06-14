@@ -90,6 +90,148 @@ function switchModalTab(tabName) {
     }
 }
 
+// ── Holdings table: sortable body (click "נכס" header to cycle) ──
+// 0 = original order · 1 = strongest performers (return % high→low) · 2 = by sector
+let _holdingsSortMode = 0;
+const _HOLD_SORT_LABEL = ['נכס', 'נכס · ביצועים', 'נכס · לפי סקטור'];
+
+function _sortHoldingsFor(holdings, mode) {
+    const arr = holdings.slice();
+    if (mode === 1) {
+        const ret = (h) => (h.costBasis > 0 ? (h.value - h.costBasis) / h.costBasis * 100 : -Infinity);
+        arr.sort((a, b) => ret(b) - ret(a));
+    } else if (mode === 2) {
+        const sec = (h) => h.sector || (h.type === 'stock' ? 'Other' : (h.typeLabel || 'אחר'));
+        arr.sort((a, b) => String(sec(a)).localeCompare(String(sec(b))) || (b.value || 0) - (a.value || 0));
+    }
+    return arr;
+}
+
+// Builds the full <tbody> inner HTML (rows + footer) for the current sort mode.
+function _buildHoldingsTable(client) {
+    const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const _pReturn = (typeof calcPortfolioReturn === 'function') ? calcPortfolioReturn(client) : { totalCost: 0 };
+    const _portTotalForPct = client.holdings.reduce((s, hh) => s + (hh.value || 0) * _fxR(hh.currency), 0)
+        + ((client.cash?.usd || 0) + (client.cash?.ils || 0) * _fxR('ILS'));
+
+    let holdingsRows = '';
+    let totalHoldingsValue = 0, totalHoldingsPnL = 0, totalDailyPnL = 0;
+    const ordered = _sortHoldingsFor(client.holdings, _holdingsSortMode);
+    let lastSector = null;
+
+    ordered.forEach((h) => {
+        const isStale = h.type === 'stock' && !h._livePriceResolved;
+        const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
+        const changeClass = change >= 0 ? 'positive' : 'negative';
+        const changeSign = change >= 0 ? '+' : '';
+        const holdingProfit = h.value - h.costBasis;
+        const holdingReturn = h.costBasis > 0 ? (holdingProfit / h.costBasis * 100) : 0;
+        const holdingProfitClass = holdingProfit >= 0 ? 'positive' : 'negative';
+        const holdingProfitSign = holdingProfit >= 0 ? '+' : '';
+        const currSymbol = h.currency === 'ILS' ? '₪' : '$';
+        const purchasePrice = h.shares > 0 ? (h.costBasis / h.shares) : 0;
+        const heName = typeof getHebrewName === 'function' ? getHebrewName(h) : '';
+        const primaryName = heName || (h.type === 'stock' ? h.ticker : h.name);
+        const secondaryName = heName ? (h.type === 'stock' ? h.ticker : '') : '';
+        const subName = secondaryName ? `<span style="font-size:10px;color:var(--text-muted)">${secondaryName}</span>` : '';
+        const _recChip = (() => {
+            const m = window._lastRiskModel;
+            if (!m || !m.assets || h.type !== 'stock') return '';
+            const a = m.assets[h.ticker];
+            if (!a || !a.hasData || a.recommendation === 'unknown') return '';
+            const color = (typeof rmRecColor === 'function') ? rmRecColor(a.recommendation) : '#64748b';
+            const label = (typeof rmRecLabel === 'function') ? rmRecLabel(a.recommendation) : '';
+            const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;
+            return `<span class="rec-chip" style="--rec:${color}" title="${tip}">${label}</span>`;
+        })();
+        const _hFx = _fxR(h.currency);
+        totalHoldingsValue += h.value * _hFx;
+        totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
+        const dailyProfit = (h.previousClose > 0 && h.shares > 0) ? (h.price - h.previousClose) * h.shares : 0;
+        totalDailyPnL += isStale ? 0 : dailyProfit * _hFx;
+        const dailyProfitClass = dailyProfit >= 0 ? 'positive' : 'negative';
+        const dailyProfitSign = dailyProfit >= 0 ? '+' : '';
+        const _betaCell = (() => {
+            const m = window._lastRiskModel;
+            const a = m && m.assets && h.type === 'stock' ? m.assets[h.ticker] : null;
+            return (a && a.beta != null && isFinite(a.beta)) ? a.beta.toFixed(2) : '<span style="color:var(--text-muted)">—</span>';
+        })();
+        const _pctOfPort = _portTotalForPct > 0 ? (h.value * _hFx / _portTotalForPct * 100) : 0;
+
+        // In "by sector" mode, emit a thin sector divider row when the sector changes
+        if (_holdingsSortMode === 2) {
+            const sec = h.sector || (h.type === 'stock' ? 'Other' : (h.typeLabel || 'אחר'));
+            if (sec !== lastSector) {
+                lastSector = sec;
+                holdingsRows += `<tr class="hold-sector-row"><td colspan="14">${sec}</td></tr>`;
+            }
+        }
+
+        holdingsRows += `<tr>
+            <td>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
+                    ${subName}
+                    <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                        <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
+                        ${_recChip}
+                    </span>
+                </div>
+            </td>
+            <td>${formatPrice(purchasePrice)} ${currSymbol}</td>
+            <td>${isStale ? `<span style="color:var(--text-muted)" title="ממתין לעדכון מחיר מהשוק">${formatPrice(h.price)} ${currSymbol}</span>` : `${formatPrice(h.price)} ${currSymbol}`}</td>
+            <td id="yh_${h.id}">${h.yearHigh ? `${formatPrice(h.yearHigh)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td id="yl_${h.id}">${h.yearLow ? `${formatPrice(h.yearLow)} ${currSymbol}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
+            <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
+            <td style="font-weight:600">${_pctOfPort >= 0.05 ? _pctOfPort.toFixed(1) + '%' : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td>${_betaCell}</td>
+            <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
+            <td class="price-change ${isStale ? '' : dailyProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${dailyProfitSign}${formatCurrency(Math.abs(dailyProfit), h.currency)}`}</td>
+            <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
+            <td class="price-change ${isStale ? '' : holdingProfitClass}" style="font-weight:700">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${holdingReturn.toFixed(2)}%`}</td>
+            <td>
+                <button class="holding-action-btn buy" onclick="openMgmtModal('buyHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">קנה</button>
+                <button class="holding-action-btn sell" onclick="openMgmtModal('sellHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(h=>h.id===${h.id})})">מכור</button>
+            </td>
+        </tr>`;
+    });
+
+    const totalPnLClass = totalHoldingsPnL >= 0 ? 'positive' : 'negative';
+    const totalPnLSign = totalHoldingsPnL >= 0 ? '+' : '';
+    const totalReturnPctHoldings = _pReturn.totalCost > 0 ? (totalHoldingsPnL / _pReturn.totalCost * 100) : 0;
+    const totalDailyClass = totalDailyPnL >= 0 ? 'positive' : 'negative';
+    const totalDailySign = totalDailyPnL >= 0 ? '+' : '';
+    const totalDailyPct = (totalHoldingsValue - totalDailyPnL) > 0 ? (totalDailyPnL / (totalHoldingsValue - totalDailyPnL) * 100) : 0;
+    const holdingsFooter = `<tr class="holdings-footer-row">
+        <td style="font-weight:700;color:var(--text-primary)">סה"כ</td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td style="font-weight:700;color:var(--text-primary)">${formatCurrency(totalHoldingsValue)}</td>
+        <td></td><td></td>
+        <td class="price-change ${totalDailyClass}" style="font-weight:700">${totalDailySign}${totalDailyPct.toFixed(2)}%</td>
+        <td class="price-change ${totalDailyClass}" style="font-weight:700">${totalDailySign}${formatCurrency(Math.abs(totalDailyPnL))}</td>
+        <td class="price-change ${totalPnLClass}" style="font-weight:700">${totalPnLSign}${formatCurrency(Math.abs(totalHoldingsPnL))}</td>
+        <td class="price-change ${totalPnLClass}" style="font-weight:700">${totalPnLSign}${totalReturnPctHoldings.toFixed(2)}%</td>
+        <td></td>
+    </tr>`;
+    return holdingsRows + holdingsFooter;
+}
+
+function _cycleHoldingsSort(clientId) {
+    _holdingsSortMode = (_holdingsSortMode + 1) % 3;
+    const client = (typeof clients !== 'undefined' ? clients : []).find(c => c.id === clientId);
+    if (!client) return;
+    const body = document.getElementById('holdingsTbody');
+    if (body) body.innerHTML = _buildHoldingsTable(client);
+    const lbl = document.getElementById('holdSortLabel');
+    if (lbl) lbl.textContent = _HOLD_SORT_LABEL[_holdingsSortMode];
+    if (typeof _enrichHoldings52w === 'function') _enrichHoldings52w(client); // re-fill 52w cells
+}
+if (typeof window !== 'undefined') {
+    window._cycleHoldingsSort = _cycleHoldingsSort;
+    window._buildHoldingsTable = _buildHoldingsTable;
+}
+
 async function openModal(clientId) {
     currentModalClientId = clientId;
     const client = clients.find(c => c.id === clientId);
@@ -114,7 +256,10 @@ async function openModal(clientId) {
     // ── Risk & allocation metrics (reuses _calcListMetrics logic) ──
     const _rm = (typeof _calcListMetrics === 'function') ? _calcListMetrics(client) : null;
 
-    // Holdings table — columns: נכס, מחיר קנייה, מחיר נוכחי, כמות, שווי כולל, שינוי יומי %, רווח $, תשואה %, פעולות
+    // Holdings table body — built by a reusable, re-sortable function so clicking
+    // the "נכס" header can re-order in place without rebuilding the whole modal.
+    const holdingsTableBody = _buildHoldingsTable(client);
+    if (false) { // legacy inline build retained (dead) — _buildHoldingsTable is authoritative
     let holdingsRows = '';
     let totalHoldingsValue = 0;   // FX-converted to USD for correct cross-currency totals
     let totalHoldingsPnL = 0;     // FX-converted to USD
@@ -217,6 +362,7 @@ async function openModal(clientId) {
         <td class="price-change ${totalPnLClass}" style="font-weight:700">${totalPnLSign}${totalReturnPctHoldings.toFixed(2)}%</td>
         <td></td>
     </tr>`;
+    } // end dead legacy block
 
     // Sector breakdown table
     const sectorData = {};
@@ -462,8 +608,8 @@ async function openModal(clientId) {
                 <button class="add-asset-btn" onclick="openMgmtModal('addHolding', clients.find(c=>c.id===${client.id}))">+ הוסף נכס חדש</button>
                 <div class="holdings-table-wrapper">
                 <table class="holdings-table">
-                    <thead><tr><th>נכס</th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-price">שנתי גבוה</th><th class="col-price">שנתי נמוך</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">% מהתיק</th><th class="col-pct">β</th><th class="col-pct">תשואה יומית</th><th>רווח יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה כוללת</th><th>פעולות</th></tr></thead>
-                    <tbody>${holdingsRows}${holdingsFooter}</tbody>
+                    <thead><tr><th class="hold-sort-th" onclick="_cycleHoldingsSort(${client.id})" title="לחץ למיון: רגיל → ביצועים → לפי סקטור"><span id="holdSortLabel">נכס</span> <span class="hold-sort-ind">⇅</span></th><th class="col-price">מחיר קנייה</th><th class="col-price">מחיר נוכחי</th><th class="col-price">שנתי גבוה</th><th class="col-price">שנתי נמוך</th><th class="col-qty-header">כמות</th><th>שווי כולל</th><th class="col-pct">% מהתיק</th><th class="col-pct">β</th><th class="col-pct">תשואה יומית</th><th>רווח יומי</th><th>רווח/הפסד</th><th class="col-pct">תשואה כוללת</th><th>פעולות</th></tr></thead>
+                    <tbody id="holdingsTbody">${holdingsTableBody}</tbody>
                 </table>
                 </div>
             </div>
