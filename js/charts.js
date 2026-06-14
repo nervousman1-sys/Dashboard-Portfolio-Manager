@@ -1340,6 +1340,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 2. Acquire data: real history → synthetic fallback ──
     let hist = null;
+    let _histIsSynthetic = false; // synthetic = cost-anchored values (different scale than market value)
     const isIntraday = (range === '1d' || range === '5d');
 
     // 2a. Intraday: live 5min/1h data from FMP/Twelve Data
@@ -1419,6 +1420,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                 const synth = await fetchSyntheticHistory(client, range);
                 if (synth && synth.length >= 2) {
                     hist = synth;
+                    _histIsSynthetic = true; // cost-anchored scale — do NOT mix with market value
                     console.log(`[PerfChart] Using synthetic history for ${client.name} (${synth.length} points, range=${range})`);
                 }
             }
@@ -1480,7 +1482,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // off the previous point, and the LIVE portfolio value agrees with the
     // previous point rather than the dive — snap the endpoint to the live value.
     // A genuine crash is preserved: there the live value agrees with the dive.
-    if (hist && hist.length >= 3 && range !== '1d' && range !== '5d') {
+    if (hist && hist.length >= 3 && range !== '1d' && range !== '5d' && !_histIsSynthetic) {
         const pv = client.portfolioValue
             || (client.holdings || []).reduce((s, h) => s + (h.value || 0), 0) + (client.cashBalance || 0);
         const last = hist[hist.length - 1], prev = hist[hist.length - 2];
@@ -1576,8 +1578,13 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     const is1DPrevCloseNorm = isIntraday && range === '1d' && hist.length > 0 && hist[0]._isPrevCloseBaseline;
 
     // Ensure the LAST point uses the actual current portfolio value (not a stale
-    // synthetic estimate), so the endpoint always reflects reality.
-    if (hist.length >= 2 && client.portfolioValue > 0 && !is1DPrevCloseNorm) {
+    // estimate), so the endpoint reflects reality.
+    // CRITICAL: only for recorded snapshots (real market-value scale). Synthetic
+    // history is COST-ANCHORED — a different scale — so overwriting its last value
+    // with the market value mixed scales and produced a fake vertical cliff to ~0%
+    // at the chart's end. For synthetic data the cost-anchored endpoint is already
+    // accurate, so we leave it untouched.
+    if (hist.length >= 2 && client.portfolioValue > 0 && !is1DPrevCloseNorm && !_histIsSynthetic) {
         hist[hist.length - 1].value = client.portfolioValue;
     }
 
