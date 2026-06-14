@@ -9332,6 +9332,11 @@ html.day-mode .tech-table .tech-no { color: rgba(15,23,42,0.72) !important; }
 html.day-mode .tech-table .tech-na { color: rgba(15,23,42,0.6) !important; }
 html.day-mode .tech-table .tech-dist { color: #0f172a !important; }
 html.day-mode .tech-foot { color: #334155 !important; }
+/* A met condition (✓ near-MA / "בפנים" FVG) is marked GREEN — the `.tech-table td`
+   white rule above had been overriding it. Higher specificity restores the green on
+   the ✓/בפנים mark only; the white % distance numbers are left exactly as they are. */
+.tech-table td.tech-yes { color: #4ade80 !important; }
+html.day-mode .tech-table td.tech-yes { color: #047857 !important; }
 
 /* Institutional issuer attribution — under the histogram in the RIGHT column,
    filling the space below the bars. Multi-issuer; scrolls if long. */
