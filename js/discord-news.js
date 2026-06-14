@@ -411,8 +411,10 @@ function _dnVisionHTML(text, img, mode) {
                     const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : '');
                     const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '•');
                     const dirWord = m.dir === 'in' ? 'כניסה' : (m.dir === 'out' ? 'יציאה' : '');
+                    // Sub-sector the money went into, shown next to the institution.
+                    const subLabel = _dnDestSubLabel(m.dest);
                     const destHtml = m.dest
-                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}</span>`
+                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
                     const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '<span class="dn-mover-amt">—</span>';
                     // When this body moved money into several destinations, flag (once) the
@@ -847,6 +849,32 @@ const _DN_SUBSECTOR = {
 };
 function _dnSubSector(name, tickers) {
     for (const t of (tickers || [])) { const k = String(t).toUpperCase(); if (_DN_SUBSECTOR[k]) return _DN_SUBSECTOR[k]; }
+    return '';
+}
+
+// Broad Hebrew sector → the sub-sectors that typically absorb the flow within it. Used
+// to label, next to each institution, the sub-sector its money went into.
+const _DN_HE_SUBSECTORS = [
+    ['מוליכים למחצה', 'מוליכים למחצה'], ['שבב', 'מוליכים למחצה'], ['בינה מלאכותית', 'AI ושבבים'], [' AI', 'AI ושבבים'],
+    ['טכנולוג', 'שבבים · תוכנה · ענן'], ['תוכנה', 'תוכנה וענן'], ['ענן', 'תוכנה וענן'],
+    ['אנרגיה', 'נפט, גז ותשתיות'], ['נפט', 'נפט וגז'], ['גז', 'נפט וגז'],
+    ['פיננס', 'בנקים וביטוח'], ['בנק', 'בנקים'], ['ביטוח', 'ביטוח'],
+    ['בריאות', 'פארמה ומכשור רפואי'], ['פארמ', 'פארמה'], ['תרופ', 'פארמה'],
+    ['תקשורת', 'אינטרנט ומדיה'], ['מדיה', 'מדיה ובידור'], ['אינטרנט', 'אינטרנט ופרסום'],
+    ['צריכה', 'קמעונאות ומותגים'], ['קמעונ', 'קמעונאות'], ['רכב', 'רכב חשמלי'],
+    ['נדל', 'קרנות REIT'], ['ריט', 'קרנות REIT'],
+    ['אג"ח', 'אג"ח ממשלתי וקונצרני'], ['אגח', 'אג"ח ממשלתי וקונצרני'], ['ממשלת', 'אג"ח ממשלתי'],
+    ['קריפט', 'ביטקוין ומטבעות'], ['ביטקוין', 'ביטקוין'], ['זהב', 'מתכות יקרות'],
+    ['תעשי', 'מכונות ותעופה'], ['חומרי גלם', 'מתכות וכימיקלים'],
+];
+// Best sub-sector label for a destination string: prefer a ticker it names, else map the
+// broad Hebrew sector to its representative sub-sectors. Returns '' when nothing matches.
+function _dnDestSubLabel(dest) {
+    if (!dest) return '';
+    const s = String(dest);
+    const tk = s.toUpperCase().match(/[A-Z]{2,5}/);
+    if (tk) { const sub = _dnSubSector('', [tk[0]]); if (sub) return sub; }
+    for (const [needle, label] of _DN_HE_SUBSECTORS) { if (s.includes(needle.trim())) return label; }
     return '';
 }
 

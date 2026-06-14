@@ -809,6 +809,77 @@ function _drawModalSML(model, client) {
     _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts, plugins: [_minLegendHeightPlugin] });
 }
 
+// ── News relevance profiles ──
+// To keep the "עדכונים מהותיים" column tight, a headline is shown ONLY if it actually
+// names the company — its ticker, a company-name alias, or its CEO. This drops generic
+// market roundups and multi-company pieces that merely brush past the holding.
+// names = English aliases, he = Hebrew aliases (apostrophe-stripped to match any geresh),
+// ceo = executive names (matched in either language when present in the headline).
+const _NEWS_PROFILE = {
+    NVDA: { names: ['nvidia'], he: ['אנבידיה', 'נבידיה'], ceo: ['jensen huang', 'huang', 'הואנג'] },
+    AAPL: { names: ['apple'], he: ['אפל'], ceo: ['tim cook', 'טים קוק'] },
+    GOOGL: { names: ['google', 'alphabet'], he: ['גוגל', 'אלפאבית', 'אלפבית'], ceo: ['sundar pichai', 'pichai', 'פיצאי'] },
+    GOOG: { names: ['google', 'alphabet'], he: ['גוגל', 'אלפאבית', 'אלפבית'], ceo: ['pichai', 'פיצאי'] },
+    AMD: { names: ['advanced micro'], he: ['איי.אם.די'], ceo: ['lisa su', 'ליסה סו'] },
+    AVGO: { names: ['broadcom'], he: ['ברודקום'], ceo: ['hock tan'] },
+    APP: { names: ['applovin'], he: ['אפלוביין'], ceo: [] },
+    MSFT: { names: ['microsoft'], he: ['מיקרוסופט'], ceo: ['satya nadella', 'nadella', 'נאדלה'] },
+    META: { names: ['meta platforms', 'facebook', 'instagram'], he: ['מטא', 'פייסבוק', 'אינסטגרם'], ceo: ['mark zuckerberg', 'zuckerberg', 'צוקרברג'] },
+    AMZN: { names: ['amazon'], he: ['אמזון'], ceo: ['andy jassy', 'jassy'] },
+    TSLA: { names: ['tesla'], he: ['טסלה'], ceo: ['elon musk', 'musk', 'מאסק'] },
+    JPM: { names: ['jpmorgan', 'jp morgan'], he: ['גיי.פי מורגן', 'מורגן'], ceo: ['jamie dimon', 'dimon', 'דיימון'] },
+    XOM: { names: ['exxon'], he: ['אקסון'], ceo: ['darren woods'] },
+    CVX: { names: ['chevron'], he: ['שברון'], ceo: [] },
+    LLY: { names: ['eli lilly', 'lilly'], he: ['אלי לילי', 'לילי'], ceo: [] },
+    JNJ: { names: ['johnson & johnson'], he: ['גונסון אנד גונסון', 'גונסון'], ceo: [] },
+    UNH: { names: ['unitedhealth'], he: ['יונייטדהלת'], ceo: [] },
+    CSCO: { names: ['cisco'], he: ['סיסקו'], ceo: ['chuck robbins'] },
+    MSTR: { names: ['microstrategy'], he: ['מיקרוסטרטגי', 'סטרטגי'], ceo: ['michael saylor', 'saylor', 'סיילור'] },
+    V: { names: ['visa inc'], he: ['ויזה'], ceo: [] },
+    INTC: { names: ['intel'], he: ['אינטל'], ceo: ['lip-bu tan', 'gelsinger'] },
+    NFLX: { names: ['netflix'], he: ['נטפליקס'], ceo: [] },
+    CAT: { names: ['caterpillar'], he: ['קטרפילר'], ceo: [] },
+    ORCL: { names: ['oracle'], he: ['אורקל'], ceo: ['safra catz'] },
+    CRM: { names: ['salesforce'], he: ['סיילספורס'], ceo: ['marc benioff', 'benioff'] },
+    PLTR: { names: ['palantir'], he: ['פלנטיר'], ceo: ['alex karp', 'karp'] },
+    COIN: { names: ['coinbase'], he: ['קוינבייס'], ceo: ['brian armstrong'] },
+    // ETFs / funds — match the ticker and the fund/theme name only.
+    GLD: { names: ['gold'], he: ['זהב'], ceo: [] }, SCHD: { names: ['schwab dividend'], he: [], ceo: [] },
+    VOO: { names: ['vanguard s&p', 's&p 500'], he: [], ceo: [] }, VNQ: { names: ['vanguard real estate', 'reit'], he: [], ceo: [] },
+    XLE: { names: ['energy select', 'energy sector'], he: [], ceo: [] }, SMH: { names: ['semiconductor'], he: ['שבבים', 'מוליכים למחצה'], ceo: [] },
+    SOXX: { names: ['semiconductor'], he: ['שבבים', 'מוליכים למחצה'], ceo: [] }, TLT: { names: ['treasury'], he: [], ceo: [] }, IEF: { names: ['treasury'], he: [], ceo: [] },
+};
+// Strip apostrophes/geresh so "מיקרוסטרטג׳י" / "ג'ונסון" match their stripped aliases.
+const _newsNorm = (s) => String(s || '').toLowerCase().replace(/['׳’‘"״“”]/g, '');
+// Build the match terms for a ticker: the ticker itself (word-boundary), any profile
+// aliases (EN + HE) + CEO, and the significant words of the stored company name.
+function _newsMatchTerms(ticker, heldName) {
+    const T = String(ticker || '').toUpperCase();
+    const terms = [{ s: T, word: true }];
+    const prof = _NEWS_PROFILE[T];
+    if (prof) {
+        for (const n of prof.names) terms.push({ s: _newsNorm(n), word: false });
+        for (const h of (prof.he || [])) terms.push({ s: _newsNorm(h), word: false });
+        for (const c of prof.ceo) terms.push({ s: _newsNorm(c), word: false });
+    }
+    // Significant words from the stored holding name (e.g. "NVIDIA Corp" → "nvidia").
+    const STOP = new Set(['inc', 'corp', 'co', 'ltd', 'plc', 'the', 'group', 'holdings', 'company', 'class', 'etf', 'fund', 'trust', 'index']);
+    for (const w of _newsNorm(heldName).split(/[^a-z0-9]+/)) {
+        if (w.length >= 4 && !STOP.has(w)) terms.push({ s: w, word: false });
+    }
+    return terms;
+}
+function _newsIsRelevant(item, terms) {
+    const hay = _newsNorm(`${item.en || ''} ${item.he || ''}`);
+    if (!hay.trim()) return false;
+    for (const t of terms) {
+        if (!t.s) continue;
+        if (t.word) { if (new RegExp(`(^|[^a-z0-9])${t.s.toLowerCase()}([^a-z0-9]|$)`, 'i').test(hay)) return true; }
+        else if (hay.includes(t.s)) return true;
+    }
+    return false;
+}
+
 // Daily Hebrew news headlines for the portfolio's HELD US tickers. Because it reads
 // the current holdings, a sold ticker is simply not requested → its news disappears.
 async function _renderPortfolioNews(clientId) {
@@ -857,17 +928,23 @@ async function _renderPortfolioNews(clientId) {
     } else {
         const items = [];
         const seenHeadlines = new Set();
+        let _dropped = 0;
         for (const t of tickers) {
             const arr = data[t];
             if (!arr || !arr.length) continue;
+            const held = (client.holdings || []).find(h => (h.ticker || '').toUpperCase() === t.toUpperCase());
+            const terms = _newsMatchTerms(t, held && held.name);
             for (const n of arr) {
                 const key = (n.he || n.en || '').trim();
                 if (key && seenHeadlines.has(key)) continue; // skip market-wide dupes
+                // STRICT relevance: keep only headlines that actually name THIS company
+                // (ticker / alias / CEO). Drops generic market & multi-company roundups.
+                if (!_newsIsRelevant(n, terms)) { _dropped++; continue; }
                 if (key) seenHeadlines.add(key);
                 items.push({ t, ...n });
             }
         }
-        console.log(`[PortfolioNews] ${tickers.length} tickers → ${Object.keys(data || {}).length} with news, ${items.length} headlines`);
+        console.log(`[PortfolioNews] ${tickers.length} tickers → ${Object.keys(data || {}).length} with news, ${items.length} relevant headlines (${_dropped} generic dropped)`);
         if (items.length) {
             box.innerHTML = items.map(n => `
                 <a class="pf-news-item" href="${n.url || '#'}" target="_blank" rel="noopener">

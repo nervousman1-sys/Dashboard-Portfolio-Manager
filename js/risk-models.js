@@ -998,12 +998,16 @@ function buildPortfolioAdvisory(client, model) {
             const sectorGap = Math.max(0, 0.18 - secW);   // reward sectors THIS book lacks
             const sectorOver = Math.max(0, secW - 0.22);  // penalty once a sector exceeds ~22%
             const betaMismatch = Math.abs((a.beta != null ? a.beta : 1) - desiredAddBeta);
+            // Saturate alpha: past ~15% the marginal quality flattens. Without this, ONE
+            // freak-alpha name (INTC showed +79.7%) dominates the linear score and wins
+            // EVERY portfolio's list. Capped, the portfolio's own gaps decide instead.
+            const alphaSat = Math.max(-0.02, Math.min(0.15, a.alpha));
             const fit =
-                  1.00 * a.alpha                 // SML quality — above the line
-                + 0.55 * sectorGap               // fills a genuine sector gap in THIS portfolio
-                - 0.45 * Math.max(0, corr)       // genuine diversification (low correlation)
-                - 0.60 * sectorOver              // never pile into an already-heavy sector
-                - 0.06 * betaMismatch;           // nudge the portfolio toward the CML (β≈1)
+                  0.60 * alphaSat                // SML quality — above the line (bounded)
+                + 0.90 * sectorGap               // PRIMARY driver: fills a gap in THIS book
+                - 0.70 * Math.max(0, corr)       // genuine diversification (low correlation)
+                - 0.80 * sectorOver              // never pile into an already-heavy sector
+                - 0.10 * betaMismatch;           // nudge the portfolio toward the CML (β≈1)
             return {
                 ticker: a.ticker, name: a.name, sector: a.sector,
                 alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
@@ -1062,8 +1066,18 @@ function buildPortfolioAdvisory(client, model) {
         });
     }
 
-    // 4. Quality upgrades — top 2 best-fit names, with the reason THEY fit THIS book.
-    candidates.slice(0, 2).forEach((c) => {
+    // 4. Quality upgrades — top best-fit names from DISTINCT sectors, with the reason
+    //    THEY fit THIS book. Distinct sectors so the two picks aren't near-duplicates.
+    const _planSectors = new Set();
+    const planPicks = [];
+    for (const c of candidates) {
+        const s = c.sector || 'Other';
+        if (_planSectors.has(s)) continue;
+        _planSectors.add(s);
+        planPicks.push(c);
+        if (planPicks.length >= 2) break;
+    }
+    planPicks.forEach((c) => {
         const reasons = [];
         if (c.sectorGap > 0.05) reasons.push(`משלים חשיפה לסקטור <b>${c.sector || 'חדש'}</b> שחסר בתיק`);
         if (c.corrToPort != null && c.corrToPort < 0.4) reasons.push(`קורלציה נמוכה לאחזקות (ρ=${rmFmtNum(c.corrToPort, 2)}) — פיזור אמיתי`);
