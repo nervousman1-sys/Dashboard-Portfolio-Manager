@@ -460,10 +460,14 @@ function _dnVisionHTML(text, img, mode) {
                     if (isTopRow) _domShown.add(m.name);
                     const starOnAsset = (isTopRow && m.dest && m.dir)
                         ? ` <span class="dn-mover-star" title="הנכס שאליו ${_dnEsc(m.name)} הזרים את הזרימה הנטו הגדולה ביותר">★</span>` : '';
-                    // The EXACT asset the flow went to, plus its sub-sector.
+                    // The EXACT asset the flow went to: its central ticker (always shown
+                    // when resolvable), the name, and its sub-sector.
                     const subLabel = _dnDestSubLabel(m.dest);
+                    const destTk = _dnDestTicker(m.dest);
+                    const tkBadge = (destTk && destTk.toUpperCase() !== String(m.dest).trim().toUpperCase())
+                        ? `<span class="dn-mover-tk">${_dnEsc(destTk)}</span> ` : '';
                     const destHtml = m.dest
-                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}${starOnAsset}</span>`
+                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${tkBadge}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}${starOnAsset}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
                     const amtHtml = m.amount
                         ? `<span class="dn-mover-amt ${cls}" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
@@ -923,6 +927,43 @@ function _dnDestSubLabel(dest) {
     if (tk) { const sub = _dnSubSector('', [tk[0]]); if (sub) return sub; }
     for (const [needle, label] of _DN_HE_SUBSECTORS) { if (s.includes(needle.trim())) return label; }
     return '';
+}
+
+// The TICKER of the central asset a flow went to. If the destination already names a
+// known ticker use it; otherwise resolve the asset/sub-sector name to its representative
+// ETF ticker. Returns '' only when nothing recognisable is present.
+const _DN_KNOWN_TK = new Set(['SOXX', 'SMH', 'AIQ', 'IBIT', 'FBTC', 'GLD', 'SLV', 'TLT', 'IEF', 'SHV', 'SGOV', 'XLE', 'XLF', 'XLV', 'XLK', 'XLC', 'XLP', 'XLY', 'XLI', 'XLB', 'XLU', 'XLRE', 'SPY', 'VOO', 'QQQ', 'VNQ', 'BOTZ']);
+const _DN_DEST_TK = [
+    [/מוליכים|שבב|semicon|chips?/i, 'SOXX'],
+    [/בינה\s*מלאכותית|רובוטיק|\bA\.?I\b|genai/i, 'AIQ'],
+    [/ביטקוין|קריפט|bitcoin|crypto/i, 'IBIT'],
+    [/זהב|gold/i, 'GLD'], [/כסף\b|silver/i, 'SLV'],
+    [/אג["״']?ח\s*ממשלתי\s*ארוך|treasury\s*20|long\s*treasur/i, 'TLT'],
+    [/אג["״']?ח\s*ממשלתי\s*בינוני|7-?10|intermediate\s*treasur/i, 'IEF'],
+    [/אג["״']?ח\s*קצר|short\s*treasur|t-?bill/i, 'SHV'],
+    [/אג["״']?ח|bond|treasur/i, 'TLT'],
+    [/נפט|גז|אנרגיה|energy|oil/i, 'XLE'],
+    [/בנק|פיננס|financ/i, 'XLF'],
+    [/בריאות|פארמ|תרופ|health|pharma|biotech|ביוטכ/i, 'XLV'],
+    [/תקשורת|communicat|מדיה|media/i, 'XLC'],
+    [/צריכה\s*בסיסית|staples/i, 'XLP'],
+    [/צריכה|discretionary/i, 'XLY'],
+    [/תעשיי|industrial/i, 'XLI'],
+    [/חומרי\s*גלם|materials/i, 'XLB'],
+    [/תשתיות|utilit/i, 'XLU'],
+    [/נדל|real\s*estate|reit/i, 'XLRE'],
+    [/טכנולוג|tech/i, 'XLK'],
+    [/s&p|מדד\s*הרחב|broad\s*market/i, 'SPY'],
+];
+function _dnDestTicker(dest) {
+    if (!dest) return '';
+    const s = String(dest);
+    // A known ticker already written in the destination wins (most precise).
+    for (const m of (s.toUpperCase().match(/[A-Z]{2,5}/g) || [])) { if (_DN_KNOWN_TK.has(m)) return m; }
+    for (const [re, tk] of _DN_DEST_TK) { if (re.test(s)) return tk; }
+    // Last resort: any uppercase token that looks like a ticker.
+    const any = s.toUpperCase().match(/\b[A-Z]{2,5}\b/);
+    return (any && any[0] !== 'ETF') ? any[0] : '';
 }
 
 // Convert a parsed amount string to a comparable USD magnitude (for "biggest transfer").

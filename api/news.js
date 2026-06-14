@@ -31,6 +31,21 @@ async function translateHe(text) {
     } catch (e) { return text; }
 }
 
+// Deterministic safety net for the worst literal machine-translation artifacts — applied
+// to EVERY Hebrew headline (Gemini or Google fallback) so a stray idiom never ships.
+function cleanHe(s) {
+    if (!s) return s;
+    let o = String(s);
+    o = o.replace(/כאילו\s+אין\s+מחר/g, 'בקצב מואץ');
+    o = o.replace(/אין\s+מוח\b/g, 'מתבקש');                 // "no-brainer" mis-rendered
+    o = o.replace(/לקנות\s+את\s+הטבילה|לקנות\s+את\s+הירידה/g, 'לנצל את הירידה לקנייה'); // "buy the dip"
+    o = o.replace(/בעיקבות/g, 'בעקבות');
+    o = o.replace(/משביח(ה|ים|ות|)(\s+את)/g, (m, suf, t) => ({ '': 'משדרג', 'ה': 'משדרגת', 'ים': 'משדרגים', 'ות': 'משדרגות' }[suf] || 'משדרג') + t);
+    o = o.replace(/הונפק(ה|ו|)\s+((?:\S+\s+){0,3}?)לפי\s+שווי/g, 'גייסה הון $2לפי שווי');
+    o = o.replace(/\s{2,}/g, ' ').trim();
+    return o;
+}
+
 function ymd(d) { return new Date(d).toISOString().slice(0, 10); }
 
 // Primary: Finnhub company-news (rich, per-company).
@@ -73,18 +88,21 @@ async function translateBatchGemini(texts) {
     if (!GEMINI_KEY || !texts.length) return null;
     const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
     const prompt =
-        'תרגם את כותרות החדשות הכלכליות הבאות לעברית עיתונאית-כלכלית ברורה, טבעית וזורמת שמובנת מיד לקורא ישראלי — לא תרגום מילולי ולא "תרגום מכונה". נסח כל כותרת כפי שהיה כותב עיתונאי כלכלי ישראלי. ' +
-        'בטא את המשמעות הפיננסית האמיתית בבירור: ' +
-        '"mixed" → "נסחרות במגמה מעורבת", "rally/surge/jump" → "מזנקות/מזנק", "slip/drop/fall" → "נחלשות/יורד", "edge higher/lower" → "עולה/יורד קלות", ' +
-        '"late afternoon trading" → "במסחר של אחר הצהריים", "raises ... at a valuation" → "גייסה הון לפי שווי" (לא "הונפקה"; "הנפקה" רק ל-IPO), "upgrades/improves its models" → "משדרגת את המודלים" (לא "משביחה"). ' +
-        'השאר שמות חברות וטיקרים באנגלית במקומם. הקפד על דקדוק, תחביר טבעי והתאמת מין/מספר, וללא שגיאות כתיב. שמור על העובדות, המספרים והשמות בדיוק. ' +
-        'החזר אך ורק רשימה ממוספרת באותו הסדר, שורה אחת לכל כותרת, ללא הקדמות ותוספות.\n\n' + numbered;
+        'אתה עורך חדשות כלכלי בכיר בעיתון כלכלי ישראלי מוביל (גלובס/כלכליסט/דה-מרקר). לפניך כותרות חדשות כלכליות באנגלית. נסח כל אחת מחדש ככותרת עברית מקצועית, חדה וברורה שהקורא הישראלי מבין מיד — זו עריכה ולא תרגום, ובוודאי לא תרגום מכונה מילולי.\n' +
+        'כללים מחייבים:\n' +
+        '1) נסח מחדש בעברית עיתונאית-כלכלית טבעית וזורמת, לא העתקה מילה-במילה.\n' +
+        '2) אל תתרגם ניבים אנגליים מילולית — העבר את המשמעות: "like there\'s no tomorrow"→"בקצב מואץ" (או השמט), "buy the dip"→"לנצל את הירידה לקנייה", "no-brainer"→"השקעה מתבקשת", "skyrocket"→"מרקיע שחקים", "in the red/green"→"בירידות/בעליות", "bag holder"→"מחזיק שנתקע", "moonshot"→"הימור גבוה-סיכון".\n' +
+        '3) מונחים פיננסיים מדויקים: mixed→"מגמה מעורבת", rally/surge/jump→"זינוק/מזנק", slip/drop/fall→"ירידה/נחלש", edge higher/lower→"עולה/יורד קלות", earnings→"דוחות כספיים", guidance→"תחזית", valuation→"שווי/הערכת שווי", "raises at a valuation"→"גייסה הון לפי שווי" (לא "הנפקה" — רק ב-IPO), "upgrades its models"→"משדרגת את המודלים" (לא "משביחה").\n' +
+        '4) שמות חברות וטיקרים נשארים באנגלית במקומם הטבעי במשפט.\n' +
+        '5) דקדוק תקין, תחביר טבעי, התאמת מין/מספר, ללא שגיאות כתיב. שמור על העובדות, המספרים והשמות בדיוק.\n' +
+        '6) קצר וענייני ככותרת — לא משפט מסורבל.\n' +
+        'החזר אך ורק רשימה ממוספרת 1 עד ' + texts.length + ', שורה אחת לכל כותרת, באותו סדר בדיוק, ללא שום טקסט נוסף.\n\n' + numbered;
     try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+                generationConfig: { temperature: 0.3, maxOutputTokens: 6000, thinkingConfig: { thinkingBudget: 0 } },
             }),
         });
         if (!r.ok) return null;
@@ -130,9 +148,9 @@ module.exports = async (req, res) => {
         if (allItems.length) {
             const heBatch = await translateBatchGemini(allItems.map(it => it.en));
             if (heBatch) {
-                allItems.forEach((it, i) => { it.he = heBatch[i] || it.en; });
+                allItems.forEach((it, i) => { it.he = cleanHe(heBatch[i] || it.en); });
             } else {
-                await Promise.all(allItems.map(async (it) => { it.he = await translateHe(it.en); }));
+                await Promise.all(allItems.map(async (it) => { it.he = cleanHe(await translateHe(it.en)); }));
             }
         }
         // Cache a populated result for ~2h (continuous through-the-day scanning);

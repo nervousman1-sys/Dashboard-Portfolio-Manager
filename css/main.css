@@ -9377,6 +9377,10 @@ html.day-mode .dn-inst-src2 { color: #64748b; }
 .dn-mover-dest-empty { color: #64748b; background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
 .dn-mover-sub { color: #7dd3fc; font-weight: 700; font-size: 10.5px; }
 html.day-mode .dn-mover-sub { color: #0e7490; }
+/* Central-asset ticker badge in a mover row */
+.dn-mover-tk { display: inline-block; font-weight: 800; font-size: 11px; color: #f1f5f9; direction: ltr;
+    background: rgba(125,211,252,0.14); border: 1px solid rgba(125,211,252,0.30); border-radius: 5px; padding: 0 5px; }
+html.day-mode .dn-mover-tk { color: #0f172a; background: rgba(8,145,178,0.10); border-color: rgba(8,145,178,0.28); }
 .dn-mover-dir.flat { color: #94a3b8; }
 .dn-mover-amt.flat { color: #94a3b8; }
 .dn-mover-gross { grid-column: 1 / -1; justify-self: start; font-size: 10.5px; color: #94a3b8; margin-top: 1px; }
