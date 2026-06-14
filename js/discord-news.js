@@ -354,16 +354,40 @@ function _dnVisionHTML(text, img, mode) {
             // (a) NAMED movers the image itself called out (BlackRock, Vanguard…) —
             // structured into direction · name · destination · amount, each with an SEC
             // 13F source so the reader can verify who bought and (via the filing) into what.
+            const moverObjs = institutions.map(_dnParseInstMover);
+            // REAL-DATA highlight: the sector that received the most institutional money.
+            // Prefer the actual per-institution destinations the image named (sum the $ by
+            // destination); when none are given, fall back to the top INFLOW sector from the
+            // histogram — both are real figures parsed from the image, nothing invented.
+            const destAgg = new Map();
+            for (const m of moverObjs) {
+                const mag = _dnAmtMag(m.amount);
+                if (m.dir === 'in' && m.dest && mag > 0) destAgg.set(m.dest, (destAgg.get(m.dest) || 0) + mag);
+            }
+            let topDest = '', topDestNote = '';
+            if (destAgg.size) {
+                const e = [...destAgg.entries()].sort((a, b) => b[1] - a[1])[0];
+                topDest = e[0]; topDestNote = 'לפי דיווחי הגופים';
+            } else if (ins[0]) { topDest = ins[0].name; topDestNote = ins[0].amount; }
+            // Biggest single institutional transfer by $ size (real parsed amounts).
+            const biggestIn = moverObjs.filter(m => m.dir === 'in' && _dnAmtMag(m.amount) > 0)
+                .sort((a, b) => _dnAmtMag(b.amount) - _dnAmtMag(a.amount))[0];
+            let bigMoveHTML = '';
+            if (topDest || biggestIn) {
+                const bits = [];
+                if (topDest) bits.push(`הכי הרבה כסף נכנס אל <b>${_dnEsc(topDest)}</b>${topDestNote ? ` (${_dnEsc(topDestNote)})` : ''}`);
+                if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> ${_dnEsc(biggestIn.amount)}${biggestIn.dest ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
+                bigMoveHTML = `<div class="dn-flow-bigmove" dir="rtl"><span class="dn-bigmove-ic">▲</span> ${bits.join(' · ')}</div>`;
+            }
             const moversHTML = institutions.length
-                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => {
-                    const m = _dnParseInstMover(s);
+                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${bigMoveHTML}${moverObjs.map(m => {
                     const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : '');
                     const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '•');
                     const dirWord = m.dir === 'in' ? 'כניסה' : (m.dir === 'out' ? 'יציאה' : '');
                     const destHtml = m.dest
                         ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}</span>`
-                        : '';
-                    const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '';
+                        : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
+                    const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '<span class="dn-mover-amt">—</span>';
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
                         <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
                         <span class="dn-mover-name">${_dnEsc(m.name)}</span>
@@ -750,15 +774,40 @@ function _dnParseInstMover(s) {
     const parts = String(s).split('|').map(x => x.trim()).filter(Boolean);
     const name = parts[0] || String(s).trim();
     let dir = '', dest = '', amount = '';
+    const hasLetters = (x) => /[A-Za-z֐-׿]/.test(x);   // Latin or Hebrew letters
     const isDir = (x) => /כניס|נכנס|יציא|יוצא|קנ|מכ(ר|ירה)|הגדל|הקטנ|inflow|outflow|buy|sell/i.test(x);
-    const isAmt = (x) => /\d/.test(x) && /[$₪%]|[\d.](\s?)(b|m|k|bn|mn)\b|מיליארד|מיליון|מיל'|אלף/i.test(x);
+    // An amount is anything numeric: a magnitude/currency token ($, ₪, %, B/M/K, מיליארד…)
+    // OR a bare number like "110.20". A destination must contain letters — so bare values
+    // (State Street's 110.20 / 89.97) land in the AMOUNT column, never the destination.
+    const isAmt = (x) => /\d/.test(x) && (
+        /[$₪%]|[\d.](\s?)(b|m|k|bn|mn)\b|מיליארד|מיליון|מיל'|אלף/i.test(x) ||
+        /^[\d.,\s]+$/.test(x)
+    );
     for (let i = 1; i < parts.length; i++) {
         const p = parts[i];
         if (!dir && isDir(p)) { dir = /כניס|נכנס|קנ|הגדל|inflow|buy/i.test(p) ? 'in' : 'out'; continue; }
         if (!amount && isAmt(p)) { amount = p; continue; }
-        dest = dest ? `${dest} ${p}` : p;
+        if (hasLetters(p)) { dest = dest ? `${dest} ${p}` : p; }
+        else if (!amount) { amount = p; }                        // leftover bare value → amount
     }
     return { name, dir, dest, amount };
+}
+
+// Convert a parsed amount string to a comparable USD magnitude (for "biggest transfer").
+// Percentages return 0 — they are not a dollar size and must not win the comparison.
+function _dnAmtMag(a) {
+    if (!a) return 0;
+    const s = String(a).trim();
+    if (/%/.test(s) && !/[$₪]/.test(s)) return 0;
+    const m = s.match(/([\d,.]+)\s*(b|bn|מיליארד|m|mn|מיליון|k|אלף)?/i);
+    if (!m) return 0;
+    let n = parseFloat(m[1].replace(/,/g, ''));
+    if (!isFinite(n)) return 0;
+    const u = (m[2] || '').toLowerCase();
+    if (/b|bn|מיליארד/.test(u)) n *= 1e9;
+    else if (/m|mn|מיליון/.test(u)) n *= 1e6;
+    else if (/k|אלף/.test(u)) n *= 1e3;
+    return n;
 }
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
