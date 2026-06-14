@@ -148,7 +148,7 @@ function _renderRiskPage(model, errMsg) {
                     <span class="risk-chart-sub">תשואה צפויה מול סיכון כולל (σ) — לכל תיק</span>
                 </div>
                 <div class="risk-chart-canvas-wrap"><canvas id="cmlChart"></canvas></div>
-                <p class="risk-chart-legend">העקומה הירוקה = החזית היעילה (Markowitz). הקו הכחול = ה-CML, משיק לחזית ב<b>כוכב הזהב</b> = <b>התיק האופטימלי</b>. תיקים על/מעל ה-CML יעילים; מתחת — נחותים.</p>
+                <p class="risk-chart-legend"><b>כל נקודה בגרף היא תיק</b>, צבועה לפי מיקומה מול ה-CML: <b style="color:#22c55e">ירוק = מעל הקו (יעיל)</b>, <b style="color:#eab308">צהוב = על הקו</b>, <b style="color:#ef4444">אדום = מתחת לקו (נחות)</b> — בדיוק כפי שמופיע בעמודת "מיקום" בטבלה ובלשונית CML/SML של התיק. העקומה הירוקה = החזית היעילה (Markowitz); הקו הכחול = ה-CML, משיק לחזית ב<b>כוכב הזהב</b> = <b>התיק האופטימלי</b>.</p>
             </div>
             <div class="risk-chart-card glass-card">
                 <div class="risk-chart-head">
@@ -236,7 +236,12 @@ function _drawCMLChart(model) {
     if (!canvas || typeof Chart === 'undefined') return;
     const rfPct = model.rf * 100;
     const pts = (model.portfolios || []).filter(p => p.hasData && p.totalValue > 0)
-        .map(p => ({ x: p.vol * 100, y: p.expReturn * 100, name: p.name, risk: p.riskLabel }));
+        // eff = CML efficiency status — SAME basis as the "מיקום" column (p.aboveCML), so
+        // a green dot here always equals "מעל ה-CML" in the table and the modal verdict.
+        .map(p => ({
+            x: p.vol * 100, y: p.expReturn * 100, name: p.name, risk: p.riskLabel,
+            eff: p.aboveCML ? ((p.alpha != null && p.alpha >= 0.01) ? 'above' : 'on') : 'below',
+        }));
     const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
 
     // Efficient frontier curve + tangency (optimal risky portfolio)
@@ -261,18 +266,28 @@ function _drawCMLChart(model) {
     const yMin = Math.min(byMin, portMinY - 5);
     const cmlLine = [{ x: 0, y: rfPct }, { x: maxX, y: rfPct + slope * maxX }];
 
-    const ptColors = pts.map(p => p.risk === 'גבוה' ? '#ef4444' : p.risk === 'בינוני' ? '#eab308' : '#22c55e');
-
     const datasets = [];
     for (const ds of _frontierDatasets(model.frontier)) datasets.push(ds);
     datasets.push({
         type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5,
         borderDash: [7, 4], pointRadius: 0, fill: false, tension: 0, order: 2,
     });
-    datasets.push({
-        type: 'scatter', label: 'תיקים', data: pts, pointRadius: 7, pointHoverRadius: 9,
-        backgroundColor: ptColors, borderColor: '#0b0b0f', borderWidth: 1.5, order: 1,
-    });
+    // Portfolios, colored by CML efficiency (NOT risk level — that was the mismatch with
+    // the "מעל/מתחת ל-CML" status). Split into up to three labelled groups so the legend
+    // itself tells the user every dot is a תיק, and the colour means its CML standing.
+    const EFF_STYLE = {
+        above: { color: '#22c55e', label: 'תיק יעיל · מעל ה-CML' },
+        on: { color: '#eab308', label: 'תיק על ה-CML' },
+        below: { color: '#ef4444', label: 'תיק נחות · מתחת ל-CML' },
+    };
+    for (const key of ['above', 'on', 'below']) {
+        const grp = pts.filter(p => p.eff === key);
+        if (!grp.length) continue;
+        datasets.push({
+            type: 'scatter', label: EFF_STYLE[key].label, data: grp, pointRadius: 7, pointHoverRadius: 9,
+            backgroundColor: EFF_STYLE[key].color, borderColor: '#0b0b0f', borderWidth: 1.5, order: 1,
+        });
+    }
     datasets.push({
         type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot',
         pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 1,
