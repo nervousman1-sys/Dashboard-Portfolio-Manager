@@ -275,13 +275,24 @@ function _dnVisionHTML(text, img, mode) {
             if (mA) { analysis.push(mA[1].trim()); continue; }
             const mI = l.match(/^מוסדי\s*:\s*(.+)$/);
             if (mI) { institutions.push(mI[1].trim()); continue; }
-            const mS = l.match(/^סקטור\s*:\s*(.+?)\s*\|\s*כיוון\s*:\s*(.+?)\s*\|\s*היקף\s*:\s*(.+)$/);
+            // Tolerate BOTH the labeled form ("סקטור: X | כיוון: כניסה | היקף: 4.3%")
+            // and the short form the model sometimes emits ("סקטור: X | כניסה | 4.3%").
+            // Direction and amount are detected by CONTENT, not by their label/position —
+            // so a dropped "כיוון:"/"היקף:" label no longer breaks the whole histogram
+            // (which then fell back to dumping raw lines as plain text).
+            const mS = l.match(/^סקטור\s*:\s*(.+)$/);
             if (mS) {
-                const amount = mS[3].trim();
-                if (!amount.includes('%')) continue; // percentages only — no $B ETF rows
+                const segs = mS[1].split('|').map(x => x.replace(/^\s*(כיוון|היקף|כיוּן)\s*:\s*/, '').trim()).filter(Boolean);
+                const raw = (segs[0] || '').trim();
+                let dirStr = '', amount = '';
+                for (let i = 1; i < segs.length; i++) {
+                    const p = segs[i];
+                    if (!dirStr && /כניס|יציא|נכנס|יוצא/.test(p)) { dirStr = p; continue; }
+                    if (!amount && /\d/.test(p) && p.includes('%')) { amount = p; continue; }
+                }
+                if (!amount || !amount.includes('%')) continue; // percentages only — no $B ETF rows
                 // Split a sector label into a clean name + the tickers in its parens.
                 // "מניות בולטות (NVDA, AMD, AVGO)" → base="מניות בולטות", tickers=[NVDA,AMD,AVGO]
-                const raw = mS[1].trim();
                 let base = raw, tickers = [];
                 const pm = raw.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
                 if (pm) {
@@ -291,7 +302,7 @@ function _dnVisionHTML(text, img, mode) {
                 }
                 rows.push({
                     name: base, tickers,
-                    inflow: /כניס/.test(mS[2]),
+                    inflow: /כניס|נכנס/.test(dirStr),
                     amount,
                     mag: Math.abs(parseFloat(String(amount).replace(/[^\d.\-]/g, ''))) || 0,
                 });
