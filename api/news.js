@@ -39,6 +39,8 @@ function cleanHe(s) {
     o = o.replace(/כאילו\s+אין\s+מחר/g, 'בקצב מואץ');
     o = o.replace(/אין\s+מוח\b/g, 'מתבקש');                 // "no-brainer" mis-rendered
     o = o.replace(/לקנות\s+את\s+הטבילה|לקנות\s+את\s+הירידה/g, 'לנצל את הירידה לקנייה'); // "buy the dip"
+    // "missing the boat" → literal "מתגעגע/מפספס לסירה/אוטובוס" → idiomatic
+    o = o.replace(/(מתגעגע|מפספס|מפספסים|מתגעגעים)(\s+ל?)(סירה|אוטובוס|הסירה|האוטובוס)/g, 'מפספס את ההזדמנות');
     o = o.replace(/בעיקבות/g, 'בעקבות');
     o = o.replace(/משביח(ה|ים|ות|)(\s+את)/g, (m, suf, t) => ({ '': 'משדרג', 'ה': 'משדרגת', 'ים': 'משדרגים', 'ות': 'משדרגות' }[suf] || 'משדרג') + t);
     o = o.replace(/הונפק(ה|ו|)\s+((?:\S+\s+){0,3}?)לפי\s+שווי/g, 'גייסה הון $2לפי שווי');
@@ -84,6 +86,9 @@ async function yahooNewsFor(symbol, perSymbol) {
 // Hebrew (not a literal word-for-word machine translation). Tickers/names stay in
 // English. Returns an array aligned to the input, or null to fall back to Google.
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+// English headline → high-quality Hebrew (Gemini). Persists within a warm function
+// instance so a repeated headline never re-spends the scarce free-tier quota.
+const _heCache = new Map();
 async function translateBatchGemini(texts) {
     if (!GEMINI_KEY || !texts.length) return null;
     const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
@@ -150,22 +155,6 @@ async function newsFor(symbol, perSymbol) {
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
-    // TEMP diagnostic: surface exactly why Gemini translation might be failing.
-    if (req.query.debug === 'gem') {
-        const probe = async (model) => {
-            try {
-                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: 'תרגם לעברית טבעית: 1. Are You Missing the Boat on This AI Stock?' }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 200 } }),
-                });
-                const body = await r.text();
-                return { model, status: r.status, body: body.slice(0, 500) };
-            } catch (e) { return { model, error: String(e && e.message) }; }
-        };
-        res.setHeader('Cache-Control', 'no-store');
-        res.status(200).json({ hasKey: !!GEMINI_KEY, keyLen: (GEMINI_KEY || '').length, p25: await probe('gemini-2.5-flash'), p20: await probe('gemini-2.0-flash') });
-        return;
-    }
     try {
         const perSymbol = Math.min(parseInt(req.query.perSymbol, 10) || 1, 2);
         const syms = String(req.query.symbols || '')
@@ -185,11 +174,24 @@ module.exports = async (req, res) => {
         const allItems = [];
         for (const s of Object.keys(out)) for (const it of out[s]) allItems.push(it);
         if (allItems.length) {
-            const heBatch = await translateBatchGemini(allItems.map(it => it.en));
-            if (heBatch) {
-                allItems.forEach((it, i) => { it.he = cleanHe(heBatch[i] || it.en); });
-            } else {
-                await Promise.all(allItems.map(async (it) => { it.he = cleanHe(await translateHe(it.en)); }));
+            // Reuse any headline we've ALREADY translated well (Gemini) — a warm function
+            // instance keeps _heCache, so a repeated headline costs zero Gemini quota. Only
+            // the genuinely-new headlines are sent to Gemini, cutting calls drastically
+            // (the free tier is 20 req/min, shared with vision).
+            const todo = [];
+            for (const it of allItems) {
+                const c = _heCache.get(it.en);
+                if (c) it.he = c; else todo.push(it);
+            }
+            if (todo.length) {
+                const heBatch = await translateBatchGemini(todo.map(it => it.en));
+                if (heBatch) {
+                    todo.forEach((it, i) => { it.he = cleanHe(heBatch[i] || it.en); if (it.he && it.he !== it.en) _heCache.set(it.en, it.he); });
+                } else {
+                    // Gemini quota-blocked → Google as last resort (scrubbed). NOT cached, so
+                    // the next attempt re-tries Gemini once quota frees up.
+                    await Promise.all(todo.map(async (it) => { it.he = cleanHe(await translateHe(it.en)); }));
+                }
             }
         }
         // Cache a populated result for ~2h (continuous through-the-day scanning);
