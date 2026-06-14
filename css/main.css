@@ -9381,9 +9381,12 @@ html.day-mode .dn-mover-sub { color: #0e7490; }
 .dn-mover-amt.flat { color: #94a3b8; }
 .dn-mover-gross { grid-column: 1 / -1; justify-self: start; font-size: 10.5px; color: #94a3b8; margin-top: 1px; }
 html.day-mode .dn-mover-gross { color: #64748b; }
-/* Notable-flow marker — a single gold ★ inline on the institution's row */
+/* Notable-flow marker — a single gold ★ inline next to the ASSET */
 .dn-mover-star { color: #fbbf24; font-size: 12px; font-weight: 900; cursor: help; }
 html.day-mode .dn-mover-star { color: #d97706; }
+/* Header explanation line under "גופים מוסדיים בולטים · נטו" */
+.dn-flow-inst-sub { font-size: 10.5px; color: #94a3b8; margin: -2px 0 8px; line-height: 1.5; }
+html.day-mode .dn-flow-inst-sub { color: #64748b; }
 
 /* "Biggest transfer" highlight — the real-data headline above the movers list:
    which sector took in the most institutional money + the single largest mover. */

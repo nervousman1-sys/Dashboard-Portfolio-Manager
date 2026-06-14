@@ -449,28 +449,29 @@ function _dnVisionHTML(text, img, mode) {
             }
             const _domShown = new Set();   // show an institution's dominant destination once
             const moversHTML = institutions.length
-                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים · נטו (קנייה פחות מכירה)</div>${bigMoveHTML}${moverObjs.map(m => {
+                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים · נטו (קנייה פחות מכירה)</div><div class="dn-flow-inst-sub">★ ליד הנכס = הנכס שאליו הגוף הזרים את הזרימה הנטו הגדולה ביותר · כל שורה מציינת את הנכס המדויק שהועבר</div>${bigMoveHTML}${moverObjs.map(m => {
                     const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : 'flat');
                     const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '◼');
                     const dirWord = m.dir === 'in' ? 'נטו קנייה' : (m.dir === 'out' ? 'נטו מכירה' : 'מאוזן (קנייה≈מכירה)');
-                    // Sub-sector the money went into, shown next to the institution.
+                    // ★ marks the ASSET that received this institution's largest net flow —
+                    // placed next to the ASSET itself. Once per institution; its top row
+                    // (rows are sorted by net size), and only for a real net move.
+                    const isTopRow = !_domShown.has(m.name);
+                    if (isTopRow) _domShown.add(m.name);
+                    const starOnAsset = (isTopRow && m.dest && m.dir)
+                        ? ` <span class="dn-mover-star" title="הנכס שאליו ${_dnEsc(m.name)} הזרים את הזרימה הנטו הגדולה ביותר">★</span>` : '';
+                    // The EXACT asset the flow went to, plus its sub-sector.
                     const subLabel = _dnDestSubLabel(m.dest);
                     const destHtml = m.dest
-                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}</span>`
+                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}${starOnAsset}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
                     const amtHtml = m.amount
                         ? `<span class="dn-mover-amt ${cls}" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
                         : '<span class="dn-mover-amt">—</span>';
-                    // The notable-flow marker: a single ★ ON the institution's own row
-                    // (its largest net destination), with the detail in the tooltip — no
-                    // separate badge line. Shown once per institution.
-                    const dom = instTopDest(m.name);
-                    let starHtml = '';
-                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); starHtml = ` <span class="dn-mover-star" title="הזרימה הבולטת של ${_dnEsc(m.name)} — הכי הרבה כסף נטו אל ${_dnEsc(dom)}">★</span>`; }
                     const grossHtml = m.grossNote ? `<span class="dn-mover-gross">${_dnEsc(m.grossNote)}</span>` : '';
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
                         <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
-                        <span class="dn-mover-name">${_dnEsc(m.name)}${starHtml}</span>
+                        <span class="dn-mover-name">${_dnEsc(m.name)}</span>
                         ${destHtml}
                         ${amtHtml}
                         <a class="dn-inst-src" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="דיווחי 13F של הגוף ב-SEC — האחזקות והקניות/מכירות בפועל, ולאן הכסף נכנס">מקור 13F ↗</a>
