@@ -185,6 +185,27 @@ async function _techLoad(force) {
     }
 }
 
+// Builds a TradingView link that opens the chart with the indicators relevant to
+// THIS stock's live signals already applied — so a name that's near its 200-day MA
+// AND oversold on RSI opens with BOTH the SMA(200) and the RSI study open. Routes
+// through our /tv.html widget page, which reliably loads studies via URL.
+function _techTvUrl(tvSym, v) {
+    const m = v.ma || {};
+    const near = (d) => d != null && Math.abs(d) <= _TECH_NEAR_PCT;
+    const inds = [];
+    let tf = 'D';
+    // The moving average the price is hugging (daily preferred; else weekly → 1W chart)
+    if (near(m.d200dist)) inds.push('sma200');
+    else if (near(m.d300dist)) inds.push('sma300');
+    else if (near(m.w200dist)) { inds.push('sma200'); tf = 'W'; }
+    else if (near(m.w300dist)) { inds.push('sma300'); tf = 'W'; }
+    // RSI when the stock is in an extreme (daily <40, or weekly oversold/overbought)
+    if ((v.rsiD != null && v.rsiD < 40) || (v.rsiW != null && (v.rsiW < 30 || v.rsiW > 70))) inds.push('rsi');
+    // FVG isn't a built-in TradingView study — the chart still opens for inspection.
+    const q = `s=${encodeURIComponent(tvSym)}&tf=${tf}${inds.length ? '&ind=' + inds.join(',') : ''}`;
+    return `/tv.html?${q}`;
+}
+
 // ── Predicates ──
 function _tNearAnyMA(v) {
     const m = v.ma || {};
@@ -266,7 +287,7 @@ function _techRender() {
             <td class="risk-td-name">
                 <div class="tech-name-cell">
                     <span>${disp}</span>
-                    <a class="tech-tv" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView לאימות">TradingView ↗</a>
+                    <a class="tech-tv" href="${_techTvUrl(tvSym, v)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView עם האינדיקטורים הרלוונטיים">TradingView ↗</a>
                 </div>
             </td>
             <td>${curSym}${(v.price ?? 0).toLocaleString('en-US')}</td>

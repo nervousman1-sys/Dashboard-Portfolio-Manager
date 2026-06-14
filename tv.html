@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>TradingView — Finextium</title>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; background: #0b0b0f; overflow: hidden; }
+        #tv_chart { height: 100vh; width: 100vw; }
+        #tv_note {
+            position: fixed; top: 8px; inset-inline-start: 12px; z-index: 5;
+            font: 600 12px/1.4 Assistant, system-ui, sans-serif; color: #cbd5e1;
+            background: rgba(11, 11, 15, 0.78); border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px; padding: 6px 10px; pointer-events: none;
+        }
+        #tv_note b { color: #38bdf8; }
+        #tv_fallback {
+            position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+            color: #e2e8f0; font: 600 15px Assistant, system-ui, sans-serif; text-align: center; padding: 24px;
+        }
+        #tv_fallback a { color: #38bdf8; }
+    </style>
+</head>
+<body>
+    <div id="tv_note"></div>
+    <div id="tv_chart"></div>
+    <div id="tv_fallback">
+        <div>טוען את הגרף…<br><br>
+            <a id="tv_direct" href="#" target="_blank" rel="noopener">פתח ישירות ב-TradingView ↗</a>
+        </div>
+    </div>
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        (function () {
+            var p = new URLSearchParams(location.search);
+            var sym = (p.get('s') || 'AAPL').toUpperCase();
+            var tf = (p.get('tf') || 'D').toUpperCase();               // D or W
+            var indCodes = (p.get('ind') || '').split(',').filter(Boolean);
+
+            // Map our indicator codes → TradingView studies (objects carry the length
+            // so 200/300 MAs render at the right period, not the default).
+            var studies = [];
+            var labels = [];
+            indCodes.forEach(function (c) {
+                if (c === 'rsi') { studies.push({ id: 'RSI@tv-basicstudies', inputs: { length: 14 } }); labels.push('RSI(14)'); }
+                else if (c === 'sma200') { studies.push({ id: 'MASimple@tv-basicstudies', inputs: { length: 200 } }); labels.push('SMA 200'); }
+                else if (c === 'sma300') { studies.push({ id: 'MASimple@tv-basicstudies', inputs: { length: 300 } }); labels.push('SMA 300'); }
+            });
+            // Fallback: some widget builds only accept study-ID strings.
+            var studyStrings = studies.map(function (s) { return s.id; });
+            var maLen = null;
+            indCodes.forEach(function (c) { if (c === 'sma200') maLen = 200; if (c === 'sma300') maLen = 300; });
+            var overrides = {};
+            if (maLen) {
+                overrides['MASimple@tv-basicstudies.length'] = maLen;
+                overrides['moving average.length'] = maLen;
+                overrides['Moving Average.length'] = maLen;
+            }
+
+            // On-chart note + a direct-to-TradingView fallback link
+            var note = document.getElementById('tv_note');
+            note.innerHTML = '<b>' + sym + '</b> · ' + (tf === 'W' ? 'שבועי' : 'יומי') +
+                (labels.length ? ' · ' + labels.join(' + ') : '');
+            var direct = document.getElementById('tv_direct');
+            direct.href = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(sym);
+            setTimeout(function () {
+                if (!document.querySelector('#tv_chart iframe')) document.getElementById('tv_fallback').style.display = 'flex';
+            }, 6000);
+
+            function build(studiesArg) {
+                document.getElementById('tv_chart').innerHTML = '';
+                /* eslint-disable no-undef */
+                return new TradingView.widget({
+                    container_id: 'tv_chart',
+                    symbol: sym,
+                    interval: tf,
+                    autosize: true,
+                    theme: 'dark',
+                    style: '1',
+                    timezone: 'Etc/UTC',
+                    locale: 'he',
+                    studies: studiesArg,
+                    studies_overrides: overrides,
+                    hide_side_toolbar: false,
+                    allow_symbol_change: true,
+                    withdateranges: true
+                });
+            }
+
+            if (typeof TradingView === 'undefined') {
+                document.getElementById('tv_fallback').style.display = 'flex';
+                return;
+            }
+            try {
+                build(studies);              // object form (carries lengths)
+            } catch (e) {
+                try { build(studyStrings); } // string form fallback
+                catch (e2) { document.getElementById('tv_fallback').style.display = 'flex'; }
+            }
+        })();
+    </script>
+</body>
+</html>
