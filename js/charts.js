@@ -1435,16 +1435,20 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 2c-clip. CLAMP any series to the selected range ──
     // Synthetic/backdated histories can run longer than the chosen window — a 1Y
-    // view must NOT show 2 years. Clip by date, then rebase returnPct so the range
-    // opens at 0%. Applies to every source uniformly (ISO or he-IL dates).
+    // view must NOT show 2 years. Clip by date. For RECORDED snapshots we rebase the
+    // % so the window opens at 0%; for SYNTHETIC data we keep returnPct as-is because
+    // it is already the return-FROM-COST (so the endpoint equals the card), and
+    // rebasing would turn it into within-window price movement.
     if (hist && hist.length > 2 && range !== 'all' && range !== 'max' && range !== '1d' && range !== '5d') {
         const cutoff = _rangeCutoffDate(range);
         if (cutoff) {
             const _pd = (p) => p._dateObj ? new Date(p._dateObj) : _parseAnyDate(p.date);
             const clipped = hist.filter(p => { const d = _pd(p); return d && d >= cutoff; });
             if (clipped.length >= 2) {
-                const base = clipped[0].value;
-                if (base > 0) for (const p of clipped) p.returnPct = (p.value - base) / base * 100;
+                if (!_histIsSynthetic) {
+                    const base = clipped[0].value;
+                    if (base > 0) for (const p of clipped) p.returnPct = (p.value - base) / base * 100;
+                }
                 hist = clipped;
             }
         }
@@ -1610,7 +1614,14 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             if (is1DPrevCloseNorm) {
                 return { x, y: p.returnPct || 0 };
             }
-            // Normalize from first visible point — shows accurate relative movement
+            // Synthetic = return-FROM-COST (already the card's metric) → use directly,
+            // so the chart endpoint matches the portfolio's real return. BUT when a
+            // benchmark is shown, both must share the window-start 0% origin, so fall
+            // through to the firstValue rebase for an apples-to-apples comparison.
+            if (_histIsSynthetic && p.returnPct != null && !hasBenchmarks) {
+                return { x, y: p.returnPct };
+            }
+            // Recorded snapshots: normalize from the first visible point.
             const returnPct = firstValue > 0
                 ? ((p.value - firstValue) / firstValue) * 100
                 : 0;

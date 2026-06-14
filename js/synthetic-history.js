@@ -428,64 +428,61 @@ async function fetchSyntheticHistory(client, range) {
     const history = new Array(n);
     const cashBalance = client.cashBalance || 0;
 
-    // ── DIRECT WEIGHTED-RETURN reconstruction ──
-    // The portfolio's return at each date is the CURRENT-VALUE-weighted average of
-    // each holding's REAL price return, measured from the window's first date (or
-    // the holding's buy date, if later). A holding contributes 0 before it's held
-    // and 0 on its anchor date, then its true % move — so the line is ALWAYS smooth
-    // (every wiggle is a real price move) and there is no value-reconstruction, no
-    // cost↔market scale jump, and no phantom cliff.
+    // ── RETURN-FROM-COST reconstruction (matches the portfolio card exactly) ──
+    // returnPct(date) = (marketValue(date) − costBasis) / costBasis × 100, where the
+    // holdings' market value is reconstructed from real daily closes. This is the
+    // SAME definition the card/summary use (profit ÷ cost), so the chart's endpoint
+    // equals the portfolio's real return — not the holdings' raw price appreciation.
+    // A position contributes its COST before it was bought (its capital) and its
+    // market value after, anchored so the entry is continuous (no phantom cliff).
+    const fxOf = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
     const windowStart = backbone[0].date;
-    const legs = [];          // { ticker, dateMap, anchorClose, anchorIdx, weight }
-    let totalWeight = 0;
+    const legs = [];          // { ticker, dateMap, shares, fx, costUsd, entryClose, entryIdx, flat }
+    let totalCostUsd = 0;
     for (const h of allStockFundHoldings) {
+        const f = fxOf(h.currency);
+        const costUsd = ((h.costBasis > 0 ? h.costBasis : h.shares * (h.price || 0)) || 0) * f;
+        if (costUsd <= 0) continue;
+        totalCostUsd += costUsd;
         const dateMap = priceLookup.get(h.ticker);
-        if (!dateMap) continue;
+        if (!dateMap) { legs.push({ ticker: h.ticker, flat: true, costUsd }); continue; }
         const anchorIso = (h.buyDate && h.buyDate > windowStart) ? h.buyDate : windowStart;
-        let anchor = null, anchorIdx = n;
-        for (let i = 0; i < n; i++) {
-            const d = backbone[i].date;
-            if (d < anchorIso) continue;
-            const c = dateMap.get(d);
-            if (c > 0) { anchor = c; anchorIdx = i; break; }
-        }
-        if (anchor == null) { // anchor beyond the series — use the first priced point
-            for (let i = 0; i < n; i++) { const c = dateMap.get(backbone[i].date); if (c > 0) { anchor = c; anchorIdx = i; break; } }
-        }
-        if (anchor == null || !(anchor > 0)) continue;
-        const weight = (h.value > 0 ? h.value : (h.shares * (h.price || 0))) || 0; // current market weight
-        if (weight <= 0) continue;
-        legs.push({ ticker: h.ticker, dateMap, anchorClose: anchor, anchorIdx, weight });
-        totalWeight += weight;
+        let entryClose = null, entryIdx = n;
+        for (let i = 0; i < n; i++) { const d = backbone[i].date; if (d < anchorIso) continue; const c = dateMap.get(d); if (c > 0) { entryClose = c; entryIdx = i; break; } }
+        if (entryClose == null) { for (let i = 0; i < n; i++) { const c = dateMap.get(backbone[i].date); if (c > 0) { entryClose = c; entryIdx = i; break; } } }
+        if (!(entryClose > 0)) { legs.push({ ticker: h.ticker, flat: true, costUsd }); continue; }
+        legs.push({ ticker: h.ticker, dateMap, shares: h.shares, fx: f, costUsd, entryClose, entryIdx });
     }
-    if (!legs.length || totalWeight <= 0) return _buildCostBasisFallback(client, range);
+    if (!legs.length || totalCostUsd <= 0) return _buildCostBasisFallback(client, range);
 
-    const invTotalW = 1 / totalWeight;
-    const lastClose = {}; // forward-fill buffer per ticker
+    const invCB = 100 / totalCostUsd;
+    const lastClose = {}; // forward-fill buffer
     for (let i = 0; i < n; i++) {
         const date = backbone[i].date;
-        let weightedRet = 0; // Σ wᵢ·retᵢ  (positions not yet held contribute 0)
+        let mv = 0; // holdings market value (USD), cost-anchored at entry → continuous
         for (const leg of legs) {
-            if (i < leg.anchorIdx) continue;            // not held yet → 0 (continuous at entry)
+            if (leg.flat) { mv += leg.costUsd; continue; }            // no price → hold at cost
+            if (i < leg.entryIdx) { mv += leg.costUsd; continue; }    // before buy → its capital (0 contribution)
             let close = leg.dateMap.get(date);
             if (!(close > 0)) close = lastClose[leg.ticker];
-            if (!(close > 0)) close = leg.anchorClose;  // before any data → flat at anchor
+            if (!(close > 0)) close = leg.entryClose;
             lastClose[leg.ticker] = close;
-            weightedRet += leg.weight * (close / leg.anchorClose - 1);
+            mv += leg.costUsd * (close / leg.entryClose);             // cost grown by the real % move
         }
-        history[i] = { date, returnPct: weightedRet * invTotalW * 100 };
+        history[i] = { date, value: mv + cashBalance, returnPct: (mv - totalCostUsd) * invCB };
     }
 
-    // Provide a $ value series consistent with the return (for the absolute-$ view):
-    // back-project from the CURRENT portfolio value so value(now) == portfolioValue.
-    const pvNow = (client.portfolioValue > 0 ? client.portfolioValue : (totalWeight + cashBalance)) || 1;
-    const retNow = history[n - 1].returnPct / 100;
-    const scale = pvNow / (1 + retNow);
-    for (let i = 0; i < n; i++) history[i].value = scale * (1 + history[i].returnPct / 100);
+    // Pin the LAST point to the portfolio's EXACT current return (live prices), so the
+    // chart endpoint equals the card to the decimal.
+    const mvNowUsd = client.holdings.reduce((s, h) => s + (h.value || 0) * fxOf(h.currency), 0);
+    if (mvNowUsd > 0) {
+        history[n - 1].returnPct = (mvNowUsd - totalCostUsd) * invCB;
+        history[n - 1].value = mvNowUsd + cashBalance;
+    }
 
     // Cache result
     _syntheticCache[cacheKey] = { data: history, timestamp: Date.now() };
-    console.log(`[SyntheticHistory] Built ${n}-point weighted-return history (${history[0].date} → ${history[n - 1].date}), return: ${history[n - 1].returnPct.toFixed(2)}%`);
+    console.log(`[SyntheticHistory] Built ${n}-point return-from-cost history (${history[0].date} → ${history[n - 1].date}), return: ${history[n - 1].returnPct.toFixed(2)}%`);
     return history;
 }
 
