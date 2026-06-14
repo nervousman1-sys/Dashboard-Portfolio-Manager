@@ -683,9 +683,10 @@ const SECTOR_ETF_GROUP = {
     QQQ: [['QQQ', 'Invesco'], ['QQQM', 'Invesco'], ['ONEQ', 'Fidelity']],
     SPY: [['SPY', 'SPDR · State Street'], ['VOO', 'Vanguard'], ['IVV', 'iShares · BlackRock']],
 };
-// Lands DIRECTLY on the ETF's Fund Flows section (net creation/redemption flows),
-// not the performance page — etf.com's dedicated flows anchor.
-const fundFlowsUrl = (t) => `https://www.etf.com/${String(t).toUpperCase()}#fund-page-fund-flows`;
+// Lands on the ETF's Fund Flows page — etfdb (THE fund-flows database) renders the
+// real net creation/redemption flow figures server-side (1-week / 1-month / etc.),
+// unlike etf.com's SPA which opens on Overview. Anchored to the flows section.
+const fundFlowsUrl = (t) => `https://etfdb.com/etf/${String(t).toUpperCase()}/#fund-flows`;
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.
