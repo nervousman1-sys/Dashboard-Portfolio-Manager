@@ -9372,6 +9372,10 @@ html.day-mode .dn-inst-src2 { color: #64748b; }
 .dn-mover-dest-empty { color: #64748b; background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
 .dn-mover-sub { color: #7dd3fc; font-weight: 700; font-size: 10.5px; }
 html.day-mode .dn-mover-sub { color: #0e7490; }
+.dn-mover-dir.flat { color: #94a3b8; }
+.dn-mover-amt.flat { color: #94a3b8; }
+.dn-mover-gross { grid-column: 1 / -1; justify-self: start; font-size: 10.5px; color: #94a3b8; margin-top: 1px; }
+html.day-mode .dn-mover-gross { color: #64748b; }
 .dn-mover-dom { grid-column: 1 / -1; justify-self: start; font-size: 11px; font-weight: 700; color: #fbbf24;
     background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.20); border-radius: 999px; padding: 1px 9px; margin-top: 2px; }
 html.day-mode .dn-mover-dom { color: #b45309; background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.22); }

@@ -365,14 +365,45 @@ function _dnVisionHTML(text, img, mode) {
             // (a) NAMED movers the image itself called out (BlackRock, Vanguard…) —
             // structured into direction · name · destination · amount, each with an SEC
             // 13F source so the reader can verify who bought and (via the filing) into what.
-            const moverObjs = institutions.map(_dnParseInstMover);
+            const rawMovers = institutions.map(_dnParseInstMover);
+            // ── NET consolidation ──
+            // The same body+asset can appear as both a buy (▲) and a sell (▼) — reading as
+            // "bought SOXX then sold it?". Consolidate each institution+destination to its
+            // NET flow (bought − sold) so the list shows ONE clear position change, with the
+            // gross detail kept transparent. Movers with no $ size (e.g. "2.6%") pass through.
+            const _netMap = new Map();   // key → { name, dest, inMag, outMag }
+            const _passMovers = [];
+            for (const m of rawMovers) {
+                const mag = _dnAmtMag(m.amount);
+                if (!(mag > 0) || !m.dir) { _passMovers.push(m); continue; }
+                const key = m.name + '' + (m.dest || '');
+                let g = _netMap.get(key);
+                if (!g) { g = { name: m.name, dest: m.dest || '', inMag: 0, outMag: 0 }; _netMap.set(key, g); }
+                if (m.dir === 'in') g.inMag += mag; else g.outMag += mag;
+            }
+            const moverObjs = [];
+            for (const g of _netMap.values()) {
+                const net = g.inMag - g.outMag, gross = g.inMag + g.outMag;
+                if (gross <= 0) continue;
+                const balanced = Math.abs(net) < 0.05 * gross;   // equal buy+sell → churn, not a net move
+                const grossNote = (g.inMag > 0 && g.outMag > 0)
+                    ? `נטו · קנו ${_dnFmtMag(g.inMag)}$ ומכרו ${_dnFmtMag(g.outMag)}$` : '';
+                moverObjs.push({
+                    name: g.name, dest: g.dest,
+                    dir: balanced ? '' : (net > 0 ? 'in' : 'out'),
+                    amount: balanced ? 'מאוזן' : _dnFmtMag(Math.abs(net)) + '$',
+                    netMag: Math.abs(net), grossNote, balanced,
+                });
+            }
+            moverObjs.sort((a, b) => (b.netMag || 0) - (a.netMag || 0));
+            for (const m of _passMovers) moverObjs.push(m);
             // REAL-DATA highlight: the sector that received the most institutional money.
-            // Prefer the actual per-institution destinations the image named (sum the $ by
-            // destination); when none are given, fall back to the top INFLOW sector from the
-            // histogram — both are real figures parsed from the image, nothing invented.
+            // Prefer the actual per-institution NET destinations the image named (sum the
+            // net $ by destination); when none are given, fall back to the top INFLOW sector
+            // from the histogram — both are real figures parsed from the image, nothing invented.
             const destAgg = new Map();
             for (const m of moverObjs) {
-                const mag = _dnAmtMag(m.amount);
+                const mag = m.netMag != null ? m.netMag : _dnAmtMag(m.amount);
                 if (m.dir === 'in' && m.dest && mag > 0) destAgg.set(m.dest, (destAgg.get(m.dest) || 0) + mag);
             }
             let topDest = '', topDestNote = '';
@@ -392,9 +423,9 @@ function _dnVisionHTML(text, img, mode) {
             }
             // Per-institution dominant destination: when the same body appears more than
             // once with named destinations, compute where IT moved the most (real summed $).
-            const perInst = new Map();   // name → Map(dest → $mag)
+            const perInst = new Map();   // name → Map(dest → net $mag)
             for (const m of moverObjs) {
-                const mag = _dnAmtMag(m.amount);
+                const mag = m.netMag != null ? m.netMag : _dnAmtMag(m.amount);
                 if (m.dir === 'in' && m.dest && mag > 0) {
                     if (!perInst.has(m.name)) perInst.set(m.name, new Map());
                     const d = perInst.get(m.name);
@@ -406,9 +437,9 @@ function _dnVisionHTML(text, img, mode) {
                 if (!d || d.size < 2) return '';
                 return [...d.entries()].sort((a, b) => b[1] - a[1])[0][0];
             };
-            // Biggest single institutional transfer by $ size (real parsed amounts).
-            const biggestIn = moverObjs.filter(m => m.dir === 'in' && _dnAmtMag(m.amount) > 0)
-                .sort((a, b) => _dnAmtMag(b.amount) - _dnAmtMag(a.amount))[0];
+            // Biggest single institutional NET inflow (real, consolidated amounts).
+            const biggestIn = moverObjs.filter(m => m.dir === 'in' && (m.netMag != null ? m.netMag : _dnAmtMag(m.amount)) > 0)
+                .sort((a, b) => (b.netMag != null ? b.netMag : _dnAmtMag(b.amount)) - (a.netMag != null ? a.netMag : _dnAmtMag(a.amount)))[0];
             let bigMoveHTML = '';
             if (topDest || biggestIn) {
                 const bits = [];
@@ -418,27 +449,31 @@ function _dnVisionHTML(text, img, mode) {
             }
             const _domShown = new Set();   // show an institution's dominant destination once
             const moversHTML = institutions.length
-                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${bigMoveHTML}${moverObjs.map(m => {
-                    const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : '');
-                    const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '•');
-                    const dirWord = m.dir === 'in' ? 'כניסה' : (m.dir === 'out' ? 'יציאה' : '');
+                ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים · נטו (קנייה פחות מכירה)</div>${bigMoveHTML}${moverObjs.map(m => {
+                    const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : 'flat');
+                    const arrow = m.dir === 'in' ? '▲' : (m.dir === 'out' ? '▼' : '◼');
+                    const dirWord = m.dir === 'in' ? 'נטו קנייה' : (m.dir === 'out' ? 'נטו מכירה' : 'מאוזן (קנייה≈מכירה)');
                     // Sub-sector the money went into, shown next to the institution.
                     const subLabel = _dnDestSubLabel(m.dest);
                     const destHtml = m.dest
-                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}</span>`
+                        ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
-                    const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '<span class="dn-mover-amt">—</span>';
+                    const amtHtml = m.amount
+                        ? `<span class="dn-mover-amt ${cls}" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
+                        : '<span class="dn-mover-amt">—</span>';
                     // When this body moved money into several destinations, flag (once) the
-                    // one that got the MOST — computed from the real summed $ in the image.
+                    // one that got the MOST — computed from the real net $ in the image.
                     const dom = instTopDest(m.name);
                     let domHtml = '';
-                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); domHtml = `<span class="dn-mover-dom" title="היעד שאליו הגוף הזרים הכי הרבה כסף לפי הנתונים">★ הכי הרבה אל ${_dnEsc(dom)}</span>`; }
+                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); domHtml = `<span class="dn-mover-dom" title="היעד שאליו הגוף הזרים הכי הרבה כסף נטו לפי הנתונים">★ הכי הרבה אל ${_dnEsc(dom)}</span>`; }
+                    const grossHtml = m.grossNote ? `<span class="dn-mover-gross">${_dnEsc(m.grossNote)}</span>` : '';
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
                         <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
                         <span class="dn-mover-name">${_dnEsc(m.name)}</span>
                         ${destHtml}
                         ${amtHtml}
                         <a class="dn-inst-src" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="דיווחי 13F של הגוף ב-SEC — האחזקות והקניות/מכירות בפועל, ולאן הכסף נכנס">מקור 13F ↗</a>
+                        ${grossHtml}
                         ${domHtml}
                     </div>`;
                   }).join('')}</div>`
@@ -904,6 +939,14 @@ function _dnAmtMag(a) {
     else if (/m|mn|מיליון/.test(u)) n *= 1e6;
     else if (/k|אלף/.test(u)) n *= 1e3;
     return n;
+}
+// Format a USD magnitude back to a compact label (e.g. 4.16e9 → "4.16B").
+function _dnFmtMag(n) {
+    const a = Math.abs(n);
+    if (a >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
+    if (a >= 1e6) return Math.round(n / 1e6) + 'M';
+    if (a >= 1e3) return Math.round(n / 1e3) + 'K';
+    return String(Math.round(n));
 }
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
