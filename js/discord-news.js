@@ -461,20 +461,20 @@ function _dnVisionHTML(text, img, mode) {
                     const amtHtml = m.amount
                         ? `<span class="dn-mover-amt ${cls}" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
                         : '<span class="dn-mover-amt">—</span>';
-                    // When this body moved money into several destinations, flag (once) the
-                    // one that got the MOST — computed from the real net $ in the image.
+                    // The notable-flow marker: a single ★ ON the institution's own row
+                    // (its largest net destination), with the detail in the tooltip — no
+                    // separate badge line. Shown once per institution.
                     const dom = instTopDest(m.name);
-                    let domHtml = '';
-                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); domHtml = `<span class="dn-mover-dom" title="היעד שאליו הגוף הזרים הכי הרבה כסף נטו לפי הנתונים">★ הכי הרבה אל ${_dnEsc(dom)}</span>`; }
+                    let starHtml = '';
+                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); starHtml = ` <span class="dn-mover-star" title="הזרימה הבולטת של ${_dnEsc(m.name)} — הכי הרבה כסף נטו אל ${_dnEsc(dom)}">★</span>`; }
                     const grossHtml = m.grossNote ? `<span class="dn-mover-gross">${_dnEsc(m.grossNote)}</span>` : '';
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
                         <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
-                        <span class="dn-mover-name">${_dnEsc(m.name)}</span>
+                        <span class="dn-mover-name">${_dnEsc(m.name)}${starHtml}</span>
                         ${destHtml}
                         ${amtHtml}
                         <a class="dn-inst-src" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="דיווחי 13F של הגוף ב-SEC — האחזקות והקניות/מכירות בפועל, ולאן הכסף נכנס">מקור 13F ↗</a>
                         ${grossHtml}
-                        ${domHtml}
                     </div>`;
                   }).join('')}</div>`
                 : '';
@@ -1115,17 +1115,18 @@ async function _dnFillFlowsNews(scope) {
     box.dataset.loaded = '1';
     const list = box.querySelector('.dn-flow-news-list');
     const syms = (box.dataset.syms || '').split(',').filter(Boolean);
-    if (!syms.length) { box.remove(); return; }
+    const _ph = (msg) => { if (list) list.innerHTML = `<div class="adv-empty">${_dnEsc(msg)}</div>`; };
+    if (!syms.length) { _ph('סורק חדשות לסקטורים שבתנועה…'); return; }
     try {
         // Hourly bucket → the edge runs a fresh scan every hour, so the headlines update
         // through the day instead of being frozen for the session.
         const bucket = Math.floor(Date.now() / 3600000);
         const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}&b=${bucket}&tr=2`, { headers: { Accept: 'application/json' } });
         const data = await r.json();
-        // Flatten to the most recent headlines across the sectors, dedup by title.
-        // Keep only headlines that actually name the sector's stock (ticker/alias/CEO),
-        // dropping generic market pieces — same strict relevance as the portfolio column.
-        const items = [];
+        // Headlines for the sectors that moved. PREFER ones that name the sector's stock
+        // (ticker/alias/CEO); if too few pass, top up with the latest sector headlines so
+        // this box ALWAYS shows live news tied to the capital flows — never empties.
+        const relevant = [], fallback = [];
         const seen = new Set();
         const _rel = (typeof _newsIsRelevant === 'function' && typeof _newsMatchTerms === 'function');
         for (const s of syms) {
@@ -1133,21 +1134,24 @@ async function _dnFillFlowsNews(scope) {
             for (const n of (data[s] || [])) {
                 const t = (n.he || n.en || '').trim();
                 if (!t || seen.has(t)) continue;
-                if (_rel && !_newsIsRelevant(n, terms)) continue;
                 seen.add(t);
-                items.push({ t, sym: s, date: n.date || '', url: n.url || '', source: n.source || '' });
+                const item = { t, sym: s, date: n.date || '', url: n.url || '', source: n.source || '' };
+                if (_rel && terms && _newsIsRelevant(n, terms)) relevant.push(item);
+                else fallback.push(item);
             }
         }
-        items.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-        const top = items.slice(0, 5);
-        if (!top.length) { box.remove(); return; }
+        const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
+        relevant.sort(byDate); fallback.sort(byDate);
+        let top = relevant.slice(0, 5);
+        if (top.length < 3) top = top.concat(fallback.slice(0, 5 - top.length));
+        if (!top.length) { _ph('סורק חדשות עדכניות לסקטורים שבתנועה…'); return; }
         if (list) list.innerHTML = top.map(n => `
             <a class="dn-flow-news-item" href="${_dnEsc(n.url)}" target="_blank" rel="noopener" dir="rtl">
                 <span class="dn-flow-news-txt">${_dnEsc(n.t)}</span>
                 <span class="dn-flow-news-meta">${_dnEsc(n.sym)}${n.source ? ' · ' + _dnEsc(n.source) : ''}${n.date ? ' · ' + _dnEsc(n.date) : ''}</span>
             </a>`).join('');
     } catch (e) {
-        box.remove();
+        _ph('לא ניתן לטעון חדשות כרגע — ננסה שוב.');
     }
 }
 

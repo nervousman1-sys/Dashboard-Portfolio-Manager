@@ -148,7 +148,7 @@ function _renderRiskPage(model, errMsg) {
                     <span class="risk-chart-sub">תשואה צפויה מול סיכון כולל (σ) — לכל תיק</span>
                 </div>
                 <div class="risk-chart-canvas-wrap"><canvas id="cmlChart"></canvas></div>
-                <p class="risk-chart-legend"><b>כל נקודה בגרף היא תיק</b>, צבועה לפי מיקומה מול ה-CML: <b style="color:#22c55e">ירוק = מעל הקו (יעיל)</b>, <b style="color:#eab308">צהוב = על הקו</b>, <b style="color:#ef4444">אדום = מתחת לקו (נחות)</b> — בדיוק כפי שמופיע בעמודת "מיקום" בטבלה ובלשונית CML/SML של התיק. העקומה הירוקה = החזית היעילה (Markowitz); הקו הכחול = ה-CML, משיק לחזית ב<b>כוכב הזהב</b> = <b>התיק האופטימלי</b>.</p>
+                <p class="risk-chart-legend"><b>כל נקודה בגרף היא תיק</b>, צבועה לפי <b>ציון המודל</b> — בדיוק כפי שמופיע בתג "מודל" של אותו תיק בדאשבורד: <b style="color:#22c55e">ירוק = עומד במודל (≥75)</b>, <b style="color:#eab308">צהוב = עמידה חלקית (50–74)</b>, <b style="color:#ef4444">אדום = לא עומד (&lt;50)</b>. ציון המודל משקלל יעילות CML (40%), בחירת נכסים SML (40%) ופיזור (20%). העקומה הירוקה = החזית היעילה (Markowitz); הקו הכחול = ה-CML, משיק לחזית ב<b>כוכב הזהב</b> = <b>התיק האופטימלי</b>.</p>
             </div>
             <div class="risk-chart-card glass-card">
                 <div class="risk-chart-head">
@@ -236,12 +236,16 @@ function _drawCMLChart(model) {
     if (!canvas || typeof Chart === 'undefined') return;
     const rfPct = model.rf * 100;
     const pts = (model.portfolios || []).filter(p => p.hasData && p.totalValue > 0)
-        // eff = CML efficiency status — SAME basis as the "מיקום" column (p.aboveCML), so
-        // a green dot here always equals "מעל ה-CML" in the table and the modal verdict.
-        .map(p => ({
-            x: p.vol * 100, y: p.expReturn * 100, name: p.name, risk: p.riskLabel,
-            eff: p.aboveCML ? ((p.alpha != null && p.alpha >= 0.01) ? 'above' : 'on') : 'below',
-        }));
+        // eff = the SAME model-compliance band the dashboard "מודל" chip uses
+        // (complianceScore: ≥75 green, ≥50 yellow, <50 red — see render.js). So a dot's
+        // colour here is identical to that portfolio's badge on the dashboard.
+        .map(p => {
+            const mc = p.complianceScore;
+            return {
+                x: p.vol * 100, y: p.expReturn * 100, name: p.name, risk: p.riskLabel, mc,
+                eff: mc == null ? 'on' : (mc >= 75 ? 'above' : mc >= 50 ? 'on' : 'below'),
+            };
+        });
     const marketPt = { x: model.marketVol * 100, y: model.rm * 100, name: model.marketLabel };
 
     // Efficient frontier curve + tangency (optimal risky portfolio)
@@ -272,13 +276,14 @@ function _drawCMLChart(model) {
         type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5,
         borderDash: [7, 4], pointRadius: 0, fill: false, tension: 0, order: 2,
     });
-    // Portfolios, colored by CML efficiency (NOT risk level — that was the mismatch with
-    // the "מעל/מתחת ל-CML" status). Split into up to three labelled groups so the legend
-    // itself tells the user every dot is a תיק, and the colour means its CML standing.
+    // Portfolios, colored by the SAME model-compliance band as the dashboard "מודל" chip
+    // (not by raw CML position — that mismatched the dashboard score the user reads).
+    // Split into up to three labelled groups so the legend itself tells the user every
+    // dot is a תיק, and the colour equals its dashboard model badge.
     const EFF_STYLE = {
-        above: { color: '#22c55e', label: 'תיק יעיל · מעל ה-CML' },
-        on: { color: '#eab308', label: 'תיק על ה-CML' },
-        below: { color: '#ef4444', label: 'תיק נחות · מתחת ל-CML' },
+        above: { color: '#22c55e', label: 'תיק עומד במודל (ציון ≥75)' },
+        on: { color: '#eab308', label: 'עמידה חלקית (50–74)' },
+        below: { color: '#ef4444', label: 'לא עומד במודל (<50)' },
     };
     for (const key of ['above', 'on', 'below']) {
         const grp = pts.filter(p => p.eff === key);
