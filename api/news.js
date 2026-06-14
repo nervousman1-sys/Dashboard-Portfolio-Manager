@@ -97,21 +97,44 @@ async function translateBatchGemini(texts) {
         '5) דקדוק תקין, תחביר טבעי, התאמת מין/מספר, ללא שגיאות כתיב. שמור על העובדות, המספרים והשמות בדיוק.\n' +
         '6) קצר וענייני ככותרת — לא משפט מסורבל.\n' +
         'החזר אך ורק רשימה ממוספרת 1 עד ' + texts.length + ', שורה אחת לכל כותרת, באותו סדר בדיוק, ללא שום טקסט נוסף.\n\n' + numbered;
-    try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
+    // One model attempt → an array aligned to the input by each line's LEADING NUMBER
+    // (robust to preamble, reordering or a missing line — far better than requiring an
+    // exact line count, which used to fail the whole batch and drop us to Google).
+    const callModel = async (model) => {
+        const genCfg = { temperature: 0.3, maxOutputTokens: 6000 };
+        if (/2\.5/.test(model)) genCfg.thinkingConfig = { thinkingBudget: 0 }; // 2.0 has no thinking
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 6000, thinkingConfig: { thinkingBudget: 0 } },
+                generationConfig: genCfg,
             }),
         });
         if (!r.ok) return null;
         const j = await r.json();
         const text = (((j.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('\n').trim() || '';
         if (!text) return null;
-        const lines = text.split('\n').map(l => l.replace(/^\s*\d+[.)\]]\s*/, '').trim()).filter(Boolean);
-        return lines.length >= texts.length ? lines.slice(0, texts.length) : null;
-    } catch (e) { return null; }
+        const out = new Array(texts.length).fill(null);
+        for (const line of text.split('\n')) {
+            const m = line.match(/^\s*(\d+)[.)\]]\s*(.+\S)\s*$/);
+            if (m) { const idx = parseInt(m[1], 10) - 1; if (idx >= 0 && idx < texts.length && !out[idx]) out[idx] = m[2].trim(); }
+        }
+        return out;
+    };
+    const filled = (a) => a ? a.filter(Boolean).length : 0;
+    let out = null;
+    try { out = await callModel('gemini-2.5-flash'); } catch { out = null; }
+    // Retry on a different model if the first failed or under-translated.
+    if (filled(out) < texts.length) {
+        try {
+            const alt = await callModel('gemini-2.0-flash');
+            if (filled(alt) > filled(out)) out = alt;
+        } catch { /* keep first */ }
+    }
+    if (!out || filled(out) === 0) return null;       // total failure → caller's last resort
+    // Any gap stays as the English original — a readable headline beats a garbled
+    // literal Google translation. (Gaps are rare with number-aligned parsing + retry.)
+    return out.map((he, i) => he || texts[i]);
 }
 
 async function newsFor(symbol, perSymbol) {
