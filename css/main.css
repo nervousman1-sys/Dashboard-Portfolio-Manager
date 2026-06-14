@@ -9334,6 +9334,13 @@ html.day-mode .tech-table .tech-dist { color: #0f172a !important; }
 html.day-mode .tech-foot { color: #334155 !important; }
 
 /* Institutional issuer attribution — under the histogram in the RIGHT column,
-   filling the space below the bars and balancing the two columns' heights. */
-.dn-flow-bars .dn-flow-inst { display: block; margin-top: 16px; }
-.dn-flow-bars .dn-flow-inst .dn-flow-inst-row { display: flex; gap: 8px; align-items: center; }
+   filling the space below the bars. Multi-issuer; scrolls if long. */
+.dn-flow-bars .dn-flow-inst { display: block; margin-top: 16px; max-height: 360px; overflow-y: auto; }
+.dn-flow-bars .dn-flow-inst .dn-flow-inst-row {
+    display: grid; grid-template-columns: 14px 52px 1fr auto auto; gap: 8px; align-items: center;
+    padding: 5px 0; border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+.dn-inst-sector { font-size: 11.5px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dn-inst-name { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+html.day-mode .dn-inst-sector { color: #334155; }
+html.day-mode .dn-inst-name { color: #64748b; }

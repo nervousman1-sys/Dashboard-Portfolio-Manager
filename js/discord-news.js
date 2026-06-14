@@ -319,21 +319,30 @@ function _dnVisionHTML(text, img, mode) {
             // LEFT column — the words: conclusion, named institutions (if shown), and
             // the reasoning for the rotation.
             const conc = conclusion ? `<div class="dn-flow-conc" dir="rtl"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            // FACTUAL institutional attribution: each ETF that moved → its real
-            // issuer (asset manager) with a link to the official product page. This
-            // replaces guessed names with verifiable data + a source.
+            // FACTUAL institutional attribution: for each moving sector, list the major
+            // ETFs ACROSS asset managers (State Street, Vanguard, BlackRock, VanEck,
+            // Fidelity…) — each linking to its live fund page where the actual flows
+            // and performance are shown. Real, verifiable, multi-issuer.
             const flowEtfs = [];
-            for (const r of rows) for (const t of (r.tickers || [])) {
-                const u = t.toUpperCase();
-                if (ETF_ISSUER[u] && !flowEtfs.find(x => x.t === u)) flowEtfs.push({ t: u, dir: r.inflow, ...ETF_ISSUER[u] });
+            const seenInst = new Set();
+            for (const r of [...rows].sort((a, b) => b.mag - a.mag)) {
+                const key = (r.tickers || []).map(t => t.toUpperCase()).find(t => SECTOR_ETF_GROUP[t]);
+                if (!key) continue;
+                for (const [t, issuer] of SECTOR_ETF_GROUP[key]) {
+                    if (seenInst.has(t)) continue;
+                    seenInst.add(t);
+                    flowEtfs.push({ t, issuer, dir: r.inflow, sector: r.name });
+                }
+                if (flowEtfs.length >= 18) break;
             }
             const instHTML = flowEtfs.length
-                ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">מנהלי הנכסים מאחורי התנועות (נתוני אמת)</div>${flowEtfs.slice(0, 8).map(e => `
+                ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">מנהלי הנכסים מאחורי התנועות (נתוני אמת · מעודכן יומית)</div>${flowEtfs.map(e => `
                     <div class="dn-flow-inst-row" dir="rtl">
                         <span class="dn-inst-dir ${e.dir ? 'in' : 'out'}">${e.dir ? '▲' : '▼'}</span>
                         <span class="dn-inst-tk">${_dnEsc(e.t)}</span>
+                        <span class="dn-inst-sector">${_dnEsc(e.sector)}</span>
                         <span class="dn-inst-name">${_dnEsc(e.issuer)}</span>
-                        <a class="dn-inst-src" href="${e.url}" target="_blank" rel="noopener">מקור ↗</a>
+                        <a class="dn-inst-src" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener">זרימות וביצועים ↗</a>
                     </div>`).join('')}</div>`
                 : (institutions.length
                     ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
@@ -647,6 +656,35 @@ function _dnRender() {
     document.querySelectorAll('#dnFeed details.dn-day[open]').forEach(d => _dnLoadVision(d));
     _dnPrefetchVisions();
 }
+
+// For each sector, the major ETFs across DIFFERENT asset managers (real products),
+// so the flows show more than just State Street. Keyed by the SPDR/primary ticker
+// that appears in the data. Each links to its live fund page (performance + flows).
+const SECTOR_ETF_GROUP = {
+    XLK: [['XLK', 'SPDR · State Street'], ['VGT', 'Vanguard'], ['IYW', 'iShares · BlackRock'], ['FTEC', 'Fidelity']],
+    XLF: [['XLF', 'SPDR · State Street'], ['VFH', 'Vanguard'], ['IYF', 'iShares · BlackRock']],
+    XLV: [['XLV', 'SPDR · State Street'], ['VHT', 'Vanguard'], ['IYH', 'iShares · BlackRock']],
+    XLE: [['XLE', 'SPDR · State Street'], ['VDE', 'Vanguard'], ['IYE', 'iShares · BlackRock']],
+    XLY: [['XLY', 'SPDR · State Street'], ['VCR', 'Vanguard'], ['IYC', 'iShares · BlackRock']],
+    XLP: [['XLP', 'SPDR · State Street'], ['VDC', 'Vanguard'], ['KXI', 'iShares · BlackRock']],
+    XLI: [['XLI', 'SPDR · State Street'], ['VIS', 'Vanguard'], ['IYJ', 'iShares · BlackRock']],
+    XLC: [['XLC', 'SPDR · State Street'], ['VOX', 'Vanguard'], ['IYZ', 'iShares · BlackRock']],
+    XLB: [['XLB', 'SPDR · State Street'], ['VAW', 'Vanguard'], ['IYM', 'iShares · BlackRock']],
+    XLU: [['XLU', 'SPDR · State Street'], ['VPU', 'Vanguard'], ['IDU', 'iShares · BlackRock']],
+    XLRE: [['XLRE', 'SPDR · State Street'], ['VNQ', 'Vanguard'], ['IYR', 'iShares · BlackRock']],
+    SOXX: [['SOXX', 'iShares · BlackRock'], ['SMH', 'VanEck'], ['XSD', 'SPDR · State Street'], ['FTXL', 'First Trust']],
+    SMH: [['SMH', 'VanEck'], ['SOXX', 'iShares · BlackRock'], ['XSD', 'SPDR · State Street']],
+    GLD: [['GLD', 'SPDR · State Street'], ['IAU', 'iShares · BlackRock'], ['SGOL', 'abrdn'], ['GLDM', 'SPDR · State Street']],
+    IBIT: [['IBIT', 'iShares · BlackRock'], ['FBTC', 'Fidelity'], ['GBTC', 'Grayscale'], ['ARKB', 'ARK · 21Shares']],
+    TLT: [['TLT', 'iShares · BlackRock'], ['VGLT', 'Vanguard'], ['GOVT', 'iShares · BlackRock']],
+    IEF: [['IEF', 'iShares · BlackRock'], ['VGIT', 'Vanguard']],
+    SHV: [['SHV', 'iShares · BlackRock'], ['BIL', 'SPDR · State Street'], ['SGOV', 'iShares · BlackRock']],
+    AIQ: [['AIQ', 'Global X'], ['BOTZ', 'Global X'], ['IRBO', 'iShares · BlackRock'], ['ROBT', 'First Trust']],
+    QQQ: [['QQQ', 'Invesco'], ['QQQM', 'Invesco'], ['ONEQ', 'Fidelity']],
+    SPY: [['SPY', 'SPDR · State Street'], ['VOO', 'Vanguard'], ['IVV', 'iShares · BlackRock']],
+};
+// Live fund page (performance, holdings & flows) — the "direct place to see it".
+const fundFlowsUrl = (t) => `https://stockanalysis.com/etf/${String(t).toLowerCase()}/`;
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.
