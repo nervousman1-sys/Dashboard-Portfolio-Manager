@@ -990,11 +990,13 @@ const SECTOR_TOP_STOCKS = {
     XLB: ['LIN', 'SHW', 'FCX', 'ECL', 'NEM'],
     XLU: ['NEE', 'SO', 'DUK', 'CEG', 'AEP'],
     XLRE: ['PLD', 'AMT', 'EQIX', 'WELL', 'SPG'],
-    SOXX: ['NVDA', 'AVGO', 'AMD', 'TSM', 'ASML'],
-    SMH: ['NVDA', 'TSM', 'AVGO', 'AMD', 'ASML'],
+    SOXX: ['NVDA', 'AVGO', 'AMD', 'TSM', 'ASML', 'QCOM', 'MU', 'LRCX', 'AMAT', 'ARM'],
+    SMH: ['NVDA', 'TSM', 'AVGO', 'AMD', 'ASML', 'QCOM', 'MU', 'INTC', 'AMAT', 'KLAC'],
+    AIQ: ['NVDA', 'MSFT', 'GOOGL', 'META', 'AVGO', 'PLTR', 'AMD', 'CRM'],
 };
 const SECTOR_HE_TO_ETF = [
-    [/שבב|סמיקונדקטור|semicon/i, 'SOXX'],
+    [/שבב|מוליכים\s*למחצה|מוליכ|סמיקונדקטור|semicon/i, 'SOXX'],
+    [/בינה\s*מלאכותית|\bai\b|genai|רובוטיק/i, 'AIQ'],
     [/בריאות|פארמה|תרופ/i, 'XLV'],
     [/ביוטכ|biotech/i, 'XLV'],
     [/פיננס|בנק|ביטוח/i, 'XLF'],
@@ -1115,15 +1117,23 @@ async function _dnFillFlowsNews(scope) {
     const syms = (box.dataset.syms || '').split(',').filter(Boolean);
     if (!syms.length) { box.remove(); return; }
     try {
-        const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}&tr=2`, { headers: { Accept: 'application/json' } });
+        // Hourly bucket → the edge runs a fresh scan every hour, so the headlines update
+        // through the day instead of being frozen for the session.
+        const bucket = Math.floor(Date.now() / 3600000);
+        const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}&b=${bucket}&tr=2`, { headers: { Accept: 'application/json' } });
         const data = await r.json();
-        // Flatten to the most recent headlines across the sectors, dedup by title
+        // Flatten to the most recent headlines across the sectors, dedup by title.
+        // Keep only headlines that actually name the sector's stock (ticker/alias/CEO),
+        // dropping generic market pieces — same strict relevance as the portfolio column.
         const items = [];
         const seen = new Set();
+        const _rel = (typeof _newsIsRelevant === 'function' && typeof _newsMatchTerms === 'function');
         for (const s of syms) {
+            const terms = _rel ? _newsMatchTerms(s, null) : null;
             for (const n of (data[s] || [])) {
                 const t = (n.he || n.en || '').trim();
                 if (!t || seen.has(t)) continue;
+                if (_rel && !_newsIsRelevant(n, terms)) continue;
                 seen.add(t);
                 items.push({ t, sym: s, date: n.date || '', url: n.url || '', source: n.source || '' });
             }

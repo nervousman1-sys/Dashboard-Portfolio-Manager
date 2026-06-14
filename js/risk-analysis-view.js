@@ -902,9 +902,10 @@ async function _renderPortfolioNews(clientId) {
 
     // One news request, returning parsed {ok, data}. `bust` forces a fresh edge entry.
     const fetchNews = async (bust) => {
-        // 2-hour bucket key → the edge serves the same scan for up to 2h, then a new
-        // scan runs; combined with the auto-refresh below this is a continuous 24/7 scan.
-        const bucket = Math.floor(Date.now() / 7200000);
+        // 1-hour bucket key → the edge runs a fresh scan every hour, so a new relevant
+        // headline appears through the day; combined with the auto-refresh below this is
+        // a continuous 24/7 hourly scan.
+        const bucket = Math.floor(Date.now() / 3600000);
         const extra = bust ? `&fresh=${Date.now()}` : '';
         try {
             const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&b=${bucket}&tr=2${extra}`, { headers: { Accept: 'application/json' } });
