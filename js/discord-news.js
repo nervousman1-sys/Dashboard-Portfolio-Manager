@@ -368,7 +368,33 @@ function _dnVisionHTML(text, img, mode) {
             if (destAgg.size) {
                 const e = [...destAgg.entries()].sort((a, b) => b[1] - a[1])[0];
                 topDest = e[0]; topDestNote = 'לפי דיווחי הגופים';
-            } else if (ins[0]) { topDest = ins[0].name; topDestNote = ins[0].amount; }
+            } else if (ins[0]) {
+                // Refine the broad sector to its specific sub-industry using the image's tickers.
+                const sub = _dnSubSector(ins[0].name, ins[0].tickers);
+                let label = ins[0].name;
+                if (sub) {
+                    if (sub.includes(ins[0].name)) label = sub;                       // sub already richer
+                    else if (!ins[0].name.includes(sub)) label = `${ins[0].name} — ${sub}`;
+                }
+                topDest = label;
+                topDestNote = ins[0].amount;
+            }
+            // Per-institution dominant destination: when the same body appears more than
+            // once with named destinations, compute where IT moved the most (real summed $).
+            const perInst = new Map();   // name → Map(dest → $mag)
+            for (const m of moverObjs) {
+                const mag = _dnAmtMag(m.amount);
+                if (m.dir === 'in' && m.dest && mag > 0) {
+                    if (!perInst.has(m.name)) perInst.set(m.name, new Map());
+                    const d = perInst.get(m.name);
+                    d.set(m.dest, (d.get(m.dest) || 0) + mag);
+                }
+            }
+            const instTopDest = (name) => {
+                const d = perInst.get(name);
+                if (!d || d.size < 2) return '';
+                return [...d.entries()].sort((a, b) => b[1] - a[1])[0][0];
+            };
             // Biggest single institutional transfer by $ size (real parsed amounts).
             const biggestIn = moverObjs.filter(m => m.dir === 'in' && _dnAmtMag(m.amount) > 0)
                 .sort((a, b) => _dnAmtMag(b.amount) - _dnAmtMag(a.amount))[0];
@@ -379,6 +405,7 @@ function _dnVisionHTML(text, img, mode) {
                 if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> ${_dnEsc(biggestIn.amount)}${biggestIn.dest ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
                 bigMoveHTML = `<div class="dn-flow-bigmove" dir="rtl"><span class="dn-bigmove-ic">▲</span> ${bits.join(' · ')}</div>`;
             }
+            const _domShown = new Set();   // show an institution's dominant destination once
             const moversHTML = institutions.length
                 ? `<div class="dn-flow-inst dn-flow-movers"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${bigMoveHTML}${moverObjs.map(m => {
                     const cls = m.dir === 'in' ? 'in' : (m.dir === 'out' ? 'out' : '');
@@ -388,12 +415,18 @@ function _dnVisionHTML(text, img, mode) {
                         ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : 'אל '}${_dnEsc(m.dest)}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
                     const amtHtml = m.amount ? `<span class="dn-mover-amt ${cls}">${_dnEsc(m.amount)}</span>` : '<span class="dn-mover-amt">—</span>';
+                    // When this body moved money into several destinations, flag (once) the
+                    // one that got the MOST — computed from the real summed $ in the image.
+                    const dom = instTopDest(m.name);
+                    let domHtml = '';
+                    if (dom && !_domShown.has(m.name)) { _domShown.add(m.name); domHtml = `<span class="dn-mover-dom" title="היעד שאליו הגוף הזרים הכי הרבה כסף לפי הנתונים">★ הכי הרבה אל ${_dnEsc(dom)}</span>`; }
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
                         <span class="dn-mover-dir ${cls}" title="${dirWord}">${arrow}</span>
                         <span class="dn-mover-name">${_dnEsc(m.name)}</span>
                         ${destHtml}
                         ${amtHtml}
                         <a class="dn-inst-src" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="דיווחי 13F של הגוף ב-SEC — האחזקות והקניות/מכירות בפועל, ולאן הכסף נכנס">מקור 13F ↗</a>
+                        ${domHtml}
                     </div>`;
                   }).join('')}</div>`
                 : '';
@@ -791,6 +824,30 @@ function _dnParseInstMover(s) {
         else if (!amount) { amount = p; }                        // leftover bare value → amount
     }
     return { name, dir, dest, amount };
+}
+
+// Ticker → specific sub-sector (Hebrew). Lets the "where the money went" highlight name
+// the precise sub-industry (e.g. "מוליכים למחצה") instead of the broad sector
+// ("טכנולוגיה"), derived ONLY from tickers the image actually listed — a factual
+// classification, nothing invented.
+const _DN_SUBSECTOR = {
+    NVDA: 'מוליכים למחצה', AMD: 'מוליכים למחצה', AVGO: 'מוליכים למחצה', SMH: 'מוליכים למחצה',
+    SOXX: 'מוליכים למחצה', TSM: 'מוליכים למחצה', MU: 'מוליכים למחצה', INTC: 'מוליכים למחצה',
+    QCOM: 'מוליכים למחצה', ASML: 'ציוד לייצור שבבים', ARM: 'מוליכים למחצה',
+    MSFT: 'תוכנה וענן', ORCL: 'תוכנה וענן', CRM: 'תוכנה וענן', ADBE: 'תוכנה', NOW: 'תוכנה וענן',
+    PLTR: 'תוכנה / AI', SNOW: 'תוכנה ונתונים', AIQ: 'בינה מלאכותית', BOTZ: 'רובוטיקה ו-AI',
+    AAPL: 'חומרה ומכשירים', GOOGL: 'אינטרנט ופרסום', GOOG: 'אינטרנט ופרסום', META: 'אינטרנט ופרסום',
+    AMZN: 'מסחר אלקטרוני וענן', NFLX: 'מדיה ובידור', TSLA: 'רכב חשמלי',
+    XOM: 'נפט וגז', CVX: 'נפט וגז', COP: 'נפט וגז', XLE: 'אנרגיה', OXY: 'נפט וגז',
+    JPM: 'בנקים', BAC: 'בנקים', WFC: 'בנקים', GS: 'בנקאות השקעות', XLF: 'פיננסים',
+    IBIT: 'קריפטו — ביטקוין', FBTC: 'קריפטו — ביטקוין', MSTR: 'קריפטו', COIN: 'קריפטו',
+    TLT: 'אג"ח ממשלתי ארוך', IEF: 'אג"ח ממשלתי בינוני', SHV: 'אג"ח קצר', GOVT: 'אג"ח ממשלתי',
+    GLD: 'זהב', IAU: 'זהב', SLV: 'כסף (מתכת)',
+    LLY: 'פארמה', UNH: 'ביטוח בריאות', XLV: 'בריאות', NVO: 'פארמה',
+};
+function _dnSubSector(name, tickers) {
+    for (const t of (tickers || [])) { const k = String(t).toUpperCase(); if (_DN_SUBSECTOR[k]) return _DN_SUBSECTOR[k]; }
+    return '';
 }
 
 // Convert a parsed amount string to a comparable USD magnitude (for "biggest transfer").

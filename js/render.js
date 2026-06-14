@@ -724,7 +724,9 @@ let _portfolioView = 'grid';
 // NOTE: Correlation is NOT shown — we do not have benchmark (S&P 500) time series to compute it.
 //       Dividend yield is NOT shown — the price API does not return annual dividend data.
 function _calcListMetrics(client) {
-    const pr = calcPortfolioReturn(client);
+    // FX-aware: respect the תשואה מתואמת מט"ח toggle so the list table's תשואה % and
+    // רווח/הפסד match the cards and the modal (USD holdings revalued by the FX move).
+    const pr = (typeof _calcReturn === 'function') ? _calcReturn(client) : calcPortfolioReturn(client);
     const returnPct = pr.returnPct;
     const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
 
@@ -770,41 +772,51 @@ function _calcListMetrics(client) {
     if (hist.length >= 2) {
         const values = hist.map(h => h.value).filter(v => v > 0);
         if (values.length >= 2) {
-            hasHistory = true;
+            // Returns between snapshots — EXCLUDING capital-flow steps. A real portfolio
+            // does not move ±25% between snapshots from market action; such jumps are
+            // deposits/withdrawals (capital added/removed), and counting them as returns
+            // inflated σ to absurd values (e.g. a portfolio built up over Q1 showed a
+            // 251% "monthly" σ → a fake $2.9M VaR). Dropping them yields the REAL volatility.
             const returns = [];
             for (let i = 1; i < values.length; i++) {
-                returns.push((values[i] - values[i - 1]) / values[i - 1] * 100);
+                const r = (values[i] - values[i - 1]) / values[i - 1] * 100;
+                if (Math.abs(r) <= 25) returns.push(r);
             }
-            // Std Dev of monthly returns (real: from actual portfolio value history)
-            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-            const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
-            const sd = Math.sqrt(variance);
-            stdDev = sd.toFixed(1);
+            if (returns.length >= 1) {
+                hasHistory = true;
+                // Std Dev of monthly returns (real, flow-cleaned)
+                const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+                const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
+                const sd = Math.sqrt(variance);
+                stdDev = sd.toFixed(1);
 
-            // Max Drawdown (real: peak-to-trough from portfolio value history)
-            let peak = values[0], worstDD = 0;
-            for (const v of values) {
-                if (v > peak) peak = v;
-                const dd = ((v - peak) / peak) * 100;
-                if (dd < worstDD) worstDD = dd;
+                // Max Drawdown — rebuilt from the flow-cleaned return series as a
+                // normalized index, so a withdrawal can never register as a "crash".
+                let idx = 100, peak = 100, worstDD = 0;
+                for (const r of returns) {
+                    idx *= (1 + r / 100);
+                    if (idx > peak) peak = idx;
+                    const dd = ((idx - peak) / peak) * 100;
+                    if (dd < worstDD) worstDD = dd;
+                }
+                maxDD = worstDD.toFixed(1);
+
+                // Sharpe (real: annualized — (return - risk-free) / annualized std)
+                const riskFreeRate = 4.5;
+                const annualizedStd = sd * Math.sqrt(12);
+                sharpe = annualizedStd > 0 ? ((returnPct - riskFreeRate) / annualizedStd).toFixed(2) : '—';
+
+                // Sortino (real: like Sharpe but only downside deviation)
+                const downside = returns.filter(r => r < 0);
+                const downsideVar = downside.length > 0 ? downside.reduce((a, r) => a + r * r, 0) / downside.length : 0;
+                const downsideDev = Math.sqrt(downsideVar) * Math.sqrt(12);
+                sortino = downsideDev > 0 ? ((returnPct - riskFreeRate) / downsideDev).toFixed(2) : '—';
+
+                // Risk score (composite: volatility 40% + drawdown 35% + stock exposure 25%)
+                const normStd = Math.min(sd / 20, 1);
+                const normDD = Math.min(Math.abs(worstDD) / 30, 1);
+                riskScore = Math.round(Math.min(99, Math.max(5, (normStd * 40 + normDD * 35 + stockPct * 25))));
             }
-            maxDD = worstDD.toFixed(1);
-
-            // Sharpe (real: annualized — (return - risk-free) / annualized std)
-            const riskFreeRate = 4.5;
-            const annualizedStd = sd * Math.sqrt(12);
-            sharpe = annualizedStd > 0 ? ((returnPct - riskFreeRate) / annualizedStd).toFixed(2) : '—';
-
-            // Sortino (real: like Sharpe but only downside deviation)
-            const downside = returns.filter(r => r < 0);
-            const downsideVar = downside.length > 0 ? downside.reduce((a, r) => a + r * r, 0) / downside.length : 0;
-            const downsideDev = Math.sqrt(downsideVar) * Math.sqrt(12);
-            sortino = downsideDev > 0 ? ((returnPct - riskFreeRate) / downsideDev).toFixed(2) : '—';
-
-            // Risk score (composite: volatility 40% + drawdown 35% + stock exposure 25%)
-            const normStd = Math.min(sd / 20, 1);
-            const normDD = Math.min(Math.abs(worstDD) / 30, 1);
-            riskScore = Math.round(Math.min(99, Math.max(5, (normStd * 40 + normDD * 35 + stockPct * 25))));
         }
     }
 
@@ -843,7 +855,8 @@ function _calcListMetrics(client) {
 
 // ── Render list-view table ──
 function _renderListView(filtered, container) {
-    const sorted = [...filtered].sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    const _ret = (c) => (typeof _calcReturn === 'function') ? _calcReturn(c).returnPct : calcPortfolioReturn(c).returnPct;
+    const sorted = [...filtered].sort((a, b) => _ret(b) - _ret(a));
     const top12 = sorted.slice(0, 12);
 
     const rows = top12.map(c => {
@@ -1024,7 +1037,7 @@ function _filterFullList() {
     // Apply search
     if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || c.holdings.some(h => h.ticker.toLowerCase().includes(q)));
     // Sort by return
-    list.sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+    list.sort((a, b) => ((typeof _calcReturn === 'function') ? _calcReturn(b).returnPct - _calcReturn(a).returnPct : calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct));
     // Update count
     const sub = document.querySelector('#fullPortfolioListModal .portfolio-section-sub');
     if (sub) sub.textContent = list.length === clients.length ? `כל התיקים (${clients.length})` : `${list.length} מתוך ${clients.length} תיקים`;
@@ -1220,7 +1233,7 @@ function renderClientCards() {
         }
         if (activeFilters.sizeMin !== null && c.portfolioValue < activeFilters.sizeMin) return false;
         if (activeFilters.sizeMax !== null && c.portfolioValue > activeFilters.sizeMax) return false;
-        const returnPct = calcPortfolioReturn(c).returnPct;
+        const returnPct = (typeof _calcReturn === 'function') ? _calcReturn(c).returnPct : calcPortfolioReturn(c).returnPct;
         if (activeFilters.returnMin !== null && returnPct < activeFilters.returnMin) return false;
         if (activeFilters.returnMax !== null && returnPct > activeFilters.returnMax) return false;
         return true;
@@ -1230,10 +1243,11 @@ function renderClientCards() {
     updateRiskMiniSummary(filtered);
 
     // Sorting
+    const _retOf = (c) => (typeof _calcReturn === 'function') ? _calcReturn(c).returnPct : calcPortfolioReturn(c).returnPct;
     if (activeFilters.sort === 'return-high') {
-        filtered.sort((a, b) => calcPortfolioReturn(b).returnPct - calcPortfolioReturn(a).returnPct);
+        filtered.sort((a, b) => _retOf(b) - _retOf(a));
     } else if (activeFilters.sort === 'return-low') {
-        filtered.sort((a, b) => calcPortfolioReturn(a).returnPct - calcPortfolioReturn(b).returnPct);
+        filtered.sort((a, b) => _retOf(a) - _retOf(b));
     } else if (activeFilters.sort === 'size-high') {
         filtered.sort((a, b) => b.portfolioValue - a.portfolioValue);
     } else if (activeFilters.sort === 'size-low') {
