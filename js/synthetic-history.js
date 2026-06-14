@@ -428,45 +428,51 @@ async function fetchSyntheticHistory(client, range) {
     const history = new Array(n);
     const cashBalance = client.cashBalance || 0;
 
-    // ── RETURN-FROM-COST reconstruction anchored to the REAL PURCHASE PRICE ──
+    // ── RETURN-FROM-COST reconstruction via UNIT-FREE price ratios ──
     //
-    // The previous version anchored every leg to the price at the WINDOW START. A
-    // holding up 78% since last June was therefore drawn as if the whole PORTFOLIO
-    // rose 78% — pure distortion — and the endpoint then had to be force-pinned down
-    // to the real return, producing the vertical cliff. Both bugs share one root:
-    // the anchor was the window-start price, not what the investor actually PAID.
+    // Earlier versions anchored each leg to a PRICE expressed in costBasis units
+    // (window-start price, then purchase price). That silently assumed costBasis and
+    // the fetched close series share a currency AND scale — false for Israeli holdings,
+    // where brokers quote agorot but Yahoo returns shekels (a 100× mismatch). One such
+    // leg exploded the line to hundreds of % mid-series (the bogus 276% YTD), and the
+    // endpoint rigid-shift only fixed the last point, leaving the fake spike visible.
     //
-    // Fix: anchor each leg to its real per-share cost (costBasis ÷ shares). A leg's
-    // value at date t is then shares × close(t) × fx — its genuine market value — so:
-    //   • the SHAPE is the holdings' true price movement (never an inflated 78%),
+    // Robust fix: value each leg by close(t) / currentClose — a RATIO of two prices
+    // from the SAME series, so all units cancel and a currency/scale mismatch is
+    // impossible. Scale that ratio by the leg's REAL current value (h.value × fx),
+    // which the app already holds in correct units. So:
+    //   • the SHAPE is the holding's genuine price movement (unit-free, never inflated),
     //   • before its buyDate the capital sits flat at cost (0 return contribution),
-    //   • at t = today the legs sum to the real current value, so returnPct arrives
-    //     at the card's return ORGANICALLY — no pin, no cliff, in every resolution.
+    //   • at t = today every leg equals its true value → portfolio endpoint is the real
+    //     value, so returnPct arrives at the card's return ORGANICALLY — no cliff, in
+    //     every resolution,
+    //   • a per-leg ratio clamp [0.1, 10] neutralises any single sparse/bad close so it
+    //     can never blow the whole line to triple digits.
     //
-    // returnPct(t) = (Σ legValue(t) − totalCost) / totalCost × 100  — the exact same
-    // profit ÷ cost definition the portfolio card uses.
+    // returnPct(t) = (Σ legValue(t) − totalCost) / totalCost × 100 — the same profit ÷
+    // cost definition the portfolio card uses.
     const fxOf = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
     const windowStart = backbone[0].date;
-    const legs = [];          // { ticker, dateMap, fx, costUsd, buyPrice, entryIdx, flat }
+    const legs = [];          // { ticker, dateMap, currentClose, costUsd, valueUsd, entryIdx, flat }
     let totalCostUsd = 0;
     for (const h of allStockFundHoldings) {
         const f = fxOf(h.currency);
-        const costNative = (h.costBasis > 0 ? h.costBasis : h.shares * (h.price || 0)) || 0;
-        const costUsd = costNative * f;
+        const costUsd = ((h.costBasis > 0 ? h.costBasis : h.shares * (h.price || 0)) || 0) * f;
+        const valueUsd = ((h.value > 0 ? h.value : (h.costBasis > 0 ? h.costBasis : 0)) || 0) * f;
         if (costUsd <= 0) continue;
         totalCostUsd += costUsd;
         const dateMap = priceLookup.get(h.ticker);
-        // Per-share price PAID (native currency) — the true anchor. legValue(t) =
-        // costUsd × close(t)/buyPrice = shares × close(t) × fx (real market value).
-        const buyPrice = (h.shares > 0) ? costNative / h.shares : 0;
-        if (!dateMap || !(buyPrice > 0)) { legs.push({ ticker: h.ticker, flat: true, costUsd }); continue; }
-        // The leg starts tracking price at its actual buy date (if it falls inside the
-        // window); before that its capital is held flat at cost. Holdings bought before
-        // the window open track price from the first visible day.
+        // currentClose = most recent close in the series — the ratio denominator. Both
+        // it and close(t) come from the same series, so close(t)/currentClose is unit-free.
+        let currentClose = 0;
+        if (dateMap) { for (let i = n - 1; i >= 0; i--) { const c = dateMap.get(backbone[i].date); if (c > 0) { currentClose = c; break; } } }
+        if (!dateMap || !(currentClose > 0) || !(valueUsd > 0)) { legs.push({ ticker: h.ticker, flat: true, costUsd, valueUsd: valueUsd > 0 ? valueUsd : costUsd }); continue; }
+        // Track price from the actual buy date (if it falls inside the window); before
+        // that the capital is held flat at cost. Bought-before-window legs track from day 0.
         const buyIso = (h.buyDate && h.buyDate > windowStart) ? h.buyDate : windowStart;
         let entryIdx = 0;
         for (let i = 0; i < n; i++) { if (backbone[i].date >= buyIso) { entryIdx = i; break; } entryIdx = n - 1; }
-        legs.push({ ticker: h.ticker, dateMap, fx: f, costUsd, buyPrice, entryIdx });
+        legs.push({ ticker: h.ticker, dateMap, currentClose, costUsd, valueUsd, entryIdx });
     }
     if (!legs.length || totalCostUsd <= 0) return _buildCostBasisFallback(client, range);
 
@@ -474,15 +480,18 @@ async function fetchSyntheticHistory(client, range) {
     const lastClose = {}; // forward-fill buffer
     for (let i = 0; i < n; i++) {
         const date = backbone[i].date;
-        let mv = 0; // holdings market value (USD), anchored to real purchase price
+        let mv = 0; // holdings market value (USD), via unit-free ratio of real value
         for (const leg of legs) {
-            if (leg.flat) { mv += leg.costUsd; continue; }            // no price → hold at cost
+            if (leg.flat) { mv += leg.valueUsd; continue; }           // no usable price → hold at value
             if (i < leg.entryIdx) { mv += leg.costUsd; continue; }    // before buy → its capital (0 contribution)
             let close = leg.dateMap.get(date);
             if (!(close > 0)) close = lastClose[leg.ticker];
-            if (!(close > 0)) close = leg.buyPrice;
+            if (!(close > 0)) close = leg.currentClose;
             lastClose[leg.ticker] = close;
-            mv += leg.costUsd * (close / leg.buyPrice);               // = shares × close × fx (real value)
+            let ratio = close / leg.currentClose;                     // unit-free
+            if (!(ratio > 0) || !isFinite(ratio)) ratio = 1;
+            else if (ratio > 10) ratio = 10; else if (ratio < 0.1) ratio = 0.1; // bad-data guard
+            mv += leg.valueUsd * ratio;                               // anchored to REAL current value
         }
         history[i] = { date, value: mv + cashBalance, returnPct: (mv - totalCostUsd) * invCB };
     }
