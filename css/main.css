@@ -9320,3 +9320,23 @@ html.day-mode .dn-flow-news-txt { color: #0f172a; }
 .dn-inst-src:hover { text-decoration: underline; }
 html.day-mode .dn-inst-tk { color: #0f172a; }
 html.day-mode .dn-inst-name { color: #334155; }
+
+/* ===== Technical scanner — all gray text → bright white & sharp ===== */
+.tech-table td, .tech-table th { color: #f8fafc !important; }
+.tech-table .tech-no { color: rgba(248,250,252,0.82) !important; }
+.tech-table .tech-na { color: rgba(248,250,252,0.7) !important; }
+.tech-table .tech-dist { color: #f8fafc !important; opacity: 1 !important; font-weight: 800 !important; }
+.tech-foot { color: rgba(248,250,252,0.85) !important; }
+html.day-mode .tech-table td, html.day-mode .tech-table th { color: #0f172a !important; }
+html.day-mode .tech-table .tech-no { color: rgba(15,23,42,0.72) !important; }
+html.day-mode .tech-table .tech-na { color: rgba(15,23,42,0.6) !important; }
+html.day-mode .tech-table .tech-dist { color: #0f172a !important; }
+html.day-mode .tech-foot { color: #334155 !important; }
+
+/* Institutional issuer attribution — full-width 2-col grid below the histogram (symmetry) */
+.dn-flow-2col + .dn-flow-inst { margin-top: 16px; }
+.dn-flow-inst { display: block; }
+.dn-flow-inst .dn-flow-inst-h { grid-column: 1 / -1; }
+@media (min-width: 700px) {
+    .dn-flow-inst { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; align-items: center; }
+}

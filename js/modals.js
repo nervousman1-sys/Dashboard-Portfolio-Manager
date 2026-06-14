@@ -248,10 +248,12 @@ async function openModal(clientId) {
     const totalBondValue = bondHoldings.reduce((s, h) => s + h.value, 0);
     // Unified FX-aware return calculation (same function used by dashboard cards)
     const _fxR = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-    const _pReturn = calcPortfolioReturn(client);
+    // FX-aware: respect the תשואה מתואמת מט"ח toggle in the modal too
+    const _pReturn = (typeof _calcReturn === 'function') ? _calcReturn(client) : calcPortfolioReturn(client);
     const totalProfit = _pReturn.profit;
     const totalReturnPct = _pReturn.returnPct;
     const totalProfitSign = totalProfit >= 0 ? '+' : '';
+    const _heroValue = (typeof _clientDisplayValue === 'function') ? _clientDisplayValue(client) : client.portfolioValue;
 
     // ── Risk & allocation metrics (reuses _calcListMetrics logic) ──
     const _rm = (typeof _calcListMetrics === 'function') ? _calcListMetrics(client) : null;
@@ -415,8 +417,8 @@ async function openModal(clientId) {
                     <div class="ov-hero-scan"></div>
                     <div class="ov-hero-inner">
                         <div class="ov-hero-top">
-                            <span class="ov-hero-label">שווי תיק כולל</span>
-                            <span class="ov-hero-value">${formatCurrency(client.portfolioValue)}</span>
+                            <span class="ov-hero-label">שווי תיק כולל${_fxAdjustedReturn ? ' <span class="fx-badge">FX</span>' : ''}</span>
+                            <span class="ov-hero-value">${formatCurrency(_heroValue)}</span>
                             <span class="ov-hero-live"><span class="ov-hero-live-dot"></span>LIVE</span>
                         </div>
                         <div class="ov-hero-sep"></div>

@@ -343,11 +343,10 @@ function _dnVisionHTML(text, img, mode) {
             const newsBox = newsSyms.length
                 ? `<div class="dn-flow-news" data-syms="${newsSyms.join(',')}"><div class="dn-flow-news-h">רקע חדשותי — נתוני אמת מהשוק</div><div class="dn-flow-news-list"><div class="adv-empty">טוען חדשות עדכניות…</div></div></div>`
                 : '';
-            const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}${instHTML}</div>`;
-
-            // Two filled columns: in/out histogram on the RIGHT, the detail + analysis
-            // + news on the LEFT — both filling their half (no empty side gaps).
-            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>`;
+            // Two symmetric columns (histogram RIGHT, conclusion+analysis+news LEFT);
+            // the factual asset-manager attribution spans FULL WIDTH below both.
+            const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}</div>`;
+            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>${instHTML}`;
         }
         // fall through to plain lines if parsing failed
     }
@@ -727,11 +726,11 @@ function openSectorStocks(sid) {
     const isEtf = (t) => etfTickers.includes(t);
     const rows = allTickers.map(t => {
         const r = recOf(t);
-        const tag = isEtf(t) ? '<span class="secst-etf-tag">תעודת סל</span>' : '';
+        const tag = isEtf(t) ? ' <span class="secst-etf-tag">תעודת סל</span>' : '';
         return `
         <div class="secst-row">
-            <span class="secst-tk">${_dnEsc(t)}${tag}</span>
-            <span class="secst-rec" style="--rc:${r.color}" title="${r.tip || ''}">${_dnEsc(r.label)}</span>
+            <span class="secst-tk">${_dnEsc(t)}</span>
+            <span class="secst-rec" style="--rc:${r.color}" title="${r.tip || ''}">${_dnEsc(r.label)}${tag}</span>
             <a class="secst-gf" href="${gf(t)}" target="_blank" rel="noopener">Google Finance ↗</a>
             <button class="secst-buy" onclick="_sectorBuyPick('${_dnEsc(t)}', this)">קנה לתיק ▾</button>
         </div>`;

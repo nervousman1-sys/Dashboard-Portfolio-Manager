@@ -120,6 +120,19 @@ function _calcReturn(client) {
     return { totalValue, totalCost, profit, returnPct };
 }
 
+// The portfolio's DISPLAY value (USD). When FX-adjusted is ON, the USD holdings are
+// re-valued by the FX move (a falling dollar shrinks them) and cash is added back —
+// so the AUM / portfolio value reflects the same basis as the FX-adjusted return.
+function _clientDisplayValue(c) {
+    if (!c) return 0;
+    if (!_fxAdjustedReturn) return c.portfolioValue || 0;
+    const r = _calcReturn(c); // r.totalValue = FX-adjusted holdings value (USD, no cash)
+    const ilsToUsd = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const cashUsd = (c.cash?.usd || 0) + (c.cash?.ils || 0) * ilsToUsd;
+    return r.totalValue + cashUsd;
+}
+if (typeof window !== 'undefined') window._clientDisplayValue = _clientDisplayValue;
+
 function setCurrency(currency, btn) {
     _displayCurrency = currency;
     document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
@@ -599,7 +612,8 @@ function renderSummaryBar() {
 
     // NEVER fall back to full clients list — empty filter result must show $0
     const src = filtered;
-    const totalAUM = src.reduce((sum, c) => sum + c.portfolioValue, 0);
+    // AUM respects the FX-adjusted toggle (same basis as the P&L below)
+    const totalAUM = src.reduce((sum, c) => sum + _clientDisplayValue(c), 0);
     // Use _calcReturn so FX-adjusted toggle is respected
     const allCostBasis = src.reduce((s, c) => s + _calcReturn(c).totalCost, 0);
     const allCurrentValue = src.reduce((s, c) => s + _calcReturn(c).totalValue, 0);
@@ -852,7 +866,7 @@ function _renderListView(filtered, container) {
                 <span class="pl-name-text">${c.name}</span>
             </div>
             <div class="pl-cell pl-c-risk"><span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span></div>
-            <div class="pl-cell pl-c-size">${formatCurrency(c.portfolioValue)}</div>
+            <div class="pl-cell pl-c-size">${formatCurrency(_clientDisplayValue(c))}</div>
             <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
             <div class="pl-cell pl-c-cumpnl ${cumPnlClass}">${cumPnlSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
             <div class="pl-cell pl-c-dailypnl ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
@@ -1048,7 +1062,7 @@ function _renderFullList(list) {
                         <span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span>
                     </div>
                     <div class="full-list-numbers">
-                        <span class="full-list-value">${formatCurrency(c.portfolioValue)}</span>
+                        <span class="full-list-value">${formatCurrency(_clientDisplayValue(c))}</span>
                         <span class="full-list-ret price-change ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</span>
                     </div>
                     <span class="full-list-expand-icon">&#x25BC;</span>
@@ -1092,7 +1106,7 @@ function _renderFullList(list) {
             <div class="pl-row pl-data-row" onclick="closeFullPortfolioList(); openModal(${c.id})">
                 <div class="pl-cell pl-c-name"><div class="pl-avatar">${initial}</div><span class="pl-name-text">${c.name}</span></div>
                 <div class="pl-cell pl-c-risk"><span class="risk-badge ${c.risk}">${c.riskLabel || c.risk}</span></div>
-                <div class="pl-cell pl-c-size">${formatCurrency(c.portfolioValue)}</div>
+                <div class="pl-cell pl-c-size">${formatCurrency(_clientDisplayValue(c))}</div>
                 <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
                 <div class="pl-cell pl-c-cumpnl ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
                 <div class="pl-cell pl-c-dailypnl ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
@@ -1341,8 +1355,8 @@ function renderClientCards() {
         const totalStockPct = _assetTotalUsd > 0 ? (_stockValueUsd / _assetTotalUsd * 100) : 0;
         const totalBondPct  = _assetTotalUsd > 0 ? (_bondValueUsd  / _assetTotalUsd * 100) : 0;
 
-        // Unified FX-aware return calculation
-        const _pr = calcPortfolioReturn(client);
+        // FX-aware return — respects the תשואה מתואמת מט"ח toggle
+        const _pr = _calcReturn(client);
         const profit = _pr.profit;
         const returnPct = _pr.returnPct;
 
@@ -1452,8 +1466,8 @@ function renderClientCards() {
                     <span class="card-footer-value ${returnColor}">${allPricesStale ? '<span class="stat-stale">—</span>' : `${profitSign}${formatCurrency(Math.abs(profit))}`}</span>
                 </div>
                 <div class="card-footer-stat card-footer-stat-end">
-                    <span class="card-footer-label">שווי תיק</span>
-                    <span class="card-footer-value">${formatCurrency(client.portfolioValue)}</span>
+                    <span class="card-footer-label">שווי תיק${_fxAdjustedReturn ? ' <span class="fx-badge">FX</span>' : ''}</span>
+                    <span class="card-footer-value">${formatCurrency(_clientDisplayValue(client))}</span>
                 </div>
             </div>
             <div class="card-currency-bar">
