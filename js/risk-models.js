@@ -973,22 +973,58 @@ function buildPortfolioAdvisory(client, model) {
         return k ? s / k : null;
     };
     const TARGET_ADD = 0.10; // size each suggested addition to ~10% of the portfolio
-    const candidates = Object.values(model.assets)
+
+    // ── PORTFOLIO-SPECIFIC FIT ──
+    // The recommendations must differ per portfolio — not just "any name above the SML".
+    // We score each candidate against THIS book: its sector gaps, its correlation to the
+    // current holdings, and the beta move that brings IT toward the CML.
+    const sectorWeights = {};
+    for (const pos of positions) { const s = pos.sector || 'Other'; sectorWeights[s] = (sectorWeights[s] || 0) + pos.weight; }
+    // Beta to ADD so the portfolio drifts toward the market/CML (β≈1): an aggressive
+    // high-β book is balanced by lower-β names; an under-invested low-β book by names
+    // with more market exposure. Direction is specific to each portfolio's own beta.
+    const portBeta = (p.beta != null && isFinite(p.beta)) ? p.beta : 1;
+    const desiredAddBeta = Math.max(0.5, Math.min(1.35, 2 - portBeta));
+
+    const candidatesRanked = Object.values(model.assets)
         .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > -0.005 && a.recommendation !== 'avoid')
         .map(a => {
             const c = _avgCorrTo(a.ticker);
+            const corr = (c == null) ? 0.35 : c;     // unknown correlation → assume mildly positive
             const price = (a.lastClose != null && a.lastClose > 0) ? a.lastClose : null;
             const shares = (price && total > 0) ? Math.max(1, Math.round((TARGET_ADD * total) / price)) : null;
             const pct = (shares && price && total > 0) ? (shares * price / total) * 100 : null;
+            const secW = sectorWeights[a.sector] || 0;
+            const sectorGap = Math.max(0, 0.18 - secW);   // reward sectors THIS book lacks
+            const sectorOver = Math.max(0, secW - 0.22);  // penalty once a sector exceeds ~22%
+            const betaMismatch = Math.abs((a.beta != null ? a.beta : 1) - desiredAddBeta);
+            const fit =
+                  1.00 * a.alpha                 // SML quality — above the line
+                + 0.55 * sectorGap               // fills a genuine sector gap in THIS portfolio
+                - 0.45 * Math.max(0, corr)       // genuine diversification (low correlation)
+                - 0.60 * sectorOver              // never pile into an already-heavy sector
+                - 0.06 * betaMismatch;           // nudge the portfolio toward the CML (β≈1)
             return {
                 ticker: a.ticker, name: a.name, sector: a.sector,
                 alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
-                price, shares, pct,
-                fit: a.alpha - 0.4 * (c == null ? 0.4 : Math.max(0, c)),
+                price, shares, pct, sectorGap, betaMismatch, fit,
             };
         })
-        .sort((x, y) => y.fit - x.fit)
-        .slice(0, 36);   // deep bench so the picker can offer many alternatives per sector
+        .sort((x, y) => y.fit - x.fit);
+
+    // Spread the shortlist across sectors (cap per sector) so every portfolio gets names
+    // matched to ITS gaps, rather than 10 clones from the single highest-alpha sector.
+    const _PER_SECTOR_CAP = 3;
+    const _secCount = {};
+    const candidates = [];
+    for (const c of candidatesRanked) {
+        const s = c.sector || 'Other';
+        if ((_secCount[s] || 0) >= _PER_SECTOR_CAP) continue;
+        _secCount[s] = (_secCount[s] || 0) + 1;
+        candidates.push(c);
+        if (candidates.length >= 36) break;
+    }
+    if (candidates.length < 6) { candidates.length = 0; candidates.push(...candidatesRanked.slice(0, 36)); }
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];
@@ -1026,11 +1062,16 @@ function buildPortfolioAdvisory(client, model) {
         });
     }
 
-    // 4. Quality upgrades — top 2 best-fit names (full list shown separately)
+    // 4. Quality upgrades — top 2 best-fit names, with the reason THEY fit THIS book.
     candidates.slice(0, 2).forEach((c) => {
+        const reasons = [];
+        if (c.sectorGap > 0.05) reasons.push(`משלים חשיפה לסקטור <b>${c.sector || 'חדש'}</b> שחסר בתיק`);
+        if (c.corrToPort != null && c.corrToPort < 0.4) reasons.push(`קורלציה נמוכה לאחזקות (ρ=${rmFmtNum(c.corrToPort, 2)}) — פיזור אמיתי`);
+        if (c.betaMismatch < 0.25) reasons.push(`β=${rmFmtNum(c.beta, 2)} מקרב את התיק לקו ה-CML`);
+        const why = reasons.length ? ` — ${reasons.join(', ')}` : '';
         actions.push({
             priority: 4, kind: 'buy',
-            text: `שקול הוספת <b>${c.ticker}</b> — מעל ה-SML (α=${rmFmtPct(c.alpha, 1)}, β=${rmFmtNum(c.beta, 2)}), מועמד איכותי.`
+            text: `שקול הוספת <b>${c.ticker}</b> (מעל ה-SML, α=${rmFmtPct(c.alpha, 1)})${why}.`
         });
     });
 
