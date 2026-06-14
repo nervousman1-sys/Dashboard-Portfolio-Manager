@@ -754,16 +754,14 @@ function _drawModalSML(model, client) {
     const xMin = -0.8, xMax = 2.8;
     const smlLine = [{ x: xMin, y: rfPct + xMin * (rmPct - rfPct) }, { x: xMax, y: rfPct + xMax * (rmPct - rfPct) }];
 
-    // Zoom OUT so every asset point is comfortably inside the frame. Give a GENEROUS
-    // top margin (matching the CML chart) so the portfolio dot never sits up against
-    // the top axis number.
+    // Fixed, symmetric-feeling frame: the axis runs to a clean 150% by default
+    // (so all points sit comfortably in the lower-middle and the portfolio dot is
+    // never up against the top number). It only grows ABOVE 150 if some asset's
+    // expected return actually exceeds 150%.
     const ys = holdPts.map(q => q.y).concat([marketPt.y, rfPct, portPt ? portPt.y : rfPct, smlLine[0].y, smlLine[1].y]);
     const yLo = Math.min(...ys), yHi = Math.max(...ys);
-    const yRange = (yHi - yLo) || 50;
-    // Ensure the portfolio point specifically keeps ~15% clearance below the top.
-    const topAnchor = Math.max(yHi, portPt ? portPt.y * 1.15 : yHi);
-    const yMax = Math.min(205, topAnchor + yRange * 0.28 + 14);
-    const yMin = Math.max(-130, yLo - yRange * 0.18 - 10);
+    const yMax = yHi > 150 ? Math.ceil((yHi + 15) / 25) * 25 : 150;
+    const yMin = yLo < -50 ? Math.floor((yLo - 15) / 25) * 25 : -50;
 
     // Portfolio holdings, split by SML verdict into THREE legend entries (green =
     // suitable, yellow = neutral, red = unsuitable) so it's clear the red dots are

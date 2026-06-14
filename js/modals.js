@@ -522,24 +522,7 @@ async function openModal(clientId) {
                     </div>
                 </div>
 
-                <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->
-                ${(() => {
-                    const cs = client.complianceScore;
-                    const cl = client.complianceLabel || '';
-                    const col = cs == null ? 'var(--text-muted)' : cs >= 75 ? 'var(--risk-low)' : cs >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
-                    return `<div class="ov-compliance" onclick="switchModalTab('cmlsml')" style="--cc:${col}">
-                        <div class="ov-comp-left">
-                            <span class="ov-comp-ring">${cs == null ? '—' : cs}<small>/100</small></span>
-                            <div class="ov-comp-txt">
-                                <span class="ov-comp-label">עמידה במודל CML / SML</span>
-                                <span class="ov-comp-sub">${cs == null ? 'לחץ לפתיחת הניתוח, העקומות וההמלצות' : cl + ' · לחץ לעקומות ולתוכנית הפעולה'}</span>
-                            </div>
-                        </div>
-                        <span class="ov-comp-cta">ניתוח CML / SML →</span>
-                    </div>`;
-                })()}
-
-                <!-- ═══ CURRENCY EXPOSURE — full-width row ═══ -->
+                <!-- ═══ CURRENCY EXPOSURE — full-width row (ABOVE model compliance) ═══ -->
                 <div class="ov-currency-bar">
                     <div class="ov-curbar-side">
                         <span class="ov-curbar-symbol">$</span>
@@ -560,7 +543,30 @@ async function openModal(clientId) {
                     const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
                     if (!hasUsd) return '';
                     const b = getPortfolioAvgUsdRate(client.id);
-                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (בסיס לתשואה מתואמת מט"ח): <b>₪${b.rate.toFixed(3)}</b></div>`;
+                    const cur = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : 3.6;
+                    // FX P&L for an ILS investor: ₪ now per $ vs ₪ paid per $.
+                    const fxPnl = (cur / b.rate - 1) * 100;
+                    const cls = fxPnl >= 0 ? 'val-positive' : 'val-negative';
+                    const sign = fxPnl >= 0 ? '+' : '';
+                    const word = fxPnl >= 0 ? 'רווח' : 'הפסד';
+                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק: <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח על הדולר: <b class="${cls}">${sign}${fxPnl.toFixed(1)}%</b></div>`;
+                })()}
+
+                <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->
+                ${(() => {
+                    const cs = client.complianceScore;
+                    const cl = client.complianceLabel || '';
+                    const col = cs == null ? 'var(--text-muted)' : cs >= 75 ? 'var(--risk-low)' : cs >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+                    return `<div class="ov-compliance" onclick="switchModalTab('cmlsml')" style="--cc:${col}">
+                        <div class="ov-comp-left">
+                            <span class="ov-comp-ring">${cs == null ? '—' : cs}<small>/100</small></span>
+                            <div class="ov-comp-txt">
+                                <span class="ov-comp-label">עמידה במודל CML / SML</span>
+                                <span class="ov-comp-sub">${cs == null ? 'לחץ לפתיחת הניתוח, העקומות וההמלצות' : cl + ' · לחץ לעקומות ולתוכנית הפעולה'}</span>
+                            </div>
+                        </div>
+                        <span class="ov-comp-cta">ניתוח CML / SML →</span>
+                    </div>`;
                 })()}
 
                 <!-- Performance chart intentionally lives OUTSIDE the modal — open it

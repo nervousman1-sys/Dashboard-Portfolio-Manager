@@ -161,6 +161,30 @@ function _rangeToDays(range) {
     return map[range] || 365;
 }
 
+// Cutoff date for a range (null = no clip). Mirrors filterHistoryByRange.
+function _rangeCutoffDate(range) {
+    const now = new Date();
+    switch (range) {
+        case '1m': return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        case '3m': return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+        case '6m': return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+        case 'ytd': return new Date(now.getFullYear(), 0, 1);
+        case '1y': return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        case '5y': return new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
+        default: return null;
+    }
+}
+
+// Parse either ISO 'YYYY-MM-DD' or he-IL 'DD.MM.YYYY' into a Date (or null).
+function _parseAnyDate(s) {
+    if (!s) return null;
+    s = String(s);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s.slice(0, 10) + 'T12:00:00');
+    const p = s.split('.');
+    if (p.length === 3) return new Date(+p[2], +p[1] - 1, +p[0], 12);
+    const d = new Date(s); return isNaN(d.getTime()) ? null : d;
+}
+
 function _rangeToInterval(range) {
     if (range === '1d') return '5min';   // 5-minute candles for 1D — enough granularity
     if (range === '5d') return '1h';     // Hourly candles for 5D
@@ -1400,6 +1424,23 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             }
         } catch (e) {
             console.warn('[PerfChart] Synthetic history failed:', e.message);
+        }
+    }
+
+    // ── 2c-clip. CLAMP any series to the selected range ──
+    // Synthetic/backdated histories can run longer than the chosen window — a 1Y
+    // view must NOT show 2 years. Clip by date, then rebase returnPct so the range
+    // opens at 0%. Applies to every source uniformly (ISO or he-IL dates).
+    if (hist && hist.length > 2 && range !== 'all' && range !== 'max' && range !== '1d' && range !== '5d') {
+        const cutoff = _rangeCutoffDate(range);
+        if (cutoff) {
+            const _pd = (p) => p._dateObj ? new Date(p._dateObj) : _parseAnyDate(p.date);
+            const clipped = hist.filter(p => { const d = _pd(p); return d && d >= cutoff; });
+            if (clipped.length >= 2) {
+                const base = clipped[0].value;
+                if (base > 0) for (const p of clipped) p.returnPct = (p.value - base) / base * 100;
+                hist = clipped;
+            }
         }
     }
 

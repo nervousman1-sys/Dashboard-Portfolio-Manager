@@ -329,7 +329,9 @@ function _dnVisionHTML(text, img, mode) {
                 : '';
             const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}${instHTML}</div>`;
 
-            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>`;
+            // Single column: the in/out histogram (centered, symmetric) with the
+            // "where the money flows" detail + analysis + news BELOW it.
+            return `<div class="dn-flow-stack">${barsCol}${sideCol}</div>`;
         }
         // fall through to plain lines if parsing failed
     }
@@ -625,7 +627,7 @@ function _dnRender() {
 const SECTOR_TOP_STOCKS = {
     XLK: ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'ORCL'],
     XLV: ['LLY', 'UNH', 'JNJ', 'MRK', 'ABBV'],
-    XLF: ['BRK.B', 'JPM', 'V', 'MA', 'BAC'],
+    XLF: ['BRK-B', 'JPM', 'V', 'MA', 'BAC'],
     XLE: ['XOM', 'CVX', 'COP', 'EOG', 'SLB'],
     XLY: ['AMZN', 'TSLA', 'HD', 'MCD', 'NKE'],
     XLP: ['PG', 'COST', 'KO', 'WMT', 'PEP'],
@@ -672,7 +674,7 @@ function openSectorStocks(sid) {
     const model = window._lastRiskModel;
     const recOf = (t) => {
         const a = model && model.assets ? model.assets[t.toUpperCase()] : null;
-        if (!a || !a.hasData || a.recommendation === 'unknown') return { label: 'לא נסרק במודל', color: '#64748b' };
+        if (!a || !a.hasData || a.recommendation === 'unknown') return { label: 'ממתין לסריקת המודל', color: '#94a3b8' };
         const label = (typeof rmRecLabel === 'function') ? rmRecLabel(a.recommendation) : a.recommendation;
         const color = (typeof rmRecColor === 'function') ? rmRecColor(a.recommendation) : '#64748b';
         const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;

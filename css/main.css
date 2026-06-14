@@ -9293,3 +9293,12 @@ html.day-mode .dn-flow-secname.clickable:hover { color: #0e7490; }
 html.day-mode .dn-flow-news { background: rgba(22, 163, 74, 0.05); border-color: rgba(22, 163, 74, 0.2); }
 html.day-mode .dn-flow-news-h { color: #15803d; }
 html.day-mode .dn-flow-news-txt { color: #0f172a; }
+
+/* Flows: single column — centered symmetric histogram, detail below */
+.dn-flow-stack { width: 100%; }
+.dn-flow-stack .dn-flow-bars { max-width: 560px; margin: 0 auto; }
+.dn-flow-stack .dn-flow-side { margin-top: 16px; }
+.dn-flow-stack .dn-flow-bars .dn-flow-row { grid-template-columns: 150px minmax(40px, 1fr) auto; }
+/* ETF tag stays on one line beside the ticker */
+.secst-etf-tag { white-space: nowrap; display: inline-block; }
+.secst-tk { white-space: nowrap; display: flex; align-items: center; gap: 6px; }

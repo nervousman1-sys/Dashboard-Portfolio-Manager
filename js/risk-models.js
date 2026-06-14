@@ -67,9 +67,15 @@ const RISK_MODEL = {
         // Consumer staples / discretionary
         'PG', 'KO', 'PEP', 'COST', 'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'DIS', 'LOW',
         // Industrials
-        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX',
-        // Broad ETFs / hedges
+        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX', 'UNP',
+        // Materials / Utilities / Real estate (sector leaders)
+        'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'NEE', 'SO', 'DUK', 'CEG', 'AEP',
+        'PLD', 'AMT', 'EQIX', 'WELL', 'SPG',
+        // Semis / global tech leaders + crypto-exposed
+        'TSM', 'ASML', 'BRK-B', 'TMUS', 'COIN', 'MARA', 'RIOT', 'MSTR',
+        // Broad / sector ETFs (every sector covered so each stock list is scannable)
         'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
+        'XLY', 'XLC', 'XLB', 'XLU', 'XLRE', 'SOXX', 'SMH',
     ],
 };
 
@@ -716,7 +722,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v1';
+const _RM_PERSIST_KEY = 'risk_model_persist_v2'; // v2: expanded scan universe (sector leaders)
 const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
 
 function _rmPersistModel(sig, model) {
