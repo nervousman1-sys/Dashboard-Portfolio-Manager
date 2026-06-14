@@ -309,9 +309,25 @@ function _dnVisionHTML(text, img, mode) {
             // LEFT column — the words: conclusion, named institutions (if shown), and
             // the reasoning for the rotation.
             const conc = conclusion ? `<div class="dn-flow-conc" dir="rtl"><b>לאן זורם הכסף:</b> ${_dnEsc(conclusion)}</div>` : '';
-            const instHTML = institutions.length
-                ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
-                : '';
+            // FACTUAL institutional attribution: each ETF that moved → its real
+            // issuer (asset manager) with a link to the official product page. This
+            // replaces guessed names with verifiable data + a source.
+            const flowEtfs = [];
+            for (const r of rows) for (const t of (r.tickers || [])) {
+                const u = t.toUpperCase();
+                if (ETF_ISSUER[u] && !flowEtfs.find(x => x.t === u)) flowEtfs.push({ t: u, dir: r.inflow, ...ETF_ISSUER[u] });
+            }
+            const instHTML = flowEtfs.length
+                ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">מנהלי הנכסים מאחורי התנועות (נתוני אמת)</div>${flowEtfs.slice(0, 8).map(e => `
+                    <div class="dn-flow-inst-row" dir="rtl">
+                        <span class="dn-inst-dir ${e.dir ? 'in' : 'out'}">${e.dir ? '▲' : '▼'}</span>
+                        <span class="dn-inst-tk">${_dnEsc(e.t)}</span>
+                        <span class="dn-inst-name">${_dnEsc(e.issuer)}</span>
+                        <a class="dn-inst-src" href="${e.url}" target="_blank" rel="noopener">מקור ↗</a>
+                    </div>`).join('')}</div>`
+                : (institutions.length
+                    ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
+                    : '');
             const analHTML = analysis.length
                 ? `<div class="dn-flow-analysis"><div class="dn-flow-analysis-h">למה הכסף זורם כך — ניתוח</div>${analysis.map(s => `<div class="dn-flow-analysis-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
                 : '<div class="dn-flow-analysis"><div class="adv-empty">הניתוח ייטען עם קריאת התמונה…</div></div>';
@@ -329,9 +345,9 @@ function _dnVisionHTML(text, img, mode) {
                 : '';
             const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}${instHTML}</div>`;
 
-            // Single column: the in/out histogram (centered, symmetric) with the
-            // "where the money flows" detail + analysis + news BELOW it.
-            return `<div class="dn-flow-stack">${barsCol}${sideCol}</div>`;
+            // Two filled columns: in/out histogram on the RIGHT, the detail + analysis
+            // + news on the LEFT — both filling their half (no empty side gaps).
+            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>`;
         }
         // fall through to plain lines if parsing failed
     }
@@ -620,6 +636,32 @@ function _dnRender() {
     document.querySelectorAll('#dnFeed details.dn-day[open]').forEach(d => _dnLoadVision(d));
     _dnPrefetchVisions();
 }
+
+// Factual ETF → issuer (asset manager) + official product page. Used to attribute
+// each flow to the REAL institution behind it, with a verifiable source link.
+const ETF_ISSUER = {
+    SOXX: { issuer: 'iShares · BlackRock', url: 'https://www.ishares.com/us/products/239705/ishares-phlx-semiconductor-etf' },
+    SMH: { issuer: 'VanEck', url: 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/' },
+    GLD: { issuer: 'SPDR · State Street', url: 'https://www.spdrgoldshares.com/' },
+    QQQ: { issuer: 'Invesco', url: 'https://www.invesco.com/qqq-etf/en/home.html' },
+    SPY: { issuer: 'SPDR · State Street', url: 'https://www.ssga.com/us/en/intermediary/etfs/spdr-sp-500-etf-trust-spy' },
+    IBIT: { issuer: 'iShares · BlackRock', url: 'https://www.ishares.com/us/products/333011/ishares-bitcoin-trust' },
+    TLT: { issuer: 'iShares · BlackRock', url: 'https://www.ishares.com/us/products/239454/' },
+    IEF: { issuer: 'iShares · BlackRock', url: 'https://www.ishares.com/us/products/239456/' },
+    SHV: { issuer: 'iShares · BlackRock', url: 'https://www.ishares.com/us/products/239466/' },
+    AIQ: { issuer: 'Global X', url: 'https://www.globalxetfs.com/funds/aiq/' },
+    XLF: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlf' },
+    XLV: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlv' },
+    XLE: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xle' },
+    XLK: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlk' },
+    XLI: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xli' },
+    XLP: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlp' },
+    XLY: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xly' },
+    XLC: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlc' },
+    XLB: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlb' },
+    XLU: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlu' },
+    XLRE: { issuer: 'SPDR Select Sector · State Street', url: 'https://www.sectorspdrs.com/mainfund/xlre' },
+};
 
 // Largest real constituents per sector (top names in each sector's leading ETF),
 // keyed by the ETF ticker and by the Hebrew sector keyword. Used to enrich the

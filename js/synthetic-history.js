@@ -426,44 +426,51 @@ async function fetchSyntheticHistory(client, range) {
     );
     const n = backbone.length;
     const history = new Array(n);
-    const lastKnown = {};    // Forward-fill buffer: ticker → last known close
     const cashBalance = client.cashBalance || 0;
 
+    // ── COST-ANCHORED reconstruction (no cost-vs-market cliff) ──
+    // Each position represents REAL invested capital (costBasis). It enters the
+    // line on its buy date at EXACTLY that cost, then tracks its true market
+    // performance: value(date) = cost × close(date) / close(entryDate). Because the
+    // ratio is 1 on the entry date, the line is continuous — no jump from average
+    // cost to that day's close. Positions held before the window's first date enter
+    // at the window start, so each range shows the holdings' real % move within it.
+    const entryClose = {}; // ticker → close on the first priced date ≥ its buy date
+    const costOf = (h) => (h.costBasis > 0 ? h.costBasis : (h.shares * (h.price || 0))) || 0;
+    for (const h of allStockFundHoldings) {
+        const dateMap = priceLookup.get(h.ticker);
+        if (!dateMap) continue;
+        const startIso = h.buyDate || backbone[0].date;
+        let found = null;
+        for (let i = 0; i < n; i++) {
+            const d = backbone[i].date;
+            if (d < startIso) continue;
+            const c = dateMap.get(d);
+            if (c > 0) { found = { date: d, close: c }; break; }
+        }
+        if (!found) { // buy date beyond the series — anchor to the first priced point
+            for (let i = 0; i < n; i++) { const c = dateMap.get(backbone[i].date); if (c > 0) { found = { date: backbone[i].date, close: c }; break; } }
+        }
+        if (found) entryClose[h.ticker] = found;
+    }
+
+    const lastClose = {}; // forward-fill buffer
     for (let i = 0; i < n; i++) {
         const date = backbone[i].date;
-        let totalValue = cashBalance; // Cash is constant throughout synthetic history
-
+        let totalValue = cashBalance;
         for (let j = 0; j < allStockFundHoldings.length; j++) {
             const h = allStockFundHoldings[j];
-
-            // Position not bought yet at this date → the money sat as capital
-            // (cost basis), so the line moves only from the real purchase day.
-            if (h.buyDate && date < h.buyDate) {
-                totalValue += h.costBasis || 0;
-                continue;
-            }
-
+            const cost = costOf(h);
+            const e = entryClose[h.ticker];
             const dateMap = priceLookup.get(h.ticker);
-
-            if (dateMap) {
-                const close = dateMap.get(date);
-                if (close !== undefined) {
-                    // Normal case: we have price data for this date
-                    lastKnown[h.ticker] = close;
-                    totalValue += h.shares * close;
-                } else if (lastKnown[h.ticker] !== undefined) {
-                    // Forward-fill: market closed for this ticker (holiday, different exchange)
-                    totalValue += h.shares * lastKnown[h.ticker];
-                } else {
-                    // No data yet (ticker starts later in the series) — use cost basis
-                    totalValue += h.costBasis || 0;
-                }
-            } else {
-                // Ticker fetch failed or was capped — hold at cost basis
-                totalValue += h.costBasis || 0;
-            }
+            if (!dateMap || !e) { totalValue += cost; continue; }          // no price → hold at cost
+            if (date < e.date) { totalValue += cost; continue; }            // not entered yet → cost
+            let close = dateMap.get(date);
+            if (!(close > 0)) close = lastClose[h.ticker];                  // forward-fill holidays
+            if (!(close > 0)) { totalValue += cost; continue; }
+            lastClose[h.ticker] = close;
+            totalValue += cost * (close / e.close);                         // cost-anchored, real %
         }
-
         history[i] = { date, value: totalValue };
     }
 
