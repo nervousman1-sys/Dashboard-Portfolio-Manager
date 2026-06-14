@@ -396,6 +396,24 @@ function _chartDay() {
     return typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode');
 }
 
+// Forces the legend to reserve at least TWO rows of height. CML's legend (6 items)
+// naturally wraps to 2 rows while SML's (≤5) fits in 1 — which left the two chart
+// panels' plot areas (and their points) at different heights. Pinning a minimum
+// legend height on BOTH makes them align, so the SML icons sit at the CML height.
+const _minLegendHeightPlugin = {
+    id: 'minLegendHeight',
+    beforeInit(chart) {
+        const legend = chart.legend;
+        if (!legend || legend.__pinned) return;
+        legend.__pinned = true;
+        const origFit = legend.fit;
+        legend.fit = function () {
+            origFit.call(this);
+            this.height = Math.max(this.height, 54); // ≈ two legend rows
+        };
+    }
+};
+
 function _scatterOpts(xLabel, yLabel) {
     const day = _chartDay();
     const tick = day ? '#0f172a' : '#64748b';
@@ -733,7 +751,7 @@ function _drawModalCML(model, client) {
     const opts = _scatterOpts('סיכון כולל σ (%)', 'תשואה צפויה (%)');
     opts.scales.x.min = 0; opts.scales.x.max = maxX;
     opts.scales.y.min = byMin; opts.scales.y.max = Math.max(yTop, byMin + 10);
-    _modalRiskCharts.mcml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
+    _modalRiskCharts.mcml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts, plugins: [_minLegendHeightPlugin] });
 }
 
 function _drawModalSML(model, client) {
@@ -788,7 +806,7 @@ function _drawModalSML(model, client) {
     const opts = _scatterOpts('β (סיכון שיטתי)', 'תשואה צפויה (%)');
     opts.scales.x.min = xMin; opts.scales.x.max = xMax;
     opts.scales.y.min = yMin; opts.scales.y.max = yMax;
-    _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts });
+    _modalRiskCharts.msml = new Chart(canvas.getContext('2d'), { data: { datasets }, options: opts, plugins: [_minLegendHeightPlugin] });
 }
 
 // Daily Hebrew news headlines for the portfolio's HELD US tickers. Because it reads
