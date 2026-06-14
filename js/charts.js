@@ -1388,7 +1388,36 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         }
     }
 
-    // 2b. Longer ranges: Supabase performance_history (recorded daily snapshots)
+    // 2b-PRIMARY. Synthetic return-from-cost is the PRIMARY source for the return chart.
+    //
+    // Recorded performance_history snapshots store total portfolio VALUE, which conflates
+    // capital ADDED (deposits, progressively-built positions) with actual performance.
+    // Rebasing those values as a % return inflates them wildly — a portfolio built up over
+    // Q1 shows a fake +276% with a near-vertical early jump where money was deposited.
+    //
+    // The synthetic reconstruction is return-FROM-COST and buyDate-aware (a position
+    // contributes 0 return before it was bought), so it is immune to capital flows and its
+    // endpoint equals the card. Use it first; fall back to recorded snapshots only when it
+    // cannot be built (no eligible holdings, all price APIs down).
+    if (!hist && !isIntraday) {
+        try {
+            const hasEligibleHoldings = client.holdings && client.holdings.some(
+                h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0
+            );
+            if (hasEligibleHoldings && typeof fetchSyntheticHistory === 'function') {
+                const synth = await fetchSyntheticHistory(client, range);
+                if (synth && synth.length >= 2) {
+                    hist = synth;
+                    _histIsSynthetic = true;
+                    console.log(`[PerfChart] Using synthetic (return-from-cost) as PRIMARY for ${client.name} (${synth.length} pts, range=${range})`);
+                }
+            }
+        } catch (e) {
+            console.warn('[PerfChart] Synthetic primary failed, falling back to recorded:', e.message);
+        }
+    }
+
+    // 2b. Longer ranges: Supabase performance_history (recorded daily snapshots) — FALLBACK
     if (!hist) {
         try {
             // If history is empty, try to seed an initial snapshot
