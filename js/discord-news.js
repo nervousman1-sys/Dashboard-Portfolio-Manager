@@ -75,6 +75,17 @@ function _dnEsc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Category label for a Discord channel name (module-scope so setDnChannel + _dnRender share it)
+function _dnLabelOf(name) {
+    const n = String(name || '');
+    if (n.includes('חדשות')) return 'חדשות';
+    if (n.includes('קטליסט')) return 'קטליסט';
+    if (n.includes('תנועות-הון')) return 'תנועות הון';
+    if (n.includes('קניות-פנימיות')) return 'קניות פנימיות';
+    if (n.includes('אופציות')) return 'ניתוח תנועת אופציות';
+    return _dnCleanName(n);
+}
+
 async function _dnFetchAndRender(silent) {
     const feedEl = document.getElementById('dnFeed');
     if (!feedEl) return;
@@ -114,6 +125,11 @@ async function _dnFetchAndRender(silent) {
 
 function setDnChannel(id) {
     _dnActiveChannel = id;
+    // Persist the chosen category (by label) so a page refresh stays on it
+    try {
+        const c = (_dnLastData?.channels || []).find(x => x.id === id);
+        if (c) localStorage.setItem('dn_active_cat', _dnLabelOf(c.name));
+    } catch (e) { /* ignore */ }
     _dnRender();
 }
 
@@ -391,23 +407,22 @@ function _dnRender() {
 
     // Fixed category labels, in the user's order — no 'all' tab, no message counts
     const CAT_ORDER = ['חדשות', 'קטליסט', 'תנועות הון', 'קניות פנימיות', 'ניתוח תנועת אופציות'];
-    const labelOf = (name) => {
-        const n = String(name || '');
-        if (n.includes('חדשות')) return 'חדשות';
-        if (n.includes('קטליסט')) return 'קטליסט';
-        if (n.includes('תנועות-הון')) return 'תנועות הון';
-        if (n.includes('קניות-פנימיות')) return 'קניות פנימיות';
-        if (n.includes('אופציות')) return 'ניתוח תנועת אופציות';
-        return _dnCleanName(n);
-    };
+    const labelOf = _dnLabelOf;
     const ordered = visible.slice().sort((a, b) => {
         const ia = CAT_ORDER.indexOf(labelOf(a.name)), ib = CAT_ORDER.indexOf(labelOf(b.name));
         return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
 
-    // Everything is categorized — no merged view. Default to the first category.
+    // Everything is categorized — no merged view. Restore the LAST-VIEWED category
+    // (persisted by label, so a refresh keeps you on e.g. "תנועות הון" instead of
+    // bouncing back to the default "חדשות"). Falls back to the first category.
     if (_dnActiveChannel === 'all' || !ordered.some(c => c.id === _dnActiveChannel)) {
-        _dnActiveChannel = ordered.length ? ordered[0].id : null;
+        let restored = null;
+        try {
+            const savedCat = localStorage.getItem('dn_active_cat');
+            if (savedCat) { const m = ordered.find(c => labelOf(c.name) === savedCat); if (m) restored = m.id; }
+        } catch (e) { /* ignore */ }
+        _dnActiveChannel = restored || (ordered.length ? ordered[0].id : null);
     }
 
     tabsEl.innerHTML = ordered.map(c =>
@@ -688,9 +703,10 @@ const SECTOR_ETF_GROUP = {
 // real net creation/redemption flow figures server-side (1-week / 1-month / etc.),
 // unlike etf.com's SPA which opens on Overview. Anchored to the flows section.
 const fundFlowsUrl = (t) => `https://etfdb.com/etf/${String(t).toUpperCase()}/#fund-flows`;
-// The actual INSTITUTIONS holding the fund (13F filers) + their recent buy/sell
-// activity — i.e. WHO put money in. Nasdaq's per-ticker institutional-holdings page.
-const holdersUrl = (t) => `https://www.nasdaq.com/market-activity/etf/${String(t).toLowerCase()}/institutional-holdings`;
+// The actual INSTITUTIONS holding the fund (13F filers) WITH NAMES + their recent
+// buys/sells — i.e. WHO put money in (e.g. BlackRock, Morgan Stanley…). Fintel's
+// per-ticker ownership page (ticker-only, no exchange guesswork; loads in-browser).
+const holdersUrl = (t) => `https://fintel.io/so/us/${String(t).toLowerCase()}`;
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.

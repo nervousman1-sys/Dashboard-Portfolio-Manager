@@ -193,6 +193,14 @@ let _cacheRendered = false;
             _cacheRendered = true;
         }
     }
+    // If the URL points to a specific page/portfolio, open it RIGHT NOW (on top of
+    // the cache render) so a refresh lands straight on that page — no dashboard
+    // flash. The later init-phase restore is idempotent and just re-asserts it.
+    try {
+        if (new URLSearchParams(window.location.search).toString() && typeof restoreStateFromURL === 'function') {
+            restoreStateFromURL();
+        }
+    } catch (e) { /* init-phase restore will cover it */ }
 })();
 
 // ========== REFRESH ==========
