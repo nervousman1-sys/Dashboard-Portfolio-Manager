@@ -185,9 +185,13 @@ function _parseAnyDate(s) {
     const d = new Date(s); return isNaN(d.getTime()) ? null : d;
 }
 
+// Button labels — internal key stays '5d' (a trading-week of data) but shows "1W".
+const _RANGE_LABEL = { '1d': '1D', '5d': '1W', '1m': '1M', '3m': '3M', '6m': '6M', 'ytd': 'YTD', '1y': '1Y', '5y': '5Y', 'max': 'MAX' };
+const _rangeLabel = (r) => _RANGE_LABEL[r] || String(r).toUpperCase();
+
 function _rangeToInterval(range) {
     if (range === '1d') return '5min';   // 5-minute candles for 1D — enough granularity
-    if (range === '5d') return '1h';     // Hourly candles for 5D
+    if (range === '5d') return '1h';     // Hourly candles for 5D / 1W
     return '1day';
 }
 
@@ -2152,7 +2156,7 @@ function openFullscreenChart(clientId) {
                 </div>
                 <div style="display:flex;flex-wrap:nowrap;justify-content:center;gap:4px">
                     ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
-                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)" style="padding:5px 9px;font-size:11px">${r.toUpperCase()}</button>`
+                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)" style="padding:5px 9px;font-size:11px">${_rangeLabel(r)}</button>`
                     ).join('')}
                 </div>
                 <div style="display:flex;flex-wrap:nowrap;gap:6px;align-items:center;justify-content:flex-end;direction:rtl">
@@ -2181,7 +2185,7 @@ function openFullscreenChart(clientId) {
                 </div>
                 <div class="perf-time-range fs-time-range">
                     ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
-                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${r.toUpperCase()}</button>`
+                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${_rangeLabel(r)}</button>`
                     ).join('')}
                 </div>
                 <div class="perf-benchmarks fs-benchmarks">
