@@ -8,6 +8,7 @@
 let _dnTimer = null;
 let _dnActiveChannel = 'all';
 let _dnLastData = null;
+let _dnLastSig = null; // signature of the last rendered feed — skips no-op re-renders
 
 function openDiscordNews() {
     const page = document.getElementById('discordNewsPage');
@@ -93,6 +94,15 @@ async function _dnFetchAndRender(silent) {
             if (!silent) feedEl.innerHTML = '<div class="adv-empty">לא ניתן לטעון את הפיד כרגע — ננסה שוב אוטומטית.</div>';
             return;
         }
+        // Change-detection: a silent auto-refresh must NOT rebuild the DOM when the
+        // content is identical — that re-render is what caused the recurring "jump"
+        // every refresh. Only re-render when messages actually changed.
+        const sig = data.channels.map(c => `${c.id}:${(c.messages || []).map(m => m.id || m.ts || '').join(',')}`).join('|');
+        if (silent && sig === _dnLastSig && document.getElementById('dnFeed')?.childElementCount) {
+            const live = document.getElementById('dnLive'); if (live) live.classList.add('on');
+            return;
+        }
+        _dnLastSig = sig;
         _dnLastData = data;
         _dnRender();
         const live = document.getElementById('dnLive');
@@ -343,10 +353,12 @@ function _dnVisionHTML(text, img, mode) {
             const newsBox = newsSyms.length
                 ? `<div class="dn-flow-news" data-syms="${newsSyms.join(',')}"><div class="dn-flow-news-h">רקע חדשותי — נתוני אמת מהשוק</div><div class="dn-flow-news-list"><div class="adv-empty">טוען חדשות עדכניות…</div></div></div>`
                 : '';
-            // Two symmetric columns (histogram RIGHT, conclusion+analysis+news LEFT);
-            // the factual asset-manager attribution spans FULL WIDTH below both.
+            // RIGHT column: the histogram + the asset-manager attribution below it
+            // (fills the space under the bars, balancing the two column heights).
+            // LEFT column: conclusion + analysis + real news.
+            const rightCol = `<div class="dn-flow-bars">${insHTML}${outsHTML}${axisNote}${instHTML}</div>`;
             const sideCol = `<div class="dn-flow-side">${conc}${analHTML}${newsBox}</div>`;
-            return `<div class="dn-flow-2col">${barsCol}${sideCol}</div>${instHTML}`;
+            return `<div class="dn-flow-2col">${rightCol}${sideCol}</div>`;
         }
         // fall through to plain lines if parsing failed
     }

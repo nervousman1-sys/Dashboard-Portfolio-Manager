@@ -9333,10 +9333,7 @@ html.day-mode .tech-table .tech-na { color: rgba(15,23,42,0.6) !important; }
 html.day-mode .tech-table .tech-dist { color: #0f172a !important; }
 html.day-mode .tech-foot { color: #334155 !important; }
 
-/* Institutional issuer attribution — full-width 2-col grid below the histogram (symmetry) */
-.dn-flow-2col + .dn-flow-inst { margin-top: 16px; }
-.dn-flow-inst { display: block; }
-.dn-flow-inst .dn-flow-inst-h { grid-column: 1 / -1; }
-@media (min-width: 700px) {
-    .dn-flow-inst { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; align-items: center; }
-}
+/* Institutional issuer attribution — under the histogram in the RIGHT column,
+   filling the space below the bars and balancing the two columns' heights. */
+.dn-flow-bars .dn-flow-inst { display: block; margin-top: 16px; }
+.dn-flow-bars .dn-flow-inst .dn-flow-inst-row { display: flex; gap: 8px; align-items: center; }
