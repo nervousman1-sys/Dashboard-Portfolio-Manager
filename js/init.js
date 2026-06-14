@@ -303,8 +303,15 @@ async function init() {
         overlay.classList.add('hidden');
     }
 
-    // Restore state from URL query params
+    // Restore state from URL query params (refresh keeps you on the same page).
     restoreStateFromURL();
+    // Safety net: re-assert once data is settled, in case the page/modal needed
+    // clients or DOM that weren't ready on the first pass. Idempotent (won't
+    // re-open anything already open), and skipped if the user already navigated.
+    setTimeout(() => {
+        const stillThere = new URLSearchParams(window.location.search).toString();
+        if (stillThere) syncViewToURL();
+    }, 1800);
 
     // ── Phase 1.5: Fetch FX rates for multi-currency valuation ──
     // Must resolve before price update so portfolio totals are FX-converted.
@@ -715,8 +722,20 @@ function saveTickerConfig() {
 // navigates between dashboard views: dashboard ← modal ← macro ← full-list.
 
 let _suppressPopstate = false; // prevent loops when we programmatically navigate
+let _restoringView = false;    // while true, open/close functions must NOT push history
+
+// Registry of the full-page views (class-based overlays).
+const _VIEW_PAGES = [
+    { view: 'macro', id: 'macroPage', open: () => typeof toggleAlerts === 'function' && toggleAlerts(), close: () => typeof closeMacroPage === 'function' && closeMacroPage() },
+    { view: 'riskmodel', id: 'riskmodelPage', open: () => typeof openRiskAnalysis === 'function' && openRiskAnalysis(), close: () => typeof closeRiskAnalysis === 'function' && closeRiskAnalysis() },
+    { view: 'bulkmgr', id: 'bulkPage', open: () => typeof openBulkPage === 'function' && openBulkPage(), close: () => typeof closeBulkPage === 'function' && closeBulkPage() },
+    { view: 'disconews', id: 'discordNewsPage', open: () => typeof openDiscordNews === 'function' && openDiscordNews(), close: () => typeof closeDiscordNews === 'function' && closeDiscordNews() },
+    { view: 'technical', id: 'technicalPage', open: () => typeof openTechnicalPage === 'function' && openTechnicalPage(), close: () => typeof closeTechnicalPage === 'function' && closeTechnicalPage() },
+];
+const _isPageOpen = (id) => !!document.getElementById(id)?.classList.contains('active');
 
 function updateURLState(params) {
+    if (_restoringView) return; // navigating/restoring — keep the URL as the source of truth
     const url = new URL(window.location);
     url.searchParams.delete('view');
     url.searchParams.delete('client');
@@ -733,6 +752,7 @@ function updateURLState(params) {
 }
 
 function clearURLState() {
+    if (_restoringView) return;
     const url = new URL(window.location);
     url.searchParams.delete('view');
     url.searchParams.delete('client');
@@ -740,39 +760,59 @@ function clearURLState() {
     history.pushState({ finextium: true, dashboard: true }, '', url);
 }
 
-function restoreStateFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    const view = params.get('view');
-    const clientId = params.get('client');
-    const tab = params.get('tab');
+// Single source of truth: make the visible UI match the current URL. Used for the
+// initial load (refresh), the Back button AND the Forward button — all identical.
+// _restoringView stops the open/close helpers from pushing new history entries,
+// so navigation never loops or corrupts the forward stack.
+function syncViewToURL() {
+    _restoringView = true;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view');
+        const clientId = params.get('client') ? parseInt(params.get('client')) : null;
+        const tab = params.get('tab');
 
-    if (view === 'macro') {
-        toggleAlerts();
-    } else if (view === 'riskmodel') {
-        if (typeof openRiskAnalysis === 'function') openRiskAnalysis();
-    } else if (view === 'bulkmgr') {
-        if (typeof openBulkPage === 'function') openBulkPage();
-    } else if (view === 'disconews') {
-        if (typeof openDiscordNews === 'function') openDiscordNews();
-    } else if (view === 'technical') {
-        if (typeof openTechnicalPage === 'function') openTechnicalPage();
-    } else if (view === 'fulllist') {
-        if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
-    } else if (clientId) {
-        const id = parseInt(clientId);
-        const client = clients.find(c => c.id === id);
-        if (client) {
-            openModal(id).then(() => {
-                if (tab && tab !== 'overview') {
+        // 1. Close every page/overlay that is NOT the current target
+        for (const p of _VIEW_PAGES) {
+            if (_isPageOpen(p.id) && view !== p.view) p.close();
+        }
+        const fullList = document.querySelector('.full-list-page');
+        if (fullList && view !== 'fulllist' && typeof closeFullPortfolioList === 'function') closeFullPortfolioList();
+        const modalEl = document.getElementById('modalOverlay');
+        if (modalEl && modalEl.classList.contains('active') && !clientId) {
+            modalEl.classList.remove('active');
+            if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+            currentModalClientId = null;
+        }
+
+        // 2. Open the current target (idempotent — only if not already open)
+        if (clientId) {
+            if (typeof clients !== 'undefined' && clients.find(c => c.id === clientId)) {
+                if (currentModalClientId !== clientId) {
+                    const r = openModal(clientId);
+                    if (r && r.then) r.then(() => { if (tab && tab !== 'overview' && typeof switchModalTab === 'function') switchModalTab(tab); });
+                } else if (tab && typeof switchModalTab === 'function') {
                     switchModalTab(tab);
                 }
-            });
+            }
+        } else if (view === 'fulllist') {
+            if (!document.querySelector('.full-list-page') && typeof openFullPortfolioList === 'function') openFullPortfolioList();
+        } else {
+            const target = _VIEW_PAGES.find(p => p.view === view);
+            if (target && !_isPageOpen(target.id)) target.open();
         }
+    } catch (e) {
+        console.warn('[Nav] syncViewToURL failed:', e.message);
+    } finally {
+        _restoringView = false;
     }
 }
 
-// ── Back button handler (browser + Android) ──
-window.addEventListener('popstate', function(e) {
+// Initial load / refresh: restore exactly what the URL points to.
+function restoreStateFromURL() { syncViewToURL(); }
+
+// ── History navigation (Back AND Forward, browser + Android) ──
+window.addEventListener('popstate', function (e) {
     if (_suppressPopstate) { _suppressPopstate = false; return; }
 
     // Lightweight popups FIRST: back closes the topmost open popup (these push a
@@ -793,69 +833,9 @@ window.addEventListener('popstate', function(e) {
         return;
     }
 
-    const params = new URLSearchParams(window.location.search);
-    const view = params.get('view');
-    const clientId = params.get('client');
-
-    // Close everything first
-    const modalOpen = document.getElementById('modalOverlay')?.classList.contains('active');
-    const macroOpen = document.getElementById('macroPage')?.style.display === 'block';
-    const fullListOpen = document.querySelector('.full-list-page');
-
-    if (fullListOpen && !clientId && view !== 'fulllist') {
-        if (typeof closeFullPortfolioList === 'function') closeFullPortfolioList();
-        return;
-    }
-    if (modalOpen && !clientId) {
-        // Back from modal → dashboard (don't push new state)
-        _suppressPopstate = true;
-        document.getElementById('modalOverlay').classList.remove('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-        return;
-    }
-    if (macroOpen && view !== 'macro') {
-        if (typeof closeMacroPage === 'function') closeMacroPage();
-        return;
-    }
-    const riskOpen = document.getElementById('riskmodelPage')?.classList.contains('active');
-    if (riskOpen && view !== 'riskmodel') {
-        if (typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
-        return;
-    }
-    const bulkOpen = document.getElementById('bulkPage')?.classList.contains('active');
-    if (bulkOpen && view !== 'bulkmgr') {
-        if (typeof closeBulkPage === 'function') closeBulkPage();
-        return;
-    }
-    const dnOpen = document.getElementById('discordNewsPage')?.classList.contains('active');
-    if (dnOpen && view !== 'disconews') {
-        if (typeof closeDiscordNews === 'function') closeDiscordNews();
-        return;
-    }
-    const techOpen = document.getElementById('technicalPage')?.classList.contains('active');
-    if (techOpen && view !== 'technical') {
-        if (typeof closeTechnicalPage === 'function') closeTechnicalPage();
-        return;
-    }
-
-    // Restore whatever the URL says
-    if (clientId) {
-        const id = parseInt(clientId);
-        if (id && clients && clients.find(c => c.id === id)) {
-            _suppressPopstate = true;
-            openModal(id);
-        }
-    } else if (view === 'macro') {
-        if (typeof toggleAlerts === 'function') toggleAlerts();
-    } else if (view === 'bulkmgr') {
-        if (typeof openBulkPage === 'function') openBulkPage();
-    } else if (view === 'disconews') {
-        if (typeof openDiscordNews === 'function') openDiscordNews();
-    } else if (view === 'technical') {
-        if (typeof openTechnicalPage === 'function') openTechnicalPage();
-    } else if (view === 'fulllist') {
-        if (typeof openFullPortfolioList === 'function') openFullPortfolioList();
-    }
+    // Everything else: just make the UI match the URL — this handles BOTH the Back
+    // button (close current view) and the Forward button (re-open the next view).
+    syncViewToURL();
 });
 
 // ========== AUTH CHECK (runs AFTER cache render) ==========

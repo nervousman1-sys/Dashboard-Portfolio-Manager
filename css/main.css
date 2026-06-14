@@ -9344,3 +9344,9 @@ html.day-mode .tech-foot { color: #334155 !important; }
 .dn-inst-name { font-size: 11px; color: #94a3b8; white-space: nowrap; }
 html.day-mode .dn-inst-sector { color: #334155; }
 html.day-mode .dn-inst-name { color: #64748b; }
+
+/* Institutional row — two source links (who bought + flows); wrap gracefully */
+.dn-flow-bars .dn-flow-inst .dn-flow-inst-row { flex-wrap: wrap; }
+.dn-inst-src2 { color: #94a3b8; }
+.dn-inst-src2:hover { color: #60a5fa; }
+html.day-mode .dn-inst-src2 { color: #64748b; }

@@ -65,18 +65,43 @@ async function yahooNewsFor(symbol, perSymbol) {
         }));
 }
 
+// Batch-translate all headlines in ONE Gemini call → natural, CLEAR financial
+// Hebrew (not a literal word-for-word machine translation). Tickers/names stay in
+// English. Returns an array aligned to the input, or null to fall back to Google.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+async function translateBatchGemini(texts) {
+    if (!GEMINI_KEY || !texts.length) return null;
+    const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    const prompt =
+        'תרגם את כותרות החדשות הכלכליות הבאות לעברית טבעית, ברורה ומקצועית — לא תרגום מילולי. בטא את המשמעות הפיננסית האמיתית בבירור: ' +
+        '"mixed" → "נסחרות במגמה מעורבת", "rally/surge/jump" → "מזנקות/מזנק", "slip/drop/fall" → "נחלשות/יורד", "edge higher/lower" → "עולה/יורד קלות", ' +
+        '"late afternoon trading" → "במסחר של אחר הצהריים". השאר שמות חברות וטיקרים באנגלית במקומם. כתוב עברית תקנית ומובנת לקורא. ' +
+        'החזר אך ורק רשימה ממוספרת באותו הסדר, שורה אחת לכל כותרת, ללא הקדמות ותוספות.\n\n' + numbered;
+    try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+            }),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const text = (((j.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('\n').trim() || '';
+        if (!text) return null;
+        const lines = text.split('\n').map(l => l.replace(/^\s*\d+[.)\]]\s*/, '').trim()).filter(Boolean);
+        return lines.length >= texts.length ? lines.slice(0, texts.length) : null;
+    } catch (e) { return null; }
+}
+
 async function newsFor(symbol, perSymbol) {
     let items = [];
     try { items = await finnhubNewsFor(symbol, perSymbol); } catch (e) { items = []; }
     if (!items.length) {
         try { items = await yahooNewsFor(symbol, perSymbol); } catch (e) { items = []; }
     }
-    const out = [];
-    for (const n of items) {
-        const he = await translateHe(n.en);
-        out.push({ he, en: n.en, date: n.date, url: n.url, source: n.source });
-    }
-    return out;
+    // Translation happens in ONE batch back in the handler (better quality + fewer calls)
+    return items.map(n => ({ he: '', en: n.en, date: n.date, url: n.url, source: n.source }));
 }
 
 module.exports = async (req, res) => {
@@ -95,6 +120,19 @@ module.exports = async (req, res) => {
         }));
         const out = {};
         for (const [s, v] of entries) if (v && v.length) out[s] = v;
+
+        // ── Translate ALL headlines together: one high-quality Gemini batch (clear
+        //    financial Hebrew); fall back to Google Translate per-headline if needed.
+        const allItems = [];
+        for (const s of Object.keys(out)) for (const it of out[s]) allItems.push(it);
+        if (allItems.length) {
+            const heBatch = await translateBatchGemini(allItems.map(it => it.en));
+            if (heBatch) {
+                allItems.forEach((it, i) => { it.he = heBatch[i] || it.en; });
+            } else {
+                await Promise.all(allItems.map(async (it) => { it.he = await translateHe(it.en); }));
+            }
+        }
         // Cache a populated result for ~2h (continuous through-the-day scanning);
         // if we got nothing (a transient upstream hiccup), cache only briefly so
         // it isn't stuck empty.

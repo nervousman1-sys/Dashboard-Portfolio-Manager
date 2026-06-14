@@ -342,7 +342,8 @@ function _dnVisionHTML(text, img, mode) {
                         <span class="dn-inst-tk">${_dnEsc(e.t)}</span>
                         <span class="dn-inst-sector">${_dnEsc(e.sector)}</span>
                         <span class="dn-inst-name">${_dnEsc(e.issuer)}</span>
-                        <a class="dn-inst-src" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener">זרימות הקרן ↗</a>
+                        <a class="dn-inst-src" href="${holdersUrl(e.t)}" target="_blank" rel="noopener" title="המוסדיים שמחזיקים בקרן והקניות/מכירות האחרונות שלהם">מי קנה (מוסדיים) ↗</a>
+                        <a class="dn-inst-src dn-inst-src2" href="${fundFlowsUrl(e.t)}" target="_blank" rel="noopener" title="זרימת ההון נטו לקרן">זרימות ↗</a>
                     </div>`).join('')}</div>`
                 : (institutions.length
                     ? `<div class="dn-flow-inst"><div class="dn-flow-inst-h">גופים מוסדיים בולטים</div>${institutions.map(s => `<div class="dn-flow-inst-row" dir="rtl">${_dnEsc(s)}</div>`).join('')}</div>`
@@ -687,6 +688,9 @@ const SECTOR_ETF_GROUP = {
 // real net creation/redemption flow figures server-side (1-week / 1-month / etc.),
 // unlike etf.com's SPA which opens on Overview. Anchored to the flows section.
 const fundFlowsUrl = (t) => `https://etfdb.com/etf/${String(t).toUpperCase()}/#fund-flows`;
+// The actual INSTITUTIONS holding the fund (13F filers) + their recent buy/sell
+// activity — i.e. WHO put money in. Nasdaq's per-ticker institutional-holdings page.
+const holdersUrl = (t) => `https://www.nasdaq.com/market-activity/etf/${String(t).toLowerCase()}/institutional-holdings`;
 
 // Factual ETF → issuer (asset manager) + official product page. Used to attribute
 // each flow to the REAL institution behind it, with a verifiable source link.
@@ -854,7 +858,7 @@ async function _dnFillFlowsNews(scope) {
     const syms = (box.dataset.syms || '').split(',').filter(Boolean);
     if (!syms.length) { box.remove(); return; }
     try {
-        const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}`, { headers: { Accept: 'application/json' } });
+        const r = await fetch(`/api/news?symbols=${encodeURIComponent(syms.join(','))}&tr=2`, { headers: { Accept: 'application/json' } });
         const data = await r.json();
         // Flatten to the most recent headlines across the sectors, dedup by title
         const items = [];

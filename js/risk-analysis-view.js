@@ -836,7 +836,7 @@ async function _renderPortfolioNews(clientId) {
         const bucket = Math.floor(Date.now() / 7200000);
         const extra = bust ? `&fresh=${Date.now()}` : '';
         try {
-            const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&b=${bucket}${extra}`, { headers: { Accept: 'application/json' } });
+            const res = await fetch(`/api/news?symbols=${encodeURIComponent(tickers.join(','))}&b=${bucket}&tr=2${extra}`, { headers: { Accept: 'application/json' } });
             if (!res.ok) return { ok: false, data: null };
             const data = await res.json();
             if (!data || typeof data !== 'object' || data.error) return { ok: false, data: null };
