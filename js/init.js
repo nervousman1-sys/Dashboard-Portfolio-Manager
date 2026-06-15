@@ -307,14 +307,17 @@ async function init() {
         }
     }
 
+    // Restore the URL's target view FIRST (under the still-visible overlay), THEN hide the
+    // overlay — so a refresh on a modal/page reveals that view directly and NEVER flashes
+    // the dashboard underneath. (Open helpers set their overlay .active synchronously, so
+    // by the time we hide the loader the target already covers the dashboard.)
+    restoreStateFromURL();
+
     // ── Hide overlay ALWAYS — never leave user stuck on loading screen ──
     if (overlay && !overlay.classList.contains('hidden')) {
         updateUserDisplay();
         overlay.classList.add('hidden');
     }
-
-    // Restore state from URL query params (refresh keeps you on the same page).
-    restoreStateFromURL();
     // Safety net: re-assert once data is settled, in case the page/modal needed
     // clients or DOM that weren't ready on the first pass. Idempotent (won't
     // re-open anything already open), and skipped if the user already navigated.
@@ -919,6 +922,10 @@ async function checkAuthAndInit() {
 // flash before the auth gate decides.)
 function _revealIfPreRendered() {
     if (!_cacheRendered) return;
+    // Re-assert the URL's target view BEFORE revealing — Phase-0 already opened it, but this
+    // guarantees the modal/page is on screen so hiding the overlay never flashes the
+    // dashboard underneath on refresh.
+    try { if (typeof restoreStateFromURL === 'function') restoreStateFromURL(); } catch (e) { /* init re-asserts */ }
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) overlay.classList.add('hidden');
 }

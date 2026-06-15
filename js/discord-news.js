@@ -232,7 +232,15 @@ async function _dnLoadVision(det) {
     const ok = texts.filter(Boolean);
     if (ok.length) {
         box.innerHTML = _dnVisionHTML(ok.join('\n'), imgs[0], mode);
-        if (mode === 'flows') _dnFillFlowsNews(box); // pull real headlines for the side
+        if (mode === 'flows') {
+            _dnFillFlowsNews(box); // pull real headlines for the side
+            // Warm the risk model in the background (de-duped/persisted) so a sector-stock
+            // popup opens with CML/SML verdicts already computed — no slow "ממתין" wait.
+            if (typeof buildRiskModel === 'function' && typeof clients !== 'undefined' && clients.length && !window._secModelWarmed) {
+                window._secModelWarmed = true;
+                setTimeout(() => { try { buildRiskModel(clients); } catch (e) { window._secModelWarmed = false; } }, 200);
+            }
+        }
     } else {
         box.dataset.loaded = '';
         box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(imgs[0])}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
