@@ -34,6 +34,9 @@ function isLoggedIn() {
 // ========== LOGIN FORM ==========
 
 function showLoginForm() {
+    // SECURITY: wipe any portfolio data/DOM that Phase-0 may have rendered, so the login
+    // screen never sits on top of (or briefly flashes) the previous session's portfolio.
+    if (typeof clearAllAppData === 'function') clearAllAppData();
     document.getElementById('loadingOverlay').classList.add('hidden');
     const overlay = document.getElementById('authOverlay');
     overlay.classList.remove('hidden');

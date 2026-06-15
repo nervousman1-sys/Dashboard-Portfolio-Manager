@@ -163,19 +163,21 @@ if ('serviceWorker' in navigator) {
 let _cacheRendered = false;
 
 (function renderFromCacheImmediately() {
-    // Verify the logged-in user matches the cached data owner
+    // SECURITY GATE: never render cached data unless there is a VALID auth token AND the
+    // cache belongs to the logged-in user. A lingering user object without a token (logged
+    // out / expired) must NOT flash the previous portfolio before the login screen shows.
+    const hasToken = (typeof isLoggedIn === 'function') ? isLoggedIn() : false;
     const currentUser = getUser(); // from auth.js — reads localStorage only
     const cachedUserId = localStorage.getItem('portfolio_cache_uid');
 
-    // If no user logged in, or cache belongs to a different user, skip cache render
-    if (!currentUser || !cachedUserId || currentUser.id !== cachedUserId) {
-        console.log('[Init] Phase 0: Skipped — no user match for cached data');
+    if (!hasToken || !currentUser || !cachedUserId || currentUser.id !== cachedUserId) {
+        console.log('[Init] Phase 0: Skipped — no valid token / user-cache mismatch');
         return;
     }
 
     const cached = loadClientsFromCache();
     if (cached && cached.length > 0) {
-        console.log(`[Init] Phase 0: Instant render of ${cached.length} cached portfolios`);
+        console.log(`[Init] Phase 0: Instant render of ${cached.length} cached portfolios (kept under the loading overlay until auth is confirmed)`);
         clients = cached;
 
         try {
@@ -186,9 +188,9 @@ let _cacheRendered = false;
         } catch (e) {
             console.error('[Init] Phase 0 render failed:', e);
         } finally {
-            // Always hide overlay — even if a render function throws
-            const overlay = document.getElementById('loadingOverlay');
-            if (overlay) overlay.classList.add('hidden');
+            // Render into the DOM but DO NOT reveal it yet — the loading overlay stays up
+            // until checkAuthAndInit confirms the session (authed → reveal; not authed →
+            // clearAllAppData + login). This closes the flash-of-previous-portfolio window.
             document.getElementById('lastUpdate').textContent = 'מעדכן נתונים...';
             _cacheRendered = true;
         }
@@ -885,6 +887,7 @@ async function checkAuthAndInit() {
             saveUser({ id: session.user.id, username });
             window._dashboardBooted = true;
             console.log('[Auth] Existing session:', username);
+            _revealIfPreRendered();   // session confirmed → show the user's own pre-rendered data
             init();
             return;
         }
@@ -893,6 +896,7 @@ async function checkAuthAndInit() {
         if (isLoggedIn()) {
             _cachedUserId = getCachedUserId();
             window._dashboardBooted = true;
+            _revealIfPreRendered();
             init();
         } else {
             showLoginForm();
@@ -902,11 +906,21 @@ async function checkAuthAndInit() {
         if (isLoggedIn()) {
             _cachedUserId = getCachedUserId();
             window._dashboardBooted = true;
+            _revealIfPreRendered();
             init();
         } else {
             showLoginForm();
         }
     }
+}
+
+// Reveal the Phase-0 pre-rendered dashboard ONLY after auth is confirmed. (Phase-0 keeps
+// it hidden under the loading overlay until here, so the previous portfolio can never
+// flash before the auth gate decides.)
+function _revealIfPreRendered() {
+    if (!_cacheRendered) return;
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 // Handle ESC key for modal
