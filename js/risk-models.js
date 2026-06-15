@@ -73,6 +73,7 @@ const RISK_MODEL = {
         'PLD', 'AMT', 'EQIX', 'WELL', 'SPG',
         // Semis / global tech leaders + crypto-exposed
         'TSM', 'ASML', 'BRK-B', 'TMUS', 'COIN', 'MARA', 'RIOT', 'MSTR',
+        'MU', 'LRCX', 'AMAT', 'ARM', 'KLAC', 'PLTR',
         // Broad / sector ETFs (every sector covered so each stock list is scannable)
         'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
         'XLY', 'XLC', 'XLB', 'XLU', 'XLRE', 'SOXX', 'SMH',

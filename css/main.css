@@ -9250,6 +9250,21 @@ html.day-mode .dn-sec-stocks-btn { color: #0e7490; border-color: rgba(8, 145, 17
     padding: 5px 11px; cursor: pointer; font-family: inherit;
 }
 .secst-pick-opt:hover { background: rgba(56, 189, 248, 0.22); }
+.secst-pick-more {
+    background: rgba(148,163,184,0.10); border: 1px solid rgba(148,163,184,0.28);
+    color: #cbd5e1; border-radius: 8px; font-size: 11.5px; font-weight: 700;
+    padding: 5px 11px; cursor: pointer; font-family: inherit;
+}
+.secst-pick-more:hover { background: rgba(148,163,184,0.20); }
+.secst-pick-search {
+    width: 100%; box-sizing: border-box; margin: 2px 0 4px; padding: 6px 10px;
+    background: rgba(15,23,42,0.5); border: 1px solid rgba(148,163,184,0.3);
+    border-radius: 8px; color: #f1f5f9; font-size: 12.5px; font-family: inherit; direction: rtl;
+}
+.secst-pick-search:focus { outline: none; border-color: rgba(56,189,248,0.6); }
+.secst-pick-results { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+html.day-mode .secst-pick-more { color: #334155; }
+html.day-mode .secst-pick-search { background: #fff; color: #0f172a; }
 html.day-mode .secst-row { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.1); }
 html.day-mode .secst-tk { color: #0f172a; }
 html.day-mode .secst-pick-opt { color: #0e7490; }

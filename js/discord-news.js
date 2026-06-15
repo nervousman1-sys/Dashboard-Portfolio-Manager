@@ -1061,7 +1061,7 @@ function _sectorTopStocks(sectorName, tickers) {
 }
 
 // ── Sector stock-list popup: GF links + CML/SML compliance + buy into a portfolio ──
-function openSectorStocks(sid) {
+function openSectorStocks(sid, _skipEnsure) {
     const data = (window._dnFlowSectors || {})[sid];
     if (!data) return;
     // Merge the image's tickers (ETF) with the sector's largest real constituents
@@ -1113,19 +1113,67 @@ function openSectorStocks(sid) {
             </div>
         </div>`;
     ov.classList.add('active');
+
+    // If the model is missing a verdict for any displayed ticker, build/refresh it in the
+    // background (histories are cached, so it's fast on repeat) and re-render once — so the
+    // "ממתין לסריקת המודל" rows resolve to a real, accurate CML/SML verdict.
+    if (!_skipEnsure) _ensureSectorModel(allTickers, sid);
 }
 
-// Reveal an inline portfolio picker under the clicked stock's buy button.
+let _secModelEnsuring = false;
+async function _ensureSectorModel(tickers, sid) {
+    if (_secModelEnsuring) return;
+    const m = window._lastRiskModel;
+    const missing = tickers.some(t => {
+        const a = m && m.assets ? m.assets[t.toUpperCase()] : null;
+        return !(a && a.hasData);
+    });
+    if (!missing || typeof buildRiskModel !== 'function' || typeof clients === 'undefined') return;
+    _secModelEnsuring = true;
+    try {
+        await buildRiskModel(clients);
+        const ov = document.getElementById('secStockOverlay');
+        if (ov && ov.classList.contains('active')) openSectorStocks(sid, true); // re-render, no re-ensure
+    } catch (e) { /* keep the "ממתין" labels */ }
+    finally { _secModelEnsuring = false; }
+}
+
+// Reveal an inline portfolio picker under the clicked stock's buy button: up to 5
+// portfolios, plus a button that expands to the FULL searchable client list.
 function _sectorBuyPick(ticker, btn) {
     const existing = btn.parentElement.querySelector('.secst-pick');
     if (existing) { existing.remove(); return; }
     const list = (typeof clients !== 'undefined' ? clients : []);
     if (!list.length) return;
-    const opts = list.map(c => `<button class="secst-pick-opt" onclick="_sectorBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('');
+    const opts = list.slice(0, 5).map(c => `<button class="secst-pick-opt" onclick="_sectorBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('');
+    const more = list.length > 5
+        ? `<button class="secst-pick-more" onclick="_sectorBuyPickAll('${ticker}', this)">רשימת התיקים המלאה (${list.length}) ↗</button>` : '';
     const box = document.createElement('div');
     box.className = 'secst-pick';
-    box.innerHTML = `<div class="secst-pick-h">בחר תיק לקנייה:</div>${opts}`;
+    box.innerHTML = `<div class="secst-pick-h">בחר תיק לקנייה:</div>${opts}${more}`;
     btn.parentElement.appendChild(box);
+}
+function _secPickRows(ticker, list) {
+    return list.length
+        ? list.map(c => `<button class="secst-pick-opt" onclick="_sectorBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('')
+        : '<div class="adv-empty" style="padding:6px">לא נמצאו תיקים</div>';
+}
+// Expand to the full list with a client-search box.
+function _sectorBuyPickAll(ticker, btn) {
+    const box = btn.closest('.secst-pick');
+    if (!box) return;
+    const list = (typeof clients !== 'undefined' ? clients : []);
+    box.innerHTML = `<div class="secst-pick-h">חיפוש תיק לקוח (${list.length}):</div>` +
+        `<input class="secst-pick-search" type="text" placeholder="הקלד שם תיק…" oninput="_sectorBuyPickFilter('${ticker}', this)" />` +
+        `<div class="secst-pick-results">${_secPickRows(ticker, list)}</div>`;
+    const inp = box.querySelector('.secst-pick-search');
+    if (inp) inp.focus();
+}
+function _sectorBuyPickFilter(ticker, inp) {
+    const q = inp.value.trim().toLowerCase();
+    const list = (typeof clients !== 'undefined' ? clients : []).filter(c => (c.name || '').toLowerCase().includes(q));
+    const res = inp.parentElement.querySelector('.secst-pick-results');
+    if (res) res.innerHTML = _secPickRows(ticker, list);
 }
 
 async function _sectorBuy(ticker, clientId) {
@@ -1203,5 +1251,7 @@ if (typeof window !== 'undefined') {
     window.setDnChannel = setDnChannel;
     window.openSectorStocks = openSectorStocks;
     window._sectorBuyPick = _sectorBuyPick;
+    window._sectorBuyPickAll = _sectorBuyPickAll;
+    window._sectorBuyPickFilter = _sectorBuyPickFilter;
     window._sectorBuy = _sectorBuy;
 }
