@@ -199,8 +199,14 @@ function _techTvUrl(tvSym, v) {
     else if (near(m.d300dist)) inds.push('sma300');
     else if (near(m.w200dist)) { inds.push('sma200'); tf = 'W'; }
     else if (near(m.w300dist)) { inds.push('sma300'); tf = 'W'; }
-    // RSI when the stock is in an extreme (daily <40, or weekly oversold/overbought)
-    if ((v.rsiD != null && v.rsiD < 40) || (v.rsiW != null && (v.rsiW < 30 || v.rsiW > 70))) inds.push('rsi');
+    // RSI when the stock is in an extreme (daily <40, or weekly oversold/overbought).
+    const weeklyRsi = v.rsiW != null && (v.rsiW < 30 || v.rsiW > 70);
+    const dailyRsi = v.rsiD != null && v.rsiD < 40;
+    if (weeklyRsi || dailyRsi) inds.push('rsi');
+    // The timeframe MUST match the signal the user clicked: a WEEKLY RSI extreme
+    // (the "RSI שבועי" Oversold/Overbought tag) opens the chart on the WEEKLY (W)
+    // timeframe; a daily-only RSI signal stays daily. (Keeps the SMA studies intact.)
+    if (weeklyRsi) tf = 'W';
     // FVG isn't a built-in TradingView study — the chart still opens for inspection.
     const q = `s=${encodeURIComponent(tvSym)}&tf=${tf}${inds.length ? '&ind=' + inds.join(',') : ''}`;
     return `/tv.html?${q}`;
@@ -265,9 +271,11 @@ function _techRender() {
         : '<td class="tech-no">✗</td>';
     const rsiWChip = (v) => {
         if (v.rsiW == null) return '—';
-        if (v.rsiW > 70) return `${v.rsiW} <span class="tech-warn ob">⚠ RSI Overbought</span>`;
-        if (v.rsiW < 30) return `${v.rsiW} <span class="tech-warn os">⚠ RSI Oversold</span>`;
-        return v.rsiW;
+        // Badge FIRST, value in a fixed-width tabular cell → the Oversold/Overbought tags
+        // line up in a straight column instead of zig-zagging with the value's width.
+        const badge = v.rsiW > 70 ? '<span class="tech-warn ob">⚠ RSI Overbought</span>'
+            : v.rsiW < 30 ? '<span class="tech-warn os">⚠ RSI Oversold</span>' : '';
+        return `<span class="tech-rsiw">${badge}<span class="tech-rsiw-num">${v.rsiW}</span></span>`;
     };
     const rsiDCell = (v) => {
         if (v.rsiD == null) return '—';

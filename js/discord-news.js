@@ -1166,22 +1166,50 @@ function _secPickRows(ticker, list) {
         ? list.map(c => `<button class="secst-pick-opt" onclick="_sectorBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('')
         : '<div class="adv-empty" style="padding:6px">לא נמצאו תיקים</div>';
 }
-// Expand to the full list with a client-search box.
+// Open the FULL client list in its own modal window (scales to 100s of portfolios),
+// with a search box. Separate overlay so the sector popup stays put behind it.
 function _sectorBuyPickAll(ticker, btn) {
-    const box = btn.closest('.secst-pick');
-    if (!box) return;
+    const inline = btn && btn.closest('.secst-pick'); if (inline) inline.remove();
+    let ov = document.getElementById('secPickAllOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'secPickAllOverlay';
+        ov.className = 'chart-info-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('active'); });
+        document.body.appendChild(ov);
+    }
     const list = (typeof clients !== 'undefined' ? clients : []);
-    box.innerHTML = `<div class="secst-pick-h">חיפוש תיק לקוח (${list.length}):</div>` +
-        `<input class="secst-pick-search" type="text" placeholder="הקלד שם תיק…" oninput="_sectorBuyPickFilter('${ticker}', this)" />` +
-        `<div class="secst-pick-results">${_secPickRows(ticker, list)}</div>`;
-    const inp = box.querySelector('.secst-pick-search');
-    if (inp) inp.focus();
+    ov.innerHTML = `
+        <div class="chart-info-dialog secpick-dialog" dir="rtl">
+            <div class="chart-info-head">
+                <h3>בחר תיק לקנייה — ${_dnEsc(ticker)}</h3>
+                <button class="chart-info-close" onclick="document.getElementById('secPickAllOverlay').classList.remove('active')">&times;</button>
+            </div>
+            <div class="chart-info-body">
+                <input class="secpick-search" type="text" placeholder="חיפוש שם תיק לקוח…" oninput="_sectorBuyPickFilter('${ticker}', this)" />
+                <div class="secpick-count" id="secPickAllCount">${list.length} תיקים</div>
+                <div class="secpick-results" id="secPickAllResults">${_secPickAllRows(ticker, list)}</div>
+            </div>
+        </div>`;
+    ov.classList.add('active');
+    const inp = ov.querySelector('.secpick-search'); if (inp) setTimeout(() => inp.focus(), 60);
+}
+function _secPickAllRows(ticker, list) {
+    return list.length
+        ? list.map(c => `<button class="secpick-row" onclick="_secPickAllBuy('${ticker}', ${c.id})">${(c.name || '').replace(/"/g, '')}</button>`).join('')
+        : '<div class="adv-empty" style="padding:16px">לא נמצאו תיקים</div>';
 }
 function _sectorBuyPickFilter(ticker, inp) {
     const q = inp.value.trim().toLowerCase();
     const list = (typeof clients !== 'undefined' ? clients : []).filter(c => (c.name || '').toLowerCase().includes(q));
-    const res = inp.parentElement.querySelector('.secst-pick-results');
-    if (res) res.innerHTML = _secPickRows(ticker, list);
+    const res = document.getElementById('secPickAllResults');
+    const cnt = document.getElementById('secPickAllCount');
+    if (res) res.innerHTML = _secPickAllRows(ticker, list);
+    if (cnt) cnt.textContent = `${list.length} תיקים`;
+}
+function _secPickAllBuy(ticker, clientId) {
+    document.getElementById('secPickAllOverlay')?.classList.remove('active');
+    _sectorBuy(ticker, clientId);
 }
 
 async function _sectorBuy(ticker, clientId) {
@@ -1261,5 +1289,6 @@ if (typeof window !== 'undefined') {
     window._sectorBuyPick = _sectorBuyPick;
     window._sectorBuyPickAll = _sectorBuyPickAll;
     window._sectorBuyPickFilter = _sectorBuyPickFilter;
+    window._secPickAllBuy = _secPickAllBuy;
     window._sectorBuy = _sectorBuy;
 }
