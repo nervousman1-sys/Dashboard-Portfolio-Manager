@@ -757,6 +757,7 @@ const _VIEW_PAGES = [
     { view: 'bulkmgr', id: 'bulkPage', open: () => typeof openBulkPage === 'function' && openBulkPage(), close: () => typeof closeBulkPage === 'function' && closeBulkPage() },
     { view: 'disconews', id: 'discordNewsPage', open: () => typeof openDiscordNews === 'function' && openDiscordNews(), close: () => typeof closeDiscordNews === 'function' && closeDiscordNews() },
     { view: 'technical', id: 'technicalPage', open: () => typeof openTechnicalPage === 'function' && openTechnicalPage(), close: () => typeof closeTechnicalPage === 'function' && closeTechnicalPage() },
+    { view: 'reports', id: 'reportsPage', open: () => typeof openReportsPage === 'function' && openReportsPage(), close: () => typeof closeReportsPage === 'function' && closeReportsPage() },
 ];
 const _isPageOpen = (id) => !!document.getElementById(id)?.classList.contains('active');
 
@@ -766,6 +767,8 @@ function updateURLState(params) {
     url.searchParams.delete('view');
     url.searchParams.delete('client');
     url.searchParams.delete('tab');
+    url.searchParams.delete('mkt');
+    url.searchParams.delete('sym');
 
     Object.entries(params).forEach(([key, value]) => {
         if (value !== null && value !== undefined && value !== '') {
@@ -783,6 +786,8 @@ function clearURLState() {
     url.searchParams.delete('view');
     url.searchParams.delete('client');
     url.searchParams.delete('tab');
+    url.searchParams.delete('mkt');
+    url.searchParams.delete('sym');
     history.pushState({ finextium: true, dashboard: true }, '', url);
 }
 

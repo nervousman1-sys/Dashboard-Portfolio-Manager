@@ -22,6 +22,16 @@ let _repSearch = '';
 let _repView = 'list';        // 'list' | 'detail'
 let _repCurrent = null;       // current detail model
 let _repCharts = [];          // live Chart.js instances to destroy on teardown
+let _repChartCtx = null;      // { m, cur } for the enlarge modal
+let _repBigChart = null;      // Chart.js instance inside the enlarge modal
+
+// Trend charts shown in the detail view (each is clickable to enlarge).
+const _REP_CHARTS = [
+    { key: 'revenue', canvas: 'repChartRev', title: 'הכנסות', color: 'rgba(56,189,248,0.85)' },
+    { key: 'netIncome', canvas: 'repChartNi', title: 'רווח נקי', color: 'rgba(132,204,22,0.85)' },
+    { key: 'ebitda', canvas: 'repChartEbitda', title: 'EBITDA', color: 'rgba(250,204,21,0.85)' },
+    { key: 'fcf', canvas: 'repChartFcf', title: 'תזרים חופשי (FCF)', color: 'rgba(168,85,247,0.85)' },
+];
 
 function openReportsPage() {
     const page = document.getElementById('reportsPage');
@@ -36,14 +46,23 @@ function openReportsPage() {
     if (psh) psh.style.display = 'none';
 
     page.classList.add('active');
-    if (typeof updateURLState === 'function') updateURLState({ view: 'reports' });
     if (typeof _setActiveNav === 'function') _setActiveNav('reports');
 
-    _repMarket = 'us';
+    // Restore market + open company from the URL (refresh / back-forward keep you here).
+    const params = new URLSearchParams(window.location.search);
+    const urlMkt = (params.get('mkt') || '').toLowerCase();
+    const urlSym = (params.get('sym') || '').toUpperCase();
+    _repMarket = _REP_MKT[urlMkt] ? urlMkt : 'us';
     _repView = 'list';
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: urlSym || null });
+
     _repRenderShell();
+    document.querySelectorAll('#repMkt .tech-mkt-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-mkt') === _repMarket));
+    const search = document.getElementById('repSearch');
+    if (search) search.placeholder = _REP_MKT[_repMarket].search;
     window.scrollTo(0, 0);
     _repLoadUniverse();
+    if (urlSym) openReportDetail(urlSym); // _repRenderList is a no-op while in detail view
 }
 
 function closeReportsPage() {
@@ -97,6 +116,7 @@ function setRepMarket(mkt) {
     _repMarket = mkt;
     _repView = 'list';
     _repSearch = '';
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: null });
     _repRenderShell();
     const search = document.getElementById('repSearch');
     if (search) { search.placeholder = _REP_MKT[mkt].search; }
@@ -168,24 +188,74 @@ function _repRenderList() {
         const disp = _repMarket === 'il' ? t.replace(/\.TA$/, '') : t;
         const s = scores[t];
         const chip = (s && s.score != null)
-            ? `<span class="rep-card-score ${_repScoreClass(s.score)}">${s.score}</span>`
-            : '<span class="rep-card-score rep-card-score-empty">—</span>';
+            ? `<span class="rep-card-score ${_repScoreClass(s.score)}" data-rep-score="${t}">${s.score}</span>`
+            : `<span class="rep-card-score rep-card-score-empty" data-rep-score="${t}">—</span>`;
         const beat = (s && s.improved) ? '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>' : '';
         return `<button class="rep-card" onclick="openReportDetail('${t}')">
-            <span class="rep-card-ticker">${disp}${beat}</span>
+            <span class="rep-card-ticker">${disp}<span class="rep-card-beat-slot" data-rep-beat="${t}">${beat}</span></span>
             ${chip}
         </button>`;
     }).join('');
 
     body.innerHTML = `
         <div class="rep-grid">${cards || `<div class="adv-empty">אין חברות שתואמות "${_repSearch}".</div>`}</div>
-        ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`}</div>` : ''}`;
+        ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`} · הציונים נטענים אוטומטית ברקע</div>` : ''}`;
+
+    _repPrefetchScores(); // fill the board's score chips in the background (free Yahoo source)
+}
+
+// ── Background score fill — fetch reports for un-scored tickers (throttled), so the
+// board shows scores without the user opening each one. Uses the free Yahoo path
+// (fast=1) to avoid burning the FMP daily quota; results cached in localStorage. ──
+let _repPrefetchToken = 0;
+async function _repPrefetchScores() {
+    const market = _repMarket;
+    const uni = _repUniverse[market];
+    if (!uni || !uni.length) return;
+    const myToken = ++_repPrefetchToken; // cancels any prefetch from a previous list/market
+    const TTL = 3 * 24 * 3600 * 1000;    // refresh scores older than 3 days (rolling updates)
+    const now = Date.now();
+    const scores = _repScoreCache();
+    const todo = uni.filter(t => { const s = scores[t]; return !s || s.score == null || (now - (s.ts || 0) > TTL); });
+    if (!todo.length) return;
+
+    let idx = 0;
+    const CONCURRENCY = 4;
+    const worker = async () => {
+        while (idx < todo.length) {
+            if (myToken !== _repPrefetchToken || _repView !== 'list' || _repMarket !== market) return;
+            const t = todo[idx++];
+            try {
+                const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(t)}&market=${market}&fast=1`, { headers: { Accept: 'application/json' } });
+                if (r.ok) {
+                    const rep = await r.json();
+                    const model = ReportsEngine.buildReport(rep);
+                    if (model.score && model.score.value != null) {
+                        _repSaveScore(t, { score: model.score.value, improved: model.beat && model.beat.improved });
+                        if (myToken === _repPrefetchToken && _repView === 'list' && _repMarket === market) _repUpdateCardChip(t, model.score.value, model.beat && model.beat.improved);
+                    }
+                }
+            } catch (e) { /* skip — try the next ticker */ }
+            await new Promise(res => setTimeout(res, 140)); // gentle on the data source
+        }
+    };
+    for (let w = 0; w < CONCURRENCY; w++) worker();
+}
+
+function _repUpdateCardChip(symbol, score, improved) {
+    const chip = document.querySelector(`[data-rep-score="${symbol}"]`);
+    if (chip) { chip.className = `rep-card-score ${_repScoreClass(score)}`; chip.textContent = score; }
+    if (improved) {
+        const slot = document.querySelector(`[data-rep-beat="${symbol}"]`);
+        if (slot && !slot.innerHTML) slot.innerHTML = '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>';
+    }
 }
 
 // ── Detail: fetch report on demand → engine → render ──
 async function openReportDetail(symbol) {
     _repView = 'detail';
     _repDestroyCharts();
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: symbol });
     const body = document.getElementById('repBody');
     if (body) body.innerHTML = `<div class="rep-loading"><div class="rep-spinner"></div><span>טוען דו"ח עבור ${symbol.replace(/\.TA$/, '')}…</span></div>`;
 
@@ -213,6 +283,7 @@ async function openReportDetail(symbol) {
 function backToReportsList() {
     _repView = 'list';
     _repDestroyCharts();
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: null });
     _repRenderList();
 }
 
@@ -318,6 +389,12 @@ function _repRenderDetail(m) {
         <div class="rep-section-title">דגלי סיכון</div>
         <div class="rep-flags">${flagsHtml}</div>
 
+        ${(m.attentionNotes && m.attentionNotes.length) ? `
+        <div class="rep-section-title">הערות לתשומת לב</div>
+        <div class="rep-attention">
+            ${m.attentionNotes.map(n => `<div class="rep-attn rep-attn-${n.severity}"><span class="rep-attn-dot"></span>${n.he}</div>`).join('')}
+        </div>` : ''}
+
         <div class="rep-section-title">פרמטרים מרכזיים — עד 4 רבעונים</div>
         <div class="risk-table-scroll" style="max-height:none">
         <table class="risk-table rep-table">
@@ -349,9 +426,11 @@ function _repRenderDetail(m) {
 
         <div class="rep-section-title">מגמות (8 רבעונים)</div>
         <div class="rep-charts">
-            <div class="rep-chart-card"><div class="rep-chart-h">הכנסות</div><canvas id="repChartRev"></canvas></div>
-            <div class="rep-chart-card"><div class="rep-chart-h">רווח נקי</div><canvas id="repChartNi"></canvas></div>
-            <div class="rep-chart-card"><div class="rep-chart-h">תזרים חופשי (FCF)</div><canvas id="repChartFcf"></canvas></div>
+            ${_REP_CHARTS.map(c => `
+            <div class="rep-chart-card rep-chart-clickable" onclick="_repEnlargeChart('${c.key}')" title="לחץ להגדלה">
+                <div class="rep-chart-h">${c.title}<span class="rep-chart-zoom" aria-hidden="true">⤢</span></div>
+                <canvas id="${c.canvas}"></canvas>
+            </div>`).join('')}
         </div>
 
         <div class="rep-section-title">ניתוח SWOT</div>
@@ -375,6 +454,7 @@ function _repQuarterLabel(q) {
 function _repDestroyCharts() {
     _repCharts.forEach(c => { try { c.destroy(); } catch (e) { } });
     _repCharts = [];
+    if (typeof _repCloseChartModal === 'function') _repCloseChartModal();
 }
 function _repBarChart(canvasId, series, color, cur) {
     const el = document.getElementById(canvasId);
@@ -401,12 +481,62 @@ function _repBarChart(canvasId, series, color, cur) {
     _repCharts.push(ch);
 }
 function _repRenderCharts(m, cur) {
+    _repChartCtx = { m, cur };
     const chron = m.rows.slice().reverse(); // oldest → newest
     const mk = (key) => chron.map(q => ({ label: _repQuarterLabel(q), value: q[key] == null ? null : q[key] }));
-    _repBarChart('repChartRev', mk('revenue'), 'rgba(56,189,248,0.75)', cur);
-    _repBarChart('repChartNi', mk('netIncome'), 'rgba(132,204,22,0.75)', cur);
-    _repBarChart('repChartFcf', mk('fcf'), 'rgba(168,85,247,0.75)', cur);
+    _REP_CHARTS.forEach(c => _repBarChart(c.canvas, mk(c.key), c.color, cur));
 }
+
+// ── Enlarge a trend chart in a modal ──
+function _repEnlargeChart(key) {
+    const def = _REP_CHARTS.find(c => c.key === key);
+    if (!def || !_repChartCtx) return;
+    const { m, cur } = _repChartCtx;
+    const chron = m.rows.slice().reverse();
+    const series = chron.map(q => ({ label: _repQuarterLabel(q), value: q[key] == null ? null : q[key] }));
+
+    _repCloseChartModal();
+    const ov = document.createElement('div');
+    ov.id = 'repChartModal';
+    ov.className = 'rep-chart-modal';
+    ov.innerHTML = `
+      <div class="rep-chart-modal-box" dir="rtl">
+        <div class="rep-chart-modal-head">
+          <span class="rep-chart-modal-title">${def.title} · ${m.companyName || m.symbol}</span>
+          <button class="rep-chart-modal-x" onclick="_repCloseChartModal()" aria-label="סגור">✕</button>
+        </div>
+        <div class="rep-chart-modal-canvas"><canvas id="repChartBig"></canvas></div>
+        <div class="rep-chart-modal-foot">8 רבעונים אחרונים · ${def.title}</div>
+      </div>`;
+    ov.addEventListener('click', (e) => { if (e.target === ov) _repCloseChartModal(); });
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+
+    const el = document.getElementById('repChartBig');
+    if (el && typeof Chart !== 'undefined') {
+        _repBigChart = new Chart(el, {
+            type: 'bar',
+            data: { labels: series.map(s => s.label), datasets: [{ data: series.map(s => s.value), backgroundColor: def.color, borderRadius: 4, maxBarThickness: 64 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => _repFmtMoney(c.parsed.y, cur) } } },
+                scales: {
+                    x: { ticks: { color: '#e8edf5', font: { size: 13 } }, grid: { display: false } },
+                    y: { ticks: { color: '#e8edf5', font: { size: 13 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                },
+            },
+        });
+    }
+    document.addEventListener('keydown', _repChartModalEsc);
+}
+function _repCloseChartModal() {
+    if (_repBigChart) { try { _repBigChart.destroy(); } catch (e) { } _repBigChart = null; }
+    const ov = document.getElementById('repChartModal');
+    if (ov) ov.remove();
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', _repChartModalEsc);
+}
+function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 
 // ── AI SWOT + strategy (async, fills the placeholders) ──
 async function _repLoadAI(m) {
@@ -457,4 +587,6 @@ if (typeof window !== 'undefined') {
     window._repRenderList = _repRenderList;
     window.openReportDetail = openReportDetail;
     window.backToReportsList = backToReportsList;
+    window._repEnlargeChart = _repEnlargeChart;
+    window._repCloseChartModal = _repCloseChartModal;
 }

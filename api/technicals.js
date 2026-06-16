@@ -237,8 +237,9 @@ module.exports = async (req, res) => {
             const symbol = String(req.query.symbol || '').trim().toUpperCase();
             const market = (req.query.market || (symbol.endsWith('.TA') ? 'il' : 'us')).toLowerCase();
             if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
+            const yahooFirst = req.query.fast === '1' || req.query.src === 'yahoo';
             try {
-                const data = await fetchReport(symbol, market);
+                const data = await fetchReport(symbol, market, { yahooFirst });
                 if (!data.quarters || !data.quarters.length) { res.status(404).json({ error: 'no data', symbol }); return; }
                 res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
                 res.status(200).json(data);

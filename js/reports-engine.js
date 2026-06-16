@@ -83,6 +83,7 @@
         const score = computeScore(rows, { peTrailing, pb, beat, flags });
         const valuation = { peTrailing, pb, roeTTM, fcfYield, evToEbitda, ttmNetIncome: ttmHasFull ? ttmNetIncome : null, ttmRevenue: ttmHasFull ? ttmRevenue : null };
         const keyPoints = computeKeyPoints(rows, { beat, valuation, currency: report.currency });
+        const attentionNotes = computeAttentionNotes(rows);
 
         return {
             symbol: report.symbol,
@@ -103,7 +104,42 @@
             beat,
             score,
             keyPoints,
+            attentionNotes,
         };
+    }
+
+    // ── Attention notes — sharp deteriorations worth flagging in the table area.
+    // Compares the latest quarter vs the prior quarter (QoQ) and the same quarter
+    // last year (YoY). severity: 'high' (steep) | 'warn'. Deterministic, no API cost.
+    function computeAttentionNotes(rows) {
+        const a = rows[0], qoq = rows[1], yoy = rows[4];
+        if (!a) return [];
+        const notes = [];
+        const pp = (x) => (x * 100).toFixed(1);
+        // For each absolute metric vs a reference period: build the right Hebrew phrasing.
+        const absDrop = (m, cur, prev, when) => {
+            if (!isNum(cur) || !isNum(prev) || prev <= 0) return;
+            if (cur < 0) { notes.push({ he: `${m.subject} ${m.neg} ${when}.`, severity: 'high' }); return; }
+            const d = (cur - prev) / prev;
+            if (d <= -0.10) notes.push({ he: `${m.subject} ${m.down} ב-${pp(-d)}% ${when}.`, severity: d <= -0.25 ? 'high' : 'warn' });
+        };
+        const QoQ = 'לעומת הרבעון הקודם', YoY = 'לעומת הרבעון המקביל אשתקד';
+        [{ k: 'revenue', subject: 'ההכנסות', down: 'ירדו', neg: 'הפכו לשליליות' },
+         { k: 'ebitda', subject: 'ה-EBITDA', down: 'ירד', neg: 'הפך לשלילי' },
+         { k: 'operatingIncome', subject: 'הרווח התפעולי', down: 'ירד', neg: 'הפך להפסד תפעולי' },
+         { k: 'netIncome', subject: 'הרווח הנקי', down: 'ירד', neg: 'הפך להפסד נקי' },
+         { k: 'fcf', subject: 'התזרים החופשי (FCF)', down: 'ירד', neg: 'הפך לשלילי' }].forEach(m => {
+            absDrop(m, a[m.k], qoq && qoq[m.k], QoQ);
+            absDrop(m, a[m.k], yoy && yoy[m.k], YoY);
+        });
+        [{ k: 'grossMargin', he: 'שיעור הרווח הגולמי' }, { k: 'operatingMargin', he: 'שיעור הרווח התפעולי' },
+         { k: 'ebitdaMargin', he: 'שיעור ה-EBITDA' }, { k: 'netMargin', he: 'שיעור הרווח הנקי' }].forEach(({ k, he }) => {
+            const dq = (isNum(a[k]) && qoq && isNum(qoq[k])) ? a[k] - qoq[k] : null;
+            const dy = (isNum(a[k]) && yoy && isNum(yoy[k])) ? a[k] - yoy[k] : null;
+            if (isNum(dq) && dq <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}.`, severity: dq <= -0.06 ? 'high' : 'warn' });
+            if (isNum(dy) && dy <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dy)} נק׳ אחוז לעומת אשתקד.`, severity: dy <= -0.06 ? 'high' : 'warn' });
+        });
+        return notes;
     }
 
     // ── Key points — deterministic, plain-Hebrew highlights pulled from the numbers.
@@ -292,7 +328,7 @@
         };
     }
 
-    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, computeKeyPoints, aiContext };
+    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, computeKeyPoints, computeAttentionNotes, aiContext };
     if (typeof module !== 'undefined' && module.exports) module.exports = API;
     if (typeof root !== 'undefined') {
         root.ReportsEngine = API;

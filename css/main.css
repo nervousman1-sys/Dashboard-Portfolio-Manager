@@ -9568,9 +9568,9 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 /* ── SWOT ── */
 .rep-swot { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .rep-swot-quad { padding: 14px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); }
-.rep-swot-h { font-size: 13px; font-weight: 800; margin-bottom: 8px; }
-.rep-swot-quad ul { margin: 0; padding-right: 18px; display: flex; flex-direction: column; gap: 6px; }
-.rep-swot-quad li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); }
+.rep-swot-h { font-size: 15px; font-weight: 800; margin-bottom: 10px; }
+.rep-swot-quad ul { margin: 0; padding-right: 18px; display: flex; flex-direction: column; gap: 8px; }
+.rep-swot-quad li { font-size: 14.5px; line-height: 1.7; color: var(--text-primary); }
 .rep-swot-empty { color: var(--text-muted); list-style: none; }
 .rep-swot-s { border-top: 2px solid var(--accent-green); } .rep-swot-s .rep-swot-h { color: var(--accent-green); }
 .rep-swot-w { border-top: 2px solid var(--accent-red); }   .rep-swot-w .rep-swot-h { color: var(--accent-red); }
@@ -9580,10 +9580,10 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 /* ── Strategy ── */
 .rep-strategy { display: flex; flex-direction: column; gap: 12px; }
 .rep-strat-part { padding: 12px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); }
-.rep-strat-label { font-size: 12px; font-weight: 800; color: var(--accent-blue); display: block; margin-bottom: 5px; }
-.rep-strat-part p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
-.rep-strat-partners { margin: 0; padding-right: 18px; display: flex; flex-direction: column; gap: 4px; }
-.rep-strat-partners li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); }
+.rep-strat-label { font-size: 13.5px; font-weight: 800; color: var(--accent-blue); display: block; margin-bottom: 6px; }
+.rep-strat-part p { margin: 0; font-size: 14.5px; line-height: 1.75; color: var(--text-primary); }
+.rep-strat-partners { margin: 0; padding-right: 18px; display: flex; flex-direction: column; gap: 6px; }
+.rep-strat-partners li { font-size: 14.5px; line-height: 1.7; color: var(--text-primary); }
 
 @media (max-width: 640px) {
     .rep-swot { grid-template-columns: 1fr; }
@@ -9628,3 +9628,35 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 #reportsPage .rep-flag,
 #reportsPage .adv-empty { color: var(--text-primary); }
 #reportsPage .rep-hint { opacity: 0.85; }
+
+/* ── Attention notes (sharp declines) ── */
+.rep-attention { display: grid; gap: 8px; margin-bottom: 8px; }
+.rep-attn { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.5;
+    color: var(--text-primary); border-radius: 9px; padding: 9px 12px;
+    background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.28); }
+.rep-attn-high { background: rgba(255, 77, 77, 0.10); border-color: rgba(255, 77, 77, 0.35); }
+.rep-attn-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--accent-orange); }
+.rep-attn-high .rep-attn-dot { background: var(--accent-red); }
+
+/* ── Clickable trend chart cards + enlarge modal ── */
+.rep-chart-clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.rep-chart-clickable:hover { border-color: rgba(0, 229, 255, 0.4); transform: translateY(-1px); }
+.rep-chart-h { display: flex; align-items: center; justify-content: space-between; }
+.rep-chart-zoom { font-size: 14px; opacity: 0.5; }
+.rep-chart-clickable:hover .rep-chart-zoom { opacity: 1; color: var(--accent-blue); }
+
+.rep-chart-modal { position: fixed; inset: 0; z-index: 5000; display: flex; align-items: center;
+    justify-content: center; padding: 24px; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(4px);
+    animation: repFadeIn 0.15s ease; }
+@keyframes repFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.rep-chart-modal-box { width: min(960px, 96vw); max-height: 92vh; display: flex; flex-direction: column;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6); }
+.rep-chart-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.rep-chart-modal-title { font-size: 17px; font-weight: 800; color: var(--text-primary); }
+.rep-chart-modal-x { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-primary);
+    width: 34px; height: 34px; border-radius: 9px; font-size: 15px; cursor: pointer; line-height: 1; }
+.rep-chart-modal-x:hover { background: rgba(255, 77, 77, 0.18); border-color: rgba(255, 77, 77, 0.4); }
+.rep-chart-modal-canvas { flex: 1 1 auto; min-height: 0; height: 60vh; position: relative; }
+.rep-chart-modal-canvas canvas { width: 100% !important; height: 100% !important; }
+.rep-chart-modal-foot { margin-top: 10px; font-size: 11px; color: var(--text-primary); opacity: 0.7; text-align: center; }
