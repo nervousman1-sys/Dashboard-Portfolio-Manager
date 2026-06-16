@@ -23,16 +23,22 @@ function setCors(res) {
 const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', Accept: 'application/json' };
 
 // ── Constituents from Wikipedia (stable tables, server-side fetch) ──
+// Maps ticker → GICS sector (English), filled by fetchSP500 from the Wikipedia table.
+const _SP_SECTORS = {};
 async function fetchSP500() {
     const r = await fetch('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', { headers: { ...UA, Accept: 'text/html' } });
     const html = await r.text();
     const sect = html.split('id="constituents"')[1] || html;
     const out = new Set();
-    const re = /<td>(?:<a[^>]*>)?([A-Z]{1,5}(?:\.[A-Z])?)(?:<\/a>)?<\/td>/g;
-    // Symbols live in the first cell of each row; rows start after <tr>
-    const rowRe = /<tr>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>/g;
+    // Capture symbol (1st cell) + GICS Sector (3rd cell). The 2nd cell (security name) is skipped.
+    const rowRe = /<tr>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>\s*<td[^>]*>[\s\S]*?<\/td>\s*<td[^>]*>\s*(?:<a[^>]*>)?([^<]+?)(?:<\/a>)?\s*<\/td>/g;
     let m;
-    while ((m = rowRe.exec(sect)) !== null) out.add(m[1].replace('.', '-')); // BRK.B → BRK-B (Yahoo)
+    while ((m = rowRe.exec(sect)) !== null) {
+        const tk = m[1].replace('.', '-'); // BRK.B → BRK-B (Yahoo)
+        out.add(tk);
+        const sector = (m[2] || '').trim();
+        if (sector) _SP_SECTORS[tk] = sector;
+    }
     return [...out];
 }
 
@@ -265,8 +271,10 @@ module.exports = async (req, res) => {
             const [sp, ndx] = await Promise.all([fetchSP500(), fetchNasdaq100()]);
             const all = [...new Set([...sp, ...ndx])].filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t)).sort();
             if (all.length < 100) throw new Error(`constituent parse too small: ${all.length}`);
+            const sectors = {};
+            all.forEach(t => { if (_SP_SECTORS[t]) sectors[t] = _SP_SECTORS[t]; });
             res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
-            res.status(200).json({ tickers: all, sp500: sp.length, ndx100: ndx.length, asOf: new Date().toISOString().slice(0, 10) });
+            res.status(200).json({ tickers: all, sectors, sp500: sp.length, ndx100: ndx.length, asOf: new Date().toISOString().slice(0, 10) });
             return;
         }
 

@@ -41,9 +41,19 @@
         return { grossMargin, operatingMargin, netMargin, workingCapital, currentRatio, debtToEquity, fcf, fcfMargin, ocfToNI, ebitda, ebitdaMargin, netDebt, roe };
     }
 
+    // Fill cells that a data source left blank but which are derivable from siblings,
+    // so the table isn't peppered with "—" for values we can reconstruct.
+    function fillDerived(q) {
+        const out = { ...q };
+        if (!isNum(out.eps) && isNum(out.netIncome) && isNum(out.sharesOut) && out.sharesOut > 0) out.eps = out.netIncome / out.sharesOut;
+        if (!isNum(out.ebitda) && isNum(out.operatingIncome) && isNum(out.dna)) out.ebitda = out.operatingIncome + out.dna;
+        if (!isNum(out.grossProfit) && isNum(out.revenue) && isNum(out.costOfRevenue)) out.grossProfit = out.revenue - out.costOfRevenue;
+        return out;
+    }
+
     // Build the full enriched model from a normalized report (quarters newest-first).
     function buildReport(report) {
-        const quarters = (report && Array.isArray(report.quarters)) ? report.quarters.slice(0, 8) : [];
+        const quarters = (report && Array.isArray(report.quarters)) ? report.quarters.slice(0, 8).map(fillDerived) : [];
         const rows = quarters.map((q, i) => {
             const m = quarterMetrics(q);
             const yoy = quarters[i + 4]; // same quarter last year

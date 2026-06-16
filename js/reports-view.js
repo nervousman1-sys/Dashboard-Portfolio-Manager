@@ -18,7 +18,24 @@ const _REP_SCORES_LS = 'rep_scores_v1';
 
 let _repMarket = 'us';
 let _repUniverse = { us: null, il: null };
+let _repSectors = { us: null, il: null };  // { ticker: GICS sector (English) }
 let _repSearch = '';
+
+// GICS sector → Hebrew label (for grouping the board).
+const _REP_SECTOR_HE = {
+    'Information Technology': 'טכנולוגיית מידע',
+    'Health Care': 'בריאות',
+    'Financials': 'פיננסים',
+    'Consumer Discretionary': 'צריכה מחזורית',
+    'Consumer Staples': 'מוצרי צריכה בסיסיים',
+    'Communication Services': 'שירותי תקשורת',
+    'Industrials': 'תעשייה',
+    'Energy': 'אנרגיה',
+    'Utilities': 'תשתיות וחשמל',
+    'Real Estate': 'נדל"ן',
+    'Materials': 'חומרי גלם',
+};
+const _REP_SECTOR_ORDER = ['Information Technology', 'Communication Services', 'Health Care', 'Financials', 'Consumer Discretionary', 'Consumer Staples', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials'];
 let _repView = 'list';        // 'list' | 'detail'
 let _repCurrent = null;       // current detail model
 let _repCharts = [];          // live Chart.js instances to destroy on teardown
@@ -133,8 +150,8 @@ async function _repLoadUniverse() {
         const raw = localStorage.getItem(cfg.ls);
         if (raw) {
             const c = JSON.parse(raw);
-            if (c && c.day === new Date().toISOString().slice(0, 10) && Array.isArray(c.tickers) && c.tickers.length) {
-                _repUniverse[mkt] = c.tickers; _repRenderList(); return;
+            if (c && c.day === new Date().toISOString().slice(0, 10) && Array.isArray(c.tickers) && c.tickers.length && (mkt !== 'us' || c.sectors)) {
+                _repUniverse[mkt] = c.tickers; _repSectors[mkt] = c.sectors || null; _repRenderList(); return;
             }
         }
     } catch (e) { /* refetch */ }
@@ -146,7 +163,8 @@ async function _repLoadUniverse() {
         if (mkt === 'il') tickers = tickers.filter(t => /^[A-Z]/.test(t) && !/\d{3,}/.test(t));
         tickers.sort((a, b) => a.localeCompare(b));
         _repUniverse[mkt] = tickers;
-        try { localStorage.setItem(cfg.ls, JSON.stringify({ day: new Date().toISOString().slice(0, 10), tickers })); } catch (e) { }
+        _repSectors[mkt] = j.sectors || null;
+        try { localStorage.setItem(cfg.ls, JSON.stringify({ day: new Date().toISOString().slice(0, 10), tickers, sectors: j.sectors || null })); } catch (e) { }
         if (_repMarket === mkt && _repView === 'list') _repRenderList();
     } catch (e) {
         const body = document.getElementById('repBody');
@@ -184,7 +202,7 @@ function _repRenderList() {
     const CAP = 2000;
     list = list.slice(0, CAP);
 
-    const cards = list.map(t => {
+    const cardHtml = (t) => {
         const disp = _repMarket === 'il' ? t.replace(/\.TA$/, '') : t;
         const s = scores[t];
         const chip = (s && s.score != null)
@@ -195,11 +213,32 @@ function _repRenderList() {
             <span class="rep-card-ticker">${disp}<span class="rep-card-beat-slot" data-rep-beat="${t}">${beat}</span></span>
             ${chip}
         </button>`;
-    }).join('');
+    };
+
+    const sectorMap = _repSectors[_repMarket];
+    let listHtml;
+    if (sectorMap && Object.keys(sectorMap).length) {
+        // Group by sector → sections, ordered by the canonical sector order; unknown last.
+        const groups = {};
+        list.forEach(t => { const sec = sectorMap[t] || '__other'; (groups[sec] = groups[sec] || []).push(t); });
+        const order = [..._REP_SECTOR_ORDER.filter(s => groups[s]), ...Object.keys(groups).filter(s => s !== '__other' && !_REP_SECTOR_ORDER.includes(s)).sort()];
+        if (groups['__other']) order.push('__other');
+        listHtml = order.map(sec => {
+            const he = sec === '__other' ? 'אחר' : (_REP_SECTOR_HE[sec] || sec);
+            const cards = groups[sec].map(cardHtml).join('');
+            return `<div class="rep-sector-group">
+                <div class="rep-sector-head">${he} <span class="rep-sector-count">${groups[sec].length}</span></div>
+                <div class="rep-grid">${cards}</div>
+            </div>`;
+        }).join('');
+        if (!list.length) listHtml = `<div class="adv-empty">אין חברות שתואמות "${_repSearch}".</div>`;
+    } else {
+        listHtml = `<div class="rep-grid">${list.map(cardHtml).join('') || `<div class="adv-empty">אין חברות שתואמות "${_repSearch}".</div>`}</div>`;
+    }
 
     body.innerHTML = `
-        <div class="rep-grid">${cards || `<div class="adv-empty">אין חברות שתואמות "${_repSearch}".</div>`}</div>
-        ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`} · הציונים נטענים אוטומטית ברקע</div>` : ''}`;
+        ${listHtml}
+        ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`}${sectorMap ? ' · מסודרות לפי סקטור' : ''} · הציונים נטענים אוטומטית ברקע</div>` : ''}`;
 
     _repPrefetchScores(); // fill the board's score chips in the background (free Yahoo source)
 }
