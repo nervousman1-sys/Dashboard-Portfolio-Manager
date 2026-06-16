@@ -230,6 +230,27 @@ module.exports = async (req, res) => {
     try {
         const mode = req.query.mode || 'tickers';
 
+        // mode=report — financial-statement report (delegated to shared lib so it
+        // doesn't need its own serverless function; the project is at the 12-fn cap).
+        if (mode === 'report') {
+            const { fetchReport } = require('../lib/reports-data.js');
+            const symbol = String(req.query.symbol || '').trim().toUpperCase();
+            const market = (req.query.market || (symbol.endsWith('.TA') ? 'il' : 'us')).toLowerCase();
+            if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
+            try {
+                const data = await fetchReport(symbol, market);
+                if (!data.quarters || !data.quarters.length) { res.status(404).json({ error: 'no data', symbol }); return; }
+                res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+                res.status(200).json(data);
+            } catch (e) {
+                const kind = e.kind || 'error';
+                const status = kind === 'limit' ? 429 : kind === 'nodata' ? 404 : 502;
+                res.setHeader('Cache-Control', 's-maxage=60');
+                res.status(status).json({ error: kind, message: String(e.message || e), symbol, market });
+            }
+            return;
+        }
+
         if (mode === 'tickers') {
             const market = (req.query.market || 'us').toLowerCase();
             if (market === 'il') {

@@ -187,7 +187,7 @@ async function openReportDetail(symbol) {
     if (body) body.innerHTML = `<div class="rep-loading"><div class="rep-spinner"></div><span>טוען דו"ח עבור ${symbol.replace(/\.TA$/, '')}…</span></div>`;
 
     try {
-        const r = await fetch(`/api/reports?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}`, { headers: { Accept: 'application/json' } });
+        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}`, { headers: { Accept: 'application/json' } });
         if (!r.ok) {
             const j = await r.json().catch(() => ({}));
             const msg = r.status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
@@ -394,7 +394,7 @@ async function _repLoadAI(m) {
     const stratEl = document.getElementById('repStrategy');
     try {
         const ctx = ReportsEngine.aiContext(m);
-        const r = await fetch('/api/report-ai', {
+        const r = await fetch('/api/vision?mode=swot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ symbol: m.symbol, company: m.companyName, sector: m.sector, context: ctx }),

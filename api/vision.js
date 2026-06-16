@@ -69,6 +69,38 @@ module.exports = async (req, res) => {
         return;
     }
 
+    // mode=swot — text-only report SWOT + strategy (Hebrew). Delegated to a shared lib
+    // so the reports page reuses this Gemini function instead of needing its own (the
+    // project is at the Vercel 12-function cap). Accepts POST body or ?context= JSON.
+    if (req.query.mode === 'swot') {
+        try {
+            const { generateSwot } = require('../lib/report-ai.js');
+            let d = {};
+            if (req.method === 'POST') {
+                d = (typeof req.body === 'object' && req.body) ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch (e) { return {}; } })();
+            } else {
+                d = { symbol: req.query.symbol, company: req.query.company, sector: req.query.sector };
+                if (req.query.context) { try { d.context = JSON.parse(req.query.context); } catch (e) { d.context = {}; } }
+            }
+            const symbol = String(d.symbol || '').trim().toUpperCase();
+            if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
+            const memoKey = `swot:${symbol}`;
+            if (_memo.has(memoKey)) {
+                res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+                res.status(200).json({ ..._memo.get(memoKey), cached: true });
+                return;
+            }
+            const result = await generateSwot(d, KEY, MODELS);
+            _memo.set(memoKey, result);
+            res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+            res.status(200).json(result);
+        } catch (e) {
+            res.setHeader('Cache-Control', 's-maxage=60');
+            res.status(502).json({ error: 'ai_failed', message: e.message });
+        }
+        return;
+    }
+
     try {
         const img = String(req.query.img || '');
         const mode = PROMPTS[req.query.mode] ? req.query.mode : 'transcribe';
