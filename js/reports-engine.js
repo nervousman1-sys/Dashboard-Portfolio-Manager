@@ -28,8 +28,17 @@
         const currentRatio = div(q.currentAssets, q.currentLiabilities);
         const debtToEquity = div(q.totalDebt, q.totalEquity);
         const fcf = (isNum(q.operatingCashFlow)) ? q.operatingCashFlow - Math.abs(isNum(q.capex) ? q.capex : 0) : null;
+        const fcfMargin = div(fcf, q.revenue);
         const ocfToNI = div(q.operatingCashFlow, q.netIncome);
-        return { grossMargin, operatingMargin, netMargin, workingCapital, currentRatio, debtToEquity, fcf, ocfToNI };
+        // EBITDA = reported, else operating income + D&A. EBITDA margin off revenue.
+        const ebitda = isNum(q.ebitda) ? q.ebitda
+            : ((isNum(q.operatingIncome) && isNum(q.dna)) ? q.operatingIncome + q.dna : null);
+        const ebitdaMargin = div(ebitda, q.revenue);
+        // Net debt = total debt − cash (a negative value means net cash).
+        const netDebt = isNum(q.totalDebt) ? q.totalDebt - (isNum(q.cash) ? q.cash : 0) : null;
+        // Return on equity for the quarter (annualized ≈ ×4 at model level).
+        const roe = div(q.netIncome, q.totalEquity);
+        return { grossMargin, operatingMargin, netMargin, workingCapital, currentRatio, debtToEquity, fcf, fcfMargin, ocfToNI, ebitda, ebitdaMargin, netDebt, roe };
     }
 
     // Build the full enriched model from a normalized report (quarters newest-first).
@@ -56,14 +65,24 @@
         const latest = rows[0] || null;
         // Trailing-twelve-month aggregates (sum of last 4 quarters) for valuation multiples.
         const ttm = rows.slice(0, 4);
-        const ttmNetIncome = ttm.reduce((s, r) => s + (isNum(r.netIncome) ? r.netIncome : 0), 0);
+        const sumTTM = (key) => ttm.reduce((s, r) => s + (isNum(r[key]) ? r[key] : 0), 0);
+        const ttmNetIncome = sumTTM('netIncome');
         const ttmHasFull = ttm.length === 4 && ttm.every(r => isNum(r.netIncome));
+        const ttmRevenue = sumTTM('revenue');
+        const ttmFcf = sumTTM('fcf');
+        const ttmEbitda = sumTTM('ebitda');
         const peTrailing = (ttmHasFull && isNum(report.marketCap)) ? div(report.marketCap, ttmNetIncome) : null;
         const pb = (latest && isNum(report.marketCap)) ? div(report.marketCap, latest.totalEquity) : null;
+        const roeTTM = (ttmHasFull && latest) ? div(ttmNetIncome, latest.totalEquity) : null;
+        const fcfYield = (ttmHasFull && isNum(report.marketCap)) ? div(ttmFcf, report.marketCap) : null;
+        const evToEbitda = (isNum(report.marketCap) && latest && isNum(latest.netDebt) && ttm.length === 4 && ttmEbitda)
+            ? div(report.marketCap + latest.netDebt, ttmEbitda) : null;
 
         const flags = computeFlags(rows);
         const beat = computeBeat(latest);
         const score = computeScore(rows, { peTrailing, pb, beat, flags });
+        const valuation = { peTrailing, pb, roeTTM, fcfYield, evToEbitda, ttmNetIncome: ttmHasFull ? ttmNetIncome : null, ttmRevenue: ttmHasFull ? ttmRevenue : null };
+        const keyPoints = computeKeyPoints(rows, { beat, valuation, currency: report.currency });
 
         return {
             symbol: report.symbol,
@@ -79,11 +98,52 @@
             asOf: report.asOf,
             rows,
             latest,
-            valuation: { peTrailing, pb, ttmNetIncome: ttmHasFull ? ttmNetIncome : null },
+            valuation,
             flags,
             beat,
             score,
+            keyPoints,
         };
+    }
+
+    // ── Key points — deterministic, plain-Hebrew highlights pulled from the numbers.
+    // tone: 'pos' | 'neg' | 'neutral' (the view colors them). No API cost.
+    function computeKeyPoints(rows, ctx) {
+        const a = rows[0];
+        if (!a) return [];
+        const pts = [];
+        const cur = ctx.currency === 'ILS' ? '₪' : (ctx.currency === 'USD' ? '$' : '');
+        const money = (v) => {
+            if (!isNum(v)) return '—';
+            const abs = Math.abs(v), sign = v < 0 ? '-' : '';
+            if (abs >= 1e9) return `${sign}${cur}${(abs / 1e9).toFixed(2)}B`;
+            if (abs >= 1e6) return `${sign}${cur}${(abs / 1e6).toFixed(1)}M`;
+            return `${sign}${cur}${abs.toFixed(0)}`;
+        };
+        const p1 = (x) => (x * 100).toFixed(1) + '%';
+        const add = (he, tone) => pts.push({ he, tone: tone || 'neutral' });
+
+        if (isNum(a.yoyRevenue))
+            add(`ההכנסות ${a.yoyRevenue >= 0 ? 'צמחו' : 'ירדו'} ב-${p1(Math.abs(a.yoyRevenue))} מול הרבעון המקביל אשתקד.`, a.yoyRevenue >= 0 ? 'pos' : 'neg');
+        if (isNum(a.yoyNetIncome))
+            add(`הרווח הנקי ${a.yoyNetIncome >= 0 ? 'עלה' : 'ירד'} ב-${p1(Math.abs(a.yoyNetIncome))} מול אשתקד.`, a.yoyNetIncome >= 0 ? 'pos' : 'neg');
+        if (isNum(a.netMargin))
+            add(`שיעור הרווח הנקי עומד על ${p1(a.netMargin)}.`, a.netMargin >= 0.10 ? 'pos' : (a.netMargin < 0 ? 'neg' : 'neutral'));
+        if (isNum(a.ebitdaMargin))
+            add(`שיעור ה-EBITDA עומד על ${p1(a.ebitdaMargin)} (רווחיות תפעולית-תזרימית).`, a.ebitdaMargin >= 0.20 ? 'pos' : 'neutral');
+        if (isNum(a.fcf))
+            add(`תזרים מזומנים חופשי (FCF) ${a.fcf >= 0 ? 'חיובי' : 'שלילי'} של ${money(a.fcf)} ברבעון.`, a.fcf >= 0 ? 'pos' : 'neg');
+        if (isNum(ctx.valuation.roeTTM))
+            add(`תשואה על ההון (ROE, שנים-עשר חודשים) ${p1(ctx.valuation.roeTTM)}.`, ctx.valuation.roeTTM >= 0.15 ? 'pos' : (ctx.valuation.roeTTM < 0 ? 'neg' : 'neutral'));
+        if (isNum(a.debtToEquity))
+            add(`מינוף (חוב/הון) ${a.debtToEquity.toFixed(2)}${isNum(a.netDebt) ? ` · חוב נטו ${money(a.netDebt)}` : ''}.`, a.debtToEquity > 2 ? 'neg' : (a.debtToEquity <= 1 ? 'pos' : 'neutral'));
+        if (isNum(a.currentRatio))
+            add(`יחס שוטף ${a.currentRatio.toFixed(2)} — ${a.currentRatio >= 1.5 ? 'נזילות איתנה' : (a.currentRatio < 1 ? 'נזילות מתוחה' : 'נזילות סבירה')}.`, a.currentRatio >= 1.5 ? 'pos' : (a.currentRatio < 1 ? 'neg' : 'neutral'));
+        if (isNum(ctx.valuation.peTrailing))
+            add(`מכפיל רווח (P/E, 12ח') ${ctx.valuation.peTrailing.toFixed(1)}.`, 'neutral');
+        if (ctx.beat && ctx.beat.label && ctx.beat.label !== 'אין נתונים')
+            add(`מגמה: ${ctx.beat.label}.`, ctx.beat.improved ? 'pos' : 'neutral');
+        return pts;
     }
 
     // ── Risk flags (deterministic). severity: 'high' (red) | 'warn' (amber) ──
@@ -219,7 +279,9 @@
             verdict: model.score?.verdict,
             grossMargin: fmtP(a.grossMargin),
             operatingMargin: fmtP(a.operatingMargin),
+            ebitdaMargin: fmtP(a.ebitdaMargin),
             netMargin: fmtP(a.netMargin),
+            roeTTM: fmtP(model.valuation?.roeTTM),
             revenueYoY: fmtP(a.yoyRevenue),
             epsYoY: fmtP(a.yoyEps),
             debtToEquity: isNum(a.debtToEquity) ? a.debtToEquity.toFixed(2) : 'n/a',
@@ -230,7 +292,7 @@
         };
     }
 
-    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, aiContext };
+    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, computeKeyPoints, aiContext };
     if (typeof module !== 'undefined' && module.exports) module.exports = API;
     if (typeof root !== 'undefined') {
         root.ReportsEngine = API;

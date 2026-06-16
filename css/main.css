@@ -9599,3 +9599,32 @@ html.day-mode .rep-keyfig-val,
 html.day-mode .rep-table .rep-metric-name,
 html.day-mode .rep-swot-quad li,
 html.day-mode .rep-strat-part p { color: var(--text-primary); }
+
+/* ── Key points (deterministic highlights) ── */
+.rep-keypoints { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.rep-kp { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.5;
+    color: var(--text-primary); background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; }
+.rep-kp-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--accent-blue); }
+.rep-kp-pos .rep-kp-dot { background: var(--accent-green); }
+.rep-kp-neg .rep-kp-dot { background: var(--accent-red); }
+.rep-kp-pos { border-color: rgba(0,255,148,0.22); }
+.rep-kp-neg { border-color: rgba(255,77,77,0.25); }
+
+/* ── No gray text on the reports page — every label/value reads white (per request).
+   Scoped to #reportsPage so the rest of the app keeps its muted hierarchy. Colored
+   bits (green/red deltas, score chips, accent titles) keep their own explicit color. */
+#reportsPage .risk-table tbody td,
+#reportsPage .risk-table thead th,
+#reportsPage .rep-head-sub,
+#reportsPage .rep-keyfig-label,
+#reportsPage .rep-score-cap,
+#reportsPage .rep-chart-h,
+#reportsPage .rep-hint,
+#reportsPage .tech-foot,
+#reportsPage .rep-badge-flat,
+#reportsPage .rep-swot-empty,
+#reportsPage .rep-card-score-empty,
+#reportsPage .rep-flag,
+#reportsPage .adv-empty { color: var(--text-primary); }
+#reportsPage .rep-hint { opacity: 0.85; }

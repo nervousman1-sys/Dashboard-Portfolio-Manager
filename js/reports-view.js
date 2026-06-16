@@ -276,6 +276,12 @@ function _repRenderDetail(m) {
     const v = m.valuation || {};
     const keyFig = (label, val) => `<div class="rep-keyfig"><span class="rep-keyfig-label">${label}</span><span class="rep-keyfig-val">${val}</span></div>`;
 
+    // Key points (deterministic highlights from the numbers).
+    const kp = Array.isArray(m.keyPoints) ? m.keyPoints : [];
+    const keyPointsHtml = kp.length
+        ? kp.map(p => `<li class="rep-kp rep-kp-${p.tone}"><span class="rep-kp-dot"></span>${p.he}</li>`).join('')
+        : '<li class="rep-kp rep-kp-neutral"><span class="rep-kp-dot"></span>אין מספיק נתונים להפקת נקודות מפתח.</li>';
+
     body.innerHTML = `
     <div class="rep-detail" dir="rtl">
         <div class="rep-detail-top">
@@ -300,8 +306,14 @@ function _repRenderDetail(m) {
             ${keyFig('מחיר', m.price != null ? `${cur}${m.price.toLocaleString('en-US')}` : '—')}
             ${keyFig('מכפיל רווח (P/E)', _repFmtRatio(v.peTrailing, 1))}
             ${keyFig('מכפיל הון (P/B)', _repFmtRatio(v.pb, 2))}
+            ${keyFig('תשואה על ההון (ROE)', _repFmtPct(v.roeTTM))}
+            ${keyFig('EV/EBITDA', _repFmtRatio(v.evToEbitda, 1))}
+            ${keyFig('תשואת FCF', _repFmtPct(v.fcfYield))}
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
         </div>
+
+        <div class="rep-section-title">נקודות מפתח מהדוח</div>
+        <ul class="rep-keypoints">${keyPointsHtml}</ul>
 
         <div class="rep-section-title">דגלי סיכון</div>
         <div class="rep-flags">${flagsHtml}</div>
@@ -316,16 +328,21 @@ function _repRenderDetail(m) {
                 ${metricRow('שיעור רווח גולמי', fmP, 'grossMargin')}
                 ${metricRow('רווח תפעולי', fmM, 'operatingIncome')}
                 ${metricRow('שיעור רווח תפעולי', fmP, 'operatingMargin')}
+                ${metricRow('EBITDA', fmM, 'ebitda', null, 'רווח לפני ריבית, מס, פחת והפחתות — רווחיות תפעולית-תזרימית')}
+                ${metricRow('שיעור EBITDA', fmP, 'ebitdaMargin')}
                 ${metricRow('רווח נקי', fmM, 'netIncome', 'yoyNetIncome')}
                 ${metricRow('שיעור רווח נקי', fmP, 'netMargin')}
                 ${metricRow('רווח למניה (EPS)', fmE, 'eps', 'yoyEps')}
                 ${metricRow('הון עצמי', fmM, 'totalEquity')}
                 ${metricRow('סך התחייבויות', fmM, 'totalLiabilities')}
+                ${metricRow('חוב נטו', fmM, 'netDebt', null, 'סך החוב פחות מזומן ושווי-מזומן (ערך שלילי = עודף מזומן)')}
                 ${metricRow('הון חוזר', fmM, 'workingCapital', null, 'נכסים שוטפים פחות התחייבויות שוטפות')}
                 ${metricRow('יחס שוטף', fmR, 'currentRatio', null, 'נכסים שוטפים / התחייבויות שוטפות')}
+                ${metricRow('תשואה על ההון (ROE)', fmP, 'roe', null, 'רווח נקי רבעוני חלקי ההון העצמי')}
                 ${metricRow('מינוף (חוב/הון)', fmR, 'debtToEquity')}
                 ${metricRow('תזרים תפעולי', fmM, 'operatingCashFlow')}
                 ${metricRow('תזרים חופשי (FCF)', fmM, 'fcf', null, 'תזרים תפעולי פחות השקעות הוניות')}
+                ${metricRow('שיעור FCF', fmP, 'fcfMargin', null, 'תזרים חופשי חלקי הכנסות')}
             </tbody>
         </table>
         </div>
@@ -376,8 +393,8 @@ function _repBarChart(canvasId, series, color, cur) {
                 tooltip: { callbacks: { label: (c) => _repFmtMoney(c.parsed.y, cur) } },
             },
             scales: {
-                x: { ticks: { color: '#8b96a8', font: { size: 9 } }, grid: { display: false } },
-                y: { ticks: { color: '#8b96a8', font: { size: 9 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: '#e8edf5', font: { size: 9 } }, grid: { display: false } },
+                y: { ticks: { color: '#e8edf5', font: { size: 9 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: 'rgba(255,255,255,0.05)' } },
             },
         },
     });
