@@ -3,3 +3,6 @@ node_modules/
 data*.xlsx
 package.json
 package-lock.json
+.env
+.env.*
+!.env.example

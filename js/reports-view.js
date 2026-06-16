@@ -283,7 +283,7 @@ function _repRenderDetail(m) {
             <div class="rep-head-id">
                 <div class="rep-head-name">${m.companyName || m.symbol}</div>
                 <div class="rep-head-sub">${m.symbol.replace(/\.TA$/, '')}${m.sector ? ' · ' + m.sector : ''}${m.asOf ? ' · דוח אחרון: ' + m.asOf : ''}</div>
-                <div class="rep-head-badges">${beatBadge}${m.source === 'yahoo' ? '<span class="rep-badge rep-badge-src">מקור: Yahoo (ישראל)</span>' : ''}</div>
+                <div class="rep-head-badges">${beatBadge}${m.source === 'yahoo' ? '<span class="rep-badge rep-badge-src">מקור: Yahoo</span>' : ''}</div>
             </div>
             <div class="rep-score-box ${scoreCls}">
                 <div class="rep-score-num">${score.value != null ? score.value : '—'}</div>
