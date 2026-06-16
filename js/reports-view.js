@@ -11,7 +11,7 @@
 // come from /api/report-ai (Gemini), loaded async into the detail view.
 
 const _REP_MKT = {
-    us: { ls: 'rep_uni_us', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
+    us: { ls: 'rep_uni_us_v2', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
     il: { ls: 'rep_uni_il', cur: '₪', label: 'ניירות (ת"א-125)', search: 'חיפוש נייר (למשל: TEVA)…' },
 };
 const _REP_SCORES_LS = 'rep_scores_v1';
