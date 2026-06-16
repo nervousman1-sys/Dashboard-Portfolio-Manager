@@ -395,11 +395,11 @@ function _dnVisionHTML(text, img, mode) {
                 if (gross <= 0) continue;
                 const balanced = Math.abs(net) < 0.05 * gross;   // equal buy+sell → churn, not a net move
                 const grossNote = (g.inMag > 0 && g.outMag > 0)
-                    ? `נטו · קנו ${_dnFmtMag(g.inMag)}$ ומכרו ${_dnFmtMag(g.outMag)}$` : '';
+                    ? `נטו · קנו $${_dnFmtMag(g.inMag)} ומכרו $${_dnFmtMag(g.outMag)}` : '';
                 moverObjs.push({
                     name: g.name, dest: g.dest,
                     dir: balanced ? '' : (net > 0 ? 'in' : 'out'),
-                    amount: balanced ? 'מאוזן' : _dnFmtMag(Math.abs(net)) + '$',
+                    amount: balanced ? 'מאוזן' : '$' + _dnFmtMag(Math.abs(net)),
                     netMag: Math.abs(net), grossNote, balanced,
                 });
             }
@@ -451,8 +451,8 @@ function _dnVisionHTML(text, img, mode) {
             let bigMoveHTML = '';
             if (topDest || biggestIn) {
                 const bits = [];
-                if (topDest) bits.push(`הכי הרבה כסף נכנס אל <b>${_dnEsc(topDest)}</b>${topDestNote ? ` (${_dnEsc(topDestNote)})` : ''}`);
-                if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> ${_dnEsc(biggestIn.amount)}${biggestIn.dest ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
+                if (topDest) bits.push(`הכי הרבה כסף נכנס אל <b>${_dnEsc(topDest)}</b>${topDestNote ? ` (<span dir="auto">${_dnEsc(topDestNote)}</span>)` : ''}`);
+                if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> <span dir="ltr">${_dnEsc(biggestIn.amount)}</span>${biggestIn.dest ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
                 bigMoveHTML = `<div class="dn-flow-bigmove" dir="rtl"><span class="dn-bigmove-ic">▲</span> ${bits.join(' · ')}</div>`;
             }
             const _domShown = new Set();   // show an institution's dominant destination once
@@ -478,7 +478,7 @@ function _dnVisionHTML(text, img, mode) {
                         ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${tkBadge}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}${starOnAsset}</span>`
                         : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
                     const amtHtml = m.amount
-                        ? `<span class="dn-mover-amt ${cls}" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
+                        ? `<span class="dn-mover-amt ${cls}" dir="ltr" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
                         : '<span class="dn-mover-amt">—</span>';
                     const grossHtml = m.grossNote ? `<span class="dn-mover-gross">${_dnEsc(m.grossNote)}</span>` : '';
                     return `<div class="dn-mover-row ${cls}" dir="rtl">
