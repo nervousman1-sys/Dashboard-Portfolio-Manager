@@ -74,6 +74,8 @@ function navigateTo(section) {
     const closeDnIfOpen = () => { if (dnPage && dnPage.classList.contains('active') && typeof closeDiscordNews === 'function') closeDiscordNews(); };
     const techPage = document.getElementById('technicalPage');
     const closeTechIfOpen = () => { if (techPage && techPage.classList.contains('active') && typeof closeTechnicalPage === 'function') closeTechnicalPage(); };
+    const repPage = document.getElementById('reportsPage');
+    const closeRepIfOpen = () => { if (repPage && repPage.classList.contains('active') && typeof closeReportsPage === 'function') closeReportsPage(); };
 
     switch (section) {
         case 'dashboard':
@@ -88,6 +90,7 @@ function navigateTo(section) {
             closeBulkIfOpen();
             closeDnIfOpen();
             closeTechIfOpen();
+            closeRepIfOpen();
             // Scroll to portfolio grid if coming from "portfolio" link
             if (section === 'portfolio') {
                 const grid = document.getElementById('clientsGrid');
@@ -105,6 +108,7 @@ function navigateTo(section) {
             closeBulkIfOpen();
             closeDnIfOpen();
             closeTechIfOpen();
+            closeRepIfOpen();
             if (!macroIsActive && typeof toggleAlerts === 'function') {
                 toggleAlerts();
             }
@@ -118,6 +122,7 @@ function navigateTo(section) {
             closeBulkIfOpen();
             closeDnIfOpen();
             closeTechIfOpen();
+            closeRepIfOpen();
             if (typeof openRiskAnalysis === 'function') {
                 openRiskAnalysis();
             }
@@ -133,6 +138,7 @@ function navigateTo(section) {
             }
             closeDnIfOpen();
             closeTechIfOpen();
+            closeRepIfOpen();
             if (typeof openBulkPage === 'function') {
                 openBulkPage();
             }
@@ -148,6 +154,7 @@ function navigateTo(section) {
             }
             closeBulkIfOpen();
             closeTechIfOpen();
+            closeRepIfOpen();
             if (typeof openDiscordNews === 'function') {
                 openDiscordNews();
             }
@@ -163,8 +170,25 @@ function navigateTo(section) {
             }
             closeBulkIfOpen();
             closeDnIfOpen();
+            closeRepIfOpen();
             if (typeof openTechnicalPage === 'function') {
                 openTechnicalPage();
+            }
+            break;
+
+        case 'reports':
+            // Open the financial-reports analysis page
+            if (macroIsActive && typeof closeMacroPage === 'function') {
+                closeMacroPage();
+            }
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') {
+                closeRiskAnalysis();
+            }
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            closeTechIfOpen();
+            if (typeof openReportsPage === 'function') {
+                openReportsPage();
             }
             break;
 
@@ -230,6 +254,19 @@ function _setActiveNav(section) {
             }
         });
         riskObserver.observe(riskPage, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Sync reports-analysis page open/close with sidebar active state
+    const reportsPage = document.getElementById('reportsPage');
+    if (reportsPage) {
+        const repObserver = new MutationObserver(() => {
+            if (reportsPage.classList.contains('active')) {
+                _setActiveNav('reports');
+            } else if (_currentNav === 'reports') {
+                _setActiveNav('dashboard');
+            }
+        });
+        repObserver.observe(reportsPage, { attributes: true, attributeFilter: ['class'] });
     }
 })();
 

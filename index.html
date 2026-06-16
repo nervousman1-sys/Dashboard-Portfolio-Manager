@@ -121,6 +121,18 @@
                     </span>
                     <span class="sidebar-label">ניתוח טכני למניות</span>
                 </a>
+                <!-- Financial reports analysis -->
+                <a class="sidebar-item" data-nav="reports" onclick="navigateTo(&#39;reports&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="8" y1="13" x2="16" y2="13" />
+                            <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח דוחות כספיים</span>
+                </a>
                 <!-- Smart bulk management -->
                 <a class="sidebar-item" data-nav="bulkmgr" onclick="navigateTo(&#39;bulkmgr&#39;)">
                     <span class="sidebar-item-icon">
@@ -359,6 +371,7 @@
             <div class="riskmodel-page" id="bulkPage"></div>
             <div class="riskmodel-page" id="discordNewsPage"></div>
             <div class="riskmodel-page" id="technicalPage"></div>
+            <div class="riskmodel-page" id="reportsPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -615,6 +628,8 @@
     <script src="js/bulk-actions.js"></script>
     <script src="js/discord-news.js"></script>
     <script src="js/technical-view.js"></script>
+    <script src="js/reports-engine.js"></script>
+    <script src="js/reports-view.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/init.js"></script>
