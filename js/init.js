@@ -145,10 +145,23 @@ window.addEventListener('DOMContentLoaded', _syncThemeButton);
 // ========== SERVICE WORKER REGISTRATION ==========
 
 if ('serviceWorker' in navigator) {
+    // Auto-reload once the new SW takes control, so a freshly-deployed version
+    // (e.g. a new sidebar item) shows up without the user manually clearing cache.
+    let _swReloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_swReloading) return;
+        _swReloading = true;
+        window.location.reload();
+    });
+
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js')
+        // updateViaCache:'none' → the SW script itself is never served from the
+        // HTTP cache, so version bumps are detected on every load.
+        navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' })
             .then((reg) => {
                 console.log('Service Worker registered, scope:', reg.scope);
+                // Proactively check for a newer SW on every load.
+                reg.update().catch(() => {});
             })
             .catch((err) => {
                 console.warn('Service Worker registration failed:', err);
