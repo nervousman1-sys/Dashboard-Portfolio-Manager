@@ -159,7 +159,10 @@ function _repRenderList() {
     const scores = _repScoreCache();
     let list = uni.filter(t => !_repSearch || t.includes(_repSearch));
     const total = list.length;
-    list = list.slice(0, 300);
+    // Show the full universe (S&P 500 ∪ Nasdaq-100 ≈ 514, or TA-125) — ~hundreds of
+    // lightweight buttons render fine; a report is only fetched when one is clicked.
+    const CAP = 2000;
+    list = list.slice(0, CAP);
 
     const cards = list.map(t => {
         const disp = _repMarket === 'il' ? t.replace(/\.TA$/, '') : t;
@@ -176,7 +179,7 @@ function _repRenderList() {
 
     body.innerHTML = `
         <div class="rep-grid">${cards || `<div class="adv-empty">אין חברות שתואמות "${_repSearch}".</div>`}</div>
-        ${total > 300 ? `<div class="tech-foot">מוצגות 300 מתוך ${total} — חדד את החיפוש.</div>` : ''}`;
+        ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`}</div>` : ''}`;
 }
 
 // ── Detail: fetch report on demand → engine → render ──
