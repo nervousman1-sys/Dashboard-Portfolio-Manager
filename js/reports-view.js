@@ -425,6 +425,7 @@ function _repRenderDetail(m) {
         : '<div class="rep-flag rep-flag-ok"><span class="rep-flag-dot"></span>לא זוהו דגלי סיכון מהותיים בנתוני הדו"ח.</div>';
 
     const v = m.valuation || {};
+    const L = m.latest || {}; // latest quarter — for headline profit-margin cards
     // Skip a key-figure card when its value couldn't be computed (renders as "—").
     const keyFig = (label, val) => (val == null || val === '—') ? '' : `<div class="rep-keyfig"><span class="rep-keyfig-label">${label}</span><span class="rep-keyfig-val">${val}</span></div>`;
 
@@ -456,6 +457,10 @@ function _repRenderDetail(m) {
         <div class="rep-keyfigs">
             ${keyFig('שווי שוק', _repFmtMoney(m.marketCap, cur))}
             ${keyFig('מחיר', m.price != null ? `${cur}${m.price.toLocaleString('en-US')}` : '—')}
+            ${keyFig('שולי רווח נקי', _repFmtPct(L.netMargin))}
+            ${keyFig('שולי רווח תפעולי', _repFmtPct(L.operatingMargin))}
+            ${keyFig('שולי רווח גולמי', _repFmtPct(L.grossMargin))}
+            ${keyFig('שולי EBITDA', _repFmtPct(L.ebitdaMargin))}
             ${keyFig('מכפיל רווח (P/E)', _repFmtRatio(v.peTrailing, 1))}
             ${keyFig('מכפיל הון (P/B)', _repFmtRatio(v.pb, 2))}
             ${keyFig('תשואה על ההון (ROE)', _repFmtPct(v.roeTTM))}
@@ -508,7 +513,7 @@ function _repRenderDetail(m) {
 
         <div class="rep-section-title">מגמות (8 רבעונים)</div>
         <div class="rep-charts">
-            ${_REP_CHARTS.map(c => `
+            ${_REP_CHARTS.filter(c => m.rows.some(q => q[c.key] != null && !isNaN(q[c.key]))).map(c => `
             <div class="rep-chart-card rep-chart-clickable" onclick="_repEnlargeChart('${c.key}')" title="לחץ להגדלה">
                 <div class="rep-chart-h">${c.title}<span class="rep-chart-zoom" aria-hidden="true">⤢</span></div>
                 <canvas id="${c.canvas}"></canvas>
@@ -565,7 +570,8 @@ function _repBarChart(canvasId, series, color, cur) {
 function _repRenderCharts(m, cur) {
     _repChartCtx = { m, cur };
     const chron = m.rows.slice().reverse(); // oldest → newest
-    const mk = (key) => chron.map(q => ({ label: _repQuarterLabel(q), value: q[key] == null ? null : q[key] }));
+    // Only plot quarters that actually have a value — no empty leading/gap bars.
+    const mk = (key) => chron.filter(q => q[key] != null && !isNaN(q[key])).map(q => ({ label: _repQuarterLabel(q), value: q[key] }));
     _REP_CHARTS.forEach(c => _repBarChart(c.canvas, mk(c.key), c.color, cur));
 }
 
@@ -575,7 +581,7 @@ function _repEnlargeChart(key) {
     if (!def || !_repChartCtx) return;
     const { m, cur } = _repChartCtx;
     const chron = m.rows.slice().reverse();
-    const series = chron.map(q => ({ label: _repQuarterLabel(q), value: q[key] == null ? null : q[key] }));
+    const series = chron.filter(q => q[key] != null && !isNaN(q[key])).map(q => ({ label: _repQuarterLabel(q), value: q[key] }));
 
     _repCloseChartModal();
     const ov = document.createElement('div');

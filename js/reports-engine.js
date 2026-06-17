@@ -46,7 +46,12 @@
     function fillDerived(q) {
         const out = { ...q };
         if (!isNum(out.eps) && isNum(out.netIncome) && isNum(out.sharesOut) && out.sharesOut > 0) out.eps = out.netIncome / out.sharesOut;
-        if (!isNum(out.ebitda) && isNum(out.operatingIncome) && isNum(out.dna)) out.ebitda = out.operatingIncome + out.dna;
+        // EBITDA = operating income + D&A. For financials (no operating income line)
+        // fall back to pre-tax income + D&A so EBITDA still shows.
+        if (!isNum(out.ebitda) && isNum(out.dna)) {
+            const base = isNum(out.operatingIncome) ? out.operatingIncome : (isNum(out.pretaxIncome) ? out.pretaxIncome : null);
+            if (isNum(base)) out.ebitda = base + out.dna;
+        }
         if (!isNum(out.grossProfit) && isNum(out.revenue) && isNum(out.costOfRevenue)) out.grossProfit = out.revenue - out.costOfRevenue;
         return out;
     }

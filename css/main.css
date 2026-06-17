@@ -9537,8 +9537,8 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 /* ── Risk flags ── */
 .rep-flags { display: flex; flex-direction: column; gap: 8px; }
 .rep-flag {
-    display: flex; align-items: flex-start; gap: 9px; padding: 10px 13px;
-    border-radius: 10px; font-size: 12.5px; font-weight: 600; line-height: 1.45;
+    display: flex; align-items: flex-start; gap: 9px; padding: 11px 14px;
+    border-radius: 10px; font-size: 14.5px; font-weight: 600; line-height: 1.6;
     background: var(--bg-card); border: 1px solid var(--border);
 }
 .rep-flag-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
@@ -9602,9 +9602,9 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 
 /* ── Key points (deterministic highlights) ── */
 .rep-keypoints { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
-.rep-kp { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.5;
+.rep-kp { display: flex; align-items: flex-start; gap: 9px; font-size: 14.5px; line-height: 1.65;
     color: var(--text-primary); background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; }
+    border: 1px solid var(--border); border-radius: 9px; padding: 11px 14px; }
 .rep-kp-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--accent-blue); }
 .rep-kp-pos .rep-kp-dot { background: var(--accent-green); }
 .rep-kp-neg .rep-kp-dot { background: var(--accent-red); }
@@ -9631,8 +9631,8 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 
 /* ── Attention notes (sharp declines) ── */
 .rep-attention { display: grid; gap: 8px; margin-bottom: 8px; }
-.rep-attn { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.5;
-    color: var(--text-primary); border-radius: 9px; padding: 9px 12px;
+.rep-attn { display: flex; align-items: flex-start; gap: 9px; font-size: 14.5px; line-height: 1.65;
+    color: var(--text-primary); border-radius: 9px; padding: 11px 14px;
     background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.28); }
 .rep-attn-high { background: rgba(255, 77, 77, 0.10); border-color: rgba(255, 77, 77, 0.35); }
 .rep-attn-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--accent-orange); }
