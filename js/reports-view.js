@@ -360,6 +360,11 @@ function _repRenderDetail(m) {
     const qHead = rows.map(q => `<th>${_repQuarterLabel(q)}</th>`).join('');
 
     const metricRow = (label, fmt, key, deltaKey, hint) => {
+        // Skip a row entirely when the metric is empty across ALL shown quarters
+        // (e.g. banks have no gross profit / EBITDA / current ratio) — so every
+        // visible table is full rather than peppered with "—".
+        const hasAny = rows.some(q => q[key] != null && !(typeof q[key] === 'number' && isNaN(q[key])));
+        if (!hasAny) return '';
         const cells = rows.map(q => {
             const val = fmt(q[key]);
             const d = deltaKey ? q[deltaKey] : null;
@@ -384,7 +389,8 @@ function _repRenderDetail(m) {
         : '<div class="rep-flag rep-flag-ok"><span class="rep-flag-dot"></span>לא זוהו דגלי סיכון מהותיים בנתוני הדו"ח.</div>';
 
     const v = m.valuation || {};
-    const keyFig = (label, val) => `<div class="rep-keyfig"><span class="rep-keyfig-label">${label}</span><span class="rep-keyfig-val">${val}</span></div>`;
+    // Skip a key-figure card when its value couldn't be computed (renders as "—").
+    const keyFig = (label, val) => (val == null || val === '—') ? '' : `<div class="rep-keyfig"><span class="rep-keyfig-label">${label}</span><span class="rep-keyfig-val">${val}</span></div>`;
 
     // Key points (deterministic highlights from the numbers).
     const kp = Array.isArray(m.keyPoints) ? m.keyPoints : [];
