@@ -327,6 +327,24 @@ function backToReportsList() {
     _repRenderList();
 }
 
+// Open the financial-reports analysis for a specific ticker from anywhere (e.g. the
+// portfolio recommendation cards). Closes any open overlays first, then deep-links
+// into the report detail for that company.
+function openReportForTicker(ticker) {
+    const sym = String(ticker || '').trim().toUpperCase();
+    if (!sym) return;
+    if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
+    const mo = document.getElementById('modalOverlay');
+    if (mo && mo.classList.contains('active')) {
+        mo.classList.remove('active');
+        if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+        try { currentModalClientId = null; } catch (e) { }
+    }
+    if (typeof openReportsPage === 'function') openReportsPage();
+    _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
+    openReportDetail(sym);
+}
+
 // Return to the FULL company list, clearing any active search (used by the sidebar
 // button so it always lands on the complete list, never a stale filtered view).
 function _repToList() {
@@ -686,4 +704,5 @@ if (typeof window !== 'undefined') {
     window._repCloseChartModal = _repCloseChartModal;
     window._repSyncToURL = _repSyncToURL;
     window._repToList = _repToList;
+    window.openReportForTicker = openReportForTicker;
 }
