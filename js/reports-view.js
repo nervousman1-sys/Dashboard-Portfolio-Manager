@@ -326,6 +326,32 @@ function backToReportsList() {
     _repRenderList();
 }
 
+// Reconcile the reports page's internal state to the URL — called by the central
+// history handler on Back/Forward so the browser's back button moves detail→list
+// (and list→detail) without leaving the reports page. updateURLState is a no-op
+// while the navigator is restoring, so this never pushes new history entries.
+function _repSyncToURL() {
+    const page = document.getElementById('reportsPage');
+    if (!page || !page.classList.contains('active')) return;
+    const params = new URLSearchParams(window.location.search);
+    const sym = (params.get('sym') || '').toUpperCase();
+    const mkt = (params.get('mkt') || '').toLowerCase();
+    if (mkt && _REP_MKT[mkt] && mkt !== _repMarket) {
+        // Market changed via history — rebuild the shell for that market.
+        _repMarket = mkt;
+        _repView = 'list';
+        _repRenderShell();
+        document.querySelectorAll('#repMkt .tech-mkt-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-mkt') === mkt));
+        const search = document.getElementById('repSearch'); if (search) search.placeholder = _REP_MKT[mkt].search;
+        _repLoadUniverse();
+    }
+    if (sym) {
+        if (_repView !== 'detail' || !_repCurrent || _repCurrent.symbol !== sym) openReportDetail(sym);
+    } else if (_repView !== 'list') {
+        backToReportsList();
+    }
+}
+
 // ── Formatting helpers ──
 function _repFmtMoney(v, cur) {
     if (v == null || isNaN(v)) return '—';
@@ -368,7 +394,7 @@ function _repRenderDetail(m) {
         const cells = rows.map(q => {
             const val = fmt(q[key]);
             const d = deltaKey ? q[deltaKey] : null;
-            const dTxt = d != null ? `<span class="rep-delta ${_repDeltaClass(d)}">${_repFmtPct(d, true)}</span>` : '';
+            const dTxt = d != null ? `<span class="rep-delta ${_repDeltaClass(d)}" title="שינוי לעומת הרבעון המקביל אשתקד (YoY)">${_repFmtPct(d, true)} <span class="rep-delta-ref">אשתקד</span></span>` : '';
             return `<td>${val}${dTxt}</td>`;
         }).join('');
         return `<tr><td class="rep-metric-name">${label}${hint ? `<span class="rep-hint" title="${hint}">ⓘ</span>` : ''}</td>${cells}</tr>`;
@@ -468,6 +494,7 @@ function _repRenderDetail(m) {
             </tbody>
         </table>
         </div>
+        <div class="rep-table-legend">▲▼ האחוז הירוק/אדום (ליד הכנסות, רווח נקי ו-EPS) = שינוי לעומת הרבעון המקביל אשתקד (YoY) · שיעורי הרווחיות (גולמי, תפעולי, EBITDA, נקי, FCF, ROE) הם ערך הרבעון עצמו — לא שינוי.</div>
 
         <div class="rep-section-title">מגמות (8 רבעונים)</div>
         <div class="rep-charts">
@@ -634,4 +661,5 @@ if (typeof window !== 'undefined') {
     window.backToReportsList = backToReportsList;
     window._repEnlargeChart = _repEnlargeChart;
     window._repCloseChartModal = _repCloseChartModal;
+    window._repSyncToURL = _repSyncToURL;
 }

@@ -187,7 +187,11 @@ function navigateTo(section) {
             closeBulkIfOpen();
             closeDnIfOpen();
             closeTechIfOpen();
-            if (typeof openReportsPage === 'function') {
+            // If the reports page is already open (e.g. viewing a company), clicking the
+            // sidebar item returns to the company list rather than re-opening the same one.
+            if (repPage && repPage.classList.contains('active') && typeof backToReportsList === 'function') {
+                backToReportsList();
+            } else if (typeof openReportsPage === 'function') {
                 openReportsPage();
             }
             break;

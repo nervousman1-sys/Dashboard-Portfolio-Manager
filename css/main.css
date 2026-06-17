@@ -9668,3 +9668,9 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     border-bottom: 1px solid var(--border); }
 .rep-sector-count { font-size: 11px; font-weight: 700; color: var(--text-primary); opacity: 0.6;
     background: rgba(255,255,255,0.06); border-radius: 999px; padding: 1px 8px; }
+
+/* ── Delta reference tag + table legend ── */
+.rep-delta-ref { font-size: 8.5px; font-weight: 600; opacity: 0.65; }
+.rep-table-legend { font-size: 11px; line-height: 1.6; color: var(--text-primary); opacity: 0.7;
+    margin: 8px 2px 0; padding: 8px 12px; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 9px; }
