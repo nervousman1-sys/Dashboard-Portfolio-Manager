@@ -483,13 +483,13 @@ function _repRenderDetail(m) {
             <tbody>
                 ${metricRow('הכנסות', fmM, 'revenue', 'yoyRevenue')}
                 ${metricRow('רווח גולמי', fmM, 'grossProfit')}
-                ${metricRow('שיעור רווח גולמי', fmP, 'grossMargin')}
+                ${metricRow('שולי רווח גולמי', fmP, 'grossMargin', null, 'רווח גולמי כאחוז מההכנסות')}
                 ${metricRow('רווח תפעולי', fmM, 'operatingIncome')}
-                ${metricRow('שיעור רווח תפעולי', fmP, 'operatingMargin')}
+                ${metricRow('שולי רווח תפעולי', fmP, 'operatingMargin', null, 'רווח תפעולי כאחוז מההכנסות')}
                 ${metricRow('EBITDA', fmM, 'ebitda', null, 'רווח לפני ריבית, מס, פחת והפחתות — רווחיות תפעולית-תזרימית')}
-                ${metricRow('שיעור EBITDA', fmP, 'ebitdaMargin')}
+                ${metricRow('שולי EBITDA', fmP, 'ebitdaMargin', null, 'EBITDA כאחוז מההכנסות')}
                 ${metricRow('רווח נקי', fmM, 'netIncome', 'yoyNetIncome')}
-                ${metricRow('שיעור רווח נקי', fmP, 'netMargin')}
+                ${metricRow('שולי רווח נקי', fmP, 'netMargin', null, 'רווח נקי כאחוז מההכנסות')}
                 ${metricRow('רווח למניה (EPS)', fmE, 'eps', 'yoyEps')}
                 ${metricRow('הון עצמי', fmM, 'totalEquity')}
                 ${metricRow('סך התחייבויות', fmM, 'totalLiabilities')}
@@ -500,11 +500,11 @@ function _repRenderDetail(m) {
                 ${metricRow('מינוף (חוב/הון)', fmR, 'debtToEquity')}
                 ${metricRow('תזרים תפעולי', fmM, 'operatingCashFlow')}
                 ${metricRow('תזרים חופשי (FCF)', fmM, 'fcf', null, 'תזרים תפעולי פחות השקעות הוניות')}
-                ${metricRow('שיעור FCF', fmP, 'fcfMargin', null, 'תזרים חופשי חלקי הכנסות')}
+                ${metricRow('שולי FCF', fmP, 'fcfMargin', null, 'תזרים חופשי חלקי הכנסות')}
             </tbody>
         </table>
         </div>
-        <div class="rep-table-legend">▲▼ האחוז הירוק/אדום (ליד הכנסות, רווח נקי ו-EPS) = שינוי לעומת הרבעון המקביל אשתקד (YoY) · שיעורי הרווחיות (גולמי, תפעולי, EBITDA, נקי, FCF, ROE) הם ערך הרבעון עצמו — לא שינוי.</div>
+        <div class="rep-table-legend">▲▼ האחוז הירוק/אדום (ליד הכנסות, רווח נקי ו-EPS) = שינוי לעומת הרבעון המקביל אשתקד (YoY) · שולי הרווח (גולמי, תפעולי, EBITDA, נקי, FCF) ו-ROE הם ערך הרבעון עצמו — לא שינוי.</div>
 
         <div class="rep-section-title">מגמות (8 רבעונים)</div>
         <div class="rep-charts">
