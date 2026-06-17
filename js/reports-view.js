@@ -71,6 +71,7 @@ function openReportsPage() {
     const urlSym = (params.get('sym') || '').toUpperCase();
     _repMarket = _REP_MKT[urlMkt] ? urlMkt : 'us';
     _repView = 'list';
+    _repSearch = ''; // always reopen on the full list, never a stale search filter
     if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: urlSym || null });
 
     _repRenderShell();
@@ -324,6 +325,15 @@ function backToReportsList() {
     _repDestroyCharts();
     if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: null });
     _repRenderList();
+}
+
+// Return to the FULL company list, clearing any active search (used by the sidebar
+// button so it always lands on the complete list, never a stale filtered view).
+function _repToList() {
+    _repSearch = '';
+    const search = document.getElementById('repSearch');
+    if (search) search.value = '';
+    backToReportsList();
 }
 
 // Reconcile the reports page's internal state to the URL — called by the central
@@ -662,4 +672,5 @@ if (typeof window !== 'undefined') {
     window._repEnlargeChart = _repEnlargeChart;
     window._repCloseChartModal = _repCloseChartModal;
     window._repSyncToURL = _repSyncToURL;
+    window._repToList = _repToList;
 }
