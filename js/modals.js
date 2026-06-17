@@ -144,6 +144,23 @@ function _buildHoldingsTable(client) {
             const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;
             return `<span class="rec-chip" style="--rec:${color}" title="${tip}">${label}</span>`;
         })();
+        // Order tag + stop-loss/target badges (local annotation), with breach flagging.
+        const _orderChip = (() => {
+            const ann = (typeof _orderAnnGet === 'function') ? _orderAnnGet(client.id, h.ticker) : null;
+            if (!ann) return '';
+            const cs = currSymbol;
+            const out = [];
+            if (ann.orderType === 'limit') out.push('<span class="order-badge ot">לימיט</span>');
+            if (ann.stopLoss) {
+                const hit = h.price > 0 && h.price <= ann.stopLoss;
+                out.push(`<span class="order-badge sl${hit ? ' breach' : ''}" title="${hit ? 'מחיר השוק חצה את הסטופ-לוס!' : 'סטופ-לוס מוגדר'}">⛒ ${formatPrice(ann.stopLoss)}${cs}${hit ? ' ⚠' : ''}</span>`);
+            }
+            if (ann.target) {
+                const hit = h.price > 0 && h.price >= ann.target;
+                out.push(`<span class="order-badge tp${hit ? ' reached' : ''}" title="${hit ? 'מחיר השוק הגיע ליעד!' : 'יעד / טייק-פרופיט'}">◎ ${formatPrice(ann.target)}${cs}${hit ? ' ✓' : ''}</span>`);
+            }
+            return out.join(' ');
+        })();
         const _hFx = _fxR(h.currency);
         totalHoldingsValue += h.value * _hFx;
         totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
@@ -175,6 +192,7 @@ function _buildHoldingsTable(client) {
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                         <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                         ${_recChip}
+                        ${_orderChip}
                     </span>
                 </div>
             </td>
@@ -296,6 +314,23 @@ async function openModal(clientId) {
             const tip = `β=${a.beta != null ? a.beta.toFixed(2) : '—'} · α=${a.alpha != null ? (a.alpha * 100).toFixed(1) + '%' : '—'}`;
             return `<span class="rec-chip" style="--rec:${color}" title="${tip}">${label}</span>`;
         })();
+        // Order tag + stop-loss/target badges (local annotation), with breach flagging.
+        const _orderChip = (() => {
+            const ann = (typeof _orderAnnGet === 'function') ? _orderAnnGet(client.id, h.ticker) : null;
+            if (!ann) return '';
+            const cs = currSymbol;
+            const out = [];
+            if (ann.orderType === 'limit') out.push('<span class="order-badge ot">לימיט</span>');
+            if (ann.stopLoss) {
+                const hit = h.price > 0 && h.price <= ann.stopLoss;
+                out.push(`<span class="order-badge sl${hit ? ' breach' : ''}" title="${hit ? 'מחיר השוק חצה את הסטופ-לוס!' : 'סטופ-לוס מוגדר'}">⛒ ${formatPrice(ann.stopLoss)}${cs}${hit ? ' ⚠' : ''}</span>`);
+            }
+            if (ann.target) {
+                const hit = h.price > 0 && h.price >= ann.target;
+                out.push(`<span class="order-badge tp${hit ? ' reached' : ''}" title="${hit ? 'מחיר השוק הגיע ליעד!' : 'יעד / טייק-פרופיט'}">◎ ${formatPrice(ann.target)}${cs}${hit ? ' ✓' : ''}</span>`);
+            }
+            return out.join(' ');
+        })();
         const _hFx = _fxR(h.currency);
         totalHoldingsValue += h.value * _hFx;
         totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
@@ -319,6 +354,7 @@ async function openModal(clientId) {
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                         <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
                         ${_recChip}
+                        ${_orderChip}
                     </span>
                 </div>
             </td>
@@ -1365,8 +1401,16 @@ function openMgmtModal(action, data) {
                     <div class="auto-class-badge" id="mgmt-bond-class-badge">Gov Bond</div>
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
-                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">$</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" placeholder="0.00" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>סוג פקודה</label>
+                    <select id="mgmt-order-type" class="mgmt-input" onchange="_onOrderTypeChange()" style="width:100%">
+                        <option value="market">קנייה במחיר שוק</option>
+                        <option value="limit">קנייה בלימיט</option>
+                    </select>
+                </div>
+                <div class="mgmt-field"><label><span id="mgmt-price-label-text">מחיר קנייה</span> (<span id="mgmt-price-currency-label">$</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" placeholder="0.00" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-qty" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
+                <div class="mgmt-field"><label>סטופ-לוס (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-stoploss" placeholder="מחיר יציאה להגנה" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
+                <div class="mgmt-field"><label>יעד / טייק-פרופיט (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-target" placeholder="מחיר יעד למימוש" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
                     <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
@@ -2141,6 +2185,31 @@ async function deleteClient(clientId) {
 
 // --- Holding CRUD (routes to Supabase when connected, fallback to backend API) ---
 
+// ── Order annotations (order type + stop-loss + target) ──────────────────────
+// Stored locally (per portfolio+ticker) so we don't touch the Supabase holdings
+// schema. Used to tag the entry (market/limit) and to flag a stop-loss/target
+// breach on the holding row. Key: "<portfolioId>:<TICKER>".
+const _ORDER_ANN_LS = 'order_ann_v1';
+function _orderAnnAll() { try { return JSON.parse(localStorage.getItem(_ORDER_ANN_LS) || '{}'); } catch (e) { return {}; } }
+function _orderAnnKey(clientId, ticker) { return `${clientId}:${String(ticker || '').toUpperCase()}`; }
+function _orderAnnGet(clientId, ticker) { return _orderAnnAll()[_orderAnnKey(clientId, ticker)] || null; }
+function _orderAnnSet(clientId, ticker, ann) {
+    try {
+        const m = _orderAnnAll(); const k = _orderAnnKey(clientId, ticker);
+        const merged = { ...(m[k] || {}), ...ann };
+        // Drop empty keys so a cleared field removes the badge.
+        Object.keys(merged).forEach(kk => { if (merged[kk] == null || merged[kk] === '') delete merged[kk]; });
+        if (Object.keys(merged).length) m[k] = merged; else delete m[k];
+        localStorage.setItem(_ORDER_ANN_LS, JSON.stringify(m));
+    } catch (e) { }
+}
+// Relabel the price field when the order type is "limit".
+function _onOrderTypeChange() {
+    const t = document.getElementById('mgmt-order-type')?.value;
+    const lbl = document.getElementById('mgmt-price-label-text');
+    if (lbl) lbl.textContent = t === 'limit' ? 'מחיר לימיט' : 'מחיר קנייה';
+}
+
 async function addHolding(clientId) {
     const price = parseInputNumber(document.getElementById('mgmt-price').value);
     const quantity = parseInputNumber(document.getElementById('mgmt-qty').value);
@@ -2187,6 +2256,16 @@ async function addHolding(clientId) {
         }
     } else {
         updated = await apiAddHolding(clientId, holdingData);
+    }
+
+    // Save the order tag + stop-loss/target as a local annotation on this position.
+    // Only when the fields are present (the add-new-asset form) — "buy more" omits
+    // them, and we must not wipe an existing annotation.
+    if (document.getElementById('mgmt-order-type')) {
+        const _ot = document.getElementById('mgmt-order-type').value || 'market';
+        const _sl = parseInputNumber(document.getElementById('mgmt-stoploss')?.value);
+        const _tp = parseInputNumber(document.getElementById('mgmt-target')?.value);
+        _orderAnnSet(clientId, ticker, { orderType: _ot, stopLoss: _sl > 0 ? _sl : null, target: _tp > 0 ? _tp : null });
     }
 
     const idx = clients.findIndex(c => c.id === clientId);
