@@ -425,7 +425,6 @@ function _repRenderDetail(m) {
         : '<div class="rep-flag rep-flag-ok"><span class="rep-flag-dot"></span>לא זוהו דגלי סיכון מהותיים בנתוני הדו"ח.</div>';
 
     const v = m.valuation || {};
-    const L = m.latest || {}; // latest quarter — for headline profit-margin cards
     // Skip a key-figure card when its value couldn't be computed (renders as "—").
     const keyFig = (label, val) => (val == null || val === '—') ? '' : `<div class="rep-keyfig"><span class="rep-keyfig-label">${label}</span><span class="rep-keyfig-val">${val}</span></div>`;
 
@@ -457,10 +456,6 @@ function _repRenderDetail(m) {
         <div class="rep-keyfigs">
             ${keyFig('שווי שוק', _repFmtMoney(m.marketCap, cur))}
             ${keyFig('מחיר', m.price != null ? `${cur}${m.price.toLocaleString('en-US')}` : '—')}
-            ${keyFig('שולי רווח נקי', _repFmtPct(L.netMargin))}
-            ${keyFig('שולי רווח תפעולי', _repFmtPct(L.operatingMargin))}
-            ${keyFig('שולי רווח גולמי', _repFmtPct(L.grossMargin))}
-            ${keyFig('שולי EBITDA', _repFmtPct(L.ebitdaMargin))}
             ${keyFig('מכפיל רווח (P/E)', _repFmtRatio(v.peTrailing, 1))}
             ${keyFig('מכפיל הון (P/B)', _repFmtRatio(v.pb, 2))}
             ${keyFig('תשואה על ההון (ROE)', _repFmtPct(v.roeTTM))}

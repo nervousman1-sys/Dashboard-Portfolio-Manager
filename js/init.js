@@ -754,8 +754,15 @@ const _VIEW_PAGES = [
 ];
 const _isPageOpen = (id) => !!document.getElementById(id)?.classList.contains('active');
 
+// While true, page open/close helpers must NOT write history. Used by navigateTo so a
+// single sidebar navigation produces ONE history entry (the target) instead of two
+// (an intermediate "dashboard" from closing the old page + the target), which made the
+// browser Back button land on the dashboard instead of the actually-previous page.
+let _suppressURLWrites = false;
+if (typeof window !== 'undefined') window._navSuppressURL = (v) => { _suppressURLWrites = !!v; };
+
 function updateURLState(params) {
-    if (_restoringView) return; // navigating/restoring — keep the URL as the source of truth
+    if (_restoringView || _suppressURLWrites) return; // navigating/restoring — keep the URL as the source of truth
     const url = new URL(window.location);
     url.searchParams.delete('view');
     url.searchParams.delete('client');
@@ -774,7 +781,7 @@ function updateURLState(params) {
 }
 
 function clearURLState() {
-    if (_restoringView) return;
+    if (_restoringView || _suppressURLWrites) return;
     const url = new URL(window.location);
     url.searchParams.delete('view');
     url.searchParams.delete('client');

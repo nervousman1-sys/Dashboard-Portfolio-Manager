@@ -77,6 +77,11 @@ function navigateTo(section) {
     const repPage = document.getElementById('reportsPage');
     const closeRepIfOpen = () => { if (repPage && repPage.classList.contains('active') && typeof closeReportsPage === 'function') closeReportsPage(); };
 
+    // Suppress per-page history writes during the close+open so this navigation
+    // produces a SINGLE history entry (the target) — Back then returns to the page
+    // you were actually on before, not an intermediate "dashboard".
+    if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(true);
+    try {
     switch (section) {
         case 'dashboard':
         case 'portfolio':
@@ -198,6 +203,16 @@ function navigateTo(section) {
 
         default:
             break;
+    }
+    } finally {
+        if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
+    }
+
+    // Push exactly one history entry for this navigation.
+    if (section === 'dashboard' || section === 'portfolio') {
+        if (typeof clearURLState === 'function') clearURLState();
+    } else if (typeof updateURLState === 'function') {
+        updateURLState({ view: section });
     }
 
     // Update active states
