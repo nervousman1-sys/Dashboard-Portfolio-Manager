@@ -520,6 +520,9 @@ function _repRenderDetail(m) {
 
         <div class="rep-section-title">אסטרטגיה וויז'ן</div>
         <div id="repStrategy" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח אסטרטגי…</div></div>
+
+        <div class="rep-section-title">תלות בספקים וסיכונים גיאופוליטיים</div>
+        <div id="repRisks" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח סיכונים…</div></div>
     </div>`;
 
     _repRenderCharts(m, cur);
@@ -625,6 +628,7 @@ function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 async function _repLoadAI(m) {
     const swotEl = document.getElementById('repSwot');
     const stratEl = document.getElementById('repStrategy');
+    const risksEl = document.getElementById('repRisks');
     try {
         const ctx = ReportsEngine.aiContext(m);
         const r = await fetch('/api/vision?mode=swot', {
@@ -636,11 +640,19 @@ async function _repLoadAI(m) {
         if (!r.ok || j.error || !j.swot) throw new Error(j.message || 'ai failed');
         if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot);
         if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
+        if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
     } catch (e) {
         const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (ייתכן מכסת Gemini). נסה שוב מאוחר יותר.</div>';
         if (swotEl) swotEl.innerHTML = msg;
         if (stratEl) stratEl.innerHTML = '';
+        if (risksEl) risksEl.innerHTML = '';
     }
+}
+function _repRisksHtml(rk) {
+    rk = rk || {};
+    const part = (label, txt) => txt ? `<div class="rep-strat-part"><span class="rep-strat-label">${label}</span><p>${txt}</p></div>` : '';
+    const html = `${part('תלות בספקים ובלקוחות', rk.supplierDependency)}${part('חשיפה גיאופוליטית', rk.geopolitical)}`;
+    return html || '<div class="adv-empty">לא זוהו סיכוני ספקים/גיאופוליטיקה מהותיים.</div>';
 }
 function _repList(items) {
     if (!Array.isArray(items) || !items.length) return '<li class="rep-swot-empty">—</li>';

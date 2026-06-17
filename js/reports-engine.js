@@ -131,28 +131,45 @@
         if (!a) return [];
         const notes = [];
         const pp = (x) => (x * 100).toFixed(1);
-        // For each absolute metric vs a reference period: build the right Hebrew phrasing.
-        const absDrop = (m, cur, prev, when) => {
-            if (!isNum(cur) || !isNum(prev) || prev <= 0) return;
-            if (cur < 0) { notes.push({ he: `${m.subject} ${m.neg} ${when}.`, severity: 'high' }); return; }
-            const d = (cur - prev) / prev;
-            if (d <= -0.10) notes.push({ he: `${m.subject} ${m.down} ב-${pp(-d)}% ${when}.`, severity: d <= -0.25 ? 'high' : 'warn' });
-        };
         const QoQ = 'לעומת הרבעון הקודם', YoY = 'לעומת הרבעון המקביל אשתקד';
+
+        // Seasonality read for a QoQ move: did the SAME fiscal transition a year earlier
+        // (rows[5]→rows[4]) move the same way? If so the dip is likely seasonal.
+        const seasonalAssess = (k, isPct) => {
+            const c0 = rows[4], p0 = rows[5];
+            if (!c0 || !p0 || !isNum(c0[k]) || !isNum(p0[k])) return ' לא ניתן לקבוע אם מדובר בעונתיות (חסרים נתוני אשתקד).';
+            const moved = isPct ? (c0[k] - p0[k]) : (p0[k] > 0 ? (c0[k] - p0[k]) / p0[k] : null);
+            const thr = isPct ? -0.02 : -0.05;
+            if (moved == null) return '';
+            return moved <= thr
+                ? ' הערכה: ככל הנראה דפוס עונתי — ירידה דומה נרשמה גם במעבר המקביל אשתקד.'
+                : ' הערכה: הירידה אינה נראית עונתית — ייתכן שינוי מגמה או אירוע חד-פעמי שכדאי לעקוב אחריו.';
+        };
+        const yoyAssess = ' הערכה: ירידה שנתית מול אותו רבעון — אינה נובעת מעונתיות, אלא מהיחלשות מגמתית.';
+
+        // Absolute metrics — sharp % declines, with the right Hebrew phrasing + assessment.
         [{ k: 'revenue', subject: 'ההכנסות', down: 'ירדו', neg: 'הפכו לשליליות' },
          { k: 'ebitda', subject: 'ה-EBITDA', down: 'ירד', neg: 'הפך לשלילי' },
          { k: 'operatingIncome', subject: 'הרווח התפעולי', down: 'ירד', neg: 'הפך להפסד תפעולי' },
          { k: 'netIncome', subject: 'הרווח הנקי', down: 'ירד', neg: 'הפך להפסד נקי' },
          { k: 'fcf', subject: 'התזרים החופשי (FCF)', down: 'ירד', neg: 'הפך לשלילי' }].forEach(m => {
-            absDrop(m, a[m.k], qoq && qoq[m.k], QoQ);
-            absDrop(m, a[m.k], yoy && yoy[m.k], YoY);
+            const drop = (prev, when, assess) => {
+                const cur = a[m.k];
+                if (!isNum(cur) || !isNum(prev) || prev <= 0) return;
+                if (cur < 0) { notes.push({ he: `${m.subject} ${m.neg} ${when}.${assess}`, severity: 'high' }); return; }
+                const d = (cur - prev) / prev;
+                if (d <= -0.10) notes.push({ he: `${m.subject} ${m.down} ב-${pp(-d)}% ${when}.${assess}`, severity: d <= -0.25 ? 'high' : 'warn' });
+            };
+            drop(qoq && qoq[m.k], QoQ, seasonalAssess(m.k, false));
+            drop(yoy && yoy[m.k], YoY, yoyAssess);
         });
+        // Margins — drop in percentage points, with assessment.
         [{ k: 'grossMargin', he: 'שיעור הרווח הגולמי' }, { k: 'operatingMargin', he: 'שיעור הרווח התפעולי' },
          { k: 'ebitdaMargin', he: 'שיעור ה-EBITDA' }, { k: 'netMargin', he: 'שיעור הרווח הנקי' }].forEach(({ k, he }) => {
             const dq = (isNum(a[k]) && qoq && isNum(qoq[k])) ? a[k] - qoq[k] : null;
             const dy = (isNum(a[k]) && yoy && isNum(yoy[k])) ? a[k] - yoy[k] : null;
-            if (isNum(dq) && dq <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}.`, severity: dq <= -0.06 ? 'high' : 'warn' });
-            if (isNum(dy) && dy <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dy)} נק׳ אחוז לעומת אשתקד.`, severity: dy <= -0.06 ? 'high' : 'warn' });
+            if (isNum(dq) && dq <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}.${seasonalAssess(k, true)}`, severity: dq <= -0.06 ? 'high' : 'warn' });
+            if (isNum(dy) && dy <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dy)} נק׳ אחוז לעומת אשתקד.${yoyAssess}`, severity: dy <= -0.06 ? 'high' : 'warn' });
         });
         return notes;
     }
