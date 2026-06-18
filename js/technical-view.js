@@ -19,6 +19,7 @@ let _techData = null;                // alias of _techDataMkt[_techMarket]
 let _techFilter = 'all';
 let _techSearch = '';
 let _techExact = '';                 // when set (deep-link), match this ticker EXACTLY (not substring)
+let _techExtra = { us: {}, il: {} }; // on-demand-scanned tickers (insider/reco deep-links) outside the index
 let _techLoading = { us: false, il: false };
 
 // Open the in-app technical-analysis page focused on a SPECIFIC ticker (from the
@@ -49,6 +50,14 @@ function openTechnicalForTicker(ticker) {
         const el = document.getElementById('techSearch');
         if (el) el.value = base;
         if (typeof _techRender === 'function') _techRender();
+        // If it's not in the index universe, scan it on demand so it shows in the table.
+        const inUniverse = (_techDataMkt[_techMarket] && (_techDataMkt[_techMarket][sym] || _techDataMkt[_techMarket][base]))
+            || (_techExtra[_techMarket] && _techExtra[_techMarket][sym]);
+        if (!inUniverse) {
+            const tbl = document.getElementById('techTable');
+            if (tbl) tbl.innerHTML = `<div class="adv-empty">סורק את ${base}…</div>`;
+            _techScanOne(sym);
+        }
     };
     if (sym.endsWith('.TA') && typeof setTechMarket === 'function') { setTechMarket('il'); setTimeout(apply, 60); }
     else apply();
@@ -150,6 +159,26 @@ function setTechMarket(mkt) {
         tbl.innerHTML = '<div class="adv-empty">טוען נתוני סריקה…</div>';
     }
     _techLoad();
+}
+
+// Scan a SINGLE ticker on demand and add it to the table — used for deep-links from
+// the insider feed / recommendations to stocks that aren't in the index universe.
+async function _techScanOne(sym) {
+    sym = String(sym || '').toUpperCase().trim();
+    if (!sym) return false;
+    const mkt = sym.endsWith('.TA') ? 'il' : _techMarket;
+    if (_techExtra[mkt] && _techExtra[mkt][sym]) return true; // already have it
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+        const r = await fetch(`/api/technicals?mode=scan&symbols=${encodeURIComponent(sym)}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        if (j && j.results && Object.keys(j.results).length) {
+            _techExtra[mkt] = Object.assign(_techExtra[mkt] || {}, j.results);
+            if (_techMarket === mkt) _techRender();
+            return true;
+        }
+    } catch (e) { /* ignore — the empty-result message will show */ }
+    return false;
 }
 
 // ── Load: daily cache → otherwise batch-scan all constituents with progress ──
@@ -272,8 +301,12 @@ function setTechFilter(id) {
 function _techRender() {
     const tbl = document.getElementById('techTable');
     const chipsEl = document.getElementById('techChips');
-    if (!tbl || !_techData) return;
-    const entries = Object.entries(_techData);
+    // Merge on-demand-scanned tickers (deep-linked from insider/recommendations) so they
+    // ALWAYS appear, even if they're outside the index universe.
+    const extra = _techExtra[_techMarket] || {};
+    if (!tbl || (!_techData && !Object.keys(extra).length)) return;
+    const dataset = Object.assign({}, _techData || {}, extra);
+    const entries = Object.entries(dataset);
 
     // Chips with live counts
     if (chipsEl) {
