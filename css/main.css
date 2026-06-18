@@ -7516,10 +7516,24 @@ body.full-list-open { overflow: hidden; }
 .order-badge.breach { color: #fff; background: var(--accent-red); border-color: var(--accent-red); animation: orderPulse 1.6s ease-in-out infinite; }
 .order-badge.reached { color: #06281a; background: var(--accent-green); border-color: var(--accent-green); font-weight: 800; }
 @keyframes orderPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
-#mgmt-order-type {
-    background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
-    border-radius: 8px; padding: 9px 10px; font-size: 13px; font-family: inherit;
+/* Segmented order-type toggle — both options always visible */
+.order-toggle { display: flex; gap: 6px; }
+.order-toggle-btn {
+    flex: 1; padding: 9px 10px; font-size: 13px; font-weight: 700; font-family: inherit;
+    color: var(--text-secondary); background: var(--bg-card); cursor: pointer;
+    border: 1px solid var(--border); border-radius: 8px; transition: all .15s; white-space: nowrap;
 }
+.order-toggle-btn:hover { border-color: rgba(56,189,248,0.4); color: var(--text-primary); }
+.order-toggle-btn.active {
+    color: #061018; background: var(--accent-blue); border-color: var(--accent-blue);
+}
+.order-toggle-sm .order-toggle-btn { padding: 5px 8px; font-size: 11.5px; }
+/* Per-row order popup (mirrors the date popup) */
+.row-order-pop { min-width: 180px; }
+.row-order-pop label { display: block; font-size: 10.5px; color: var(--text-muted); margin-bottom: 3px; }
+.row-order-pop input[type="text"] { width: 100%; padding: 6px 8px; font-size: 12px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); }
+.holding-action-btn.roworder.has-date { color: var(--accent-blue); border-color: rgba(56,189,248,0.5); }
 
 /* ── Per-portfolio CML/SML advisory ── */
 .risk-section-head { margin: 26px 2px 14px; }

@@ -1295,6 +1295,15 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>מזומן (USD)</label><input type="text" inputmode="decimal" id="mgmt-cash-usd" value="0" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></div>
                 <div class="mgmt-field"><label>מזומן (ILS)</label><input type="text" inputmode="decimal" id="mgmt-cash-ils" value="0" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></div>
 
+                <div class="mgmt-field" id="mgmt-usd-rate-field">
+                    <label>שער קניית הדולר הממוצע (₪ ל-$) — אופציונלי</label>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                        <input type="text" inputmode="decimal" id="mgmt-usd-rate" placeholder="לדוגמה: 3.65" style="direction:ltr;text-align:left;flex:1" oninput="formatInputWithCommas(this)" />
+                        <button type="button" class="mgmt-btn secondary" style="white-space:nowrap;padding:0 14px" onclick="_fillTodayUsdRate()">שער היום</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">השער שבו נקנו הדולרים בתיק. התשואה הדולרית (מעליית/ירידת הדולר מול השקל) תחושב מולו.</div>
+                </div>
+
                 <div class="mgmt-section-divider">הוספת אחזקות</div>
 
                 <div class="file-dropzone" id="addClientDropzone"
@@ -1402,10 +1411,11 @@ function openMgmtModal(action, data) {
                 </div>
                 <div id="mgmt-live-price-preview" style="display:none;padding:4px 0;font-size:12px;text-align:right"></div>
                 <div class="mgmt-field"><label>סוג פקודה</label>
-                    <select id="mgmt-order-type" class="mgmt-input" onchange="_onOrderTypeChange()" style="width:100%">
-                        <option value="market">קנייה במחיר שוק</option>
-                        <option value="limit">קנייה בלימיט</option>
-                    </select>
+                    <input type="hidden" id="mgmt-order-type" value="market" />
+                    <div class="order-toggle">
+                        <button type="button" class="order-toggle-btn active" data-ot="market" onclick="_setOrderType('market')">קנייה במחיר שוק</button>
+                        <button type="button" class="order-toggle-btn" data-ot="limit" onclick="_setOrderType('limit')">קנייה בלימיט</button>
+                    </div>
                 </div>
                 <div class="mgmt-field"><label><span id="mgmt-price-label-text">מחיר קנייה</span> (<span id="mgmt-price-currency-label">$</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" placeholder="0.00" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-qty" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
@@ -2064,6 +2074,13 @@ document.addEventListener('click', (e) => {
 
 // --- Client CRUD (routes to Supabase when connected, fallback to backend API) ---
 
+// Fill the average-USD-rate field with today's live USD/ILS rate.
+function _fillTodayUsdRate() {
+    const el = document.getElementById('mgmt-usd-rate');
+    const rate = window.USD_ILS_RATE || (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 0);
+    if (el && rate > 0) el.value = rate.toFixed(3);
+}
+
 async function addClient() {
     const submitBtn = document.getElementById('addClientSubmitBtn');
 
@@ -2073,6 +2090,8 @@ async function addClient() {
     const rawIls = document.getElementById('mgmt-cash-ils')?.value;
     const cashUsd = parseInputNumber(rawUsd);
     const cashIls = parseInputNumber(rawIls);
+    const usdAvgRate = parseInputNumber(document.getElementById('mgmt-usd-rate')?.value);
+    const rowOrders = (typeof _collectRowOrders === 'function') ? _collectRowOrders() : []; // read DOM before the modal closes
 
     if (!name) {
         console.warn('addClient validation: name is empty');
@@ -2128,6 +2147,15 @@ async function addClient() {
         }
 
         clients.push(finalClient);
+        // Record the average USD purchase rate so the FX-adjusted return measures the
+        // dollar's appreciation/depreciation against the rate the dollars were bought at.
+        if (cashUsd > 0 && usdAvgRate > 0.5 && usdAvgRate < 20 && typeof addClientFxBasis === 'function') {
+            addClientFxBasis(finalClient.id, cashUsd, usdAvgRate);
+        }
+        // Persist per-row order tags / stop-loss / target as local annotations.
+        if (rowOrders.length && typeof _orderAnnSet === 'function') {
+            rowOrders.forEach(o => _orderAnnSet(finalClient.id, o.ticker, { orderType: o.orderType, stopLoss: o.stopLoss, target: o.target }));
+        }
         window._brokerImport = null;
         closeMgmtModal();
         refreshDashboard();
@@ -2203,9 +2231,12 @@ function _orderAnnSet(clientId, ticker, ann) {
         localStorage.setItem(_ORDER_ANN_LS, JSON.stringify(m));
     } catch (e) { }
 }
-// Relabel the price field when the order type is "limit".
-function _onOrderTypeChange() {
-    const t = document.getElementById('mgmt-order-type')?.value;
+// Segmented order-type toggle (both options always visible). Sets the hidden input
+// that addHolding() reads, and relabels the price field for limit orders.
+function _setOrderType(t) {
+    const hid = document.getElementById('mgmt-order-type');
+    if (hid) hid.value = t;
+    document.querySelectorAll('.order-toggle .order-toggle-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-ot') === t));
     const lbl = document.getElementById('mgmt-price-label-text');
     if (lbl) lbl.textContent = t === 'limit' ? 'מחיר לימיט' : 'מחיר קנייה';
 }
@@ -2438,6 +2469,9 @@ function addHoldingRow(prefill = null) {
                         onclick="toggleRowDatePop('${rowId}')">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 </button>
+                <button class="holding-action-btn roworder" id="orderbtn_${rowId}" title="סוג פקודה, סטופ-לוס ויעד (אופציונלי)" onclick="toggleRowOrderPop('${rowId}')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                </button>
                 <button class="holding-action-btn delete" onclick="removeHoldingRow('${rowId}')">&times;</button>
                 <div class="row-date-pop" id="datepop_${rowId}" style="display:none">
                     <label>תאריך קנייה</label>
@@ -2447,6 +2481,19 @@ function addHoldingRow(prefill = null) {
                         <button type="button" class="row-date-ok" onclick="_onRowBuyDate('${rowId}', document.querySelector('#datepop_${rowId} .row-buydate').value)">אישור</button>
                         <button type="button" class="row-date-clear" onclick="_onRowBuyDate('${rowId}', '')">נקה</button>
                     </div>
+                </div>
+                <div class="row-date-pop row-order-pop" id="orderpop_${rowId}" style="display:none">
+                    <input type="hidden" class="row-ordertype" value="market" />
+                    <label>סוג פקודה</label>
+                    <div class="order-toggle order-toggle-sm">
+                        <button type="button" class="order-toggle-btn active" data-ot="market" onclick="_setRowOrderType('${rowId}','market')">שוק</button>
+                        <button type="button" class="order-toggle-btn" data-ot="limit" onclick="_setRowOrderType('${rowId}','limit')">לימיט</button>
+                    </div>
+                    <label style="margin-top:6px">סטופ-לוס</label>
+                    <input type="text" inputmode="decimal" class="row-stoploss" placeholder="מחיר" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" />
+                    <label style="margin-top:6px">יעד / טייק-פרופיט</label>
+                    <input type="text" inputmode="decimal" class="row-target" placeholder="מחיר" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" />
+                    <div class="row-date-btns"><button type="button" class="row-date-ok" onclick="toggleRowOrderPop('${rowId}')">סגור</button></div>
                 </div>
             </div>
         </td>
@@ -2503,6 +2550,41 @@ function _onRowBuyDate(rowId, value, keepOpen) {
         btn.classList.toggle('has-date', valid);
         btn.title = valid ? 'תאריך קנייה: ' + value : 'תאריך קנייה (אופציונלי)';
     }
+}
+
+// ── Per-row order popup (order type + stop-loss + target) in the add-portfolio table ──
+function toggleRowOrderPop(rowId) {
+    const pop = document.getElementById('orderpop_' + rowId);
+    if (!pop) return;
+    const isOpen = pop.style.display !== 'none';
+    document.querySelectorAll('.row-date-pop').forEach(p => { p.style.display = 'none'; });
+    if (!isOpen) pop.style.display = 'block';
+}
+function _setRowOrderType(rowId, t) {
+    const pop = document.getElementById('orderpop_' + rowId);
+    if (!pop) return;
+    const hid = pop.querySelector('.row-ordertype');
+    if (hid) hid.value = t;
+    pop.querySelectorAll('.order-toggle-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-ot') === t));
+    const btn = document.getElementById('orderbtn_' + rowId);
+    if (btn) btn.classList.toggle('has-date', t === 'limit' || !!pop.querySelector('.row-stoploss')?.value || !!pop.querySelector('.row-target')?.value);
+}
+// Read order metadata from each add-portfolio row → [{ ticker, orderType, stopLoss, target }].
+function _collectRowOrders() {
+    const tbody = document.getElementById('mgmt-holdings-tbody');
+    if (!tbody) return [];
+    const out = [];
+    tbody.querySelectorAll('tr').forEach(row => {
+        const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase();
+        if (!ticker) return;
+        const orderType = row.querySelector('.row-ordertype')?.value || 'market';
+        const stopLoss = parseInputNumber(row.querySelector('.row-stoploss')?.value);
+        const target = parseInputNumber(row.querySelector('.row-target')?.value);
+        if (orderType === 'limit' || stopLoss > 0 || target > 0) {
+            out.push({ ticker, orderType, stopLoss: stopLoss > 0 ? stopLoss : null, target: target > 0 ? target : null });
+        }
+    });
+    return out;
 }
 
 function clearRowTicker(rowId) {
