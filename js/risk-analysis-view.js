@@ -1212,15 +1212,13 @@ async function openStockRecommendations(clientId, _fromHistory) {
         cardsHTML = Object.entries(bySector)
             .sort((a, b) => (a[0] === 'תעודות סל' ? 1 : 0) - (b[0] === 'תעודות סל' ? 1 : 0))
             .map(([sector, list]) => {
-            // Show a clean 3 per sector; the rest of the deep bench is reached via the
-            // "↻ בדוק אופציה חלופית" button on each card (cycles the whole sector list).
-            const slots = Math.min(list.length, 4);
+            // Show a clean 3 per sector; the rest of the sector's deep bench is reached
+            // via the swap button, which rotates SAME-sector names only.
+            const slots = Math.min(list.length, 3);
             state.slots[sector] = slots;
             const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
-            // The swap cycles the FULL candidate pool (sector-first, then global), so it
-            // always has an alternative — show it on every card as long as the universe
-            // has more names than are currently displayed.
-            const hasAlt = cands.length > 1;
+            // Offer the swap whenever the sector itself has more than one candidate.
+            const hasAlt = list.length > 1;
             const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות (לחץ "בדוק אופציה חלופית" לעוד)` : _riskEsc(sector);
             let grid = '';
             for (let slot = 0; slot < slots; slot++) {
@@ -1338,21 +1336,29 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
             </div>`;
 }
 
-// Cycle a card to the next candidate NOT currently shown on any card — same sector
-// first, then the global pool — so the "↻ בדוק אופציה חלופית" button ALWAYS produces
-// a real alternative (no dead buttons even in a small sector like Crypto/Energy).
+// Cycle a card to the next candidate FROM THE SAME SECTOR ONLY — so the alternative is
+// always a real peer (never a cross-sector name like MU under "Crypto"). Prefers a name
+// not currently on another card; if the small sector is exhausted it still rotates
+// through the sector's own list, so several clicks reveal several same-sector options.
 function swapRecommendation(cardId) {
     const st = window._recoState;
     if (!st || !st.cards || !st.cards[cardId]) return;
     const cs = st.cards[cardId];
-    const all = st.allCands || [];
-    if (all.length < 2) return;
-    const shown = new Set(Object.values(st.cards).map(s => s.ticker));   // tickers on every card now
-    const cur = cs.ticker;
-    const startSame = all.filter(c => c.sector === cs.sector && c.ticker !== cur && !shown.has(c.ticker));
-    const startAny = all.filter(c => c.ticker !== cur && !shown.has(c.ticker));
-    const pick = startSame[0] || startAny[0];
-    if (!pick) return; // truly nothing left (entire universe already displayed)
+    const list = st.bySector[cs.sector] || [];   // STRICT same sector
+    if (list.length < 2) return;
+    const curIdx = Math.max(0, list.findIndex(c => c.ticker === cs.ticker));
+    const othersShown = new Set(
+        Object.entries(st.cards).filter(([id, s]) => id !== cardId && s.sector === cs.sector).map(([, s]) => s.ticker)
+    );
+    let pick = null, fallback = null;
+    for (let step = 1; step <= list.length; step++) {
+        const c = list[(curIdx + step) % list.length];
+        if (c.ticker === cs.ticker) continue;
+        if (!fallback) fallback = c;                       // next same-sector name (allows a dup if needed)
+        if (!othersShown.has(c.ticker)) { pick = c; break; } // prefer one not shown elsewhere
+    }
+    pick = pick || fallback;
+    if (!pick) return;
     cs.ticker = pick.ticker;
     const el = document.getElementById(cardId);
     if (!el) return;
