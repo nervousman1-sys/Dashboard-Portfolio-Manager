@@ -1149,7 +1149,12 @@ function openStockRecommendations(clientId) {
     // region and the target CML allocation to get it there.
     let effHTML = '';
     const eff = adv && adv.efficiency;
-    if (eff) {
+    if (adv && adv.p && adv.p.partial) {
+        effHTML = `<div class="reco-eff">
+            <div class="reco-eff-title">מחשב את עמידת התיק במודל…</div>
+            <div class="reco-eff-sub">ממתין לטעינת נתוני השוק לכל אחזקות התיק. הניתוח יוצג ברגע שהנתונים מלאים — כדי שהקביעה תהיה יציבה ולא תשתנה ללא שינוי בתיק.</div>
+        </div>`;
+    } else if (eff) {
         if (eff.isEfficient) {
             effHTML = `<div class="reco-eff reco-eff-ok">
                 <div class="reco-eff-title">התיק כבר באיזור היעיל (על/מעל קו ה-CML) ✓</div>
@@ -1189,16 +1194,17 @@ function openStockRecommendations(clientId) {
         const state = { clientId, bySector, slots: {}, cards: {} };
         let seq = 0;
         cardsHTML = Object.entries(bySector).map(([sector, list]) => {
-            const slots = Math.min(list.length, 2);
+            const slots = Math.min(list.length, 6);
             state.slots[sector] = slots;
-            const alt = list.length > 1;
-            const head = alt ? `${_riskEsc(sector)} — אופציות חלופיות (תפקיד דומה בתיק)` : _riskEsc(sector);
+            const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
+            const hasAlt = list.length > slots;      // more options than shown → enable the swap button
+            const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות חלופיות (תפקיד דומה בתיק)` : _riskEsc(sector);
             let grid = '';
             for (let slot = 0; slot < slots; slot++) {
                 const cardId = `recoCard_${seq++}`;
-                const optLetter = alt ? `${OPT[slot] || (slot + 1)}'` : '';
+                const optLetter = multi ? `${OPT[slot] || (slot + 1)}'` : '';
                 state.cards[cardId] = { sector, shownIdx: slot, optLetter };
-                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, list.length > slots)}</div>`;
+                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, hasAlt)}</div>`;
             }
             return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
         }).join('');

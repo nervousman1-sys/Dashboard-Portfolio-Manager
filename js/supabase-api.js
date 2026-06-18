@@ -25,6 +25,7 @@ function mapPortfolio(p) {
     return {
         id: p.id,
         name: p.name,
+        createdAt: p.created_at || null,
         risk: p.risk,
         riskLabel: p.risk_label,
         stockPct: p.stock_pct,

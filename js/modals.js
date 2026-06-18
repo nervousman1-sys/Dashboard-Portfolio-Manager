@@ -43,7 +43,7 @@ async function _fillModalAdvisory(clientId) {
         stillOpen.innerHTML = renderAdvisoryHTML(adv, { compact: true, noCandidates: true, clientId });
         // Refresh the compact compliance bar now that the model is in
         const p = model.portfolios.find(x => x.id === clientId);
-        if (p) { client.complianceScore = p.complianceScore; client.complianceLabel = p.complianceLabel; }
+        if (p) { client.complianceScore = p.complianceScore; client.complianceLabel = p.complianceLabel; client.compliancePartial = p.partial; }
         // The holdings table renders before the risk model is built, so the β cells
         // start as "—". Now that the model is in, fill them in place.
         if (typeof _refreshHoldingBetaCells === 'function') _refreshHoldingBetaCells(model);
@@ -610,15 +610,17 @@ async function openModal(clientId) {
 
                 <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->
                 ${(() => {
-                    const cs = client.complianceScore;
+                    const partial = client.compliancePartial;
+                    const cs = partial ? null : client.complianceScore;
                     const cl = client.complianceLabel || '';
                     const col = cs == null ? 'var(--text-muted)' : cs >= 75 ? 'var(--risk-low)' : cs >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+                    const sub = partial ? 'מחשב — ממתין לנתוני שוק מלאים…' : (cs == null ? 'לחץ לפתיחת הניתוח, העקומות וההמלצות' : cl + ' · לחץ לעקומות ולתוכנית הפעולה');
                     return `<div class="ov-compliance" onclick="switchModalTab('cmlsml')" style="--cc:${col}">
                         <div class="ov-comp-left">
                             <span class="ov-comp-ring">${cs == null ? '—' : cs}<small>/100</small></span>
                             <div class="ov-comp-txt">
                                 <span class="ov-comp-label">עמידה במודל CML / SML</span>
-                                <span class="ov-comp-sub">${cs == null ? 'לחץ לפתיחת הניתוח, העקומות וההמלצות' : cl + ' · לחץ לעקומות ולתוכנית הפעולה'}</span>
+                                <span class="ov-comp-sub">${sub}</span>
                             </div>
                         </div>
                         <span class="ov-comp-cta">ניתוח CML / SML →</span>

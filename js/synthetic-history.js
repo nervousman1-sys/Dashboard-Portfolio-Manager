@@ -332,6 +332,27 @@ async function fetchSyntheticHistory(client, range) {
         return cached.data;
     }
 
+    // ── Opened-today guard ──────────────────────────────────────────────────
+    // A portfolio created today (everything bought today at market) has NO real
+    // return history — fabricating a year-long line is misleading. Detect it via the
+    // earliest buy date / the portfolio's creation date and return a flat 0% line
+    // (today only) so the chart honestly shows "no movement yet".
+    const _todayIso = new Date().toISOString().slice(0, 10);
+    const _buyDates = (client.holdings || []).map(h => h.buyDate).filter(Boolean).sort();
+    const _createdIso = client.createdAt ? new Date(client.createdAt).toISOString().slice(0, 10) : null;
+    const _openIso = _buyDates.length ? _buyDates[0] : _createdIso;
+    if (_openIso && _openIso >= _todayIso) {
+        const totalCost = (client.holdings || []).reduce((s, h) => s + (h.costBasis || 0), 0) + (client.cashBalance || 0);
+        const curVal = (client.holdings || []).reduce((s, h) => s + (h.value || h.costBasis || 0), 0) + (client.cashBalance || 0);
+        const ret = totalCost > 0 ? ((curVal - totalCost) / totalCost) * 100 : 0;
+        const flat = [
+            { date: _todayIso, value: parseFloat(totalCost.toFixed(2)), returnPct: 0 },
+            { date: _todayIso, value: parseFloat(curVal.toFixed(2)), returnPct: parseFloat(ret.toFixed(2)) },
+        ];
+        _syntheticCache[cacheKey] = { data: flat, timestamp: Date.now() };
+        return flat;
+    }
+
     // Step 1: Filter eligible holdings — stocks AND funds (ETFs) have ticker-based history
     let eligibleHoldings = client.holdings.filter(
         h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0 && h.ticker

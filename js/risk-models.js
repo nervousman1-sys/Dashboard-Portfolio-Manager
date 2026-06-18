@@ -444,8 +444,12 @@ async function buildRiskModel(clientsList, opts = {}) {
             marketOk,
         };
 
-        _riskModelCache = { sig, ts: Date.now(), model };
-        _rmPersistModel(sig, model);
+        // If any portfolio's risky book is still mostly market-proxy (history not yet
+        // loaded), the verdicts aren't final. Cache only briefly and DON'T persist, so
+        // the next load recomputes with full data — and the verdict then stays put.
+        model.partial = portfolios.some(p => p && p.partial);
+        _riskModelCache = { sig, ts: model.partial ? (Date.now() - RISK_MODEL.CACHE_TTL + 20000) : Date.now(), model };
+        if (!model.partial) _rmPersistModel(sig, model);
         return model;
     })();
 
@@ -476,13 +480,23 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
     const riskyPositions = []; // { ticker, weight, beta, expReturn }
     let riskFreeWeightValue = 0; // value of bonds + cash treated as risk-free
 
+    let riskyMissingValue = 0; // value of STOCKS whose price history hasn't loaded yet
     for (const h of holdings) {
         const v = h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0);
         totalValue += v;
-        if (_rmIsRiskyHolding(h) && assets[h.ticker] && assets[h.ticker].hasData) {
-            riskyPositions.push({ ticker: h.ticker, value: v, a: assets[h.ticker] });
+        if (_rmIsRiskyHolding(h)) {
+            if (assets[h.ticker] && assets[h.ticker].hasData) {
+                riskyPositions.push({ ticker: h.ticker, value: v, a: assets[h.ticker] });
+            } else {
+                // A stock whose history failed/not-yet-loaded is NOT risk-free. Model it as
+                // a neutral, fairly-priced market proxy (β=1, E[r]=Rm, α=0). This keeps the
+                // verdict STABLE — a holding no longer flips between risk-free and risky
+                // depending on whether a network fetch happened to succeed this run.
+                riskyMissingValue += v;
+                riskyPositions.push({ ticker: h.ticker, value: v, _proxy: true, a: { beta: 1, expReturn: rm, vol: marketVol, alpha: 0, requiredReturn: rm, hasData: false } });
+            }
         } else {
-            riskFreeWeightValue += v; // bond / cash / data-less position → risk-free leg
+            riskFreeWeightValue += v; // bond / cash → true risk-free leg
         }
     }
     // Client-level cash buckets (stored outside holdings)
@@ -528,7 +542,9 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
             const sj = pj.a.vol != null ? pj.a.vol : 0;
             let rho;
             if (i === j) rho = 1;
-            else {
+            else if (!closeMaps[pi.ticker] || !closeMaps[pj.ticker]) {
+                rho = 0; // a proxy (data-less) position — assume uncorrelated for now
+            } else {
                 const { ra, rb } = _rmAlignedReturns(closeMaps[pi.ticker], closeMaps[pj.ticker]);
                 rho = ra.length > RISK_MODEL.MIN_POINTS ? _rmCorrelation(ra, rb) : 0;
                 if (i < j) { corrSum += rho; corrCount++; }
@@ -576,8 +592,15 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
     const complianceScore = clamp(0.40 * cmlScore + 0.40 * smlScore + 0.20 * divScore);
     const complianceLabel = complianceScore >= 75 ? 'עומד היטב' : complianceScore >= 50 ? 'עמידה חלקית' : 'לא עומד';
 
+    // Data coverage of the risky book. When too much of it is still market-proxy
+    // (history not loaded), the verdict isn't final — flag it so the UI shows
+    // "מחשב…" instead of a value that would later change with no portfolio change.
+    const riskyTotalVal = riskyPositions.reduce((s, p) => s + p.value, 0);
+    const coverage = riskyTotalVal > 0 ? (riskyTotalVal - riskyMissingValue) / riskyTotalVal : 1;
+    const partial = coverage < 0.85;
+
     return {
-        ...base, hasData: true,
+        ...base, hasData: true, partial, coverage,
         beta, expReturn, vol, sharpe, alpha,
         riskyPct, aboveCML: expReturn >= cmlReturn,
         riskScore, risk, riskLabel,
@@ -824,6 +847,7 @@ async function applyModelRiskToClients(opts = {}) {
             c.aboveCML = p.aboveCML;
             c.complianceScore = p.complianceScore;
             c.complianceLabel = p.complianceLabel;
+            c.compliancePartial = p.partial;
         }
         window._lastRiskModel = model;
         if (typeof refreshDashboard === 'function') refreshDashboard();
@@ -1019,7 +1043,7 @@ function buildPortfolioAdvisory(client, model) {
 
     // Spread the shortlist across sectors (cap per sector) so every portfolio gets names
     // matched to ITS gaps, rather than 10 clones from the single highest-alpha sector.
-    const _PER_SECTOR_CAP = 3;
+    const _PER_SECTOR_CAP = 8;
     const _secCount = {};
     const candidates = [];
     for (const c of candidatesRanked) {
@@ -1027,9 +1051,9 @@ function buildPortfolioAdvisory(client, model) {
         if ((_secCount[s] || 0) >= _PER_SECTOR_CAP) continue;
         _secCount[s] = (_secCount[s] || 0) + 1;
         candidates.push(c);
-        if (candidates.length >= 36) break;
+        if (candidates.length >= 80) break;
     }
-    if (candidates.length < 6) { candidates.length = 0; candidates.push(...candidatesRanked.slice(0, 36)); }
+    if (candidates.length < 6) { candidates.length = 0; candidates.push(...candidatesRanked.slice(0, 80)); }
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];
