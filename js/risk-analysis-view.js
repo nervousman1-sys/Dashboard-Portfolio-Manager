@@ -1196,7 +1196,7 @@ function openStockRecommendations(clientId) {
         cardsHTML = Object.entries(bySector).map(([sector, list]) => {
             // Show a clean 3 per sector; the rest of the deep bench is reached via the
             // "↻ בדוק אופציה חלופית" button on each card (cycles the whole sector list).
-            const slots = Math.min(list.length, 3);
+            const slots = Math.min(list.length, 4);
             state.slots[sector] = slots;
             const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
             const hasAlt = list.length > 1;          // ALWAYS offer the swap when the sector has alternatives
@@ -1225,6 +1225,43 @@ function openStockRecommendations(clientId) {
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
     try { history.pushState({ popup: 'reco' }, '', location.href); } catch (e) { /* ignore */ }
+
+    // The technical scores start neutral (50) if the technical-scan cache is cold.
+    // Fetch the indicators for the candidate names now, recompute the Final Score, and
+    // re-render once — so the Technical layer is real and peak names actually sink.
+    _recoEnrichTechnicals(clientId, cands);
+}
+
+// Ensure MA200/WMA200/Weekly-RSI exist for the candidates, merge into the shared
+// technical-scan cache, recompute Final Scores, and re-open once with real scores.
+const _recoTechFetched = new Set();
+async function _recoEnrichTechnicals(clientId, cands) {
+    if (!cands || !cands.length || typeof _rmApplyFinalScore !== 'function') return;
+    const need = [...new Set(cands.map(c => c.ticker))].filter(t => !_recoTechFetched.has(t));
+    if (!need.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    let got = {};
+    try {
+        const BATCH = 45;
+        for (let i = 0; i < need.length; i += BATCH) {
+            const b = need.slice(i, i + BATCH);
+            const r = await fetch(`/api/technicals?mode=scan&symbols=${b.map(encodeURIComponent).join(',')}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
+            const j = await r.json();
+            if (j && j.results) Object.assign(got, j.results);
+        }
+    } catch (e) { return; }
+    need.forEach(t => _recoTechFetched.add(t));
+    if (!Object.keys(got).length) return;
+    // Merge into the technical-scan cache the scorer reads from.
+    try {
+        const key = 'tech_scan_v3';
+        const cur = JSON.parse(localStorage.getItem(key) || '{}');
+        const data = Object.assign({}, cur.data || {}, got);
+        localStorage.setItem(key, JSON.stringify({ day: today, data }));
+    } catch (e) { /* quota — scorer can still read `got` via cache next time */ }
+    // Recompute + re-render only if this overlay is still open.
+    const ov = document.getElementById('stockRecoOverlay');
+    if (ov && ov.classList.contains('active')) openStockRecommendations(clientId);
 }
 
 function closeStockRecommendations() {
@@ -1238,6 +1275,19 @@ function closeStockRecommendations() {
 // The letter + ticker are kept on ONE line (nowrap). The Google Finance link, the alt
 // button and the buy CTA all live in a footer pinned to the bottom — fixed positions
 // that never move when the card is swapped, regardless of ticker-name length.
+// One short technical line on the card: 1–2 of the platform's technical-table params
+// (weekly RSI + distance above the 200-week MA) + a near-ATH warning when relevant.
+function _recoTechLine(c) {
+    if (!c.hasTech) return '';
+    const bits = [];
+    if (c.techRsiW != null) bits.push(`RSI שבועי <b>${Math.round(c.techRsiW)}</b>`);
+    if (c.techDistW != null) bits.push(`<b>${c.techDistW >= 0 ? '+' : ''}${Math.round(c.techDistW)}%</b> מול ממוצע 200ש׳`);
+    else if (c.techDistD != null) bits.push(`<b>${c.techDistD >= 0 ? '+' : ''}${Math.round(c.techDistD)}%</b> מול ממוצע 200י׳`);
+    if (!bits.length) return '';
+    const warn = c.nearATH ? '<span class="reco-tech-warn">⚠ קרוב לשיא</span>' : '';
+    return `<div class="reco-tech">${bits.join(' · ')} ${warn}</div>`;
+}
+
 function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const gf = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(c.ticker) : `https://www.google.com/finance/quote/${c.ticker}:NASDAQ`;
     const buy = c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק';
@@ -1265,6 +1315,7 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
                 <span>σ <b>${rmFmtPct(c.vol, 0)}</b></span>
                 <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
+            ${_recoTechLine(c)}
             <div class="reco-links">
                 <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">גוגל פיננס ↗</a>
                 <a class="reco-gf" href="javascript:void(0)" onclick="event.stopPropagation(); openTechnicalForTicker('${_riskEsc(c.ticker)}')" title="ניתוח טכני ואינדיקטורים בפלטפורמה">ניתוח טכני ↗</a>

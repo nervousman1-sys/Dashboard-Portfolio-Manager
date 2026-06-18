@@ -981,19 +981,33 @@ function _rmApplyFinalScore(cands) {
         // Technical (20%) — high = comfortable entry; penalise extension above the long-term
         // MAs and a hot weekly RSI (the direct ATH guard). Neutral 50 if no scan data.
         const t = tech[c.ticker];
-        let techScore = 50;
+        let techScore = 50, hasTech = false;
         if (t) {
+            hasTech = true;
             const ma = t.ma || {};
-            const extD = clamp01((ma.d200dist != null ? ma.d200dist : 0) / 20);  // +20% above 200-day → full
-            const extW = clamp01((ma.w200dist != null ? ma.w200dist : 0) / 40);  // +40% above 200-week → full
-            const rsiPen = clamp01(((t.rsiW != null ? t.rsiW : 50) - 70) / 15);  // weekly RSI 70→85
-            const penalty = 1 - (1 - extD) * (1 - extW) * (1 - rsiPen);          // soft-OR ∈ [0,1]
-            techScore = (1 - penalty) * 100;                                     // high = comfortable entry
+            const dD = ma.d200dist != null ? ma.d200dist : null;   // % vs 200-day MA
+            const dW = ma.w200dist != null ? ma.w200dist : null;   // % vs 200-week MA (the long base)
+            const rsiW = t.rsiW != null ? t.rsiW : null;           // weekly RSI
+            const extD = clamp01((dD != null ? dD : 0) / 20);      // +20% above 200-day → full
+            const extW = clamp01((dW != null ? dW : 0) / 40);      // +40% above 200-week → full
+            const rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 70) / 15);  // weekly RSI 70→85
+            const penalty = 1 - (1 - extD) * (1 - extW) * (1 - rsiPen);      // soft-OR ∈ [0,1]
+            techScore = (1 - penalty) * 100;                                 // high = comfortable entry
+            // Expose the actual readings so the card can SHOW 1–2 technical params.
+            c.techRsiW = rsiW; c.techDistD = dD; c.techDistW = dW;
+            // Near-ATH = stretched far above the long-term base AND/OR hot weekly RSI.
+            c.nearATH = (dW != null && dW >= 30) || (rsiW != null && rsiW >= 75);
         }
+        c.hasTech = hasTech;
         c.fundScore = Math.round(fundScore);
         c.smlScore = Math.round(smlScore);
         c.techScore = Math.round(techScore);
-        c.finalScore = Math.round(0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore);
+        let finalScore = 0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore;
+        // Hard ATH guard: actively push peak / near-peak names DOWN the list (not just a
+        // soft 20% nudge) so they don't sit at the top even with a strong α.
+        if (c.nearATH) finalScore -= 12;
+        if (techScore <= 25) finalScore -= 8;
+        c.finalScore = Math.round(Math.max(0, finalScore));
     }
     return cands;
 }
@@ -1359,6 +1373,7 @@ if (typeof window !== 'undefined') {
     window.getRiskFreeRate = getRiskFreeRate;
     window.classifyRisk = classifyRisk;
     window.buildPortfolioAdvisory = buildPortfolioAdvisory;
+    window._rmApplyFinalScore = _rmApplyFinalScore;
     window.renderAdvisoryHTML = renderAdvisoryHTML;
     window.googleFinanceUrl = googleFinanceUrl;
     window.RISK_MODEL = RISK_MODEL;
