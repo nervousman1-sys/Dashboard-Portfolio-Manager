@@ -45,9 +45,8 @@ function _dnTickerOf(m) {
 // Technical-analysis (TradingView) + in-app financial-reports links for an insider post.
 function _dnInsiderLinks(tk) {
     if (!tk) return '';
-    const tv = `https://www.tradingview.com/symbols/${encodeURIComponent(tk)}/technicals/`;
     return `<div class="dn-insider-links">
-        <a class="reco-gf" href="${tv}" target="_blank" rel="noopener">📈 ניתוח טכני ↗</a>
+        <a class="reco-gf" href="javascript:void(0)" onclick="openTechnicalForTicker('${tk}')">📈 ניתוח טכני ↗</a>
         <a class="reco-gf" href="javascript:void(0)" onclick="openReportForTicker('${tk}')">📄 דוחות החברה ↗</a>
     </div>`;
 }
@@ -250,15 +249,21 @@ async function _dnVisionText(img, mode) {
     } catch (e) { /* ignore */ }
     if (_dnVisionInflight[cacheKey]) return _dnVisionInflight[cacheKey];
     _dnVisionInflight[cacheKey] = (async () => {
+        // Retry transient failures (cold serverless / Gemini quota / slow image fetch) —
+        // the #1 reason a fresh machine "can't read the image" while a cached one shows it.
+        const attempts = 3;
         try {
-            const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=5`, { headers: { Accept: 'application/json' } });
-            const j = await res.json();
-            if (j && j.text) {
-                try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
-                return j.text;
+            for (let i = 0; i < attempts; i++) {
+                try {
+                    const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=5`, { headers: { Accept: 'application/json' } });
+                    const j = await res.json().catch(() => null);
+                    if (j && j.text) {
+                        try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }
+                        return j.text;
+                    }
+                } catch (e) { /* network — retry */ }
+                if (i < attempts - 1) await new Promise(r => setTimeout(r, 1200 * (i + 1)));
             }
-            return null;
-        } catch (e) {
             return null;
         } finally {
             setTimeout(() => { delete _dnVisionInflight[cacheKey]; }, 0);

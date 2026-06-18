@@ -18,6 +18,7 @@ let _techDataMkt = { us: null, il: null };
 let _techData = null;                // alias of _techDataMkt[_techMarket]
 let _techFilter = 'all';
 let _techSearch = '';
+let _techExact = '';                 // when set (deep-link), match this ticker EXACTLY (not substring)
 let _techLoading = { us: false, il: false };
 
 // Open the in-app technical-analysis page focused on a SPECIFIC ticker (from the
@@ -26,6 +27,9 @@ let _techLoading = { us: false, il: false };
 function openTechnicalForTicker(ticker) {
     const sym = String(ticker || '').trim().toUpperCase();
     if (!sym) return;
+    // Suppress intermediate history writes → one clean entry, so Back returns to where
+    // the user came from (insider feed, recommendations, etc.).
+    if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(true);
     if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
     const mo = document.getElementById('modalOverlay');
     if (mo && mo.classList.contains('active')) {
@@ -36,8 +40,11 @@ function openTechnicalForTicker(ticker) {
     if (typeof closeReportsPage === 'function' && document.getElementById('reportsPage')?.classList.contains('active')) closeReportsPage();
     if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
     openTechnicalPage();
+    if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
+    if (typeof updateURLState === 'function') updateURLState({ view: 'technical' });
     const base = sym.replace(/\.TA$/, '');
     const apply = () => {
+        _techExact = sym;        // exact-match this ticker, not a substring
         _techSearch = base;
         const el = document.getElementById('techSearch');
         if (el) el.value = base;
@@ -84,7 +91,7 @@ function openTechnicalPage() {
                     </div>
                     <input type="text" id="techSearch" class="tech-search" autocomplete="off"
                            placeholder="חיפוש מניה (למשל: NVDA)…"
-                           oninput="_techSearch=this.value.toUpperCase().trim(); _techRender()" />
+                           oninput="_techExact=''; _techSearch=this.value.toUpperCase().trim(); _techRender()" />
                     <div class="tech-chips" id="techChips"></div>
                 </div>
                 <div id="techProgress" class="tech-progress" style="display:none">
@@ -277,7 +284,12 @@ function _techRender() {
     }
 
     const filter = _TECH_FILTERS.find(f => f.id === _techFilter) || _TECH_FILTERS[0];
-    let rows = entries.filter(([t, v]) => filter.test(v) && (!_techSearch || t.includes(_techSearch)));
+    // Deep-link from a card/insider post → match the EXACT ticker (so a link to "MS"
+    // never also lists MSFT/MSI). Manual typing in the search box uses substring.
+    const _exact = _techExact ? _techExact.replace(/\.TA$/, '') : '';
+    let rows = entries.filter(([t, v]) => filter.test(v) && (
+        _exact ? (t === _exact || t === _techExact) : (!_techSearch || t.includes(_techSearch))
+    ));
 
     // Relevance sort per filter
     if (_techFilter === 'rsi40' || _techFilter === 'oversold') rows.sort((a, b) => (a[1].rsiD ?? 99) - (b[1].rsiD ?? 99));

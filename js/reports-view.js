@@ -370,19 +370,27 @@ function backToReportsList() {
 function openReportForTicker(ticker) {
     const sym = String(ticker || '').trim().toUpperCase();
     if (!sym) return;
-    if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
-    // Close other full-page overlays so the reports page isn't hidden behind them.
-    if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
-    if (typeof closeTechnicalPage === 'function' && document.getElementById('technicalPage')?.classList.contains('active')) closeTechnicalPage();
-    const mo = document.getElementById('modalOverlay');
-    if (mo && mo.classList.contains('active')) {
-        mo.classList.remove('active');
-        if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-        try { currentModalClientId = null; } catch (e) { }
+    // Suppress intermediate history writes so this whole hop adds ONE entry (the report),
+    // and Back returns to exactly the page the user came from.
+    if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(true);
+    try {
+        if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
+        if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
+        if (typeof closeTechnicalPage === 'function' && document.getElementById('technicalPage')?.classList.contains('active')) closeTechnicalPage();
+        const mo = document.getElementById('modalOverlay');
+        if (mo && mo.classList.contains('active')) {
+            mo.classList.remove('active');
+            if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+            try { currentModalClientId = null; } catch (e) { }
+        }
+        if (typeof openReportsPage === 'function') openReportsPage();
+        _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
+        openReportDetail(sym);
+    } finally {
+        if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
     }
-    if (typeof openReportsPage === 'function') openReportsPage();
-    _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
-    openReportDetail(sym);
+    // One clean history entry for this navigation.
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym });
 }
 
 // Return to the FULL company list, clearing any active search (used by the sidebar

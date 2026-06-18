@@ -344,7 +344,9 @@ async function buildRiskModel(clientsList, opts = {}) {
                 await prefetchTickerHistories(tickers.map(t => ({ ticker: t, currency: tickerMeta[t].currency })), out);
             } catch (e) { /* per-ticker path covers it */ }
         }
-        const BATCH = 12;
+        // Larger batches + a shorter gap: after prefetchTickerHistories warms the cache
+        // these mostly resolve instantly, so we can push harder and cut the wait.
+        const BATCH = 24;
         for (let i = 0; i < tickers.length; i += BATCH) {
             const batch = tickers.slice(i, i + BATCH);
             const results = await Promise.allSettled(
@@ -356,7 +358,7 @@ async function buildRiskModel(clientsList, opts = {}) {
                     closeMaps[batch[j]] = _rmSeriesToMap(results[j].value);
                 }
             }
-            if (i + BATCH < tickers.length) await new Promise(r => setTimeout(r, 60));
+            if (i + BATCH < tickers.length) await new Promise(r => setTimeout(r, 25));
         }
 
         const marketOk = marketReturns.length > RISK_MODEL.MIN_POINTS && marketVar > 0;
