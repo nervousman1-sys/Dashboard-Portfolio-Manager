@@ -7534,6 +7534,7 @@ body.full-list-open { overflow: hidden; }
 .row-order-pop input[type="text"] { width: 100%; padding: 6px 8px; font-size: 12px;
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); }
 .holding-action-btn.roworder.has-date { color: var(--accent-blue); border-color: rgba(56,189,248,0.5); }
+.row-value { font-size: 10.5px; color: var(--accent-green); margin-top: 3px; direction: ltr; text-align: left; font-weight: 600; }
 
 /* ── Per-portfolio CML/SML advisory ── */
 .risk-section-head { margin: 26px 2px 14px; }

@@ -44,9 +44,23 @@ async function _fillModalAdvisory(clientId) {
         // Refresh the compact compliance bar now that the model is in
         const p = model.portfolios.find(x => x.id === clientId);
         if (p) { client.complianceScore = p.complianceScore; client.complianceLabel = p.complianceLabel; }
+        // The holdings table renders before the risk model is built, so the β cells
+        // start as "—". Now that the model is in, fill them in place.
+        if (typeof _refreshHoldingBetaCells === 'function') _refreshHoldingBetaCells(model);
     } catch (e) {
         body.innerHTML = '<div class="adv-empty">לא ניתן לבנות ניתוח CML/SML כרגע.</div>';
     }
+}
+
+// Fill the β cells in the open holdings table once the risk model has computed betas.
+function _refreshHoldingBetaCells(model) {
+    if (!model || !model.assets) return;
+    document.querySelectorAll('td[data-bticker]').forEach(td => {
+        const tk = td.getAttribute('data-bticker');
+        if (!tk) return;
+        const a = model.assets[tk];
+        if (a && a.beta != null && isFinite(a.beta)) td.textContent = a.beta.toFixed(2);
+    });
 }
 
 function switchModalTab(tabName) {
@@ -120,7 +134,9 @@ function _buildHoldingsTable(client) {
     let lastSector = null;
 
     ordered.forEach((h) => {
-        const isStale = h.type === 'stock' && !h._livePriceResolved;
+        // "ממתין" only when we truly have no price yet. A position opened now at the
+        // market price already has a price (= cost), so its return is a real 0 — show it.
+        const isStale = h.type === 'stock' && !h._livePriceResolved && !(h.price > 0);
         const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
         const changeClass = change >= 0 ? 'positive' : 'negative';
         const changeSign = change >= 0 ? '+' : '';
@@ -203,7 +219,7 @@ function _buildHoldingsTable(client) {
             <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td style="font-weight:600">${_pctOfPort >= 0.05 ? _pctOfPort.toFixed(1) + '%' : '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td>${_betaCell}</td>
+            <td id="beta_${h.id}" data-bticker="${h.type === 'stock' ? h.ticker : ''}">${_betaCell}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : dailyProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${dailyProfitSign}${formatCurrency(Math.abs(dailyProfit), h.currency)}`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
@@ -288,7 +304,9 @@ async function openModal(clientId) {
     const _portTotalForPct = client.holdings.reduce((s, hh) => s + (hh.value || 0) * _fxR(hh.currency), 0)
         + ((client.cash?.usd || 0) + (client.cash?.ils || 0) * _fxR('ILS'));
     client.holdings.forEach((h, hIdx) => {
-        const isStale = h.type === 'stock' && !h._livePriceResolved;
+        // "ממתין" only when we truly have no price yet. A position opened now at the
+        // market price already has a price (= cost), so its return is a real 0 — show it.
+        const isStale = h.type === 'stock' && !h._livePriceResolved && !(h.price > 0);
         const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
         const changeClass = change >= 0 ? 'positive' : 'negative';
         const changeSign = change >= 0 ? '+' : '';
@@ -365,7 +383,7 @@ async function openModal(clientId) {
             <td data-label="כמות" class="col-quantity">${formatAssetQuantity(h.shares)}</td>
             <td style="font-weight:600;color:var(--text-primary)">${formatCurrency(h.value, h.currency)}</td>
             <td style="font-weight:600">${_pctOfPort >= 0.05 ? _pctOfPort.toFixed(1) + '%' : '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td>${_betaCell}</td>
+            <td id="beta_${h.id}" data-bticker="${h.type === 'stock' ? h.ticker : ''}">${_betaCell}</td>
             <td class="price-change ${isStale ? '' : changeClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${changeSign}${change.toFixed(2)}%`}</td>
             <td class="price-change ${isStale ? '' : dailyProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${dailyProfitSign}${formatCurrency(Math.abs(dailyProfit), h.currency)}`}</td>
             <td class="price-change ${isStale ? '' : holdingProfitClass}">${isStale ? '<span style="color:var(--text-muted)">ממתין...</span>' : `${holdingProfitSign}${formatCurrency(Math.abs(holdingProfit), h.currency)}`}</td>
@@ -1455,8 +1473,17 @@ function openMgmtModal(action, data) {
                 <input type="hidden" id="mgmt-asset-class" value="${h.assetClass || 'Gov Bond'}" />
                 <div class="mgmt-field"><label>נכס</label><div class="ticker-selected-badge" style="display:flex">${_mEsc(buyDisplayName)} <span style="direction:ltr;opacity:.7">${_mEsc(h.ticker)}</span></div></div>
                 <div id="mgmt-live-price-preview" style="display:none"></div>
-                <div class="mgmt-field"><label>מחיר קנייה (<span id="mgmt-price-currency-label">${buyCurLabel}</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" value="${formatPrice(h.price || 0)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
+                <div class="mgmt-field"><label>סוג פקודה</label>
+                    <input type="hidden" id="mgmt-order-type" value="market" />
+                    <div class="order-toggle">
+                        <button type="button" class="order-toggle-btn active" data-ot="market" onclick="_setOrderType('market')">קנייה במחיר שוק</button>
+                        <button type="button" class="order-toggle-btn" data-ot="limit" onclick="_setOrderType('limit')">קנייה בלימיט</button>
+                    </div>
+                </div>
+                <div class="mgmt-field"><label><span id="mgmt-price-label-text">מחיר קנייה</span> (<span id="mgmt-price-currency-label">${buyCurLabel}</span>)</label><input type="text" inputmode="decimal" id="mgmt-price" value="${formatPrice(h.price || 0)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost()" /></div>
                 <div class="mgmt-field"><label>כמות יחידות</label><input type="text" inputmode="decimal" id="mgmt-qty" placeholder="0" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateBuyCost(); _updateQtyPreview('mgmt-qty','mgmt-qty-preview')" /><div class="qty-live-preview" id="mgmt-qty-preview"></div></div>
+                <div class="mgmt-field"><label>סטופ-לוס (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-stoploss" value="${(typeof _orderAnnGet === 'function' && _orderAnnGet(c.id, h.ticker)?.stopLoss) ? formatPrice(_orderAnnGet(c.id, h.ticker).stopLoss) : ''}" placeholder="מחיר יציאה להגנה" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
+                <div class="mgmt-field"><label>יעד / טייק-פרופיט (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-target" value="${(typeof _orderAnnGet === 'function' && _orderAnnGet(c.id, h.ticker)?.target) ? formatPrice(_orderAnnGet(c.id, h.ticker).target) : ''}" placeholder="מחיר יעד למימוש" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">${buyCurLabel}0</span></div>
                     <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(h.currency === 'ILS' ? cashIls : cashUsd, h.currency || 'USD')}</span></div>
@@ -1514,7 +1541,15 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>כמות באחזקה</label><div class="mgmt-readonly col-quantity">${formatAssetQuantity(h.shares)}</div></div>
                 <input type="hidden" id="mgmt-sell-avg-cost" value="${avgCost}" />
                 <input type="hidden" id="mgmt-sell-currency" value="${h.currency || 'USD'}" />
-                <div class="mgmt-field"><label>מחיר מכירה (${currSymbol})</label><input type="text" inputmode="decimal" id="mgmt-sell-price" value="${formatPrice(h.price)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateSellSummary()" /></div>
+                <div class="mgmt-field"><label>סוג פקודה</label>
+                    <input type="hidden" id="mgmt-sell-order-type" value="market" />
+                    <div class="order-toggle">
+                        <button type="button" class="order-toggle-btn active" data-sot="market" onclick="_setSellOrderType('market')">מכירה בשוק</button>
+                        <button type="button" class="order-toggle-btn" data-sot="limit" onclick="_setSellOrderType('limit')">מכירה בלימיט</button>
+                        <button type="button" class="order-toggle-btn" data-sot="stop" onclick="_setSellOrderType('stop')">סטופ-לוס</button>
+                    </div>
+                </div>
+                <div class="mgmt-field"><label><span id="mgmt-sell-price-label">מחיר מכירה</span> (${currSymbol})</label><input type="text" inputmode="decimal" id="mgmt-sell-price" value="${formatPrice(h.price)}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateSellSummary()" /></div>
                 <div class="mgmt-field"><label>כמות למכירה</label><input type="text" inputmode="decimal" id="mgmt-sell-qty" value="${Number(h.shares).toLocaleString('en-US')}" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateSellSummary(); _updateQtyPreview('mgmt-sell-qty','mgmt-sell-qty-preview')" /><div class="qty-live-preview" id="mgmt-sell-qty-preview">${describeQuantity(h.shares)}</div></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ תמורה:</span><span id="mgmt-sell-total" style="color:var(--accent-green);font-weight:700">${formatCurrency(h.price * h.shares, h.currency)}</span></div>
@@ -2074,6 +2109,15 @@ document.addEventListener('click', (e) => {
 
 // --- Client CRUD (routes to Supabase when connected, fallback to backend API) ---
 
+// Sell order-type toggle (market / limit / stop-loss) — relabels the sell price field.
+function _setSellOrderType(t) {
+    const hid = document.getElementById('mgmt-sell-order-type');
+    if (hid) hid.value = t;
+    document.querySelectorAll('.order-toggle .order-toggle-btn[data-sot]').forEach(b => b.classList.toggle('active', b.getAttribute('data-sot') === t));
+    const lbl = document.getElementById('mgmt-sell-price-label');
+    if (lbl) lbl.textContent = t === 'limit' ? 'מחיר לימיט' : (t === 'stop' ? 'מחיר סטופ-לוס' : 'מחיר מכירה');
+}
+
 // Fill the average-USD-rate field with today's live USD/ILS rate.
 function _fillTodayUsdRate() {
     const el = document.getElementById('mgmt-usd-rate');
@@ -2458,9 +2502,10 @@ function addHoldingRow(prefill = null) {
             </div>
         </td>
         <td><input type="text" inputmode="decimal" class="row-shares" value="${prefill?.shares ? Number(prefill.shares).toLocaleString('en-US') : ''}" placeholder="0"
-                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></td>
+                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk(); _updateRowValue('${rowId}')" /></td>
         <td><input type="text" inputmode="decimal" class="row-price" value="${prefill?.avgPrice ? formatPrice(prefill.avgPrice) : ''}" placeholder="0.00"
-                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk()" /></td>
+                   style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this); updateAddClientRisk(); _updateRowValue('${rowId}')" />
+                   <div class="row-value" id="rowval_${rowId}"></div></td>
         <td class="row-live-price" style="font-size:12px;color:var(--text-muted);text-align:center">—</td>
         <td>
             <div class="row-actions-cell">
@@ -2500,6 +2545,7 @@ function addHoldingRow(prefill = null) {
     `;
     tbody.appendChild(tr);
     updateAddClientRisk();
+    _updateRowValue(rowId);
 
     // Focus the ticker search if not prefilled
     if (!prefill?.ticker) {
@@ -2569,6 +2615,23 @@ function _setRowOrderType(rowId, t) {
     const btn = document.getElementById('orderbtn_' + rowId);
     if (btn) btn.classList.toggle('has-date', t === 'limit' || !!pop.querySelector('.row-stoploss')?.value || !!pop.querySelector('.row-target')?.value);
 }
+// Show how much a row's holding is worth (shares × price) in its currency.
+function _updateRowValue(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const el = document.getElementById('rowval_' + rowId);
+    if (!el) return;
+    const shares = parseInputNumber(row.querySelector('.row-shares')?.value);
+    const price = parseInputNumber(row.querySelector('.row-price')?.value);
+    if (shares > 0 && price > 0) {
+        const cur = row.dataset?.currency || 'USD';
+        const sym = cur === 'ILS' ? '₪' : '$';
+        el.textContent = `שווי: ${sym}${(shares * price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    } else {
+        el.textContent = '';
+    }
+}
+
 // Read order metadata from each add-portfolio row → [{ ticker, orderType, stopLoss, target }].
 function _collectRowOrders() {
     const tbody = document.getElementById('mgmt-holdings-tbody');
