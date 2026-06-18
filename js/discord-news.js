@@ -9,6 +9,55 @@ let _dnTimer = null;
 let _dnActiveChannel = 'all';
 let _dnLastData = null;
 let _dnLastSig = null; // signature of the last rendered feed — skips no-op re-renders
+let _dnInsiderQuery = ''; // ticker filter for the insider-buys tab
+
+// ── Insider-buys persistent history ──────────────────────────────────────────
+// The feed API only returns recent messages; we accumulate insider posts locally
+// (deduped by id, capped) so the tab keeps the FULL history across sessions.
+const _DN_INSIDER_LS = 'dn_insider_hist_v1';
+const _DN_INSIDER_CAP = 1500;
+function _dnInsiderLabel(name) { return _dnLabelOf(name) === 'קניות פנימיות'; }
+function _dnMergeInsiderHistory(data) {
+    try {
+        const ch = (data.channels || []).find(c => _dnInsiderLabel(c.name));
+        if (!ch) return;
+        const store = JSON.parse(localStorage.getItem(_DN_INSIDER_LS) || '{}');
+        const byId = store.byId || {};
+        (ch.messages || []).forEach(m => { const k = m.id || m.ts; if (k) byId[k] = m; });
+        // Cap: keep the newest _DN_INSIDER_CAP by timestamp.
+        let all = Object.values(byId).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        if (all.length > _DN_INSIDER_CAP) all = all.slice(0, _DN_INSIDER_CAP);
+        const capped = {}; all.forEach(m => { capped[m.id || m.ts] = m; });
+        localStorage.setItem(_DN_INSIDER_LS, JSON.stringify({ byId: capped }));
+        // Replace the channel's messages with the full merged history (newest-first).
+        ch.messages = all;
+    } catch (e) { /* keep API messages as-is on any storage error */ }
+}
+function _dnInsiderHistory() {
+    try { const s = JSON.parse(localStorage.getItem(_DN_INSIDER_LS) || '{}'); return Object.values(s.byId || {}).sort((a, b) => (b.ts || 0) - (a.ts || 0)); } catch (e) { return []; }
+}
+// Extract the stock ticker from an insider post (it appears as "(EQPT)").
+function _dnTickerOf(m) {
+    const txt = (m.embeds || []).map(e => `${e.title || ''} ${e.description || ''} ${(e.fields || []).map(f => f.name + ' ' + f.value).join(' ')}`).join(' ') + ' ' + (m.content || '');
+    const mt = txt.match(/\(([A-Z]{1,5}(?:\.[A-Z])?)\)/);
+    return mt ? mt[1] : '';
+}
+// Technical-analysis (TradingView) + in-app financial-reports links for an insider post.
+function _dnInsiderLinks(tk) {
+    if (!tk) return '';
+    const tv = `https://www.tradingview.com/symbols/${encodeURIComponent(tk)}/technicals/`;
+    return `<div class="dn-insider-links">
+        <a class="reco-gf" href="${tv}" target="_blank" rel="noopener">📈 ניתוח טכני ↗</a>
+        <a class="reco-gf" href="javascript:void(0)" onclick="openReportForTicker('${tk}')">📄 דוחות החברה ↗</a>
+    </div>`;
+}
+function setDnInsiderQuery(v) {
+    _dnInsiderQuery = String(v || '').toUpperCase().trim();
+    _dnRender();
+    // keep focus in the search box after the re-render
+    const el = document.getElementById('dnInsiderSearch');
+    if (el) { el.value = _dnInsiderQuery; el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
+}
 
 function openDiscordNews() {
     const page = document.getElementById('discordNewsPage');
@@ -114,6 +163,7 @@ async function _dnFetchAndRender(silent) {
             return;
         }
         _dnLastSig = sig;
+        _dnMergeInsiderHistory(data); // accumulate full insider history locally
         _dnLastData = data;
         _dnRender();
         const live = document.getElementById('dnLive');
@@ -790,6 +840,27 @@ function _dnRender() {
                 html = [...byDate.values()].map((msgs, i) => renderCollapsed(msgs, null, i === 0, visionModeOf(c.name))).join('');
             } else if (kind === 'options') {
                 html = renderByDate(_dnLastNDays(c.messages), (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
+            } else if (_dnInsiderLabel(c.name)) {
+                // Insider buys: full saved history, searchable by ticker, with a
+                // technical-analysis + company-reports link on every post.
+                const q = _dnInsiderQuery;
+                let msgs = c.messages;
+                if (q) msgs = msgs.filter(m => {
+                    const tk = _dnTickerOf(m);
+                    const blob = `${tk} ${m.content || ''} ${(m.embeds || []).map(e => e.title || '').join(' ')}`.toUpperCase();
+                    return blob.includes(q);
+                });
+                const CAP = 400;
+                const total = msgs.length;
+                const shown = msgs.slice(0, CAP);
+                const searchBox = `<div class="dn-insider-search-wrap">
+                    <input id="dnInsiderSearch" class="tech-search" placeholder="חיפוש לפי טיקר (למשל: NVDA)…" value="${_dnEsc(q)}" oninput="setDnInsiderQuery(this.value)" autocomplete="off" />
+                    <span class="dn-insider-count">${total} קניות פנימיות${q ? ` · סינון: ${_dnEsc(q)}` : ' · היסטוריה מלאה'}${total > CAP ? ` · מוצגות ${CAP}` : ''}</span>
+                </div>`;
+                const items = shown.length
+                    ? shown.map(m => `<div class="dn-insider-item">${renderMsg(m, null)}${_dnInsiderLinks(_dnTickerOf(m))}</div>`).join('')
+                    : `<div class="adv-empty">לא נמצאו קניות פנימיות${q ? ` עבור "${_dnEsc(q)}"` : ''}.</div>`;
+                html = searchBox + items;
             } else {
                 html = c.messages.map(m => renderMsg(m, null)).join('');
             }

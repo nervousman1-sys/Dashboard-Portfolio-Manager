@@ -334,6 +334,9 @@ function openReportForTicker(ticker) {
     const sym = String(ticker || '').trim().toUpperCase();
     if (!sym) return;
     if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
+    // Close other full-page overlays so the reports page isn't hidden behind them.
+    if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
+    if (typeof closeTechnicalPage === 'function' && document.getElementById('technicalPage')?.classList.contains('active')) closeTechnicalPage();
     const mo = document.getElementById('modalOverlay');
     if (mo && mo.classList.contains('active')) {
         mo.classList.remove('active');

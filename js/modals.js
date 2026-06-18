@@ -1472,7 +1472,7 @@ function openMgmtModal(action, data) {
                 <input type="hidden" id="mgmt-ticker-name" value="${_mEsc(h.name || h.ticker)}" />
                 <input type="hidden" id="mgmt-asset-class" value="${h.assetClass || 'Gov Bond'}" />
                 <div class="mgmt-field"><label>נכס</label><div class="ticker-selected-badge" style="display:flex">${_mEsc(buyDisplayName)} <span style="direction:ltr;opacity:.7">${_mEsc(h.ticker)}</span></div></div>
-                <div id="mgmt-live-price-preview" style="display:none"></div>
+                <div id="mgmt-live-price-preview" style="padding:4px 0;font-size:12px;text-align:right"><span style="color:var(--accent-blue);font-weight:600">מחיר שוק נוכחי: ${formatPrice(h.price)} ${buyCurLabel}</span></div>
                 <div class="mgmt-field"><label>סוג פקודה</label>
                     <input type="hidden" id="mgmt-order-type" value="market" />
                     <div class="order-toggle">
