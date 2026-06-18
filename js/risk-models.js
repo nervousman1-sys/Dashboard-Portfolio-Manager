@@ -1043,7 +1043,7 @@ function buildPortfolioAdvisory(client, model) {
 
     // Spread the shortlist across sectors (cap per sector) so every portfolio gets names
     // matched to ITS gaps, rather than 10 clones from the single highest-alpha sector.
-    const _PER_SECTOR_CAP = 8;
+    const _PER_SECTOR_CAP = 15;   // deep bench per sector → the swap button has many to cycle
     const _secCount = {};
     const candidates = [];
     for (const c of candidatesRanked) {
@@ -1051,9 +1051,9 @@ function buildPortfolioAdvisory(client, model) {
         if ((_secCount[s] || 0) >= _PER_SECTOR_CAP) continue;
         _secCount[s] = (_secCount[s] || 0) + 1;
         candidates.push(c);
-        if (candidates.length >= 80) break;
+        if (candidates.length >= 150) break;
     }
-    if (candidates.length < 6) { candidates.length = 0; candidates.push(...candidatesRanked.slice(0, 80)); }
+    if (candidates.length < 6) { candidates.length = 0; candidates.push(...candidatesRanked.slice(0, 150)); }
 
     // ── PRIORITIZED, QUANTIFIED ACTION PLAN (specific to THIS portfolio) ──
     const actions = [];
