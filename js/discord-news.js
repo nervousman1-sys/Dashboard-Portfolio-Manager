@@ -462,7 +462,7 @@ function _dnVisionHTML(text, img, mode) {
             const destAgg = new Map();
             for (const m of moverObjs) {
                 const mag = m.netMag != null ? m.netMag : _dnAmtMag(m.amount);
-                if (m.dir === 'in' && m.dest && mag > 0) destAgg.set(m.dest, (destAgg.get(m.dest) || 0) + mag);
+                if (m.dir === 'in' && m.dest && !_dnGenericDest(m.dest) && mag > 0) destAgg.set(m.dest, (destAgg.get(m.dest) || 0) + mag);
             }
             let topDest = '', topDestNote = '';
             if (destAgg.size) {
@@ -484,7 +484,7 @@ function _dnVisionHTML(text, img, mode) {
             const perInst = new Map();   // name → Map(dest → net $mag)
             for (const m of moverObjs) {
                 const mag = m.netMag != null ? m.netMag : _dnAmtMag(m.amount);
-                if (m.dir === 'in' && m.dest && mag > 0) {
+                if (m.dir === 'in' && m.dest && !_dnGenericDest(m.dest) && mag > 0) {
                     if (!perInst.has(m.name)) perInst.set(m.name, new Map());
                     const d = perInst.get(m.name);
                     d.set(m.dest, (d.get(m.dest) || 0) + mag);
@@ -502,7 +502,7 @@ function _dnVisionHTML(text, img, mode) {
             if (topDest || biggestIn) {
                 const bits = [];
                 if (topDest) bits.push(`הכי הרבה כסף נכנס אל <b>${_dnEsc(topDest)}</b>${topDestNote ? ` (<span dir="auto">${_dnEsc(topDestNote)}</span>)` : ''}`);
-                if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> <span dir="ltr">${_dnEsc(biggestIn.amount)}</span>${biggestIn.dest ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
+                if (biggestIn) bits.push(`ההעברה המוסדית הבולטת: <b>${_dnEsc(biggestIn.name)}</b> <span dir="ltr">${_dnEsc(biggestIn.amount)}</span>${(biggestIn.dest && !_dnGenericDest(biggestIn.dest)) ? ` אל ${_dnEsc(biggestIn.dest)}` : ''}`);
                 bigMoveHTML = `<div class="dn-flow-bigmove" dir="rtl"><span class="dn-bigmove-ic">▲</span> ${bits.join(' · ')}</div>`;
             }
             const _domShown = new Set();   // show an institution's dominant destination once
@@ -524,9 +524,13 @@ function _dnVisionHTML(text, img, mode) {
                     const destTk = _dnDestTicker(m.dest);
                     const tkBadge = (destTk && destTk.toUpperCase() !== String(m.dest).trim().toUpperCase())
                         ? `<span class="dn-mover-tk">${_dnEsc(destTk)}</span> ` : '';
-                    const destHtml = m.dest
+                    // A generic "ETF"/"מניות" target with no specific ticker is a dead-end —
+                    // show the actual holdings live (the institution's positions) instead of
+                    // a meaningless label.
+                    const specificDest = m.dest && (!_dnGenericDest(m.dest) || destTk);
+                    const destHtml = specificDest
                         ? `<span class="dn-mover-dest">${m.dir === 'out' ? 'מ־' : (m.dir === 'in' ? 'אל ' : '')}${tkBadge}${_dnEsc(m.dest)}${subLabel ? ` <span class="dn-mover-sub">· ${_dnEsc(subLabel)}</span>` : ''}${starOnAsset}</span>`
-                        : '<span class="dn-mover-dest dn-mover-dest-empty">—</span>';
+                        : `<a class="dn-mover-dest dn-mover-holdings" href="${institutionSourceUrl(m.name)}" target="_blank" rel="noopener" title="האחזקות בפועל של ${_dnEsc(m.name)} מתוך דיווח 13F">לאילו ניירות? · פירוט אחזקות ↗</a>`;
                     const amtHtml = m.amount
                         ? `<span class="dn-mover-amt ${cls}" dir="ltr" title="${m.grossNote ? _dnEsc(m.grossNote) : _dnEsc(dirWord)}">${_dnEsc(m.amount)}</span>`
                         : '<span class="dn-mover-amt">—</span>';
@@ -935,6 +939,11 @@ const institutionSourceUrl = (name) => {
 //   freeform text                                    (best-effort)
 // The direction and amount tokens are detected by content (not position), so a missing
 // destination never shifts the amount into the wrong slot.
+// True when a "destination" is just a generic asset-class word (no specific ticker) —
+// such targets ("ETF", "מניות") lead nowhere, so we link to the real 13F holdings instead.
+function _dnGenericDest(d) {
+    return /^(etfs?|stocks?|funds?|equit(y|ies)|מניה|מניות|קרן|קרנות|תעוד(ת|ות)\s*סל|נכסים)\.?$/i.test(String(d || '').trim());
+}
 function _dnParseInstMover(s) {
     const parts = String(s).split('|').map(x => x.trim()).filter(Boolean);
     const name = parts[0] || String(s).trim();

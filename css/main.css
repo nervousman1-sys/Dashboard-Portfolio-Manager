@@ -9687,6 +9687,9 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .rep-attn-high { background: rgba(255, 77, 77, 0.10); border-color: rgba(255, 77, 77, 0.35); }
 .rep-attn-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--accent-orange); }
 .rep-attn-high .rep-attn-dot { background: var(--accent-red); }
+.rep-attn-why { color: var(--text-primary); opacity: 0.82; font-weight: 500; }
+.dn-mover-holdings { color: var(--accent-blue); text-decoration: none; font-weight: 600; }
+.dn-mover-holdings:hover { text-decoration: underline; }
 
 /* ── Clickable trend chart cards + enlarge modal ── */
 .rep-chart-clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }

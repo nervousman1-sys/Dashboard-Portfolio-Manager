@@ -531,7 +531,7 @@ function _repRenderDetail(m) {
         ${(m.attentionNotes && m.attentionNotes.length) ? `
         <div class="rep-section-title">הערות לתשומת לב</div>
         <div class="rep-attention">
-            ${m.attentionNotes.map(n => `<div class="rep-attn rep-attn-${n.severity}"><span class="rep-attn-dot"></span>${n.he}</div>`).join('')}
+            ${m.attentionNotes.map((n, i) => `<div class="rep-attn rep-attn-${n.severity}"><span class="rep-attn-dot"></span><span>${n.he}<span class="rep-attn-why" data-attn-why="${i}"></span></span></div>`).join('')}
         </div>` : ''}
 
         <div class="rep-section-title">פרמטרים מרכזיים — עד 4 רבעונים</div>
@@ -699,6 +699,12 @@ async function _repLoadAI(m) {
         if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot);
         if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
         if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
+        // Fill each attention-note with its intelligent, company-specific explanation.
+        const exps = Array.isArray(j.declineExplanations) ? j.declineExplanations : [];
+        document.querySelectorAll('[data-attn-why]').forEach(el => {
+            const i = parseInt(el.getAttribute('data-attn-why'), 10);
+            if (exps[i]) el.textContent = ' — ' + exps[i];
+        });
     } catch (e) {
         const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (ייתכן מכסת Gemini). נסה שוב מאוחר יותר.</div>';
         if (swotEl) swotEl.innerHTML = msg;

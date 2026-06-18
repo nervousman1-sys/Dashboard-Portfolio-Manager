@@ -1199,7 +1199,7 @@ function openStockRecommendations(clientId) {
             const slots = Math.min(list.length, 3);
             state.slots[sector] = slots;
             const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
-            const hasAlt = list.length > slots;      // more options than shown → enable the swap button
+            const hasAlt = list.length > 1;          // ALWAYS offer the swap when the sector has alternatives
             const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות (לחץ "בדוק אופציה חלופית" לעוד)` : _riskEsc(sector);
             let grid = '';
             for (let slot = 0; slot < slots; slot++) {

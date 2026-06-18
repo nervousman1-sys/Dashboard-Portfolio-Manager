@@ -1012,7 +1012,11 @@ function buildPortfolioAdvisory(client, model) {
     const desiredAddBeta = Math.max(0.5, Math.min(1.35, 2 - portBeta));
 
     const candidatesRanked = Object.values(model.assets)
-        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.alpha > -0.005 && a.recommendation !== 'avoid')
+        // Include every non-held name that isn't clearly over-priced (recommendation
+        // !== 'avoid' already excludes α ≤ −1.2%). This gives a DEEP bench of options
+        // per sector for the "בדוק אופציה חלופית" cycler; the fit-ranking still surfaces
+        // the best first.
+        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.recommendation !== 'avoid')
         .map(a => {
             const c = _avgCorrTo(a.ticker);
             const corr = (c == null) ? 0.35 : c;     // unknown correlation → assume mildly positive
