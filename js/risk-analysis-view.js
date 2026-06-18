@@ -1232,11 +1232,6 @@ function closeStockRecommendations() {
 // that never move when the card is swapped, regardless of ticker-name length.
 function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const gf = (typeof googleFinanceUrl === 'function') ? googleFinanceUrl(c.ticker) : `https://www.google.com/finance/quote/${c.ticker}:NASDAQ`;
-    // Technical-analysis (indicators) on TradingView; financial-reports analysis in-app.
-    const tvSym = String(c.ticker || '').toUpperCase().endsWith('.TA')
-        ? `TASE-${String(c.ticker).toUpperCase().replace(/\.TA$/, '')}`
-        : encodeURIComponent(String(c.ticker || '').toUpperCase());
-    const tv = `https://www.tradingview.com/symbols/${tvSym}/technicals/`;
     const buy = c.shares != null ? `קנה ≈ <b>${c.shares.toLocaleString('en-US')}</b> מניות (~${c.pct.toFixed(0)}% מהתיק)` : 'הוסף לתיק';
     const altBtn = hasAlt ? `<button class="reco-alt" onclick="event.stopPropagation(); swapRecommendation('${cardId}')" title="הצג מנייה חלופית מאותו סקטור">↻ בדוק אופציה חלופית</button>` : '';
     const heading = optLetter
@@ -1254,8 +1249,8 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
                 <span>ρ <b>${c.corrToPort == null ? '—' : rmFmtNum(c.corrToPort, 2)}</b></span>
             </div>
             <div class="reco-links">
-                <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">Google Finance ↗</a>
-                <a class="reco-gf" href="${tv}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="ניתוח טכני ואינדיקטורים (TradingView)">ניתוח טכני ↗</a>
+                <a class="reco-gf" href="${gf}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="מידע על המנייה בגוגל פיננס">גוגל פיננס ↗</a>
+                <a class="reco-gf" href="javascript:void(0)" onclick="event.stopPropagation(); openTechnicalForTicker('${_riskEsc(c.ticker)}')" title="ניתוח טכני ואינדיקטורים בפלטפורמה">ניתוח טכני ↗</a>
                 <a class="reco-gf" href="javascript:void(0)" onclick="event.stopPropagation(); openReportForTicker('${_riskEsc(c.ticker)}')" title="ניתוח דוחות כספיים של החברה">דוחות ↗</a>
             </div>
             <div class="reco-foot">

@@ -12,7 +12,7 @@
 
 const _REP_MKT = {
     us: { ls: 'rep_uni_us_v2', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
-    il: { ls: 'rep_uni_il', cur: '₪', label: 'ניירות (ת"א-125)', search: 'חיפוש נייר (למשל: TEVA)…' },
+    il: { ls: 'rep_uni_il_v2', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
 };
 const _REP_SCORES_LS = 'rep_scores_v1';
 
@@ -34,8 +34,37 @@ const _REP_SECTOR_HE = {
     'Utilities': 'תשתיות וחשמל',
     'Real Estate': 'נדל"ן',
     'Materials': 'חומרי גלם',
+    // ── Israeli TA-125 sector labels (English → Hebrew) ──
+    'Banks': 'בנקים',
+    'Insurance': 'ביטוח',
+    'Financial Services': 'שירותים פיננסיים',
+    'Investment & Holdings': 'השקעות ואחזקות',
+    'Investments & Holdings': 'השקעות ואחזקות',
+    'Real Estate & Construction': 'נדל"ן ובנייה',
+    'Internet And Software': 'אינטרנט ותוכנה',
+    'Software': 'תוכנה',
+    'Technology': 'טכנולוגיה',
+    'Communications': 'תקשורת',
+    'Communication': 'תקשורת',
+    'Pharmaceuticals': 'פארמה',
+    'Biomed': 'ביומד',
+    'Biomedical': 'ביומד',
+    'Biotechnology': 'ביומד',
+    'Oil and Gas Exploration': 'נפט וגז',
+    'Oil & Gas': 'נפט וגז',
+    'Energy': 'אנרגיה',
+    'Food': 'מזון',
+    'Commerce & Services': 'מסחר ושירותים',
+    'Trade & Services': 'מסחר ושירותים',
+    'Industry': 'תעשייה',
+    'Chemicals, Rubber & Plastic': 'כימיה, גומי ופלסטיק',
+    'Chemicals': 'כימיה',
+    'Cleantech': 'קלינטק',
+    'Metal & Building Products': 'מתכת ומוצרי בנייה',
 };
-const _REP_SECTOR_ORDER = ['Information Technology', 'Communication Services', 'Health Care', 'Financials', 'Consumer Discretionary', 'Consumer Staples', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials'];
+const _REP_SECTOR_ORDER = ['Information Technology', 'Communication Services', 'Health Care', 'Financials', 'Consumer Discretionary', 'Consumer Staples', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials',
+    // IL TA-125 sectors
+    'Banks', 'Insurance', 'Financial Services', 'Investment & Holdings', 'Investments & Holdings', 'Real Estate & Construction', 'Internet And Software', 'Software', 'Technology', 'Communications', 'Pharmaceuticals', 'Biomed', 'Biomedical', 'Oil and Gas Exploration', 'Oil & Gas', 'Food', 'Commerce & Services', 'Industry', 'Chemicals, Rubber & Plastic', 'Chemicals', 'Cleantech', 'Metal & Building Products'];
 let _repView = 'list';        // 'list' | 'detail'
 let _repCurrent = null;       // current detail model
 let _repCharts = [];          // live Chart.js instances to destroy on teardown
@@ -151,17 +180,18 @@ async function _repLoadUniverse() {
         const raw = localStorage.getItem(cfg.ls);
         if (raw) {
             const c = JSON.parse(raw);
-            if (c && c.day === new Date().toISOString().slice(0, 10) && Array.isArray(c.tickers) && c.tickers.length && (mkt !== 'us' || c.sectors)) {
+            if (c && c.day === new Date().toISOString().slice(0, 10) && Array.isArray(c.tickers) && c.tickers.length && c.sectors) {
                 _repUniverse[mkt] = c.tickers; _repSectors[mkt] = c.sectors || null; _repRenderList(); return;
             }
         }
     } catch (e) { /* refetch */ }
     try {
-        const r = await fetch(`/api/technicals?mode=tickers&market=${mkt}`, { headers: { Accept: 'application/json' } });
+        // IL: stocksOnly=1 → real TA-125 companies only (no index-tracking ETFs/funds,
+        // which have no financial statements and would never get a score).
+        const url = `/api/technicals?mode=tickers&market=${mkt}` + (mkt === 'il' ? '&stocksOnly=1' : '');
+        const r = await fetch(url, { headers: { Accept: 'application/json' } });
         const j = await r.json();
         let tickers = (j.tickers || []).slice();
-        // Drop index-tracking ETFs from IL — they have no financial statements.
-        if (mkt === 'il') tickers = tickers.filter(t => /^[A-Z]/.test(t) && !/\d{3,}/.test(t));
         tickers.sort((a, b) => a.localeCompare(b));
         _repUniverse[mkt] = tickers;
         _repSectors[mkt] = j.sectors || null;

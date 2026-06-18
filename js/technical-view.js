@@ -20,6 +20,33 @@ let _techFilter = 'all';
 let _techSearch = '';
 let _techLoading = { us: false, il: false };
 
+// Open the in-app technical-analysis page focused on a SPECIFIC ticker (from the
+// recommendation cards). Closes other overlays, opens the scanner, switches market
+// for .TA symbols, and pre-fills the search so the page lands on that stock.
+function openTechnicalForTicker(ticker) {
+    const sym = String(ticker || '').trim().toUpperCase();
+    if (!sym) return;
+    if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
+    const mo = document.getElementById('modalOverlay');
+    if (mo && mo.classList.contains('active')) {
+        mo.classList.remove('active');
+        if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+        try { currentModalClientId = null; } catch (e) { }
+    }
+    if (typeof closeReportsPage === 'function' && document.getElementById('reportsPage')?.classList.contains('active')) closeReportsPage();
+    if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
+    openTechnicalPage();
+    const base = sym.replace(/\.TA$/, '');
+    const apply = () => {
+        _techSearch = base;
+        const el = document.getElementById('techSearch');
+        if (el) el.value = base;
+        if (typeof _techRender === 'function') _techRender();
+    };
+    if (sym.endsWith('.TA') && typeof setTechMarket === 'function') { setTechMarket('il'); setTimeout(apply, 60); }
+    else apply();
+}
+
 function openTechnicalPage() {
     const page = document.getElementById('technicalPage');
     if (!page) return;

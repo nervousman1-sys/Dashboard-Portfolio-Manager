@@ -76,15 +76,25 @@ async function fetchNasdaq100() {
 
 // ── Israeli market: TA-125 constituents (Wikipedia) + index-tracking ETFs (Yahoo search) ──
 // Yahoo symbol form is SYMBOL.TA; delisted/stale rows simply fail the chart fetch and drop.
+// ticker(.TA) → sector (English, from the Wikipedia TA-125 "Sector" column).
+const _IL_SECTORS = {};
 async function fetchTA125() {
     const r = await fetch('https://en.wikipedia.org/wiki/TA-125_Index', { headers: { ...UA, Accept: 'text/html' } });
     const html = await r.text();
     const sect = (html.split(/id="Constituents"/)[1] || '').split('</table>')[0];
     const out = new Set();
-    // Symbol cell sits between the name cell and the market-cap cell (starts with a digit)
-    const re = /<\/td>\s*<td>([A-Z][A-Z0-9.]{1,9})\s*<\/td>\s*<td>[\d,]/g;
-    let m;
-    while ((m = re.exec(sect)) !== null) out.add(m[1] + '.TA');
+    // Columns: Name | Symbol | Market Cap | Weight | Sector | Comments. Strip tags per
+    // cell and read symbol (cell 1) + sector (cell 4) — robust to nested <a>/<span>.
+    const rows = sect.match(/<tr>[\s\S]*?<\/tr>/g) || [];
+    for (const row of rows) {
+        const cells = (row.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []).map(c => c.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim());
+        if (cells.length < 2) continue;
+        const sym = /^[A-Z][A-Z0-9.]{1,9}$/.test(cells[1] || '') ? cells[1] : null;
+        if (!sym) continue;
+        const t = sym + '.TA';
+        out.add(t);
+        if (cells[4]) _IL_SECTORS[t] = cells[4];
+    }
     return [...out];
 }
 
@@ -282,11 +292,16 @@ module.exports = async (req, res) => {
         if (mode === 'tickers') {
             const market = (req.query.market || 'us').toLowerCase();
             if (market === 'il') {
-                const [stocks, etfs] = await Promise.all([fetchTA125(), fetchILETFs()]);
+                // stocksOnly=1 → TA-125 real companies only (no index-tracking ETFs/funds),
+                // used by the reports page which needs fundamentals + sectors.
+                const stocksOnly = req.query.stocksOnly === '1';
+                const [stocks, etfs] = await Promise.all([fetchTA125(), stocksOnly ? Promise.resolve([]) : fetchILETFs()]);
                 const all = [...new Set([...stocks, ...etfs])].filter(t => /^[A-Z][A-Z0-9.\-]{2,14}$/.test(t)).sort();
                 if (all.length < 50) throw new Error(`IL constituent parse too small: ${all.length}`);
+                const sectors = {};
+                all.forEach(t => { if (_IL_SECTORS[t]) sectors[t] = _IL_SECTORS[t]; });
                 res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
-                res.status(200).json({ tickers: all, ta125: stocks.length, etfs: etfs.length, asOf: new Date().toISOString().slice(0, 10) });
+                res.status(200).json({ tickers: all, sectors, ta125: stocks.length, etfs: etfs.length, asOf: new Date().toISOString().slice(0, 10) });
                 return;
             }
             const [sp, ndx] = await Promise.all([fetchSP500(), fetchNasdaq100()]);
