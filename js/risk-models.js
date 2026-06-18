@@ -947,12 +947,20 @@ function _rmAvgPairwiseCorr(tickers, model) {
     return n ? sum / n : null;
 }
 
+// ETFs / index funds — recommended in their OWN "תעודות סל" category, not among stocks.
+const _RM_ETF_SET = new Set([
+    'QQQ', 'QQQM', 'ONEQ', 'SPY', 'VOO', 'IVV', 'GLD', 'IAU', 'SGOL', 'GLDM', 'TLT', 'IEF', 'VGLT', 'GOVT', 'VGIT',
+    'SHV', 'BIL', 'SGOV', 'IBIT', 'FBTC', 'GBTC', 'ARKB', 'SOXX', 'SMH', 'XSD', 'FTXL', 'AIQ', 'BOTZ', 'IRBO', 'ROBT',
+    'VGT', 'IYW', 'FTEC', 'VFH', 'IYF', 'VHT', 'IYH', 'VDE', 'IYE', 'VCR', 'IYC', 'VDC', 'KXI', 'VIS', 'IYJ', 'VOX',
+    'IYZ', 'VAW', 'IYM', 'VPU', 'IDU', 'VNQ', 'IYR',
+]);
+
 // Attach Fund/SML-CML/Technical sub-scores + the weighted Final Score (0–100) to each
 // candidate, in place. Reads the platform's existing client-side caches:
 //   • rep_scores_v1   → the financial-report score (0–100)  → Fundamental (40%)
 //   • tech_scan_v3/il → MA200/WMA200 distance + weekly RSI  → Technical entry timing (20%)
 //   • cross-sectional percentile of the de-biased α          → SML/CML (40%)
-function _rmApplyFinalScore(cands) {
+function _rmApplyFinalScore(cands, techOverride) {
     if (!cands || !cands.length) return cands;
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
     let fund = {}, tech = {};
@@ -962,6 +970,9 @@ function _rmApplyFinalScore(cands) {
         const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
         tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
     } catch (e) { }
+    // Freshly-fetched technicals (passed straight in) take priority over the cache —
+    // avoids relying on a localStorage write that can silently fail when storage is full.
+    if (techOverride) tech = Object.assign(tech, techOverride);
 
     // Cross-sectional percentile of α across the candidate pool (bounds any peak's
     // inflated reading and judges it RELATIVE to the rest of the universe).
@@ -985,20 +996,27 @@ function _rmApplyFinalScore(cands) {
         if (t) {
             hasTech = true;
             const ma = t.ma || {};
-            const dD = ma.d200dist != null ? ma.d200dist : null;   // % vs 200-day MA
-            const dW = ma.w200dist != null ? ma.w200dist : null;   // % vs 200-week MA (the long base)
-            const rsiW = t.rsiW != null ? t.rsiW : null;           // weekly RSI
-            const extD = clamp01((dD != null ? dD : 0) / 20);      // +20% above 200-day → full
-            const extW = clamp01((dW != null ? dW : 0) / 40);      // +40% above 200-week → full
-            const rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 70) / 15);  // weekly RSI 70→85
-            const penalty = 1 - (1 - extD) * (1 - extW) * (1 - rsiPen);      // soft-OR ∈ [0,1]
-            techScore = (1 - penalty) * 100;                                 // high = comfortable entry
-            // Expose the actual readings so the card can SHOW 1–2 technical params.
-            c.techRsiW = rsiW; c.techDistD = dD; c.techDistW = dW;
+            const dD = ma.d200dist != null ? ma.d200dist : null;   // % vs 200-day MA  (short res)
+            const dW = ma.w200dist != null ? ma.w200dist : null;   // % vs 200-WEEK MA (long base — primary)
+            const rsiW = t.rsiW != null ? t.rsiW : null;           // weekly RSI       (long res)
+            const inFvg = !!((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside)); // monthly/quarterly FVG
+            const extW = clamp01((dW != null ? dW : 0) / 50);      // +50% above 200-week → full
+            const rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 65) / 20);  // weekly RSI 65→85
+            const extD = clamp01((dD != null ? dD : 0) / 30);
+            // WEIGHTED penalty — the high-resolution signals dominate (200-week MA 55%,
+            // weekly RSI 30%, 200-day MA only 15%).
+            let penalty = 0.55 * extW + 0.30 * rsiPen + 0.15 * extD;
+            // Inside a monthly/quarterly fair-value gap = a recognised higher-TF support
+            // zone → a better entry → ease the penalty.
+            if (inFvg) penalty = Math.max(0, penalty - 0.20);
+            techScore = (1 - clamp01(penalty)) * 100;
+            c.techRsiW = rsiW; c.techDistD = dD; c.techDistW = dW; c.techFvg = inFvg;
             // Near-ATH = stretched far above the long-term base AND/OR hot weekly RSI.
-            c.nearATH = (dW != null && dW >= 30) || (rsiW != null && rsiW >= 75);
+            c.nearATH = (dW != null && dW >= 40) || (rsiW != null && rsiW >= 75);
         }
         c.hasTech = hasTech;
+        // ETFs go in their OWN category, never mixed among the stocks.
+        if (_RM_ETF_SET.has(c.ticker) || /^XL[A-Z]{1,3}$/.test(c.ticker)) { c.isETF = true; c.sector = 'תעודות סל'; }
         c.fundScore = Math.round(fundScore);
         c.smlScore = Math.round(smlScore);
         c.techScore = Math.round(techScore);

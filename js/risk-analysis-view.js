@@ -1134,7 +1134,7 @@ function addCandidateToPortfolio(clientId, ticker) {
 }
 
 // ════════ Recommended-stocks popup dialog ════════
-function openStockRecommendations(clientId) {
+async function openStockRecommendations(clientId) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client) return;
     const model = window._lastRiskModel;
@@ -1143,6 +1143,28 @@ function openStockRecommendations(clientId) {
     if (model && typeof buildPortfolioAdvisory === 'function') {
         try { adv = buildPortfolioAdvisory(client, model); cands = (adv && adv.candidates) || []; } catch (e) { /* ignore */ }
     }
+
+    // Show a loading overlay, then fetch REAL technical readings for the candidates and
+    // re-score — passing them straight to the scorer (no localStorage dependency, which
+    // can silently fail when storage is full and leave every technical score at 50).
+    let ov = document.getElementById('stockRecoOverlay');
+    if (!ov) {
+        ov = document.createElement('div'); ov.id = 'stockRecoOverlay'; ov.className = 'reco-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeStockRecommendations(); });
+        document.body.appendChild(ov);
+    }
+    if (!ov.classList.contains('active')) {
+        ov.innerHTML = `<div class="reco-box" dir="rtl"><div class="reco-head"><div><h3>המלצות לאיזון התיק וייעולו</h3><span class="reco-sub">מחשב ציונים…</span></div><button class="reco-close" onclick="closeStockRecommendations()">✕</button></div><div class="adv-empty" style="padding:30px">מחשב ציון לכל מנייה — כולל ניתוח טכני (ממוצע 200 שבועות · RSI שבועי · FVG)…</div></div>`;
+        ov.classList.add('active'); if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    }
+    if (cands.length && typeof _rmApplyFinalScore === 'function') {
+        try {
+            const techMap = await _recoFetchTechMap(cands.map(c => c.ticker));
+            _rmApplyFinalScore(cands, techMap);
+            cands.sort((x, y) => (y.finalScore - x.finalScore) || (y.fit - x.fit));
+        } catch (e) { /* fall back to cache-based scores already on the candidates */ }
+    }
+
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 
     // Rebalance-to-efficient banner: states whether the portfolio is in the optimal
@@ -1171,14 +1193,7 @@ function openStockRecommendations(clientId) {
         }
     }
 
-    let ov = document.getElementById('stockRecoOverlay');
-    if (!ov) {
-        ov = document.createElement('div');
-        ov.id = 'stockRecoOverlay';
-        ov.className = 'reco-overlay';
-        ov.addEventListener('click', (e) => { if (e.target === ov) closeStockRecommendations(); });
-        document.body.appendChild(ov);
-    }
+    // (overlay `ov` already created above)
 
     // Group candidates by sector → same-sector names play a similar role. Show up to 2
     // per sector, and let each card cycle through the REST of that sector's bench via a
@@ -1193,7 +1208,10 @@ function openStockRecommendations(clientId) {
         for (const c of cands) { (bySector[c.sector || 'אחר'] = bySector[c.sector || 'אחר'] || []).push(c); }
         const state = { clientId, bySector, slots: {}, cards: {} };
         let seq = 0;
-        cardsHTML = Object.entries(bySector).map(([sector, list]) => {
+        // ETFs ("תעודות סל") always render as the LAST group, after the stock sectors.
+        cardsHTML = Object.entries(bySector)
+            .sort((a, b) => (a[0] === 'תעודות סל' ? 1 : 0) - (b[0] === 'תעודות סל' ? 1 : 0))
+            .map(([sector, list]) => {
             // Show a clean 3 per sector; the rest of the deep bench is reached via the
             // "↻ בדוק אופציה חלופית" button on each card (cycles the whole sector list).
             const slots = Math.min(list.length, 4);
@@ -1225,43 +1243,30 @@ function openStockRecommendations(clientId) {
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
     try { history.pushState({ popup: 'reco' }, '', location.href); } catch (e) { /* ignore */ }
-
-    // The technical scores start neutral (50) if the technical-scan cache is cold.
-    // Fetch the indicators for the candidate names now, recompute the Final Score, and
-    // re-render once — so the Technical layer is real and peak names actually sink.
-    _recoEnrichTechnicals(clientId, cands);
 }
 
-// Ensure MA200/WMA200/Weekly-RSI exist for the candidates, merge into the shared
-// technical-scan cache, recompute Final Scores, and re-open once with real scores.
-const _recoTechFetched = new Set();
-async function _recoEnrichTechnicals(clientId, cands) {
-    if (!cands || !cands.length || typeof _rmApplyFinalScore !== 'function') return;
-    const need = [...new Set(cands.map(c => c.ticker))].filter(t => !_recoTechFetched.has(t));
-    if (!need.length) return;
-    const today = new Date().toISOString().slice(0, 10);
-    let got = {};
-    try {
+// Fetch MA200/WMA200/Weekly-RSI/FVG for the candidate tickers and return them as a
+// { ticker -> scanResult } map (also cached in-session). Passed straight to the scorer.
+const _recoTechCache = {};
+async function _recoFetchTechMap(tickers) {
+    const out = {};
+    const need = [];
+    for (const t of [...new Set(tickers)]) {
+        if (_recoTechCache[t]) out[t] = _recoTechCache[t]; else need.push(t);
+    }
+    if (need.length) {
+        const today = new Date().toISOString().slice(0, 10);
         const BATCH = 45;
         for (let i = 0; i < need.length; i += BATCH) {
             const b = need.slice(i, i + BATCH);
-            const r = await fetch(`/api/technicals?mode=scan&symbols=${b.map(encodeURIComponent).join(',')}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
-            const j = await r.json();
-            if (j && j.results) Object.assign(got, j.results);
+            try {
+                const r = await fetch(`/api/technicals?mode=scan&symbols=${b.map(encodeURIComponent).join(',')}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
+                const j = await r.json();
+                if (j && j.results) for (const [k, v] of Object.entries(j.results)) { _recoTechCache[k] = v; out[k] = v; }
+            } catch (e) { /* skip batch */ }
         }
-    } catch (e) { return; }
-    need.forEach(t => _recoTechFetched.add(t));
-    if (!Object.keys(got).length) return;
-    // Merge into the technical-scan cache the scorer reads from.
-    try {
-        const key = 'tech_scan_v3';
-        const cur = JSON.parse(localStorage.getItem(key) || '{}');
-        const data = Object.assign({}, cur.data || {}, got);
-        localStorage.setItem(key, JSON.stringify({ day: today, data }));
-    } catch (e) { /* quota — scorer can still read `got` via cache next time */ }
-    // Recompute + re-render only if this overlay is still open.
-    const ov = document.getElementById('stockRecoOverlay');
-    if (ov && ov.classList.contains('active')) openStockRecommendations(clientId);
+    }
+    return out;
 }
 
 function closeStockRecommendations() {
