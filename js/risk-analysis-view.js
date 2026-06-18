@@ -1245,10 +1245,19 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const heading = optLetter
         ? `<span class="reco-opt-lead">אופציה</span> <span class="reco-opt">${_riskEsc(optLetter)} · ${_riskEsc(c.ticker)}</span>`
         : `<span class="reco-opt">${_riskEsc(c.ticker)}</span>`;
+    // Final Score (40% דוחות · 40% SML/CML · 20% טכני) — the headline ranking number.
+    const fs = (c.finalScore != null) ? c.finalScore : null;
+    const fsCol = fs == null ? 'var(--text-muted)' : fs >= 65 ? 'var(--risk-low)' : fs >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+    const scoreHtml = fs == null ? '' : `
+            <div class="reco-score" style="--fsc:${fsCol}" title="ציון משוקלל: 40% דוחות · 40% SML/CML · 20% טכני">
+                <span class="reco-score-num">${fs}<small>/100</small></span>
+                <span class="reco-score-brk">דוחות ${c.fundScore ?? '—'} · מודל ${c.smlScore ?? '—'} · טכני ${c.techScore ?? '—'}</span>
+            </div>`;
     return `
             <div class="reco-card-top">
                 <span class="reco-tk">${heading}</span>
             </div>
+            ${scoreHtml}
             <div class="reco-buy">${buy}</div>
             <div class="reco-stats">
                 <span>α <b class="pos">${rmFmtPct(c.alpha, 1)}</b></span>

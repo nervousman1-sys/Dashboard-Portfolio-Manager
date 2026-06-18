@@ -38,7 +38,9 @@ const RISK_MODEL = {
     MARKET_SYMBOL: 'SPY',          // S&P 500 ETF — broad, liquid, FMP/TwelveData friendly
     MARKET_CURRENCY: 'USD',
     MARKET_LABEL: 'S&P 500',
-    LOOKBACK_DAYS: 260,            // ~1 trading year of daily closes
+    LOOKBACK_DAYS: 756,           // 3 trading years — a long equal-weighted base so a recent
+                                  // ATH spike is only ~a few % of the sample and can't dominate
+                                  // the SML/CML positioning (this is the anti-momentum lever)
     TRADING_DAYS: 252,            // annualization factor
     RF_FALLBACK: 0.038,           // ~3.8% — used only if DGS3MO proxy + CORS are unreachable
     RF_SERIES: 'DGS3MO',          // FRED series: 3-Month Treasury (secondary market rate)
@@ -372,7 +374,7 @@ async function buildRiskModel(clientsList, opts = {}) {
             const _sortedDates = [...cm.keys()].sort();
             const ownReturns = _rmClosesToReturns(_sortedDates.map(d => cm.get(d)));
             const lastClose = _sortedDates.length ? cm.get(_sortedDates[_sortedDates.length - 1]) : null;
-            const rawExpReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS;
+            const rawExpReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS; // equal-weight over the 3y base
             const vol = _rmStd(ownReturns) * Math.sqrt(RISK_MODEL.TRADING_DAYS);
 
             let beta = 1, corrToMarket = 0;
@@ -945,6 +947,57 @@ function _rmAvgPairwiseCorr(tickers, model) {
     return n ? sum / n : null;
 }
 
+// Attach Fund/SML-CML/Technical sub-scores + the weighted Final Score (0–100) to each
+// candidate, in place. Reads the platform's existing client-side caches:
+//   • rep_scores_v1   → the financial-report score (0–100)  → Fundamental (40%)
+//   • tech_scan_v3/il → MA200/WMA200 distance + weekly RSI  → Technical entry timing (20%)
+//   • cross-sectional percentile of the de-biased α          → SML/CML (40%)
+function _rmApplyFinalScore(cands) {
+    if (!cands || !cands.length) return cands;
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    let fund = {}, tech = {};
+    try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
+    try {
+        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
+        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
+        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
+    } catch (e) { }
+
+    // Cross-sectional percentile of α across the candidate pool (bounds any peak's
+    // inflated reading and judges it RELATIVE to the rest of the universe).
+    const sorted = cands.map(c => (c.alpha != null && isFinite(c.alpha)) ? c.alpha : 0).sort((a, b) => a - b);
+    const n = sorted.length;
+    const pctOf = (v) => {
+        let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; }
+        return n > 1 ? (lo - 1) / (n - 1) : 0.5;
+    };
+
+    for (const c of cands) {
+        // SML/CML (40%) — de-biased α, ranked cross-sectionally
+        const smlScore = 100 * clamp01(pctOf(c.alpha != null ? c.alpha : 0));
+        // Fundamental (40%) — platform report score, neutral 50 if not yet cached
+        const f = fund[c.ticker];
+        const fundScore = (f && f.score != null && isFinite(f.score)) ? f.score : 50;
+        // Technical (20%) — high = comfortable entry; penalise extension above the long-term
+        // MAs and a hot weekly RSI (the direct ATH guard). Neutral 50 if no scan data.
+        const t = tech[c.ticker];
+        let techScore = 50;
+        if (t) {
+            const ma = t.ma || {};
+            const extD = clamp01((ma.d200dist != null ? ma.d200dist : 0) / 20);  // +20% above 200-day → full
+            const extW = clamp01((ma.w200dist != null ? ma.w200dist : 0) / 40);  // +40% above 200-week → full
+            const rsiPen = clamp01(((t.rsiW != null ? t.rsiW : 50) - 70) / 15);  // weekly RSI 70→85
+            const penalty = 1 - (1 - extD) * (1 - extW) * (1 - rsiPen);          // soft-OR ∈ [0,1]
+            techScore = (1 - penalty) * 100;                                     // high = comfortable entry
+        }
+        c.fundScore = Math.round(fundScore);
+        c.smlScore = Math.round(smlScore);
+        c.techScore = Math.round(techScore);
+        c.finalScore = Math.round(0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore);
+    }
+    return cands;
+}
+
 function buildPortfolioAdvisory(client, model) {
     if (!model || !model.portfolios) return null;
     const p = model.portfolios.find(x => x.id === client.id);
@@ -1044,8 +1097,13 @@ function buildPortfolioAdvisory(client, model) {
                 alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
                 price, shares, pct, sectorGap, betaMismatch, fit,
             };
-        })
-        .sort((x, y) => y.fit - x.fit);
+        });
+    // ── FINAL SCORE (40% fundamentals · 40% SML/CML · 20% technical) ──
+    // Blends the de-biased SML α (cross-sectional) with the platform's fundamental
+    // report score and a technical entry-timing score, so a name at its ATH (stretched
+    // above MA200/WMA200 or hot weekly RSI, or richly valued) is pushed DOWN the list.
+    _rmApplyFinalScore(candidatesRanked);
+    candidatesRanked.sort((x, y) => (y.finalScore - x.finalScore) || (y.fit - x.fit));
 
     // Spread the shortlist across sectors (cap per sector) so every portfolio gets names
     // matched to ITS gaps, rather than 10 clones from the single highest-alpha sector.
