@@ -1134,7 +1134,7 @@ function addCandidateToPortfolio(clientId, ticker) {
 }
 
 // ════════ Recommended-stocks popup dialog ════════
-async function openStockRecommendations(clientId) {
+async function openStockRecommendations(clientId, _fromHistory) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client) return;
     const model = window._lastRiskModel;
@@ -1206,7 +1206,7 @@ async function openStockRecommendations(clientId) {
     } else {
         const bySector = {};
         for (const c of cands) { (bySector[c.sector || 'אחר'] = bySector[c.sector || 'אחר'] || []).push(c); }
-        const state = { clientId, bySector, slots: {}, cards: {} };
+        const state = { clientId, bySector, slots: {}, cards: {}, allCands: cands };
         let seq = 0;
         // ETFs ("תעודות סל") always render as the LAST group, after the stock sectors.
         cardsHTML = Object.entries(bySector)
@@ -1217,13 +1217,16 @@ async function openStockRecommendations(clientId) {
             const slots = Math.min(list.length, 4);
             state.slots[sector] = slots;
             const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
-            const hasAlt = list.length > 1;          // ALWAYS offer the swap when the sector has alternatives
+            // The swap cycles the FULL candidate pool (sector-first, then global), so it
+            // always has an alternative — show it on every card as long as the universe
+            // has more names than are currently displayed.
+            const hasAlt = cands.length > 1;
             const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות (לחץ "בדוק אופציה חלופית" לעוד)` : _riskEsc(sector);
             let grid = '';
             for (let slot = 0; slot < slots; slot++) {
                 const cardId = `recoCard_${seq++}`;
                 const optLetter = multi ? `${OPT[slot] || (slot + 1)}'` : '';
-                state.cards[cardId] = { sector, shownIdx: slot, optLetter };
+                state.cards[cardId] = { sector, shownIdx: slot, optLetter, ticker: list[slot].ticker };
                 grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, hasAlt)}</div>`;
             }
             return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
@@ -1242,7 +1245,10 @@ async function openStockRecommendations(clientId) {
     </div>`;
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-    try { history.pushState({ popup: 'reco' }, '', location.href); } catch (e) { /* ignore */ }
+    // Tag this history entry so browser Back FROM a technical/reports deep-link returns
+    // here (the recommendations overlay), not to the dashboard. Skip when we're already
+    // restoring this very entry (opened via popstate) to avoid stacking duplicates.
+    if (!_fromHistory) { try { history.pushState({ popup: 'reco', recoClient: clientId }, '', location.href); } catch (e) { /* ignore */ } }
 }
 
 // Fetch MA200/WMA200/Weekly-RSI/FVG for the candidate tickers and return them as a
@@ -1332,30 +1338,26 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
             </div>`;
 }
 
-// Cycle a card to the next not-currently-shown candidate in its sector (in place).
+// Cycle a card to the next candidate NOT currently shown on any card — same sector
+// first, then the global pool — so the "↻ בדוק אופציה חלופית" button ALWAYS produces
+// a real alternative (no dead buttons even in a small sector like Crypto/Energy).
 function swapRecommendation(cardId) {
     const st = window._recoState;
     if (!st || !st.cards || !st.cards[cardId]) return;
     const cs = st.cards[cardId];
-    const list = st.bySector[cs.sector] || [];
-    if (list.length < 2) return;
-    const othersShown = new Set(
-        Object.entries(st.cards)
-            .filter(([id, s]) => id !== cardId && s.sector === cs.sector)
-            .map(([, s]) => s.shownIdx)
-    );
-    let next = cs.shownIdx;
-    for (let step = 1; step <= list.length; step++) {
-        const idx = (cs.shownIdx + step) % list.length;
-        if (!othersShown.has(idx)) { next = idx; break; }
-    }
-    if (next === cs.shownIdx) return; // no free alternative
-    cs.shownIdx = next;
-    const c = list[next];
+    const all = st.allCands || [];
+    if (all.length < 2) return;
+    const shown = new Set(Object.values(st.cards).map(s => s.ticker));   // tickers on every card now
+    const cur = cs.ticker;
+    const startSame = all.filter(c => c.sector === cs.sector && c.ticker !== cur && !shown.has(c.ticker));
+    const startAny = all.filter(c => c.ticker !== cur && !shown.has(c.ticker));
+    const pick = startSame[0] || startAny[0];
+    if (!pick) return; // truly nothing left (entire universe already displayed)
+    cs.ticker = pick.ticker;
     const el = document.getElementById(cardId);
     if (!el) return;
-    el.setAttribute('onclick', `addCandidateToPortfolio(${st.clientId}, '${_riskEsc(c.ticker)}'); closeStockRecommendations();`);
-    el.innerHTML = _recoCardInner(c, cardId, cs.optLetter, list.length > (st.slots[cs.sector] || 1));
+    el.setAttribute('onclick', `addCandidateToPortfolio(${st.clientId}, '${_riskEsc(pick.ticker)}'); closeStockRecommendations();`);
+    el.innerHTML = _recoCardInner(pick, cardId, cs.optLetter, true);
 }
 
 if (typeof window !== 'undefined') {

@@ -851,6 +851,18 @@ function restoreStateFromURL() { syncViewToURL(); }
 window.addEventListener('popstate', function (e) {
     if (_suppressPopstate) { _suppressPopstate = false; return; }
 
+    // Landing BACK on a recommendations entry (e.g. returning from a technical/reports
+    // deep-link the user opened from the recommendations) → restore the underlying view
+    // then reopen that overlay on top.
+    if (e.state && e.state.popup === 'reco' && e.state.recoClient != null) {
+        const ov = document.getElementById('stockRecoOverlay');
+        if ((!ov || !ov.classList.contains('active')) && typeof openStockRecommendations === 'function') {
+            syncViewToURL();                               // close the page we came from, restore the modal
+            openStockRecommendations(e.state.recoClient, true);
+            return;
+        }
+    }
+
     // Lightweight popups FIRST: back closes the topmost open popup (these push a
     // same-URL history entry when opened, so popping it just closes the popup).
     const popupClosers = [

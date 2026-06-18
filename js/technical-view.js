@@ -66,6 +66,10 @@ function openTechnicalForTicker(ticker) {
 function openTechnicalPage() {
     const page = document.getElementById('technicalPage');
     if (!page) return;
+    // Always open on the FULL list: clear any leftover deep-link filter from a previous
+    // visit (openTechnicalForTicker re-applies its own filter AFTER this runs).
+    _techExact = '';
+    _techSearch = '';
     const header = document.querySelector('.header');
     if (header) header.style.display = 'none';
     const heroFold = document.querySelector('.hero-above-fold');
