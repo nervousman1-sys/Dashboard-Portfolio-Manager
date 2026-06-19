@@ -12,7 +12,7 @@
 
 const KEY = process.env.GEMINI_API_KEY || '';
 // Primary + fallback — both verified to have free-tier quota on the user's key
-const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
 
 // Appended to every prompt: enforce clean, correct Hebrew so transcription slips
 // (e.g. a surging index mis-written as "מונפק" instead of "מזנק") don't reach the UI.

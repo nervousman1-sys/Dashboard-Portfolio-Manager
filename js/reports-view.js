@@ -695,11 +695,17 @@ function _repCloseChartModal() {
 function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 
 // ── AI SWOT + strategy (async, fills the placeholders) ──
-async function _repLoadAI(m) {
+// `attempt` drives an automatic client-side retry: Gemini's transient 503 (model
+// overloaded) is common, so a single failure self-heals after a short wait instead of
+// leaving the user with a dead "try again later" message.
+async function _repLoadAI(m, attempt) {
+    attempt = attempt || 0;
     const summaryEl = document.getElementById('repSummary');
     const swotEl = document.getElementById('repSwot');
     const stratEl = document.getElementById('repStrategy');
     const risksEl = document.getElementById('repRisks');
+    // Guard: if the user navigated away (different report open), abort.
+    const stillHere = () => document.getElementById('repSummary') === summaryEl && summaryEl;
     try {
         const ctx = ReportsEngine.aiContext(m);
         const r = await fetch('/api/vision?mode=swot', {
@@ -709,6 +715,7 @@ async function _repLoadAI(m) {
         });
         const j = await r.json();
         if (!r.ok || j.error || !j.swot) throw new Error(j.message || 'ai failed');
+        if (!stillHere()) return;
         if (summaryEl) summaryEl.innerHTML = _repSummaryHtml(j.summary || {});
         if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot);
         if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
@@ -720,7 +727,19 @@ async function _repLoadAI(m) {
             if (exps[i]) el.textContent = ' — ' + exps[i];
         });
     } catch (e) {
-        const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (ייתכן מכסת Gemini). נסה שוב מאוחר יותר.</div>';
+        if (!stillHere()) return;
+        // Auto-retry transient failures (Gemini 503 overload) up to 2 more times.
+        if (attempt < 2) {
+            const wait = 3500 * (attempt + 1);
+            const note = `<div class="rep-ai-loading"><div class="rep-spinner"></div>שרת ה-AI עמוס כרגע — מנסה שוב…</div>`;
+            if (summaryEl) summaryEl.innerHTML = note;
+            if (swotEl) swotEl.innerHTML = '';
+            if (stratEl) stratEl.innerHTML = '';
+            if (risksEl) risksEl.innerHTML = '';
+            setTimeout(() => { if (stillHere()) _repLoadAI(m, attempt + 1); }, wait);
+            return;
+        }
+        const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (שרת ג\'מיני עמוס זמנית — לא חריגת מכסה). נסה לרענן בעוד דקה.</div>';
         if (summaryEl) summaryEl.innerHTML = msg;
         if (swotEl) swotEl.innerHTML = '';
         if (stratEl) stratEl.innerHTML = '';
