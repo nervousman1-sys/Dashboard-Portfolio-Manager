@@ -136,27 +136,62 @@
         const pp = (x) => (x * 100).toFixed(1);
         const QoQ = 'לעומת הרבעון הקודם', YoY = 'לעומת הרבעון המקביל אשתקד';
 
-        [{ k: 'revenue', subject: 'ההכנסות', down: 'ירדו', neg: 'הפכו לשליליות' },
-         { k: 'ebitda', subject: 'ה-EBITDA', down: 'ירד', neg: 'הפך לשלילי' },
-         { k: 'operatingIncome', subject: 'הרווח התפעולי', down: 'ירד', neg: 'הפך להפסד תפעולי' },
-         { k: 'netIncome', subject: 'הרווח הנקי', down: 'ירד', neg: 'הפך להפסד נקי' },
-         { k: 'fcf', subject: 'התזרים החופשי (FCF)', down: 'ירד', neg: 'הפך לשלילי' }].forEach(m => {
-            const drop = (prev, when) => {
-                const cur = a[m.k];
-                if (!isNum(cur) || !isNum(prev) || prev <= 0) return;
-                if (cur < 0) { notes.push({ he: `${m.subject} ${m.neg} ${when}.`, severity: 'high' }); return; }
-                const d = (cur - prev) / prev;
-                if (d <= -0.10) notes.push({ he: `${m.subject} ${m.down} ב-${pp(-d)}% ${when}.`, severity: d <= -0.25 ? 'high' : 'warn' });
-            };
-            drop(qoq && qoq[m.k], QoQ);
-            drop(yoy && yoy[m.k], YoY);
+        // SEASONALITY-AWARE: a QoQ dip is only an alarm if the YoY (same quarter last year)
+        // ALSO shows weakness. If YoY is positive/flat, the QoQ drop is seasonal — we reframe
+        // it as a calm "seasonal" note anchored to the accurate YoY comparison, instead of a
+        // red deterioration flag. Genuine YoY declines are always flagged.
+        [{ k: 'revenue', subject: 'ההכנסות', down: 'ירדו', up: 'צמחו', neg: 'הפכו לשליליות' },
+         { k: 'ebitda', subject: 'ה-EBITDA', down: 'ירד', up: 'עלה', neg: 'הפך לשלילי' },
+         { k: 'operatingIncome', subject: 'הרווח התפעולי', down: 'ירד', up: 'עלה', neg: 'הפך להפסד תפעולי' },
+         { k: 'netIncome', subject: 'הרווח הנקי', down: 'ירד', up: 'עלה', neg: 'הפך להפסד נקי' },
+         { k: 'fcf', subject: 'התזרים החופשי (FCF)', down: 'ירד', up: 'עלה', neg: 'הפך לשלילי' }].forEach(m => {
+            const cur = a[m.k];
+            if (!isNum(cur)) return;
+            const qPrev = qoq && qoq[m.k], yPrev = yoy && yoy[m.k];
+            const dq = (isNum(qPrev) && qPrev > 0) ? (cur - qPrev) / qPrev : null;
+            const dy = (isNum(yPrev) && yPrev > 0) ? (cur - yPrev) / yPrev : null;
+
+            // A real negative turn is always serious (regardless of seasonality).
+            if (cur < 0) { notes.push({ he: `${m.subject} ${m.neg} ${QoQ}.`, severity: 'high' }); return; }
+
+            // Genuine YoY decline → the accurate deterioration signal.
+            if (dy != null && dy <= -0.10) {
+                notes.push({ he: `${m.subject} ${m.down} ב-${pp(-dy)}% ${YoY}.`, severity: dy <= -0.25 ? 'high' : 'warn' });
+                return; // YoY note covers it — don't also raise the QoQ dip
+            }
+            // QoQ decline:
+            if (dq != null && dq <= -0.10) {
+                if (dy != null && dy > -0.03) {
+                    // YoY is flat/positive → the QoQ drop is seasonal, not a deterioration.
+                    notes.push({
+                        he: `${m.subject} ${m.down} ב-${pp(-dq)}% ${QoQ}, אך זו ככל הנראה עונתיות: ${YoY} ${dy >= 0 ? m.up + ' ב-' + pp(dy) + '%' : 'כמעט ללא שינוי'} — ההשוואה הרלוונטית היא השנתית.`,
+                        severity: 'warn', seasonal: true,
+                    });
+                } else if (dy == null) {
+                    // No prior-year data to verify seasonality — flag the QoQ dip as-is.
+                    notes.push({ he: `${m.subject} ${m.down} ב-${pp(-dq)}% ${QoQ}.`, severity: dq <= -0.25 ? 'high' : 'warn' });
+                }
+                // (dy <= -0.03 but > -0.10 → mild YoY softness; the QoQ dip plus that is minor — skip)
+            }
         });
+
+        // Margins (percentage-point deltas) — same seasonality logic.
         [{ k: 'grossMargin', he: 'שיעור הרווח הגולמי' }, { k: 'operatingMargin', he: 'שיעור הרווח התפעולי' },
          { k: 'ebitdaMargin', he: 'שיעור ה-EBITDA' }, { k: 'netMargin', he: 'שיעור הרווח הנקי' }].forEach(({ k, he }) => {
-            const dq = (isNum(a[k]) && qoq && isNum(qoq[k])) ? a[k] - qoq[k] : null;
-            const dy = (isNum(a[k]) && yoy && isNum(yoy[k])) ? a[k] - yoy[k] : null;
-            if (isNum(dq) && dq <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}.`, severity: dq <= -0.06 ? 'high' : 'warn' });
-            if (isNum(dy) && dy <= -0.03) notes.push({ he: `${he} ירד בכ-${pp(-dy)} נק׳ אחוז לעומת אשתקד.`, severity: dy <= -0.06 ? 'high' : 'warn' });
+            if (!isNum(a[k])) return;
+            const dq = (qoq && isNum(qoq[k])) ? a[k] - qoq[k] : null;
+            const dy = (yoy && isNum(yoy[k])) ? a[k] - yoy[k] : null;
+            if (isNum(dy) && dy <= -0.03) {
+                notes.push({ he: `${he} ירד בכ-${pp(-dy)} נק׳ אחוז ${YoY}.`, severity: dy <= -0.06 ? 'high' : 'warn' });
+                return;
+            }
+            if (isNum(dq) && dq <= -0.03) {
+                if (isNum(dy) && dy > -0.01) {
+                    notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}, אך ${YoY} השיעור יציב/עלה — כלומר ירידה עונתית ולא שחיקה מגמתית.`, severity: 'warn', seasonal: true });
+                } else if (!isNum(dy)) {
+                    notes.push({ he: `${he} ירד בכ-${pp(-dq)} נק׳ אחוז ${QoQ}.`, severity: dq <= -0.06 ? 'high' : 'warn' });
+                }
+            }
         });
         return notes;
     }
