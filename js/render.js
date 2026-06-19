@@ -1206,7 +1206,21 @@ function renderClientCards() {
         _safeDestroyChart(key);
     });
 
-    // Empty state — no portfolios at all
+    // While the initial portfolio fetch is still in flight, show a LOADING state — NOT the
+    // "no portfolios" empty state (which falsely implies the account is empty during load).
+    if ((!clients || clients.length === 0) && typeof window !== 'undefined' && window._clientsLoading) {
+        grid.innerHTML = `
+            <div class="empty-state glass-card">
+                <div class="rep-spinner" style="margin:0 auto 14px"></div>
+                <h3>טוען תיקים…</h3>
+                <p style="color:var(--text-muted)">רגע, מושך את נתוני התיקים</p>
+            </div>
+        `;
+        updateRiskMiniSummary([]);
+        return;
+    }
+
+    // Empty state — no portfolios at all (fetch completed, genuinely none)
     if (!clients || clients.length === 0) {
         grid.innerHTML = `
             <div class="empty-state glass-card">

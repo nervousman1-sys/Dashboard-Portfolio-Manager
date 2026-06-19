@@ -167,6 +167,13 @@ if ('serviceWorker' in navigator) {
 // SECURITY: Only render from cache if the cached user matches the currently logged-in user.
 
 let _cacheRendered = false;
+// True while the initial portfolio fetch is still in flight — so the dashboard shows a
+// LOADING state instead of the "אין תיקים להצגה" empty state during the first load window.
+if (typeof window !== 'undefined') {
+    window._clientsLoading = true;
+    // Safety: never let the loading state stick forever (e.g. a hung/failed fetch).
+    setTimeout(() => { window._clientsLoading = false; if (typeof renderClientCards === 'function') renderClientCards(); }, 20000);
+}
 
 (function renderFromCacheImmediately() {
     // SECURITY GATE: never render cached data unless there is a VALID auth token AND the
@@ -310,6 +317,12 @@ async function init() {
         console.warn('[Init] Phase 1: Supabase fetch failed — using cached data (may be stale)');
         document.getElementById('lastUpdate').textContent = 'נתונים מהמטמון (לא מעודכן)';
     }
+
+    // Initial portfolio load is done (success, empty, or failed-onto-cache) — drop the
+    // loading state and re-render so an empty result now shows the real "אין תיקים" state
+    // rather than a spinner, and a populated result shows the cards.
+    if (typeof window !== 'undefined') window._clientsLoading = false;
+    if (typeof renderClientCards === 'function') renderClientCards();
 
     // ── Phase 1.1: Probe transactions table (BLOCKING — must complete before any sell/buy) ──
     // Ensures _supaTransactionsAvailable is set correctly before any user action.
