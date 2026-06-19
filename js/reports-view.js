@@ -695,17 +695,38 @@ function _repCloseChartModal() {
 function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 
 // ── AI SWOT + strategy (async, fills the placeholders) ──
-// `attempt` drives an automatic client-side retry: Gemini's transient 503 (model
-// overloaded) is common, so a single failure self-heals after a short wait instead of
-// leaving the user with a dead "try again later" message.
-async function _repLoadAI(m, attempt) {
-    attempt = attempt || 0;
+// Durable per-company cache: the analysis is generated ONCE per quarterly report (keyed by
+// symbol + report date) and then served from localStorage on every later view — so we don't
+// re-call Gemini (whose free tier is rate-limited) for a report we already analyzed. One
+// gentle retry on a transient/rate failure; no retry storm (that only triggers more 429s).
+function _repAiCacheKey(m) { return `rep_ai_v2_${m.symbol}_${m.asOf || 'na'}`; }
+function _repApplyAI(j) {
     const summaryEl = document.getElementById('repSummary');
     const swotEl = document.getElementById('repSwot');
     const stratEl = document.getElementById('repStrategy');
     const risksEl = document.getElementById('repRisks');
-    // Guard: if the user navigated away (different report open), abort.
+    if (summaryEl) summaryEl.innerHTML = _repSummaryHtml(j.summary || {});
+    if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot || {});
+    if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
+    if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
+    const exps = Array.isArray(j.declineExplanations) ? j.declineExplanations : [];
+    document.querySelectorAll('[data-attn-why]').forEach(el => {
+        const i = parseInt(el.getAttribute('data-attn-why'), 10);
+        if (exps[i]) el.textContent = ' — ' + exps[i];
+    });
+}
+async function _repLoadAI(m, attempt) {
+    attempt = attempt || 0;
+    const summaryEl = document.getElementById('repSummary');
     const stillHere = () => document.getElementById('repSummary') === summaryEl && summaryEl;
+
+    // 1) Serve from the durable cache instantly when we've already analyzed this report.
+    if (attempt === 0) {
+        try {
+            const cached = JSON.parse(localStorage.getItem(_repAiCacheKey(m)) || 'null');
+            if (cached && cached.swot) { _repApplyAI(cached); return; }
+        } catch (e) { /* ignore */ }
+    }
     try {
         const ctx = ReportsEngine.aiContext(m);
         const r = await fetch('/api/vision?mode=swot', {
@@ -716,34 +737,24 @@ async function _repLoadAI(m, attempt) {
         const j = await r.json();
         if (!r.ok || j.error || !j.swot) throw new Error(j.message || 'ai failed');
         if (!stillHere()) return;
-        if (summaryEl) summaryEl.innerHTML = _repSummaryHtml(j.summary || {});
-        if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot);
-        if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
-        if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
-        // Fill each attention-note with its intelligent, company-specific explanation.
-        const exps = Array.isArray(j.declineExplanations) ? j.declineExplanations : [];
-        document.querySelectorAll('[data-attn-why]').forEach(el => {
-            const i = parseInt(el.getAttribute('data-attn-why'), 10);
-            if (exps[i]) el.textContent = ' — ' + exps[i];
-        });
+        _repApplyAI(j);
+        try { localStorage.setItem(_repAiCacheKey(m), JSON.stringify(j)); } catch (e) { /* quota — fine */ }
     } catch (e) {
         if (!stillHere()) return;
-        // Auto-retry transient failures (Gemini 503 overload) up to 2 more times.
-        if (attempt < 2) {
-            const wait = 3500 * (attempt + 1);
-            const note = `<div class="rep-ai-loading"><div class="rep-spinner"></div>שרת ה-AI עמוס כרגע — מנסה שוב…</div>`;
+        // ONE gentle retry after a longer wait (lets a rate/overload window pass).
+        if (attempt < 1) {
+            const note = `<div class="rep-ai-loading"><div class="rep-spinner"></div>שרת ה-AI עמוס כרגע — מנסה שוב בעוד מספר שניות…</div>`;
             if (summaryEl) summaryEl.innerHTML = note;
-            if (swotEl) swotEl.innerHTML = '';
-            if (stratEl) stratEl.innerHTML = '';
-            if (risksEl) risksEl.innerHTML = '';
-            setTimeout(() => { if (stillHere()) _repLoadAI(m, attempt + 1); }, wait);
+            ['repSwot', 'repStrategy', 'repRisks'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+            setTimeout(() => { if (stillHere()) _repLoadAI(m, attempt + 1); }, 9000);
             return;
         }
-        const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (שרת ג\'מיני עמוס זמנית — לא חריגת מכסה). נסה לרענן בעוד דקה.</div>';
+        const is429 = /429|RESOURCE_EXHAUSTED/i.test(e.message || '');
+        const msg = is429
+            ? '<div class="adv-empty">מכסת ה-AI היומית/דקתית של Gemini מוצתה כרגע. הניתוח יתחדש מאליו בהמשך — או רענן בעוד מספר דקות. (דוחות שכבר נותחו נשמרים ולא נטענים מחדש.)</div>'
+            : '<div class="adv-empty">ניתוח ה-AI אינו זמין כרגע (שרת ג\'מיני עמוס). נסה לרענן בעוד מספר דקות.</div>';
         if (summaryEl) summaryEl.innerHTML = msg;
-        if (swotEl) swotEl.innerHTML = '';
-        if (stratEl) stratEl.innerHTML = '';
-        if (risksEl) risksEl.innerHTML = '';
+        ['repSwot', 'repStrategy', 'repRisks'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     }
 }
 // Short business summary: activity sector, growth/hurt divisions, decline reasons,

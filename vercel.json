@@ -1,6 +1,9 @@
 {
   "buildCommand": "node build.js",
   "outputDirectory": ".",
+  "functions": {
+    "api/vision.js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
