@@ -56,28 +56,36 @@ const RISK_MODEL = {
     CACHE_TTL: 30 * 60 * 1000,    // 30 min model cache
     // Liquid, diversified names always analyzed so the "add to portfolio" picker
     // has real, ranked candidates to choose from (across sectors).
+    // ~10-12 liquid names PER SECTOR so the same-sector "בדוק אופציה חלופית" swap always
+    // has 5-10 real alternatives. EVERY ticker here has a SECTOR_MAP entry (no "Other"
+    // bucket). ETFs are split into their own "תעודות סל" group by the scorer.
     CANDIDATE_UNIVERSE: [
-        // Tech / Communication
-        'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'AVGO', 'NFLX', 'AMD', 'ORCL',
-        'CRM', 'ADBE', 'CSCO', 'QCOM', 'TXN', 'INTC', 'T', 'VZ',
-        // Financials
-        'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'AXP', 'SCHW', 'BLK',
+        // Technology / Semis
+        'AAPL', 'MSFT', 'NVDA', 'AVGO', 'AMD', 'ORCL', 'CRM', 'ADBE', 'QCOM', 'TXN',
+        'MU', 'LRCX', 'AMAT', 'KLAC', 'ARM', 'PLTR', 'NOW', 'ANET', 'SNPS', 'TSM', 'ASML',
+        // Communication
+        'GOOGL', 'META', 'NFLX', 'DIS', 'T', 'VZ', 'TMUS', 'CMCSA', 'CHTR', 'EA', 'TTWO',
+        // Consumer discretionary
+        'AMZN', 'TSLA', 'HD', 'LOW', 'MCD', 'NKE', 'SBUX', 'BKNG', 'TJX', 'ORLY', 'CMG', 'MAR',
+        // Consumer staples
+        'PG', 'KO', 'PEP', 'COST', 'WMT', 'MDLZ', 'MO', 'PM', 'CL', 'KMB', 'MNST',
         // Healthcare
-        'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO', 'ABT', 'AMGN', 'DHR',
+        'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO', 'ABT', 'DHR', 'AMGN', 'BMY', 'GILD', 'ISRG', 'VRTX',
+        // Financials
+        'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'AXP', 'SCHW', 'BLK', 'C', 'SPGI', 'CB', 'PGR',
         // Energy
-        'XOM', 'CVX', 'COP', 'SLB', 'EOG',
-        // Consumer staples / discretionary
-        'PG', 'KO', 'PEP', 'COST', 'WMT', 'HD', 'MCD', 'NKE', 'SBUX', 'DIS', 'LOW',
+        'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'CEG', 'PSX', 'MPC', 'VLO', 'OXY', 'WMB', 'KMI',
         // Industrials
-        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX', 'UNP',
-        // Materials / Utilities / Real estate (sector leaders)
-        'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'NEE', 'SO', 'DUK', 'CEG', 'AEP',
-        'PLD', 'AMT', 'EQIX', 'WELL', 'SPG',
-        // Semis / global tech leaders
-        'TSM', 'ASML', 'BRK-B', 'TMUS', 'MU', 'LRCX', 'AMAT', 'ARM', 'KLAC', 'PLTR',
-        // Crypto-exposed (kept ≥5 deep so the same-sector swap has 5-10 to cycle)
+        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX', 'UNP', 'DE', 'LMT', 'GD', 'MMM', 'EMR', 'ETN', 'FDX',
+        // Materials
+        'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'APD', 'DOW', 'NUE',
+        // Utilities
+        'NEE', 'SO', 'DUK', 'AEP', 'D', 'EXC', 'SRE', 'XEL',
+        // Real estate
+        'PLD', 'AMT', 'EQIX', 'WELL', 'SPG', 'O', 'PSA', 'CCI',
+        // Crypto-exposed
         'COIN', 'MARA', 'RIOT', 'MSTR', 'CLSK', 'HOOD',
-        // Broad / sector ETFs (every sector covered so each stock list is scannable)
+        // Broad / sector ETFs (their own "תעודות סל" group)
         'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
         'XLY', 'XLC', 'XLB', 'XLU', 'XLRE', 'SOXX', 'SMH',
     ],
@@ -751,7 +759,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v3'; // v3: crypto bench deepened (CLSK/HOOD) for the same-sector swap
+const _RM_PERSIST_KEY = 'risk_model_persist_v4'; // v4: full ~10-12/sector universe (every name sector-mapped)
 const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
 
 function _rmPersistModel(sig, model) {

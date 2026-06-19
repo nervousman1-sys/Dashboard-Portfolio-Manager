@@ -120,6 +120,7 @@
             score,
             keyPoints,
             attentionNotes,
+            insiders: report.insiders || null,
         };
     }
 
@@ -325,6 +326,25 @@
     function aiContext(model) {
         const a = model.latest || {};
         const fmtP = (x) => isNum(x) ? (x * 100).toFixed(1) + '%' : 'n/a';
+        const cur = model.currency === 'ILS' ? '₪' : '$';
+        const fmtMoney = (x) => {
+            if (!isNum(x)) return null;
+            const v = Math.abs(x);
+            if (v >= 1e9) return `${cur}${(x / 1e9).toFixed(2)}B`;
+            if (v >= 1e6) return `${cur}${(x / 1e6).toFixed(1)}M`;
+            return `${cur}${Math.round(x).toLocaleString('en-US')}`;
+        };
+        // TTM R&D (sum of last 4 quarters) + share of revenue — context for "what they develop".
+        const rows = model.rows || [];
+        const ttm = rows.slice(0, 4);
+        const ttmRd = ttm.reduce((s, r) => s + (isNum(r.rd) ? r.rd : 0), 0);
+        const ttmRev = ttm.reduce((s, r) => s + (isNum(r.revenue) ? r.revenue : 0), 0);
+        const rdStr = ttmRd > 0 ? `${fmtMoney(ttmRd)}${ttmRev > 0 ? ` (${(ttmRd / ttmRev * 100).toFixed(1)}% מההכנסות)` : ''}` : null;
+        // Compact recent-insider summary (real data when available) for the AI to cite.
+        const ins = Array.isArray(model.insiders) ? model.insiders : null;
+        const insStr = ins && ins.length
+            ? ins.slice(0, 6).map(x => `${x.date} ${x.type === 'buy' ? 'קנייה' : 'מכירה'} ${x.name || ''}${x.role ? ' (' + x.role + ')' : ''}${x.value != null ? ' ~' + fmtMoney(x.value) : (x.shares != null ? ' ' + x.shares.toLocaleString('en-US') + ' מניות' : '')}`).join('; ')
+            : null;
         return {
             company: model.companyName,
             symbol: model.symbol,
@@ -345,6 +365,9 @@
             flags: (model.flags || []).map(x => x.he),
             declines: (model.attentionNotes || []).map(n => n.he), // facts the AI should explain
             sector: model.sector,
+            industry: model.industry || null,
+            rdExpenseTTM: rdStr,                 // real R&D spend → "what they develop" context
+            recentInsiderTrades: insStr,         // real recent insider transactions (US)
         };
     }
 

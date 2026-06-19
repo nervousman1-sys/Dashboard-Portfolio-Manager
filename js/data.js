@@ -166,14 +166,25 @@ const SECTOR_MAP = {
     'NEE': 'Utilities', 'SO': 'Utilities',
     'PLD': 'Real Estate',
     'MSTR': 'Crypto', 'IBIT': 'Crypto', 'BITO': 'Crypto', 'GBTC': 'Crypto',
-    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto', 'HOOD': 'Crypto'
+    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto', 'HOOD': 'Crypto',
+    // ── Expanded candidate-universe coverage (so no candidate falls into "Other") ──
+    'ARM': 'Technology', 'PLTR': 'Technology', 'ANET': 'Technology', 'TSM': 'Technology', 'ASML': 'Technology',
+    'CHTR': 'Communication', 'EA': 'Communication', 'TTWO': 'Communication',
+    'TJX': 'Consumer Disc.', 'CMG': 'Consumer Disc.',
+    'CL': 'Consumer Staples', 'KMB': 'Consumer Staples',
+    'C': 'Financials', 'PGR': 'Financials',
+    'PSX': 'Energy', 'MPC': 'Energy', 'VLO': 'Energy', 'OXY': 'Energy', 'WMB': 'Energy', 'KMI': 'Energy',
+    'UNP': 'Industrials', 'LMT': 'Industrials', 'GD': 'Industrials', 'EMR': 'Industrials', 'ETN': 'Industrials', 'FDX': 'Industrials',
+    'LIN': 'Materials', 'SHW': 'Materials', 'FCX': 'Materials', 'ECL': 'Materials', 'NEM': 'Materials', 'APD': 'Materials', 'DOW': 'Materials', 'NUE': 'Materials',
+    'DUK': 'Utilities', 'AEP': 'Utilities', 'D': 'Utilities', 'EXC': 'Utilities', 'SRE': 'Utilities', 'XEL': 'Utilities',
+    'AMT': 'Real Estate', 'EQIX': 'Real Estate', 'WELL': 'Real Estate', 'SPG': 'Real Estate', 'O': 'Real Estate', 'PSA': 'Real Estate', 'CCI': 'Real Estate'
 };
 
 const SECTOR_COLORS = {
     'Technology': '#3b82f6', 'Communication': '#06b6d4', 'Consumer Disc.': '#f97316',
     'Consumer Staples': '#84cc16', 'Healthcare': '#ec4899', 'Financials': '#eab308',
     'Energy': '#ef4444', 'Industrials': '#8b5cf6', 'Utilities': '#14b8a6',
-    'Real Estate': '#f43f5e', 'Crypto': '#f7931a', 'Bonds': '#a855f7', 'Other': '#64748b'
+    'Real Estate': '#f43f5e', 'Materials': '#10b981', 'Crypto': '#f7931a', 'Bonds': '#a855f7', 'Other': '#64748b'
 };
 
 const COLORS = { profit: '#22c55e', loss: '#ef4444', neutral: '#3b82f6', bonds: '#a855f7' };

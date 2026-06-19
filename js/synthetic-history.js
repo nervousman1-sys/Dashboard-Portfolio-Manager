@@ -181,12 +181,16 @@ async function prefetchTickerHistories(specs, outputSize) {
     if (!todo.length) return 0;
     const range = _synthRangeFor(outputSize);
     let seeded = 0;
-    for (let i = 0; i < todo.length; i += 40) {
-        const chunk = todo.slice(i, i + 40);
+    // Fire all 40-symbol batches IN PARALLEL (they were sequential) — with a ~150-ticker
+    // universe that turns a 4-round-trip wait into a single one, so the first CML/SML
+    // build is markedly faster.
+    const chunks = [];
+    for (let i = 0; i < todo.length; i += 40) chunks.push(todo.slice(i, i + 40));
+    await Promise.all(chunks.map(async (chunk) => {
         try {
             const res = await fetch(`/api/history?symbols=${encodeURIComponent(chunk.map(c => c.sym).join(','))}&range=${range}`,
                 { headers: { Accept: 'application/json' } });
-            if (!res.ok) continue;
+            if (!res.ok) return;
             const data = await res.json();
             for (const c of chunk) {
                 const pts = data[c.sym];
@@ -197,7 +201,7 @@ async function prefetchTickerHistories(specs, outputSize) {
                 }
             }
         } catch { /* per-ticker path will cover the misses */ }
-    }
+    }));
     console.log(`[SyntheticHistory] Batch-prefetched ${seeded}/${todo.length} ticker histories`);
     return seeded;
 }
