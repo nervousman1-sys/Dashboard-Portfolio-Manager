@@ -200,6 +200,14 @@ let _cacheRendered = false;
             document.getElementById('lastUpdate').textContent = 'מעדכן נתונים...';
             _cacheRendered = true;
         }
+        // Warm the CML/SML risk model the INSTANT we have (cached) holdings — not 2s later
+        // behind requestIdleCallback. Returns the persisted model immediately when fresh,
+        // otherwise starts the build now so opening a CML/SML tab isn't a cold ~5s wait.
+        try {
+            if (typeof buildRiskModel === 'function' && clients && clients.length) {
+                buildRiskModel(clients).catch(() => { });
+            }
+        } catch (e) { /* non-fatal */ }
     }
     // If the URL points to a specific page/portfolio, open it RIGHT NOW (on top of
     // the cache render) so a refresh lands straight on that page — no dashboard

@@ -1144,31 +1144,53 @@ async function openStockRecommendations(clientId, _fromHistory) {
         try { adv = buildPortfolioAdvisory(client, model); cands = (adv && adv.candidates) || []; } catch (e) { /* ignore */ }
     }
 
-    // Show a loading overlay, then fetch REAL technical readings for the candidates and
-    // re-score — passing them straight to the scorer (no localStorage dependency, which
-    // can silently fail when storage is full and leave every technical score at 50).
     let ov = document.getElementById('stockRecoOverlay');
     if (!ov) {
         ov = document.createElement('div'); ov.id = 'stockRecoOverlay'; ov.className = 'reco-overlay';
         ov.addEventListener('click', (e) => { if (e.target === ov) closeStockRecommendations(); });
         document.body.appendChild(ov);
     }
-    if (!ov.classList.contains('active')) {
-        ov.innerHTML = `<div class="reco-box" dir="rtl"><div class="reco-head"><div><h3>המלצות לאיזון התיק וייעולו</h3><span class="reco-sub">מחשב ציונים…</span></div><button class="reco-close" onclick="closeStockRecommendations()">✕</button></div><div class="adv-empty" style="padding:30px">מחשב ציון לכל מנייה — כולל ניתוח טכני (ממוצע 200 שבועות · RSI שבועי · FVG)…</div></div>`;
-        ov.classList.add('active'); if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-    }
-    if (cands.length && typeof _rmApplyFinalScore === 'function') {
-        try {
-            const techMap = await _recoFetchTechMap(cands.map(c => c.ticker));
-            _rmApplyFinalScore(cands, techMap);
-            cands.sort((x, y) => (y.finalScore - x.finalScore) || (y.fit - x.fit));
-        } catch (e) { /* fall back to cache-based scores already on the candidates */ }
-    }
 
+    // PAINT IMMEDIATELY using whatever technical data is already cached (today's localStorage
+    // cache, or neutral 50 on the very first open). No blocking network wait — the score is
+    // 80% fundamental+SML which we have synchronously. Real technical scores are then filled
+    // in the BACKGROUND (see _recoEnrichAndRepaint) so the user never waits on a 130-ticker scan.
+    if (cands.length && typeof _rmApplyFinalScore === 'function') {
+        _rmApplyFinalScore(cands, _recoCachedTechMap());
+        cands.sort((x, y) => (y.finalScore - x.finalScore) || (y.fit - x.fit));
+    }
+    _recoPaint(clientId, client, cands, adv, ov);
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    // Tag this history entry so browser Back FROM a technical/reports deep-link returns here.
+    if (!_fromHistory) { try { history.pushState({ popup: 'reco', recoClient: clientId }, '', location.href); } catch (e) { /* ignore */ } }
+
+    _recoEnrichAndRepaint(clientId, client, cands, adv, ov);
+}
+
+// Background: fetch real technical readings for the candidates, re-score, and repaint
+// once — only if some tickers weren't already in the (daily) cache, and the overlay is
+// still showing this client. Keeps the first paint instant.
+async function _recoEnrichAndRepaint(clientId, client, cands, adv, ov) {
+    if (!cands.length || typeof _rmApplyFinalScore !== 'function') return;
+    _recoHydrateTechCache();
+    const need = [...new Set(cands.map(c => c.ticker))].filter(t => !_recoTechCache[t]);
+    if (!need.length) return;                       // first paint already had real scores
+    let techMap;
+    try { techMap = await _recoFetchTechMap(cands.map(c => c.ticker)); } catch (e) { return; }
+    _rmApplyFinalScore(cands, techMap);
+    cands.sort((x, y) => (y.finalScore - x.finalScore) || (y.fit - x.fit));
+    if (ov && ov.classList.contains('active') && window._recoState && window._recoState.clientId === clientId) {
+        _recoPaint(clientId, client, cands, adv, ov);
+    }
+}
+
+// Render the recommendations overlay body (efficiency banner + sector-grouped cards) into
+// `ov`. Pure paint — called for the instant first render AND the background re-render.
+function _recoPaint(clientId, client, cands, adv, ov) {
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 
-    // Rebalance-to-efficient banner: states whether the portfolio is in the optimal
-    // region and the target CML allocation to get it there.
+    // Rebalance-to-efficient banner.
     let effHTML = '';
     const eff = adv && adv.efficiency;
     if (adv && adv.p && adv.p.partial) {
@@ -1193,11 +1215,6 @@ async function openStockRecommendations(clientId, _fromHistory) {
         }
     }
 
-    // (overlay `ov` already created above)
-
-    // Group candidates by sector → same-sector names play a similar role. Show up to 2
-    // per sector, and let each card cycle through the REST of that sector's bench via a
-    // "check an alternative" button (state kept in window._recoState).
     const OPT = ['א', 'ב', 'ג', 'ד', 'ה'];
     let cardsHTML;
     if (!cands.length) {
@@ -1212,23 +1229,20 @@ async function openStockRecommendations(clientId, _fromHistory) {
         cardsHTML = Object.entries(bySector)
             .sort((a, b) => (a[0] === 'תעודות סל' ? 1 : 0) - (b[0] === 'תעודות סל' ? 1 : 0))
             .map(([sector, list]) => {
-            // Show a clean 3 per sector; the rest of the sector's deep bench is reached
-            // via the swap button, which rotates SAME-sector names only.
-            const slots = Math.min(list.length, 3);
-            state.slots[sector] = slots;
-            const multi = slots > 1;                 // letter the cards א',ב',ג'… when several are shown
-            // Offer the swap whenever the sector itself has more than one candidate.
-            const hasAlt = list.length > 1;
-            const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות (לחץ "בדוק אופציה חלופית" לעוד)` : _riskEsc(sector);
-            let grid = '';
-            for (let slot = 0; slot < slots; slot++) {
-                const cardId = `recoCard_${seq++}`;
-                const optLetter = multi ? `${OPT[slot] || (slot + 1)}'` : '';
-                state.cards[cardId] = { sector, shownIdx: slot, optLetter, ticker: list[slot].ticker };
-                grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, hasAlt)}</div>`;
-            }
-            return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
-        }).join('');
+                const slots = Math.min(list.length, 3);
+                state.slots[sector] = slots;
+                const multi = slots > 1;
+                const hasAlt = list.length > 1;
+                const head = list.length > 1 ? `${_riskEsc(sector)} — ${list.length} אופציות (לחץ "בדוק אופציה חלופית" לעוד)` : _riskEsc(sector);
+                let grid = '';
+                for (let slot = 0; slot < slots; slot++) {
+                    const cardId = `recoCard_${seq++}`;
+                    const optLetter = multi ? `${OPT[slot] || (slot + 1)}'` : '';
+                    state.cards[cardId] = { sector, shownIdx: slot, optLetter, ticker: list[slot].ticker };
+                    grid += `<div class="reco-card" id="${cardId}" onclick="addCandidateToPortfolio(${clientId}, '${_riskEsc(list[slot].ticker)}'); closeStockRecommendations();">${_recoCardInner(list[slot], cardId, optLetter, hasAlt)}</div>`;
+                }
+                return `<div class="reco-group"><div class="reco-group-head">${head}</div><div class="reco-grid">${grid}</div></div>`;
+            }).join('');
         window._recoState = state;
     }
 
@@ -1241,12 +1255,6 @@ async function openStockRecommendations(clientId, _fromHistory) {
         <p class="reco-hint">לכל מנייה: מספר המניות לקנייה ו-% מהתיק (יעד ~10% לכל הוספה), קישור לגוגל פיננס, ומדדים. לא מאמין בחברה? לחץ <b>"↻ בדוק אופציה חלופית"</b> כדי לראות מנייה אחרת מאותו סקטור.</p>
         ${cardsHTML}
     </div>`;
-    ov.classList.add('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
-    // Tag this history entry so browser Back FROM a technical/reports deep-link returns
-    // here (the recommendations overlay), not to the dashboard. Skip when we're already
-    // restoring this very entry (opened via popstate) to avoid stacking duplicates.
-    if (!_fromHistory) { try { history.pushState({ popup: 'reco', recoClient: clientId }, '', location.href); } catch (e) { /* ignore */ } }
 }
 
 // Fetch MA200/WMA200/Weekly-RSI/FVG for the candidate tickers and return them as a
@@ -1265,6 +1273,8 @@ function _recoHydrateTechCache() {
 function _recoPersistTechCache() {
     try { localStorage.setItem('reco_tech_v1', JSON.stringify({ day: new Date().toISOString().slice(0, 10), data: _recoTechCache })); } catch (e) { /* quota — session cache still serves */ }
 }
+// Synchronous cached technical map (no network) for the instant first paint.
+function _recoCachedTechMap() { _recoHydrateTechCache(); return _recoTechCache; }
 async function _recoFetchTechMap(tickers) {
     _recoHydrateTechCache();
     const out = {};

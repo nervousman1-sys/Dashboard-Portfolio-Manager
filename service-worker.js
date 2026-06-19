@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v399';
+const CACHE_NAME = 'portfolio-dashboard-v400';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
