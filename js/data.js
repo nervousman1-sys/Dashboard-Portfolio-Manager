@@ -44,8 +44,13 @@ const _HEBREW_TO_TICKER = {
 function getHebrewName(holding) {
     if (!holding) return '';
     if (holding.type === 'bond') return holding.name;
-    const ticker = (holding.ticker || '').replace('.TA', '').toUpperCase();
-    return HEBREW_NAMES[ticker] || '';
+    const rawTicker = (holding.ticker || '').replace('.TA', '').toUpperCase();
+    // Israeli funds/ETFs trade by numeric id and aren't in HEBREW_NAMES — use the real
+    // name resolved from Israeli sources (funder/bizportal via /api/ilfund), cached here.
+    if (/^\d{4,9}$/.test(rawTicker) && typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[rawTicker] && window._ilFundInfo[rawTicker].name) {
+        return window._ilFundInfo[rawTicker].name;
+    }
+    return HEBREW_NAMES[rawTicker] || '';
 }
 
 // Reverse lookup: search TASE names by query string (English name, Hebrew, or ticker).

@@ -30,6 +30,17 @@ async function fetchHtml(url, viaProxy) {
     return await r.text();
 }
 
+// Classify the Israeli security type (Hebrew) from its name + the source page kind.
+//  • קרן סל / KTF / ETF / "מחקה" (index-tracking) → קרן סל (a tradable tracking fund)
+//  • otherwise → קרן נאמנות (mutual fund)
+function inferIlType(name, urlKind) {
+    const n = String(name || '');
+    if (/\bKTF\b|\bETF\b|קרן\s*סל|תעודת\s*סל|מחקה|סל\b/i.test(n)) return 'קרן סל';
+    if (urlKind) return urlKind;
+    if (/קרן/.test(n)) return 'קרן נאמנות';
+    return 'קרן סל';
+}
+
 // funder embeds clean JSON; bizportal shows the same NAV in markup. Both quote agorot.
 function parseFunder(html, id) {
     const buy = parseFloat((html.match(/"buyPrice"\s*:\s*"?([\d.]+)/i) || [])[1]);
@@ -38,24 +49,24 @@ function parseFunder(html, id) {
     if (!(agorot > 0)) return null;
     const name = ((html.match(/<title>\s*([^<]+?)\s*-\s*\d+\s*<\/title>/) || [])[1] || '').trim();
     const year1 = parseFloat((html.match(/"1year"\s*:\s*"?(-?[\d.]+)/i) || [])[1]);
-    return { agorot, name, year1, source: 'funder' };
+    return { agorot, name, year1, source: 'funder', urlKind: null };
 }
 
-function parseBizportal(html, id) {
+function parseBizportal(html, id, urlKind) {
     const flat = html.replace(/<[^>]+>/g, '|');
     const m = flat.match(/מחיר\s*(?:פדיון|קנייה)\|+\s*([\d,]+\.?\d*)/);
     const agorot = m ? parseFloat(m[1].replace(/,/g, '')) : NaN;
     if (!(agorot > 0)) return null;
     const name = ((html.match(/<title>\s*([^<|]+?)\s*\|/) || [])[1] || '').trim();
-    return { agorot, name, year1: null, source: 'bizportal' };
+    return { agorot, name, year1: null, source: 'bizportal', urlKind: urlKind || null };
 }
 
 const ATTEMPTS = [
     (id) => fetchHtml(`https://www.funder.co.il/fund/${id}`, false).then(h => parseFunder(h, id)),
-    (id) => fetchHtml(`https://www.bizportal.co.il/mutualfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id)),
-    (id) => fetchHtml(`https://www.bizportal.co.il/tradedfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id)),
+    (id) => fetchHtml(`https://www.bizportal.co.il/tradedfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id, 'קרן סל')),
+    (id) => fetchHtml(`https://www.bizportal.co.il/mutualfunds/quote/generalview/${id}`, false).then(h => parseBizportal(h, id, 'קרן נאמנות')),
     (id) => fetchHtml(`https://www.funder.co.il/fund/${id}`, true).then(h => parseFunder(h, id)),
-    (id) => fetchHtml(`https://www.bizportal.co.il/mutualfunds/quote/generalview/${id}`, true).then(h => parseBizportal(h, id)),
+    (id) => fetchHtml(`https://www.bizportal.co.il/tradedfunds/quote/generalview/${id}`, true).then(h => parseBizportal(h, id, 'קרן סל')),
 ];
 
 module.exports = async (req, res) => {
@@ -78,6 +89,7 @@ module.exports = async (req, res) => {
         res.status(200).json({
             id,
             name: hit.name || null,
+            type: inferIlType(hit.name, hit.urlKind),   // קרן סל / קרן נאמנות
             price: +(hit.agorot / 100).toFixed(4),   // ₪ per unit
             priceAgorot: hit.agorot,
             year1Pct: isFinite(hit.year1) ? hit.year1 : null,

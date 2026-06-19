@@ -717,6 +717,8 @@ async function openModal(clientId) {
 
     // Fill any missing 52-week high/low cells in the holdings table (Yahoo proxy)
     _enrichHoldings52w(client);
+    // Resolve Israeli funds/ETFs (numeric ids) → real name + correct type tag.
+    if (typeof _enrichILFunds === 'function') _enrichILFunds(client);
 
     // Create modal charts
     setTimeout(() => {
@@ -1202,6 +1204,37 @@ function generateAllPortfoliosReport() {
 // Fill missing 52-week high/low cells in the holdings table via the same-origin
 // Yahoo quote proxy (most reliable, keyless). TASE quotes arrive in agorot (ILA)
 // → scaled to shekels. Cells are patched in place by id, no full re-render.
+// Resolve Israeli funds/ETFs (numeric ids, not on Yahoo) from Israeli sources
+// (funder/bizportal via /api/ilfund): real NAME + asset TYPE (קרן סל / קרן נאמנות),
+// so they show with their proper name and are TAGGED correctly instead of "מניה".
+window._ilFundInfo = window._ilFundInfo || {};
+async function _enrichILFunds(client) {
+    if (!client || !Array.isArray(client.holdings)) return;
+    const ids = [...new Set(client.holdings
+        .map(h => (h.ticker || '').replace(/\.TA$/i, '').toUpperCase())
+        .filter(t => /^\d{4,9}$/.test(t) && !window._ilFundInfo[t]))];
+    if (!ids.length) return;
+    let changed = false;
+    await Promise.all(ids.map(async (id) => {
+        try {
+            const r = await fetch(`/api/ilfund?id=${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } });
+            if (!r.ok) return;
+            const j = await r.json();
+            if (j && (j.name || j.type)) { window._ilFundInfo[id] = { name: j.name || null, type: j.type || 'קרן סל' }; changed = true; }
+        } catch (e) { /* leave as-is */ }
+    }));
+    if (!changed) return;
+    // Stamp the resolved type label onto the matching holdings, then repaint the table.
+    for (const h of client.holdings) {
+        const t = (h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+        const info = window._ilFundInfo[t];
+        if (info) { h.typeLabel = info.type; if (info.name) h.name = info.name; }
+    }
+    const body = document.getElementById('holdingsTbody');
+    if (body && typeof _buildHoldingsTable === 'function') { body.innerHTML = _buildHoldingsTable(client); _enrichHoldings52w(client); }
+    if (typeof renderClientCards === 'function') renderClientCards();
+}
+
 async function _enrichHoldings52w(client) {
     if (!client || !Array.isArray(client.holdings)) return;
     const proxyOf = (h) => (typeof _proxySymbolFor === 'function') ? _proxySymbolFor(h.ticker) : null;
