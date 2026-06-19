@@ -26,7 +26,14 @@ async function fetchYahoo(symbol, range, interval) {
     const intraday = ['5m', '15m', '30m', '1h'].includes(iv);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
         `?range=${encodeURIComponent(range || '1y')}&interval=${iv}`;
-    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+    // Per-symbol timeout: a single slow/hung ticker (e.g. an illiquid foreign name) must not
+    // gate the whole batched Promise.all — abort it and let the rest return.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 7000);
+    let r;
+    try {
+        r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
+    } finally { clearTimeout(timer); }
     if (!r.ok) throw new Error(`Yahoo HTTP ${r.status}`);
     const j = await r.json();
     const result = j && j.chart && j.chart.result && j.chart.result[0];

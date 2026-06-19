@@ -94,6 +94,7 @@ const RISK_MODEL = {
 // In-memory cache of the last computed model (keyed by a holdings signature)
 let _riskModelCache = { sig: null, ts: 0, model: null };
 let _riskModelInflight = null; // de-dupes concurrent builds
+let _riskModelInflightSig = null; // signature of the in-flight build (set BEFORE it resolves)
 
 // Cached risk-free rate (resolved once per session unless forced)
 let _cachedRf = null;
@@ -211,11 +212,14 @@ async function getRiskFreeRate(forceRefresh = false) {
         return false;
     };
 
-    // Path 1: same-origin serverless proxy (Vercel)
+    // Path 1: same-origin serverless proxy (Vercel) — with a hard timeout so a hung Rf
+    // request can't stall the whole model build (it falls through to the fallback instead).
     try {
+        const _ac = new AbortController();
+        const _t = setTimeout(() => _ac.abort(), 5000);
         const res = await fetch(`/api/fred?series_id=${RISK_MODEL.RF_SERIES}&latest=1`, {
-            headers: { 'Accept': 'application/json' }
-        });
+            headers: { 'Accept': 'application/json' }, signal: _ac.signal
+        }).finally(() => clearTimeout(_t));
         if (res.ok) {
             const json = await res.json();
             let pct = null;
@@ -304,8 +308,11 @@ async function buildRiskModel(clientsList, opts = {}) {
             return persisted;
         }
     }
-    // De-dupe concurrent callers (e.g. dashboard + analysis page both trigger a build)
-    if (_riskModelInflight && _riskModelCache.sig === sig) return _riskModelInflight;
+    // De-dupe concurrent callers (Phase-0 warm + CML/SML open + score badges all trigger a
+    // build at once). Match on the IN-FLIGHT signature — which is set before the build
+    // resolves — not the cache sig (only set after), so concurrent builds actually collapse
+    // into one instead of each launching a full ~150-ticker fetch.
+    if (_riskModelInflight && _riskModelInflightSig === sig) return _riskModelInflight;
 
     const build = (async () => {
         const rf = await getRiskFreeRate(force);
@@ -467,8 +474,9 @@ async function buildRiskModel(clientsList, opts = {}) {
     })();
 
     _riskModelInflight = build;
+    _riskModelInflightSig = sig;
     try { return await build; }
-    finally { if (_riskModelInflight === build) _riskModelInflight = null; }
+    finally { if (_riskModelInflight === build) { _riskModelInflight = null; _riskModelInflightSig = null; } }
 }
 
 function _rmEmptyAsset(ticker, meta) {
@@ -823,6 +831,7 @@ function _rmLoadPersistedModel(sig) {
 function invalidateRiskModel() {
     _riskModelCache = { sig: null, ts: 0, model: null };
     _riskModelInflight = null;
+    _riskModelInflightSig = null;
     try { localStorage.removeItem(_RM_PERSIST_KEY); } catch (e) { /* ignore */ }
     if (typeof window !== 'undefined') window._lastRiskModel = null;
     // Drop the cloud mirror too — holdings changed, other devices must not rehydrate it

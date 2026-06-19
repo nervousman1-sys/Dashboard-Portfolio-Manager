@@ -75,7 +75,9 @@ async function supaFetchClients() {
     // Fallback: fetch from Supabase only if no cached ID
     if (!userId) {
         const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user) return [];
+        // No resolved session yet → return null (NOT []), so the caller keeps the cached
+        // portfolios instead of wiping the UI on a transient auth race.
+        if (!user) return null;
         userId = user.id;
         _cachedUserId = userId;
     }
@@ -86,8 +88,10 @@ async function supaFetchClients() {
         .eq('user_id', userId)
         .order('id', { ascending: true });
 
-    if (error) { console.error('supaFetchClients:', error.message); return []; }
-    return data.map(mapPortfolio);
+    // A QUERY ERROR (network/timeout) must NOT look like "0 portfolios" — return null so
+    // the caller preserves the existing list. Only a successful empty result clears the UI.
+    if (error) { console.error('supaFetchClients:', error.message); return null; }
+    return Array.isArray(data) ? data.map(mapPortfolio) : null;
 }
 
 // ========== FETCH SINGLE CLIENT ==========

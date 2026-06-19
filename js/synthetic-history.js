@@ -122,6 +122,15 @@ function _synthRangeFor(outputSize) {
     return '1y';
 }
 
+// fetch() with a hard timeout — a stalled history request must never hang the risk-model
+// build (which awaits these). On timeout the caller falls back / proceeds without it.
+async function _synthFetch(url, opts, ms) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), ms || 12000);
+    try { return await fetch(url, Object.assign({}, opts, { signal: ac.signal })); }
+    finally { clearTimeout(timer); }
+}
+
 async function _fetchYahooHistory(ticker, currency, outputSize) {
     let sym = ticker;
     if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
@@ -131,7 +140,7 @@ async function _fetchYahooHistory(ticker, currency, outputSize) {
     // no CORS, no flaky public proxy). This is what makes the deployed risk model
     // actually receive real price history (and thus non-zero variance/beta).
     try {
-        const res = await fetch(`/api/history?symbol=${encodeURIComponent(sym)}&range=${range}`, { headers: { Accept: 'application/json' } });
+        const res = await _synthFetch(`/api/history?symbol=${encodeURIComponent(sym)}&range=${range}`, { headers: { Accept: 'application/json' } }, 10000);
         if (res.ok) {
             const j = await res.json();
             if (j && Array.isArray(j.points) && j.points.length > 20) return j.points;
@@ -188,8 +197,8 @@ async function prefetchTickerHistories(specs, outputSize) {
     for (let i = 0; i < todo.length; i += 40) chunks.push(todo.slice(i, i + 40));
     await Promise.all(chunks.map(async (chunk) => {
         try {
-            const res = await fetch(`/api/history?symbols=${encodeURIComponent(chunk.map(c => c.sym).join(','))}&range=${range}`,
-                { headers: { Accept: 'application/json' } });
+            const res = await _synthFetch(`/api/history?symbols=${encodeURIComponent(chunk.map(c => c.sym).join(','))}&range=${range}`,
+                { headers: { Accept: 'application/json' } }, 14000);
             if (!res.ok) return;
             const data = await res.json();
             for (const c of chunk) {
