@@ -48,6 +48,15 @@ function formatCurrency(val, sourceCurrency = null) {
     return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 }
 
+// Format an amount IN ITS OWN currency (no conversion to the global display currency).
+// Use for currency-specific lines like "מזומן (ILS)" or an Israeli asset's buy cost, where
+// converting ILS→$ would be wrong/misleading. Israeli assets are quoted & bought in ₪.
+function formatMoneyInCurrency(val, currency) {
+    const v = Number(val) || 0;
+    const sym = currency === 'ILS' ? '₪' : '$';
+    return sym + Math.round(v).toLocaleString(currency === 'ILS' ? 'he-IL' : 'en-US');
+}
+
 function formatNumber(val) {
     return Number(val).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }

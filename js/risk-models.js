@@ -772,8 +772,8 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v5'; // v5: index-tracker proxies (e.g. 5122957→SPY) so trackers aren't no-data
-const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
+const _RM_PERSIST_KEY = 'risk_model_persist_v6'; // v6: stable per-day scoring (no partial-churn)
+const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
     const entry = { sig, ts: Date.now(), model };
@@ -824,11 +824,11 @@ function _rmLoadPersistedModel(sig) {
         if (!raw) return null;
         const entry = JSON.parse(raw);
         if (!entry || entry.sig !== sig || !entry.model) return null;
-        // A COMPLETE model is good for the full TTL; a PARTIAL one (some history missing)
-        // is reused only for 1h so missing data re-attempts hourly — but stays stable within
-        // that window instead of churning a new score every 20s.
-        const ttl = entry.model.partial ? 60 * 60 * 1000 : _RM_PERSIST_TTL;
-        if (Date.now() - entry.ts > ttl) return null;
+        // Reuse for the full TTL whether partial or not. (Previously partial models expired
+        // after 1h, which made the score visibly change ~hourly with no portfolio change —
+        // exactly the "73 then 77 later" the user reported.) The score now stays CONSTANT
+        // until the holdings actually change (signature) or the TTL rolls over a full day.
+        if (Date.now() - entry.ts > _RM_PERSIST_TTL) return null;
         console.log(`[RiskModel] Instant model from persisted cache${entry.model.partial ? ' (partial)' : ''}`);
         return entry.model;
     } catch (e) { return null; }

@@ -1450,11 +1450,11 @@ function openMgmtModal(action, data) {
             <div class="mgmt-body">
                 <div class="cash-balance-display">
                     <span>מזומן (USD):</span>
-                    <span class="cash-amount">${formatCurrency(cashUsd, 'USD')}</span>
+                    <span class="cash-amount">${formatMoneyInCurrency(cashUsd, 'USD')}</span>
                 </div>
                 <div class="cash-balance-display">
                     <span>מזומן (ILS):</span>
-                    <span class="cash-amount">${formatCurrency(cashIls, 'ILS')}</span>
+                    <span class="cash-amount">${formatMoneyInCurrency(cashIls, 'ILS')}</span>
                 </div>
                 <input type="hidden" id="mgmt-available-cash-usd" value="${cashUsd}" />
                 <input type="hidden" id="mgmt-available-cash-ils" value="${cashIls}" />
@@ -1490,7 +1490,7 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>יעד / טייק-פרופיט (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-target" placeholder="מחיר יעד למימוש" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">$0</span></div>
-                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(cashUsd, 'USD')}</span></div>
+                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatMoneyInCurrency(cashUsd, 'USD')}</span></div>
                     <div class="insufficient-cash-warning" id="mgmt-cash-warning" style="display:none">אין מספיק מזומן בתיק</div>
                 </div>
             </div>
@@ -1511,8 +1511,8 @@ function openMgmtModal(action, data) {
         html = `
             <div class="mgmt-header"><h3>קניית ${_mEsc(buyDisplayName)}</h3><button class="modal-close" onclick="closeMgmtModal()">&times;</button></div>
             <div class="mgmt-body">
-                <div class="cash-balance-display"><span>מזומן (USD):</span><span class="cash-amount">${formatCurrency(cashUsd, 'USD')}</span></div>
-                <div class="cash-balance-display"><span>מזומן (ILS):</span><span class="cash-amount">${formatCurrency(cashIls, 'ILS')}</span></div>
+                <div class="cash-balance-display"><span>מזומן (USD):</span><span class="cash-amount">${formatMoneyInCurrency(cashUsd, 'USD')}</span></div>
+                <div class="cash-balance-display"><span>מזומן (ILS):</span><span class="cash-amount">${formatMoneyInCurrency(cashIls, 'ILS')}</span></div>
                 <input type="hidden" id="mgmt-available-cash-usd" value="${cashUsd}" />
                 <input type="hidden" id="mgmt-available-cash-ils" value="${cashIls}" />
                 <input type="hidden" id="mgmt-asset-type" value="${h.type}" />
@@ -1535,7 +1535,7 @@ function openMgmtModal(action, data) {
                 <div class="mgmt-field"><label>יעד / טייק-פרופיט (אופציונלי)</label><input type="text" inputmode="decimal" id="mgmt-target" value="${(typeof _orderAnnGet === 'function' && _orderAnnGet(c.id, h.ticker)?.target) ? formatPrice(_orderAnnGet(c.id, h.ticker).target) : ''}" placeholder="מחיר יעד למימוש" style="direction:ltr;text-align:left" oninput="formatInputWithCommas(this)" /></div>
                 <div class="buy-cost-summary">
                     <div class="buy-cost-row"><span>סה"כ עלות:</span><span id="mgmt-buy-total">${buyCurLabel}0</span></div>
-                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatCurrency(h.currency === 'ILS' ? cashIls : cashUsd, h.currency || 'USD')}</span></div>
+                    <div class="buy-cost-row"><span>יתרה לאחר קניה:</span><span id="mgmt-buy-remaining">${formatMoneyInCurrency(h.currency === 'ILS' ? cashIls : cashUsd, h.currency || 'USD')}</span></div>
                     <div class="insufficient-cash-warning" id="mgmt-cash-warning" style="display:none">אין מספיק מזומן בתיק</div>
                 </div>
             </div>
@@ -1836,12 +1836,24 @@ function updateBuyCost() {
     const warningEl = document.getElementById('mgmt-cash-warning');
     const buyBtn = document.getElementById('mgmt-buy-btn');
 
-    if (totalEl) totalEl.textContent = formatCurrency(total, currency);
+    // Show the cost/remaining IN THE ASSET'S OWN CURRENCY (Israeli assets trade in ₪ only) —
+    // not converted to the global display currency.
+    if (totalEl) totalEl.textContent = formatMoneyInCurrency(total, currency);
     if (remainingEl) {
-        remainingEl.textContent = formatCurrency(Math.max(0, remaining), currency);
+        remainingEl.textContent = formatMoneyInCurrency(Math.max(0, remaining), currency);
         remainingEl.style.color = remaining < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
     }
-    if (warningEl) warningEl.style.display = (total > 0 && remaining < 0) ? '' : 'none';
+    if (warningEl) {
+        const short = total > 0 && remaining < 0;
+        warningEl.style.display = short ? '' : 'none';
+        if (short) {
+            // Israeli assets can only be bought with shekels — guide the user to convert/deposit.
+            const usdCash = parseFloat(document.getElementById('mgmt-available-cash-usd')?.value) || 0;
+            warningEl.textContent = (currency === 'ILS' && usdCash > 0)
+                ? 'אין מספיק מזומן בשקלים — נכס ישראלי נרכש בשקלים בלבד. המר דולרים לשקלים (הפקדה/המרה) או הפקד שקלים.'
+                : 'אין מספיק מזומן בתיק';
+        }
+    }
     if (buyBtn) buyBtn.disabled = (total > 0 && remaining < 0);
 }
 
