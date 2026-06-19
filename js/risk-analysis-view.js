@@ -1250,9 +1250,23 @@ async function openStockRecommendations(clientId, _fromHistory) {
 }
 
 // Fetch MA200/WMA200/Weekly-RSI/FVG for the candidate tickers and return them as a
-// { ticker -> scanResult } map (also cached in-session). Passed straight to the scorer.
+// { ticker -> scanResult } map. Cached in-session AND in localStorage (daily) so the
+// second open of recommendations — even in a new session the same day — is instant.
 const _recoTechCache = {};
+let _recoTechCacheHydrated = false;
+function _recoHydrateTechCache() {
+    if (_recoTechCacheHydrated) return;
+    _recoTechCacheHydrated = true;
+    try {
+        const c = JSON.parse(localStorage.getItem('reco_tech_v1') || '{}');
+        if (c && c.day === new Date().toISOString().slice(0, 10) && c.data) Object.assign(_recoTechCache, c.data);
+    } catch (e) { /* ignore */ }
+}
+function _recoPersistTechCache() {
+    try { localStorage.setItem('reco_tech_v1', JSON.stringify({ day: new Date().toISOString().slice(0, 10), data: _recoTechCache })); } catch (e) { /* quota — session cache still serves */ }
+}
 async function _recoFetchTechMap(tickers) {
+    _recoHydrateTechCache();
     const out = {};
     const need = [];
     for (const t of [...new Set(tickers)]) {
@@ -1269,6 +1283,7 @@ async function _recoFetchTechMap(tickers) {
                 if (j && j.results) for (const [k, v] of Object.entries(j.results)) { _recoTechCache[k] = v; out[k] = v; }
             } catch (e) { /* skip batch */ }
         }
+        _recoPersistTechCache();
     }
     return out;
 }

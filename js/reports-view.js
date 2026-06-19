@@ -738,6 +738,8 @@ function _repSummaryHtml(s) {
         row('ענף שנפגע', s.hurtDivision),
         row('סיבות לירידה ברווחיות/תזרים', s.declineReasons),
         row('השקעות מרכזיות', s.investments),
+        row('מיקוד המחקר והפיתוח (לאיזו חטיבה)', s.rdFocus),
+        row('שותפויות אסטרטגיות', s.partnerships),
         row('לקוחות ושווקים מרכזיים', s.keyCustomers),
         row('חוזים ועסקאות גדולות לאחרונה', s.recentDeals),
         row('עסקאות בעלי עניין (בעיקר קניות)', s.insiderActivity),
