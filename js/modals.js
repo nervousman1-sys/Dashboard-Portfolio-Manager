@@ -1204,9 +1204,14 @@ function generateAllPortfoliosReport() {
 // → scaled to shekels. Cells are patched in place by id, no full re-render.
 async function _enrichHoldings52w(client) {
     if (!client || !Array.isArray(client.holdings)) return;
-    const targets = client.holdings.filter(h => h.type === 'stock' && h.id != null && !(h.yearHigh > 0 && h.yearLow > 0));
+    const proxyOf = (h) => (typeof _proxySymbolFor === 'function') ? _proxySymbolFor(h.ticker) : null;
+    // Include stocks AND any holding with an index proxy (e.g. an Israeli S&P-500 KTF that
+    // isn't on Yahoo — we derive its ₪ 52-week range from the underlying index it tracks).
+    const targets = client.holdings.filter(h => h.id != null && !(h.yearHigh > 0 && h.yearLow > 0) && (h.type === 'stock' || proxyOf(h)));
     if (!targets.length) return;
     const symOf = (h) => {
+        const proxy = proxyOf(h);
+        if (proxy) return proxy;
         const t = (h.ticker || '').toUpperCase();
         if (!t) return '';
         if (h.currency === 'ILS') {
@@ -1226,10 +1231,19 @@ async function _enrichHoldings52w(client) {
             const q = data[s];
             if (!q) continue;
             const k = (q.currency === 'ILA') ? 0.01 : 1; // agorot → shekels
-            const yh = q.yearHigh > 0 ? q.yearHigh * k : null;
-            const yl = q.yearLow > 0 ? q.yearLow * k : null;
             for (const h of bySym[s]) {
                 const cur = h.currency === 'ILS' ? '₪' : '$';
+                let yh, yl;
+                if (proxyOf(h) && q.price > 0 && h.price > 0) {
+                    // Proxied tracker: scale the index's 52-week range by the fund's own price,
+                    // so the ₪ high/low match the fund's scale (not the index's).
+                    const scale = h.price / q.price;
+                    yh = q.yearHigh > 0 ? q.yearHigh * scale : null;
+                    yl = q.yearLow > 0 ? q.yearLow * scale : null;
+                } else {
+                    yh = q.yearHigh > 0 ? q.yearHigh * k : null;
+                    yl = q.yearLow > 0 ? q.yearLow * k : null;
+                }
                 if (yh) { h.yearHigh = yh; const c = document.getElementById('yh_' + h.id); if (c) c.innerHTML = `${formatPrice(yh)} ${cur}`; }
                 if (yl) { h.yearLow = yl; const c = document.getElementById('yl_' + h.id); if (c) c.innerHTML = `${formatPrice(yl)} ${cur}`; }
             }

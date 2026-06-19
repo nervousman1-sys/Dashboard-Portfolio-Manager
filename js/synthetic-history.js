@@ -131,9 +131,22 @@ async function _synthFetch(url, opts, ms) {
     finally { clearTimeout(timer); }
 }
 
+// Israeli index ETFs / KTFs that aren't on Yahoo → fetch the UNDERLYING index they track
+// as a return proxy (β/σ/α come out accurate). Currency-hedged trackers map to the index in
+// its native currency, since the hedge removes the FX leg.
+const _TICKER_PROXY = {
+    '5122957': 'SPY',  // קסם S&P 500 KTF מנוטרלת מט"ח (currency-hedged S&P 500)
+};
+function _proxySymbolFor(ticker) {
+    const base = String(ticker || '').replace(/\.TA$/i, '').replace(/:TASE$/i, '');
+    return _TICKER_PROXY[base] || null;
+}
+
 async function _fetchYahooHistory(ticker, currency, outputSize) {
     let sym = ticker;
-    if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
+    const proxy = _proxySymbolFor(ticker);
+    if (proxy) sym = proxy;  // underlying-index proxy (USD); skip the .TA suffixing below
+    else if (currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
     const range = _synthRangeFor(outputSize);
 
     // PRIMARY: same-origin serverless proxy (server-side Yahoo fetch — 100% reliable,
@@ -184,7 +197,9 @@ async function prefetchTickerHistories(specs, outputSize) {
         if (_sessionTickerCache[s.ticker]) continue;
         if (_getTickerFromLS(s.ticker, outputSize)) continue; // warm LS → per-ticker path will hit it
         let sym = s.ticker;
-        if (s.currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
+        const proxy = _proxySymbolFor(s.ticker);
+        if (proxy) sym = proxy;  // index-tracker proxy (e.g. 5122957 → SPY)
+        else if (s.currency === 'ILS' && !/\.TA$/i.test(sym)) sym = sym.replace(/:TASE$/i, '') + '.TA';
         todo.push({ ticker: s.ticker, sym });
     }
     if (!todo.length) return 0;

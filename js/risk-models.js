@@ -772,7 +772,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v4'; // v4: full ~10-12/sector universe (every name sector-mapped)
+const _RM_PERSIST_KEY = 'risk_model_persist_v5'; // v5: index-tracker proxies (e.g. 5122957→SPY) so trackers aren't no-data
 const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
 
 function _rmPersistModel(sig, model) {
