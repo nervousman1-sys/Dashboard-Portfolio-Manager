@@ -194,6 +194,49 @@ const SECTOR_COLORS = {
 
 const COLORS = { profit: '#22c55e', loss: '#ef4444', neutral: '#3b82f6', bonds: '#a855f7' };
 
+// Known US ETFs / index funds — tagged "תעודת סל" instead of "מניה" (e.g. SPY = S&P 500 ETF).
+const US_ETF_TICKERS = new Set([
+    // Broad market / index
+    'SPY', 'VOO', 'IVV', 'VTI', 'VT', 'QQQ', 'QQQM', 'ONEQ', 'DIA', 'IWM', 'IWB', 'IWV', 'RSP', 'MDY', 'IJH', 'IJR', 'VB', 'VO', 'VV', 'SCHX', 'SCHB', 'ITOT',
+    // Style / factor
+    'VUG', 'VTV', 'IWF', 'IWD', 'SCHG', 'SCHD', 'VYM', 'VIG', 'DGRO', 'MOAT', 'QUAL', 'MTUM', 'USMV', 'SPLG',
+    // Income
+    'JEPI', 'JEPQ', 'DIVO', 'SCHY',
+    // International
+    'VEA', 'VWO', 'EEM', 'EFA', 'IEFA', 'IEMG', 'VXUS', 'ACWI', 'EWJ', 'EWZ', 'FXI', 'MCHI', 'INDA', 'EWG', 'EWU', 'EWT', 'EWY',
+    // Bonds
+    'AGG', 'BND', 'BNDX', 'LQD', 'HYG', 'JNK', 'TLT', 'IEF', 'SHY', 'GOVT', 'TIP', 'VCIT', 'VCSH', 'MUB', 'BIL', 'SGOV', 'VGIT', 'VGLT',
+    // Commodities / crypto
+    'GLD', 'IAU', 'GLDM', 'SGOL', 'SLV', 'USO', 'UNG', 'DBC', 'PDBC', 'IBIT', 'FBTC', 'GBTC', 'ARKB', 'BITO', 'ETHE',
+    // Sector / industry
+    'SOXX', 'SMH', 'XSD', 'VGT', 'IYW', 'FTEC', 'VHT', 'IYH', 'IBB', 'XBI', 'VFH', 'IYF', 'KRE', 'KBE', 'VDE', 'IYE', 'VCR', 'VDC', 'VIS', 'VOX', 'VAW', 'VPU', 'VNQ', 'IYR', 'ITB', 'XHB', 'JETS', 'TAN', 'ICLN', 'LIT', 'XME', 'GDX', 'GDXJ',
+    // Thematic
+    'ARKK', 'ARKG', 'ARKW', 'ARKF', 'BOTZ', 'ROBO', 'AIQ', 'IRBO', 'ROBT', 'HACK', 'CIBR', 'SKYY', 'FINX', 'MJ',
+]);
+function isUsEtf(ticker) {
+    const t = String(ticker || '').replace(/\.TA$/i, '').toUpperCase();
+    if (!t) return false;
+    if (US_ETF_TICKERS.has(t)) return true;
+    if (/^XL[A-Z]{1,2}$/.test(t)) return true;   // SPDR sector ETFs (XLF, XLK, XLRE…)
+    return false;
+}
+// The Hebrew asset-type label for a holding's badge. ETFs (US known set + Israeli funds
+// resolved from local sources) are tagged correctly instead of the default "מניה".
+function assetTypeLabel(h) {
+    if (!h) return '';
+    const t = String(h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+    if (isUsEtf(t)) return 'תעודת סל';
+    if (typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[t] && window._ilFundInfo[t].type) return window._ilFundInfo[t].type;
+    if (h.typeLabel) return h.typeLabel;
+    return h.type === 'bond' ? 'אג"ח' : h.type === 'index' ? 'מדד' : h.type === 'crypto' ? 'קריפטו' : 'מניה';
+}
+// True if a holding should be treated/styled as a fund/ETF (for the badge class).
+function isFundLike(h) {
+    if (!h) return false;
+    const t = String(h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+    return isUsEtf(t) || !!(typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[t]);
+}
+
 // Macro event category mapping for Hebrew labels
 const MACRO_CATEGORY_MAP = {
     'Inflation Rate': 'אינפלציה', 'Core Inflation Rate': 'אינפלציה', 'CPI': 'אינפלציה',

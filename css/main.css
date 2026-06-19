@@ -4302,6 +4302,12 @@ body.filter-modal-open::after {
     color: var(--accent-purple);
 }
 
+/* ETFs / tracking funds (תעודת סל / קרן סל) — teal, distinct from single stocks */
+.asset-type-badge.fund {
+    background: rgba(20, 184, 166, 0.15);
+    color: #2dd4bf;
+}
+
 .price-change.positive {
     color: var(--accent-green);
 }

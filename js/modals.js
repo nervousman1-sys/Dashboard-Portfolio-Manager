@@ -206,7 +206,7 @@ function _buildHoldingsTable(client) {
                     <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
                     ${subName}
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-                        <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
+                        <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>
                         ${_recChip}
                         ${_orderChip}
                     </span>
@@ -370,7 +370,7 @@ async function openModal(clientId) {
                     <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
                     ${subName}
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-                        <span class="asset-type-badge ${h.type}" style="font-size:10px;width:fit-content">${h.typeLabel}</span>
+                        <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>
                         ${_recChip}
                         ${_orderChip}
                     </span>
