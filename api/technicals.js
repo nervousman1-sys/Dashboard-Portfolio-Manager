@@ -28,10 +28,15 @@ const _SP_SECTORS = {};
 
 // Curated GICS sectors for Nasdaq-100 (and similar) names NOT in the S&P 500 table,
 // so they don't fall into "Other". Keys use Yahoo-style tickers.
+// Crypto-exposed names — classified "Crypto" to MATCH THE DASHBOARD taxonomy (GICS puts
+// them under IT/Financials, which made e.g. MSTR show as "Information Technology" on the
+// reports board while the dashboard shows "Crypto"). This override wins over GICS.
+const _CRYPTO_OVERRIDE = new Set(['MSTR', 'COIN', 'MARA', 'RIOT', 'CLSK', 'HUT', 'BITF', 'CIFR', 'WULF', 'IBIT', 'GBTC', 'BITO', 'HOOD']);
+
 const _EXTRA_SECTORS = {
     // Information Technology
     ASML: 'Information Technology', ARM: 'Information Technology', MRVL: 'Information Technology',
-    MSTR: 'Information Technology', SHOP: 'Information Technology', ZS: 'Information Technology',
+    SHOP: 'Information Technology', ZS: 'Information Technology',
     CRWD: 'Information Technology', PANW: 'Information Technology', DDOG: 'Information Technology',
     SNPS: 'Information Technology', CDNS: 'Information Technology', NXPI: 'Information Technology',
     // Communication Services
@@ -308,7 +313,7 @@ module.exports = async (req, res) => {
             const all = [...new Set([...sp, ...ndx])].filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t)).sort();
             if (all.length < 100) throw new Error(`constituent parse too small: ${all.length}`);
             const sectors = {};
-            all.forEach(t => { const s = _SP_SECTORS[t] || _EXTRA_SECTORS[t]; if (s) sectors[t] = s; });
+            all.forEach(t => { const s = _CRYPTO_OVERRIDE.has(t) ? 'Crypto' : (_SP_SECTORS[t] || _EXTRA_SECTORS[t]); if (s) sectors[t] = s; });
             res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
             res.status(200).json({ tickers: all, sectors, sp500: sp.length, ndx100: ndx.length, asOf: new Date().toISOString().slice(0, 10) });
             return;

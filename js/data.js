@@ -166,7 +166,7 @@ const SECTOR_MAP = {
     'NEE': 'Utilities', 'SO': 'Utilities',
     'PLD': 'Real Estate',
     'MSTR': 'Crypto', 'IBIT': 'Crypto', 'BITO': 'Crypto', 'GBTC': 'Crypto',
-    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto'
+    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto', 'HOOD': 'Crypto'
 };
 
 const SECTOR_COLORS = {

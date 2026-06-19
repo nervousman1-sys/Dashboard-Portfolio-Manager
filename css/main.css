@@ -9639,6 +9639,13 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 .rep-swot-o { border-top: 2px solid var(--accent-blue); }  .rep-swot-o .rep-swot-h { color: var(--accent-blue); }
 .rep-swot-t { border-top: 2px solid var(--accent-orange); }.rep-swot-t .rep-swot-h { color: var(--accent-orange); }
 
+/* ── Short business summary ── */
+.rep-summary { display: flex; flex-direction: column; gap: 8px; }
+.rep-sum-row { display: grid; grid-template-columns: 190px 1fr; gap: 12px; padding: 10px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); }
+.rep-sum-label { font-size: 13px; font-weight: 800; color: var(--accent-blue); }
+.rep-sum-val { font-size: 14px; line-height: 1.7; color: var(--text-primary); }
+@media (max-width: 640px) { .rep-sum-row { grid-template-columns: 1fr; gap: 3px; } }
+
 /* ── Strategy ── */
 .rep-strategy { display: flex; flex-direction: column; gap: 12px; }
 .rep-strat-part { padding: 12px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); }

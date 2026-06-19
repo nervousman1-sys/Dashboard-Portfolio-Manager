@@ -360,9 +360,18 @@ async function init() {
 
         // New computer? Pull today's CML/SML model from the cloud cache BEFORE the
         // first build — the page then renders the model instantly instead of
-        // refetching ~70 ticker histories and recomputing from scratch.
+        // refetching ~70 ticker histories and recomputing from scratch. Then warm
+        // the model RIGHT AWAY (it derives from history, not live prices), so opening
+        // a portfolio's CML/SML tab is instant instead of triggering a cold build.
+        const _warmRiskModel = () => {
+            if (typeof buildRiskModel === 'function' && typeof clients !== 'undefined' && clients.length) {
+                buildRiskModel(clients).catch(() => { });
+            }
+        };
         if (typeof rmHydrateModelFromCloud === 'function') {
-            rmHydrateModelFromCloud().catch(() => { });
+            rmHydrateModelFromCloud().then(_warmRiskModel).catch(_warmRiskModel);
+        } else {
+            _warmRiskModel();
         }
 
         // onUpdate callback — called incrementally as each price batch arrives

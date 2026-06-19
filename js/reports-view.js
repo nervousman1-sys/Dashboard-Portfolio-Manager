@@ -11,8 +11,8 @@
 // come from /api/report-ai (Gemini), loaded async into the detail view.
 
 const _REP_MKT = {
-    us: { ls: 'rep_uni_us_v2', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
-    il: { ls: 'rep_uni_il_v2', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
+    us: { ls: 'rep_uni_us_v3', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
+    il: { ls: 'rep_uni_il_v3', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
 };
 const _REP_SCORES_LS = 'rep_scores_v1';
 
@@ -23,6 +23,7 @@ let _repSearch = '';
 
 // GICS sector → Hebrew label (for grouping the board).
 const _REP_SECTOR_HE = {
+    'Crypto': 'קריפטו',
     'Information Technology': 'טכנולוגיית מידע',
     'Health Care': 'בריאות',
     'Financials': 'פיננסים',
@@ -66,7 +67,7 @@ const _REP_SECTOR_HE = {
     'Industry - Wood & Paper': 'תעשייה — עץ ונייר',
     'Defense': 'ביטחון',
 };
-const _REP_SECTOR_ORDER = ['Information Technology', 'Communication Services', 'Health Care', 'Financials', 'Consumer Discretionary', 'Consumer Staples', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials',
+const _REP_SECTOR_ORDER = ['Information Technology', 'Communication Services', 'Health Care', 'Financials', 'Consumer Discretionary', 'Consumer Staples', 'Industrials', 'Energy', 'Utilities', 'Real Estate', 'Materials', 'Crypto',
     // IL TA-125 sectors (by prevalence)
     'Banks', 'Insurance', 'Financial Services', 'Investment & Holdings', 'Real-Estate & Construction', 'Construction',
     'Internet And Software', 'IT Services', 'Semiconductors', 'Electronics And Optics', 'Communications Equipment', 'Communications & Media',
@@ -195,7 +196,7 @@ async function _repLoadUniverse() {
     try {
         // IL: stocksOnly=1 → real TA-125 companies only (no index-tracking ETFs/funds,
         // which have no financial statements and would never get a score).
-        const url = `/api/technicals?mode=tickers&market=${mkt}` + (mkt === 'il' ? '&stocksOnly=1' : '');
+        const url = `/api/technicals?mode=tickers&market=${mkt}&sv=2` + (mkt === 'il' ? '&stocksOnly=1' : '');
         const r = await fetch(url, { headers: { Accept: 'application/json' } });
         const j = await r.json();
         let tickers = (j.tickers || []).slice();
@@ -530,6 +531,9 @@ function _repRenderDetail(m) {
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
         </div>
 
+        <div class="rep-section-title">סיכום קצר</div>
+        <div id="repSummary" class="rep-summary"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר סיכום עסקי…</div></div>
+
         <div class="rep-section-title">נקודות מפתח מהדוח</div>
         <ul class="rep-keypoints">${keyPointsHtml}</ul>
 
@@ -692,6 +696,7 @@ function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 
 // ── AI SWOT + strategy (async, fills the placeholders) ──
 async function _repLoadAI(m) {
+    const summaryEl = document.getElementById('repSummary');
     const swotEl = document.getElementById('repSwot');
     const stratEl = document.getElementById('repStrategy');
     const risksEl = document.getElementById('repRisks');
@@ -704,6 +709,7 @@ async function _repLoadAI(m) {
         });
         const j = await r.json();
         if (!r.ok || j.error || !j.swot) throw new Error(j.message || 'ai failed');
+        if (summaryEl) summaryEl.innerHTML = _repSummaryHtml(j.summary || {});
         if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot);
         if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
         if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
@@ -715,10 +721,28 @@ async function _repLoadAI(m) {
         });
     } catch (e) {
         const msg = '<div class="adv-empty">ניתוח ה-AI אינו זמין כעת (ייתכן מכסת Gemini). נסה שוב מאוחר יותר.</div>';
-        if (swotEl) swotEl.innerHTML = msg;
+        if (summaryEl) summaryEl.innerHTML = msg;
+        if (swotEl) swotEl.innerHTML = '';
         if (stratEl) stratEl.innerHTML = '';
         if (risksEl) risksEl.innerHTML = '';
     }
+}
+// Short business summary: activity sector, growth/hurt divisions, decline reasons,
+// investments, key customers, recent deals, and recent insider activity.
+function _repSummaryHtml(s) {
+    s = s || {};
+    const row = (label, txt) => txt ? `<div class="rep-sum-row"><span class="rep-sum-label">${label}</span><span class="rep-sum-val">${txt}</span></div>` : '';
+    const html = [
+        row('סקטור ותחום פעילות', s.activitySector),
+        row('מנוע הצמיחה העיקרי', s.mainGrowthDivision),
+        row('ענף שנפגע', s.hurtDivision),
+        row('סיבות לירידה ברווחיות/תזרים', s.declineReasons),
+        row('השקעות מרכזיות', s.investments),
+        row('לקוחות ושווקים מרכזיים', s.keyCustomers),
+        row('חוזים ועסקאות גדולות לאחרונה', s.recentDeals),
+        row('עסקאות בעלי עניין (בעיקר קניות)', s.insiderActivity),
+    ].join('');
+    return html || '<div class="adv-empty">לא נוצר סיכום.</div>';
 }
 function _repRisksHtml(rk) {
     rk = rk || {};

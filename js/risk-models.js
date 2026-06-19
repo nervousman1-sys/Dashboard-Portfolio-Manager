@@ -73,9 +73,10 @@ const RISK_MODEL = {
         // Materials / Utilities / Real estate (sector leaders)
         'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'NEE', 'SO', 'DUK', 'CEG', 'AEP',
         'PLD', 'AMT', 'EQIX', 'WELL', 'SPG',
-        // Semis / global tech leaders + crypto-exposed
-        'TSM', 'ASML', 'BRK-B', 'TMUS', 'COIN', 'MARA', 'RIOT', 'MSTR',
-        'MU', 'LRCX', 'AMAT', 'ARM', 'KLAC', 'PLTR',
+        // Semis / global tech leaders
+        'TSM', 'ASML', 'BRK-B', 'TMUS', 'MU', 'LRCX', 'AMAT', 'ARM', 'KLAC', 'PLTR',
+        // Crypto-exposed (kept ≥5 deep so the same-sector swap has 5-10 to cycle)
+        'COIN', 'MARA', 'RIOT', 'MSTR', 'CLSK', 'HOOD',
         // Broad / sector ETFs (every sector covered so each stock list is scannable)
         'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
         'XLY', 'XLC', 'XLB', 'XLU', 'XLRE', 'SOXX', 'SMH',
@@ -750,7 +751,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v2'; // v2: expanded scan universe (sector leaders)
+const _RM_PERSIST_KEY = 'risk_model_persist_v3'; // v3: crypto bench deepened (CLSK/HOOD) for the same-sector swap
 const _RM_PERSIST_TTL = 6 * 60 * 60 * 1000; // 6h — stats are 1Y dailies, intraday drift is negligible
 
 function _rmPersistModel(sig, model) {
