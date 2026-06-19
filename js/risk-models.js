@@ -464,12 +464,17 @@ async function buildRiskModel(clientsList, opts = {}) {
             marketOk,
         };
 
-        // If any portfolio's risky book is still mostly market-proxy (history not yet
-        // loaded), the verdicts aren't final. Cache only briefly and DON'T persist, so
-        // the next load recomputes with full data — and the verdict then stays put.
+        // Cache the FULL model normally. Previously a "partial" model (some holding's
+        // history not loaded) was cached with a near-expired timestamp → it rebuilt every
+        // ~20s, and because each rebuild re-fetched data that drifts slightly (or a ticker
+        // flipped loaded/not-loaded), the SCORE kept changing with no real portfolio change.
+        // That churn is the "different score without any change" bug. Cache + persist
+        // identically whether partial or not, so the verdict is STABLE and DETERMINISTIC for
+        // a session; truly-missing data (e.g. an illiquid ticker) re-attempts only on a real
+        // refresh or a holdings change — it never silently flip-flops.
         model.partial = portfolios.some(p => p && p.partial);
-        _riskModelCache = { sig, ts: model.partial ? (Date.now() - RISK_MODEL.CACHE_TTL + 20000) : Date.now(), model };
-        if (!model.partial) _rmPersistModel(sig, model);
+        _riskModelCache = { sig, ts: Date.now(), model };
+        _rmPersistModel(sig, model);
         return model;
     })();
 
@@ -819,8 +824,12 @@ function _rmLoadPersistedModel(sig) {
         if (!raw) return null;
         const entry = JSON.parse(raw);
         if (!entry || entry.sig !== sig || !entry.model) return null;
-        if (Date.now() - entry.ts > _RM_PERSIST_TTL) return null;
-        console.log('[RiskModel] Instant model from persisted cache');
+        // A COMPLETE model is good for the full TTL; a PARTIAL one (some history missing)
+        // is reused only for 1h so missing data re-attempts hourly — but stays stable within
+        // that window instead of churning a new score every 20s.
+        const ttl = entry.model.partial ? 60 * 60 * 1000 : _RM_PERSIST_TTL;
+        if (Date.now() - entry.ts > ttl) return null;
+        console.log(`[RiskModel] Instant model from persisted cache${entry.model.partial ? ' (partial)' : ''}`);
         return entry.model;
     } catch (e) { return null; }
 }
