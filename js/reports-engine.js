@@ -345,6 +345,12 @@
         const insStr = ins && ins.length
             ? ins.slice(0, 6).map(x => `${x.date} ${x.type === 'buy' ? 'קנייה' : 'מכירה'} ${x.name || ''}${x.role ? ' (' + x.role + ')' : ''}${x.value != null ? ' ~' + fmtMoney(x.value) : (x.shares != null ? ' ' + x.shares.toLocaleString('en-US') + ' מניות' : '')}`).join('; ')
             : null;
+        // GRANULAR per-quarter trend (last 6 q) — the raw numbers the AI must use to derive
+        // PRECISE, data-grounded conclusions (e.g. exactly why FCF/margins moved) instead of
+        // generic guesses. Each line is one quarter, newest first.
+        const fmtPp = (x) => isNum(x) ? (x * 100).toFixed(1) + '%' : '—';
+        const qLine = (r) => `${r.date}: הכנסה ${fmtMoney(r.revenue) || '—'} (YoY ${fmtPp(r.yoyRevenue)}), שולי-גולמי ${fmtPp(r.grossMargin)}, שולי-תפעולי ${fmtPp(r.operatingMargin)}, שולי-נקי ${fmtPp(r.netMargin)}, רווח-נקי ${fmtMoney(r.netIncome) || '—'} (YoY ${fmtPp(r.yoyNetIncome)}), תזרים-תפעולי ${fmtMoney(r.operatingCashFlow) || '—'}, CapEx ${fmtMoney(r.capex) || '—'}, FCF ${fmtMoney(r.fcf) || '—'}, מו"פ ${fmtMoney(r.rd) || '—'}, חוב ${fmtMoney(r.totalDebt) || '—'}, מזומן ${fmtMoney(r.cash) || '—'}`;
+        const quartersTable = rows.slice(0, 6).map(qLine).join('\n');
         return {
             company: model.companyName,
             symbol: model.symbol,
@@ -368,6 +374,7 @@
             industry: model.industry || null,
             rdExpenseTTM: rdStr,                 // real R&D spend → "what they develop" context
             recentInsiderTrades: insStr,         // real recent insider transactions (US)
+            quartersTable,                       // granular per-quarter numbers for precise grounding
         };
     }
 

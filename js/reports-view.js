@@ -731,11 +731,18 @@ async function _repLoadAI(m) {
 // investments, key customers, recent deals, and recent insider activity.
 function _repSummaryHtml(s) {
     s = s || {};
-    const row = (label, txt) => txt ? `<div class="rep-sum-row"><span class="rep-sum-label">${label}</span><span class="rep-sum-val">${txt}</span></div>` : '';
+    // dot: 'up' → green, 'down' → red, '' → none.
+    const row = (label, txt, dot) => txt
+        ? `<div class="rep-sum-row"><span class="rep-sum-label">${dot ? `<span class="rep-sum-dot rep-sum-dot-${dot}"></span>` : ''}${label}</span><span class="rep-sum-val">${txt}</span></div>`
+        : '';
+    const growth = s.growthDivision || s.mainGrowthDivision;  // back-compat with older field name
+    const hurtTxt = s.hurtDivision || '';
+    // A "not hurt" answer shouldn't get a red dot — only flag red when a segment truly declined.
+    const hurtIsNeg = hurtTxt && !/לא נפגע|אין סגמנט|לא זוהה|יציב|צומח/.test(hurtTxt);
     const html = [
         row('סקטור ותחום פעילות', s.activitySector),
-        row('מנוע הצמיחה העיקרי', s.mainGrowthDivision),
-        row('ענף שנפגע', s.hurtDivision),
+        row('ענף שצומח', growth, 'up'),
+        row('ענף שנפגע', hurtTxt, hurtIsNeg ? 'down' : ''),
         row('סיבות לירידה ברווחיות/תזרים', s.declineReasons),
         row('השקעות מרכזיות', s.investments),
         row('מיקוד המחקר והפיתוח (לאיזו חטיבה)', s.rdFocus),

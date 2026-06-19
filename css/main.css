@@ -9643,6 +9643,9 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 .rep-summary { display: flex; flex-direction: column; gap: 8px; }
 .rep-sum-row { display: grid; grid-template-columns: 190px 1fr; gap: 12px; padding: 10px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); }
 .rep-sum-label { font-size: 13px; font-weight: 800; color: var(--accent-blue); }
+.rep-sum-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
+.rep-sum-dot-up { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.7); }
+.rep-sum-dot-down { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.7); }
 .rep-sum-val { font-size: 14px; line-height: 1.7; color: var(--text-primary); }
 @media (max-width: 640px) { .rep-sum-row { grid-template-columns: 1fr; gap: 3px; } }
 
