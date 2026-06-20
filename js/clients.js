@@ -8,9 +8,12 @@
 
 function calcPortfolioValue(client) {
     const fx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
-    const holdingsValue = client.holdings.reduce((sum, h) => sum + (h.shares * h.price) * fx(h.currency), 0);
-    const cashUsd = (client.cash_usd || 0) + (client.cash_ils || 0) * fx('ILS');
-    return holdingsValue + (cashUsd || client.cashBalance || 0);
+    // Use the canonical per-holding value (falls back to shares×price), FX-converted to USD.
+    const holdingsValue = client.holdings.reduce((sum, h) => sum + ((h.value != null ? h.value : (h.shares || 0) * (h.price || 0)) * fx(h.currency)), 0);
+    // Cash lives in the nested cash:{usd,ils} bucket (see mapPortfolio). FX-convert the ILS leg;
+    // only fall back to the legacy flat cashBalance when the cash object is entirely absent.
+    const cashUsd = client.cash ? ((client.cash.usd || 0) + (client.cash.ils || 0) * fx('ILS')) : (client.cashBalance || 0);
+    return holdingsValue + cashUsd;
 }
 
 // Unified return calculator — returns { totalValue, totalCost, profit, returnPct }

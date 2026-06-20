@@ -740,7 +740,10 @@ function _calcListMetrics(client) {
     const stockPct = stockVal / totalVal;
     const bondPct  = bondVal / totalVal;
 
-    const cashUsd = (client.cash?.usd || client.cashBalance || 0);
+    // Cash: use the per-currency buckets. Only fall back to the legacy cashBalance when the
+    // cash object is ENTIRELY absent — otherwise an ILS-only-cash portfolio double-counted its
+    // cash (cashBalance already includes the ILS, then we added the ILS again).
+    const cashUsd = client.cash ? (client.cash.usd || 0) : (client.cashBalance || 0);
     const cashIls = (client.cash?.ils || 0);
     const totalCash = cashUsd + cashIls / (typeof USD_ILS_RATE !== 'undefined' ? USD_ILS_RATE : 3.7);
 
