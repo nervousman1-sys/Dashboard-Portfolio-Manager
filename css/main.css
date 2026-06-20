@@ -8234,6 +8234,21 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-flow-group { font-size: 13.5px; font-weight: 900; margin: 12px 0 8px; }
 .dn-flow-group.in { color: #4ade80; }
 .dn-flow-group.out { color: #f87171; }
+
+/* Structured (market-data) money-flow card — sector rotation from real ETF performance */
+.dn-mflows { margin-bottom: 14px; }
+.dn-mflow-card { background: rgba(0,229,255,0.04); border: 1px solid rgba(0,229,255,0.25); border-radius: 14px; padding: 14px 16px; }
+.dn-mflow-head { font-size: 14px; font-weight: 900; color: #67e8f9; margin-bottom: 4px; }
+.dn-mflow-sub { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 8px; }
+.dn-mflow-row { display: grid; grid-template-columns: 160px minmax(40px, 1fr) auto; align-items: center; gap: 10px; margin-bottom: 6px; cursor: pointer; padding: 2px 4px; border-radius: 8px; transition: background .12s; }
+.dn-mflow-row:hover { background: rgba(255,255,255,0.05); }
+.dn-mflow-name { font-size: 12.5px; font-weight: 700; color: #f5f5fa; }
+.dn-mflow-name small { color: var(--text-muted); font-weight: 600; font-size: 10px; }
+.dn-mflow-track { height: 10px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
+.dn-mflow-fill { display: block; height: 100%; border-radius: 6px; }
+.dn-mflow-val { font-size: 12px; font-weight: 800; white-space: nowrap; }
+.dn-mflow-val small { color: var(--text-muted); font-weight: 600; font-size: 10px; }
+.dn-mflow-foot { font-size: 10.5px; color: var(--text-muted); margin-top: 8px; }
 .dn-flow-track { direction: rtl; }
 
 /* Flow histogram polish: thinner bars, subtle track, scale note */

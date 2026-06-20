@@ -629,6 +629,70 @@ function _dnVisionHTML(text, img, mode) {
     }).join('') + srcLink;
 }
 
+// ── STRUCTURED capital flows: real sector-rotation money-flow from sector-ETF performance ──
+// Each sector's RELATIVE STRENGTH vs the S&P 500 over the last ~21 trading days = where money is
+// actually rotating (outperformers = inflows, underperformers = outflows). Uses real daily prices
+// via /api/history (Yahoo) — verified market data, not a transcribed image. Cached for the day.
+const _DN_SECTOR_ETFS = [
+    ['טכנולוגיה', 'XLK'], ['מוליכים למחצה', 'SOXX'], ['פיננסים', 'XLF'], ['אנרגיה', 'XLE'],
+    ['בריאות', 'XLV'], ['תעשייה', 'XLI'], ['צריכה מחזורית', 'XLY'], ['צריכה בסיסית', 'XLP'],
+    ['תקשורת', 'XLC'], ['חומרי גלם', 'XLB'], ['תשתיות וחשמל', 'XLU'], ['נדל"ן', 'XLRE'],
+];
+let _dnMarketFlowsCache = null; // { day, data }
+async function _dnComputeMarketFlows() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (_dnMarketFlowsCache && _dnMarketFlowsCache.day === today) return _dnMarketFlowsCache.data;
+    if (typeof _fetchTickerTimeSeries !== 'function') return null;
+    const need = ['SPY', ..._DN_SECTOR_ETFS.map(s => s[1])];
+    const series = {};
+    await Promise.all(need.map(async (t) => { try { series[t] = await _fetchTickerTimeSeries(t, 'USD', 400); } catch (e) { } }));
+    const retOver = (pts, days) => {
+        if (!pts || pts.length < days + 1) return null;
+        const last = pts[pts.length - 1].close, prev = pts[pts.length - 1 - days].close;
+        return (prev > 0 && last > 0) ? (last / prev - 1) : null;
+    };
+    const spy1m = retOver(series['SPY'], 21), spy1w = retOver(series['SPY'], 5);
+    if (spy1m == null) return null;
+    const rows = _DN_SECTOR_ETFS.map(([name, etf]) => {
+        const r1m = retOver(series[etf], 21), r1w = retOver(series[etf], 5);
+        return { name, etf, r1w, r1m, rel: (r1m != null) ? r1m - spy1m : null };
+    }).filter(r => r.rel != null).sort((a, b) => b.rel - a.rel);
+    const data = { rows, spy1m, spy1w, asOf: today };
+    _dnMarketFlowsCache = { day: today, data };
+    return data;
+}
+async function _dnRenderMarketFlows() {
+    const box = document.getElementById('dnMarketFlows');
+    if (!box || box.dataset.loaded) return;
+    box.dataset.loaded = '1';
+    let f;
+    try { f = await _dnComputeMarketFlows(); } catch (e) { box.innerHTML = ''; return; }
+    if (!f || !f.rows.length) { box.innerHTML = ''; return; }
+    const maxAbs = Math.max(...f.rows.map(r => Math.abs(r.rel)), 0.001);
+    const ins = f.rows.filter(r => r.rel > 0);
+    const outs = f.rows.filter(r => r.rel < 0).reverse();
+    const pct = (x) => x == null ? '—' : ((x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%');
+    const bar = (r) => {
+        const w = Math.round(Math.abs(r.rel) / maxAbs * 100);
+        const col = r.rel >= 0 ? '#22c55e' : '#ef4444';
+        return `<div class="dn-mflow-row" onclick="openSectorStocks('mflow_${_dnEsc(r.etf)}')">
+            <span class="dn-mflow-name">${_dnEsc(r.name)} <small>${_dnEsc(r.etf)}</small></span>
+            <div class="dn-mflow-track"><span class="dn-mflow-fill" style="width:${w}%;background:${col}"></span></div>
+            <span class="dn-mflow-val" style="color:${col}">${pct(r.rel)} <small>(שבוע ${pct(r.r1w)} · חודש ${pct(r.r1m)})</small></span>
+        </div>`;
+    };
+    // Register each sector so the existing "מניות בסקטור" drill-down works on these rows too.
+    window._dnFlowSectors = window._dnFlowSectors || {};
+    f.rows.forEach(r => { window._dnFlowSectors['mflow_' + r.etf] = { sector: r.name, tickers: [r.etf] }; });
+    box.innerHTML = `<div class="dn-mflow-card">
+        <div class="dn-mflow-head">📊 תנועות הון — נתוני שוק אמיתיים (רוטציה סקטוריאלית)</div>
+        <div class="dn-mflow-sub">חוזק יחסי של כל סקטור מול S&P 500 ב-21 ימי מסחר (ביצועי תעודות-הסל הסקטוריאליות — מחירי סגירה אמיתיים, מאומת). ירוק = כסף נכנס (סקטור מנצח את השוק) · אדום = יוצא.</div>
+        ${ins.length ? `<div class="dn-flow-group in">▲ כניסת כסף (מנצח את השוק)</div>${ins.map(bar).join('')}` : ''}
+        ${outs.length ? `<div class="dn-flow-group out">▼ יציאת כסף (חלש מהשוק)</div>${outs.map(bar).join('')}` : ''}
+        <div class="dn-mflow-foot">S&P 500: ${pct(f.spy1m)} בחודש · עודכן ${f.asOf} · לחץ על סקטור לרשימת המניות</div>
+    </div>`;
+}
+
 function _dnRender() {
     const data = _dnLastData;
     const tabsEl = document.getElementById('dnTabs');
@@ -879,6 +943,11 @@ function _dnRender() {
                     byDate.get(d).push(m);
                 }
                 html = [...byDate.values()].map((msgs, i) => renderCollapsed(msgs, null, i === 0, visionModeOf(c.name))).join('');
+                // Capital-flows channel: prepend a STRUCTURED, verified money-flow computed from
+                // real sector-ETF performance (not the agent's image) — see _dnRenderMarketFlows.
+                if (/תנועות-?הון/.test(c.name || '')) {
+                    html = '<div id="dnMarketFlows" class="dn-mflows"><div class="adv-empty">מחשב תנועות הון מנתוני שוק אמיתיים…</div></div>' + html;
+                }
             } else if (kind === 'options') {
                 html = renderByDate(_dnLastNDays(c.messages), (m) => `<div class="dn-msg dn-msg-opt">${renderOption(m)}</div>`);
             } else if (_dnInsiderLabel(c.name)) {
@@ -913,6 +982,7 @@ function _dnRender() {
     feedEl.querySelectorAll('details.dn-day[data-dkey]').forEach(d => prevState.set(d.dataset.dkey, d.open));
 
     feedEl.innerHTML = html;
+    if (document.getElementById('dnMarketFlows') && typeof _dnRenderMarketFlows === 'function') _dnRenderMarketFlows();
 
     if (prevState.size) {
         feedEl.querySelectorAll('details.dn-day[data-dkey]').forEach(d => {
