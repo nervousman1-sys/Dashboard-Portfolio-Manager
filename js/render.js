@@ -1422,15 +1422,15 @@ function renderClientCards() {
         const _cardUsdPct = (_cardUsdVal / _cardTotal * 100).toFixed(0);
         const _cardIlsPct = (100 - parseFloat(_cardUsdPct)).toFixed(0);
 
-        // Model-compliance chip (0–100) — set by the CML/SML engine (applyModelRiskToClients).
-        // While the risky book is still loading market data, show "מחשב" rather than a
-        // score that would change once data completes.
-        const _mc = client.compliancePartial ? null : client.complianceScore;
+        // Composite MODEL chip (0–100) — the SAME score as the list/modal: 40% fundamental +
+        // 40% SML/CML + 20% technical of the held companies (read from the live model). While
+        // the risky book is still loading, show "מחשב" rather than a number that would change.
+        const _mc = (typeof rmModelScoreOf === 'function') ? rmModelScoreOf(client) : (client.modelScore != null ? client.modelScore : null);
         const _mcColor = _mc == null ? 'var(--text-muted)'
-            : _mc >= 75 ? 'var(--risk-low)' : _mc >= 50 ? 'var(--accent-yellow)' : 'var(--risk-high)';
+            : _mc >= 65 ? 'var(--risk-low)' : _mc >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
         const _mcChip = (_mc != null)
-            ? `<button class="card-model-btn" style="--mc:${_mcColor}" onclick="event.stopPropagation(); openModal(${client.id})" title="עמידה במודל CML/SML — לחץ לתוכנית פעולה">מודל ${_mc} · מה לשנות</button>`
-            : (client.compliancePartial ? `<button class="card-model-btn" style="--mc:var(--text-muted)" onclick="event.stopPropagation(); openModal(${client.id})" title="מחשב עמידה במודל">מודל · מחשב…</button>` : '');
+            ? `<button class="card-model-btn" style="--mc:${_mcColor}" onclick="event.stopPropagation(); openModal(${client.id})" title="ציון מודל כולל: 40% דוחות · 40% SML/CML · 20% טכני — לחץ לתוכנית פעולה">מודל ${_mc} · מה לשנות</button>`
+            : (client.compliancePartial ? `<button class="card-model-btn" style="--mc:var(--text-muted)" onclick="event.stopPropagation(); openModal(${client.id})" title="מחשב ציון מודל">מודל · מחשב…</button>` : '');
 
         // Allocation-breach chip — equities pushed cash below the portfolio's
         // minimum-cash target. Click → smart page with the rebalance instructions.
