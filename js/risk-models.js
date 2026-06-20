@@ -780,7 +780,7 @@ function classifyRisk(beta, vol, marketVol) {
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
 const _RM_PERSIST_KEY = 'risk_model_persist_v9'; // v9: composite portfolio modelScore + count-based technical
-const _RM_SCORE_KEY = 'rm_scores_v2'; // v2: freeze now includes modelScore
+const _RM_SCORE_KEY = 'rm_scores_v3'; // v3: drop frozen entries lacking modelScore
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
@@ -885,6 +885,10 @@ async function applyModelRiskToClients(opts = {}) {
     try {
         const model = await buildRiskModel(clients, opts);
         if (!model || !model.portfolios) return;
+        // Always (re)compute the composite modelScore against the CURRENT clients — the model
+        // may have come from a persisted/cached copy that predates modelScore or was built on
+        // stale values, which is why the dashboard kept showing the old heuristic.
+        try { _rmComputeModelScores(model, clients); } catch (e) { /* non-fatal */ }
         const byId = {};
         for (const p of model.portfolios) byId[p.id] = p;
 
@@ -901,8 +905,9 @@ async function applyModelRiskToClients(opts = {}) {
             const p = byId[c.id];
             if (!p || !p.hasData) continue;
             const fr = frozen[c.id];
-            if (fr && fr._complete) {
-                // Reuse the locked-in score — identical every open until holdings change.
+            // Reuse the locked-in score only if it's complete AND already carries a modelScore
+            // (older frozen entries lack it — don't reuse those, or the badge stays stale).
+            if (fr && fr._complete && fr.vals && fr.vals.modelScore != null) {
                 Object.assign(c, fr.vals);
                 continue;
             }
