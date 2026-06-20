@@ -300,7 +300,7 @@ function calculateOverallExposure(clientsList) {
                 } else {
                     totalStocks += h.value;
                 }
-                const sector = h.sector || SECTOR_MAP[h.ticker] || 'Other';
+                const sector = (typeof resolveHoldingSector === 'function') ? resolveHoldingSector(h) : (h.sector || SECTOR_MAP[h.ticker] || 'Other');
                 sectorTotals[sector] = (sectorTotals[sector] || 0) + h.value;
             } else {
                 totalBonds += h.value;

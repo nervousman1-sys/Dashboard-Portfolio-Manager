@@ -422,7 +422,7 @@ async function openModal(clientId) {
 
     // Sector breakdown table
     const sectorData = {};
-    stockHoldings.forEach(h => { const s = h.sector || 'Other'; sectorData[s] = (sectorData[s] || 0) + h.value; });
+    stockHoldings.forEach(h => { const s = (typeof resolveHoldingSector === 'function') ? resolveHoldingSector(h) : (h.sector || 'Other'); sectorData[s] = (sectorData[s] || 0) + h.value; });
     const sortedSectors = Object.entries(sectorData).sort((a, b) => b[1] - a[1]);
     let sectorRows = '';
     sortedSectors.forEach(([sector, value]) => {

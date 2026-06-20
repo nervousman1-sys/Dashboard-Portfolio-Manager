@@ -2119,7 +2119,7 @@ function renderModalSectorChart(client) {
     _clearCanvas(ctx);
     const sectorData = {};
     client.holdings.filter(h => h.type === 'stock').forEach(h => {
-        const s = h.sector || SECTOR_MAP[h.ticker] || 'Other';
+        const s = (typeof resolveHoldingSector === 'function') ? resolveHoldingSector(h) : (h.sector || SECTOR_MAP[h.ticker] || 'Other');
         sectorData[s] = (sectorData[s] || 0) + h.value;
     });
     const sorted = Object.entries(sectorData).sort((a, b) => b[1] - a[1]);

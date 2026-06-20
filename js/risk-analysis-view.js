@@ -1002,6 +1002,13 @@ async function _renderModalCorrelation(clientId) {
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
     if (!client) return;
 
+    // Display the fund/ETF NAME for numeric Israeli ids (5122957 → "קסם S&P 500 KTF"), not the bare number.
+    const dispName = (t) => {
+        const tk = String(t || '').replace(/\.TA$/i, '').toUpperCase();
+        if (/^\d{4,9}$/.test(tk) && typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[tk] && window._ilFundInfo[tk].name) return window._ilFundInfo[tk].name;
+        return t;
+    };
+
     let model = window._lastRiskModel;
     if (!model || !model.correlation) {
         try { model = await buildRiskModel(clients); } catch (e) { /* ignore */ }
@@ -1065,7 +1072,7 @@ async function _renderModalCorrelation(clientId) {
             : '<span class="corr-lvl low">נמוכה</span>';
 
     const recText = highCount > 0
-        ? `כדי לצמצם קורלציה: מכור את <b>${_riskEsc(sellX.ticker)}</b> (ρ̄=${sellX.avg.toFixed(2)} — הכי מתואם)${buyY ? ` או הוסף <b>${_riskEsc(buyY.ticker)}</b> (קורלציה נמוכה ${buyY.corrToPort != null ? buyY.corrToPort.toFixed(2) : ''} — מגוון)` : ''}.`
+        ? `כדי לצמצם קורלציה: מכור את <b>${_riskEsc(dispName(sellX.ticker))}</b> (ρ̄=${sellX.avg.toFixed(2)} — הכי מתואם)${buyY ? ` או הוסף <b>${_riskEsc(dispName(buyY.ticker))}</b> (קורלציה נמוכה ${buyY.corrToPort != null ? buyY.corrToPort.toFixed(2) : ''} — מגוון)` : ''}.`
         : `הפיזור טוב — אין נכסים בקורלציה גבוהה מדי. שמור על ההרכב.`;
 
     const summary = `
@@ -1079,11 +1086,11 @@ async function _renderModalCorrelation(clientId) {
 
     const tableRows = rows.map(r => `
         <tr>
-            <td class="corr-td-tk">${_riskEsc(r.ticker)}</td>
+            <td class="corr-td-tk">${_riskEsc(dispName(r.ticker))}</td>
             <td class="corr-td-num">${r.mkt != null ? r.mkt.toFixed(2) : '—'}</td>
             <td class="corr-td-num">${r.avg.toFixed(2)}</td>
             <td>${lvl(r.mkt != null ? r.mkt : r.avg)}</td>
-            <td class="corr-td-partner">${r.topT ? `${_riskEsc(r.topT)} (${r.topV.toFixed(2)})` : '—'}</td>
+            <td class="corr-td-partner">${r.topT ? `${_riskEsc(dispName(r.topT))} (${r.topV.toFixed(2)})` : '—'}</td>
         </tr>`).join('');
 
     // Transparency: how many trading days the statistics are based on
