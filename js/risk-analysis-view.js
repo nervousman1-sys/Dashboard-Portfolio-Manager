@@ -1225,9 +1225,10 @@ function _recoPaint(clientId, client, cands, adv, ov) {
         for (const c of cands) { (bySector[c.sector || 'אחר'] = bySector[c.sector || 'אחר'] || []).push(c); }
         const state = { clientId, bySector, slots: {}, cards: {}, allCands: cands };
         let seq = 0;
-        // ETFs ("תעודות סל") always render as the LAST group, after the stock sectors.
+        // Order: US/global stock sectors first, then Israeli-market stocks, then ETFs last.
+        const _grpRank = (s) => s === 'תעודות סל' ? 2 : s === 'מניות מהשוק הישראלי' ? 1 : 0;
         cardsHTML = Object.entries(bySector)
-            .sort((a, b) => (a[0] === 'תעודות סל' ? 1 : 0) - (b[0] === 'תעודות סל' ? 1 : 0))
+            .sort((a, b) => _grpRank(a[0]) - _grpRank(b[0]))
             .map(([sector, list]) => {
                 const slots = Math.min(list.length, 3);
                 state.slots[sector] = slots;
@@ -1329,6 +1330,8 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
     const heading = optLetter
         ? `<span class="reco-opt-lead">אופציה</span> <span class="reco-opt">${_riskEsc(optLetter)} · ${_riskEsc(c.ticker)}</span>`
         : `<span class="reco-opt">${_riskEsc(c.ticker)}</span>`;
+    // For Israeli-market names, show the real sector inside the card (e.g. פיננסים).
+    const subSec = c.subSector ? `<div class="reco-subsec">סקטור: ${_riskEsc(c.subSector)}</div>` : '';
     // Final Score (40% דוחות · 40% SML/CML · 20% טכני) — the headline ranking number.
     const fs = (c.finalScore != null) ? c.finalScore : null;
     const fsCol = fs == null ? 'var(--text-muted)' : fs >= 65 ? 'var(--risk-low)' : fs >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
@@ -1339,7 +1342,7 @@ function _recoCardInner(c, cardId, optLetter, hasAlt) {
             </div>`;
     return `
             <div class="reco-card-top">
-                <span class="reco-tk">${heading}</span>
+                <span class="reco-tk">${heading}${subSec}</span>
             </div>
             ${scoreHtml}
             <div class="reco-buy">${buy}</div>

@@ -63,28 +63,29 @@ const RISK_MODEL = {
         // Technology / Semis
         'AAPL', 'MSFT', 'NVDA', 'AVGO', 'AMD', 'ORCL', 'CRM', 'ADBE', 'QCOM', 'TXN',
         'MU', 'LRCX', 'AMAT', 'KLAC', 'ARM', 'PLTR', 'NOW', 'ANET', 'SNPS', 'TSM', 'ASML',
+        'ADI', 'MRVL', 'NXPI', 'CDNS', 'INTU', 'PANW', 'CRWD', 'IBM', 'APP', 'APH',
         // Communication
-        'GOOGL', 'META', 'NFLX', 'DIS', 'T', 'VZ', 'TMUS', 'CMCSA', 'CHTR', 'EA', 'TTWO',
+        'GOOGL', 'META', 'NFLX', 'DIS', 'T', 'VZ', 'TMUS', 'CMCSA', 'CHTR', 'EA', 'TTWO', 'WBD', 'OMC',
         // Consumer discretionary
-        'AMZN', 'TSLA', 'HD', 'LOW', 'MCD', 'NKE', 'SBUX', 'BKNG', 'TJX', 'ORLY', 'CMG', 'MAR',
+        'AMZN', 'TSLA', 'HD', 'LOW', 'MCD', 'NKE', 'SBUX', 'BKNG', 'TJX', 'ORLY', 'CMG', 'MAR', 'GM', 'F', 'ABNB', 'ROST',
         // Consumer staples
-        'PG', 'KO', 'PEP', 'COST', 'WMT', 'MDLZ', 'MO', 'PM', 'CL', 'KMB', 'MNST',
+        'PG', 'KO', 'PEP', 'COST', 'WMT', 'MDLZ', 'MO', 'PM', 'CL', 'KMB', 'MNST', 'KHC', 'TGT', 'KDP', 'STZ',
         // Healthcare
-        'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO', 'ABT', 'DHR', 'AMGN', 'BMY', 'GILD', 'ISRG', 'VRTX',
+        'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO', 'ABT', 'DHR', 'AMGN', 'BMY', 'GILD', 'ISRG', 'VRTX', 'MDT', 'CVS', 'ELV', 'SYK', 'REGN',
         // Financials
-        'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'AXP', 'SCHW', 'BLK', 'C', 'SPGI', 'CB', 'PGR',
+        'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'AXP', 'SCHW', 'BLK', 'C', 'SPGI', 'CB', 'PGR', 'USB', 'PNC', 'TFC', 'ICE', 'CME', 'MMC', 'PYPL',
         // Energy
-        'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'CEG', 'PSX', 'MPC', 'VLO', 'OXY', 'WMB', 'KMI',
+        'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'CEG', 'PSX', 'MPC', 'VLO', 'OXY', 'WMB', 'KMI', 'OKE', 'HES', 'DVN',
         // Industrials
-        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX', 'UNP', 'DE', 'LMT', 'GD', 'MMM', 'EMR', 'ETN', 'FDX',
+        'CAT', 'BA', 'HON', 'GE', 'UPS', 'RTX', 'UNP', 'DE', 'LMT', 'GD', 'MMM', 'EMR', 'ETN', 'FDX', 'NOC', 'CSX', 'NSC', 'ITW',
         // Materials
-        'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'APD', 'DOW', 'NUE',
+        'LIN', 'SHW', 'FCX', 'ECL', 'NEM', 'APD', 'DOW', 'NUE', 'CTVA', 'DD', 'VMC', 'MLM',
         // Utilities
-        'NEE', 'SO', 'DUK', 'AEP', 'D', 'EXC', 'SRE', 'XEL',
+        'NEE', 'SO', 'DUK', 'AEP', 'D', 'EXC', 'SRE', 'XEL', 'PEG', 'ED', 'WEC',
         // Real estate
-        'PLD', 'AMT', 'EQIX', 'WELL', 'SPG', 'O', 'PSA', 'CCI',
+        'PLD', 'AMT', 'EQIX', 'WELL', 'SPG', 'O', 'PSA', 'CCI', 'DLR', 'VICI', 'AVB',
         // Crypto-exposed
-        'COIN', 'MARA', 'RIOT', 'MSTR', 'CLSK', 'HOOD',
+        'COIN', 'MARA', 'RIOT', 'MSTR', 'CLSK', 'HOOD', 'HUT', 'BITF', 'CIFR', 'WULF',
         // Broad / sector ETFs (their own "תעודות סל" group)
         'QQQ', 'SPY', 'GLD', 'TLT', 'XLF', 'XLV', 'XLE', 'XLK', 'XLI', 'XLP',
         'XLY', 'XLC', 'XLB', 'XLU', 'XLRE', 'SOXX', 'SMH',
@@ -422,6 +423,7 @@ async function buildRiskModel(clientsList, opts = {}) {
                 ticker: t,
                 name: tickerMeta[t].name,
                 sector: tickerMeta[t].sector,
+                currency: tickerMeta[t].currency,   // so candidates can flag Israeli (ILS) names
                 hasData: true,
                 expReturn, rawExpReturn, vol, beta, corrToMarket, lastClose,
                 requiredReturn, alpha, sharpe, recommendation,
@@ -772,7 +774,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v7'; // v7: numeric IL funds excluded from candidates + auto-sector
+const _RM_PERSIST_KEY = 'risk_model_persist_v8'; // v8: deeper universe + Israeli-stock group + auto-sector
 const _RM_SCORE_KEY = 'rm_scores_v1'; // tiny per-signature score freeze (deterministic badges)
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
@@ -1077,12 +1079,23 @@ function _rmApplyFinalScore(cands, techOverride) {
         c.hasTech = hasTech;
         // ETFs go in their OWN category, never mixed among the stocks.
         if (_RM_ETF_SET.has(c.ticker) || /^XL[A-Z]{1,3}$/.test(c.ticker)) { c.isETF = true; c.sector = 'תעודות סל'; }
-        // AUTOMATIC sector classification: anything still uncategorised ('Other'/missing) is
-        // resolved from the dashboard map → US-ETF detection → the reports page's sector data
-        // (GICS, normalised) — so no candidate lands in "Other" when its sector is knowable.
-        else if ((!c.sector || c.sector === 'Other') && typeof resolveSectorFor === 'function') {
-            const r = resolveSectorFor(c.ticker);
-            if (r && r !== 'Other') c.sector = r;
+        else {
+            // Israeli stocks → their own group "מניות מהשוק הישראלי", with the REAL sector shown
+            // inside each card (e.g. LUMI = bank → פיננסים).
+            const tkU = String(c.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+            const ilSec = (typeof IL_STOCK_SECTORS !== 'undefined' && IL_STOCK_SECTORS[tkU]) || null;
+            const isIsraeli = c.currency === 'ILS' || /\.TA$/i.test(c.ticker) || !!ilSec;
+            if (isIsraeli) {
+                const eng = ilSec || (typeof resolveSectorFor === 'function' ? resolveSectorFor(c.ticker) : 'Other');
+                c.subSector = (typeof SECTOR_HE !== 'undefined' && SECTOR_HE[eng]) || eng;
+                c.sector = 'מניות מהשוק הישראלי';
+            }
+            // AUTOMATIC sector classification: anything still uncategorised ('Other'/missing) is
+            // resolved from the dashboard map → US-ETF → the reports page's sector data.
+            else if ((!c.sector || c.sector === 'Other') && typeof resolveSectorFor === 'function') {
+                const r = resolveSectorFor(c.ticker);
+                if (r && r !== 'Other') c.sector = r;
+            }
         }
         c.fundScore = Math.round(fundScore);
         c.smlScore = Math.round(smlScore);
@@ -1170,9 +1183,11 @@ function buildPortfolioAdvisory(client, model) {
         // !== 'avoid' already excludes α ≤ −1.2%). This gives a DEEP bench of options
         // per sector for the "בדוק אופציה חלופית" cycler; the fit-ranking still surfaces
         // the best first.
-        // Exclude numeric-id Israeli funds (someone else's specific KTF holding) — they're not
-        // generic recommendations and would show as a bare number. Curated tickers only.
-        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.recommendation !== 'avoid' && !/^\d{4,9}$/.test(a.ticker))
+        // Deep bench so "בדוק אופציה חלופית" can cycle ~10 per sector: include every non-held
+        // name with data (even mildly over-priced ones — the Final Score still ranks the best
+        // first; the user just gets more to explore). Exclude only numeric-id Israeli funds
+        // (someone else's specific KTF) which would show as a bare number.
+        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && !/^\d{4,9}$/.test(a.ticker))
         .map(a => {
             const c = _avgCorrTo(a.ticker);
             const corr = (c == null) ? 0.35 : c;     // unknown correlation → assume mildly positive
@@ -1194,7 +1209,7 @@ function buildPortfolioAdvisory(client, model) {
                 - 0.80 * sectorOver              // never pile into an already-heavy sector
                 - 0.10 * betaMismatch;           // nudge the portfolio toward the CML (β≈1)
             return {
-                ticker: a.ticker, name: a.name, sector: a.sector,
+                ticker: a.ticker, name: a.name, sector: a.sector, currency: a.currency,
                 alpha: a.alpha, beta: a.beta, vol: a.vol, corrToPort: c,
                 price, shares, pct, sectorGap, betaMismatch, fit,
             };
@@ -1208,7 +1223,7 @@ function buildPortfolioAdvisory(client, model) {
 
     // Spread the shortlist across sectors (cap per sector) so every portfolio gets names
     // matched to ITS gaps, rather than 10 clones from the single highest-alpha sector.
-    const _PER_SECTOR_CAP = 15;   // deep bench per sector → the swap button has many to cycle
+    const _PER_SECTOR_CAP = 22;   // deep bench per sector → the swap button cycles ~10+ names
     const _secCount = {};
     const candidates = [];
     for (const c of candidatesRanked) {

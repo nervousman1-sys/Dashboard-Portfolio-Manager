@@ -183,7 +183,30 @@ const SECTOR_MAP = {
     'UNP': 'Industrials', 'LMT': 'Industrials', 'GD': 'Industrials', 'EMR': 'Industrials', 'ETN': 'Industrials', 'FDX': 'Industrials',
     'LIN': 'Materials', 'SHW': 'Materials', 'FCX': 'Materials', 'ECL': 'Materials', 'NEM': 'Materials', 'APD': 'Materials', 'DOW': 'Materials', 'NUE': 'Materials',
     'DUK': 'Utilities', 'AEP': 'Utilities', 'D': 'Utilities', 'EXC': 'Utilities', 'SRE': 'Utilities', 'XEL': 'Utilities',
-    'AMT': 'Real Estate', 'EQIX': 'Real Estate', 'WELL': 'Real Estate', 'SPG': 'Real Estate', 'O': 'Real Estate', 'PSA': 'Real Estate', 'CCI': 'Real Estate'
+    'AMT': 'Real Estate', 'EQIX': 'Real Estate', 'WELL': 'Real Estate', 'SPG': 'Real Estate', 'O': 'Real Estate', 'PSA': 'Real Estate', 'CCI': 'Real Estate',
+    // ── Deeper bench (more options per sector for the swap) ──
+    'APH': 'Technology', 'OMC': 'Communication', 'WBD': 'Communication',
+    'GM': 'Consumer Disc.', 'F': 'Consumer Disc.', 'ROST': 'Consumer Disc.',
+    'KHC': 'Consumer Staples', 'KDP': 'Consumer Staples', 'STZ': 'Consumer Staples',
+    'MDT': 'Healthcare', 'CVS': 'Healthcare', 'ELV': 'Healthcare', 'SYK': 'Healthcare',
+    'USB': 'Financials', 'PNC': 'Financials', 'TFC': 'Financials', 'ICE': 'Financials', 'CME': 'Financials', 'MMC': 'Financials',
+    'OKE': 'Energy', 'HES': 'Energy', 'DVN': 'Energy',
+    'NOC': 'Industrials', 'CSX': 'Industrials', 'NSC': 'Industrials', 'ITW': 'Industrials',
+    'CTVA': 'Materials', 'DD': 'Materials', 'VMC': 'Materials', 'MLM': 'Materials',
+    'PEG': 'Utilities', 'ED': 'Utilities', 'WEC': 'Utilities',
+    'DLR': 'Real Estate', 'VICI': 'Real Estate', 'AVB': 'Real Estate',
+    'HUT': 'Crypto', 'BITF': 'Crypto', 'CIFR': 'Crypto', 'WULF': 'Crypto'
+};
+
+// Common Israeli (TA) stocks → their dashboard sector. Used to tag Israeli names under the
+// "מניות מהשוק הישראלי" group with the real sector shown inside. (Banks/insurance → Financials.)
+const IL_STOCK_SECTORS = {
+    'LUMI': 'Financials', 'POLI': 'Financials', 'DSCT': 'Financials', 'FIBI': 'Financials', 'MZTF': 'Financials',
+    'HARL': 'Financials', 'PHOE': 'Financials', 'MGDL': 'Financials', 'CLIS': 'Financials', 'BEZQ': 'Communication',
+    'TEVA': 'Healthcare', 'NICE': 'Technology', 'CYBR': 'Technology', 'NVMI': 'Technology', 'CAMT': 'Technology',
+    'TSEM': 'Technology', 'ELTR': 'Industrials', 'ESLT': 'Industrials', 'NESR': 'Energy', 'ICL': 'Materials',
+    'ORA': 'Energy', 'AZRG': 'Real Estate', 'MLSR': 'Real Estate', 'BIG': 'Real Estate', 'SPEN': 'Real Estate',
+    'SAE': 'Consumer Disc.', 'DELT': 'Consumer Disc.', 'FOX': 'Consumer Disc.', 'OPCE': 'Utilities', 'ENLT': 'Utilities',
 };
 
 const SECTOR_COLORS = {
@@ -244,17 +267,33 @@ function resolveSectorFor(ticker) {
     const t = String(ticker || '').replace(/\.TA$/i, '').toUpperCase();
     if (!t) return 'Other';
     if (typeof SECTOR_MAP !== 'undefined' && SECTOR_MAP[t]) return SECTOR_MAP[t];
+    if (typeof IL_STOCK_SECTORS !== 'undefined' && IL_STOCK_SECTORS[t]) return IL_STOCK_SECTORS[t];
     if (typeof isUsEtf === 'function' && isUsEtf(t)) return 'תעודות סל';
     if (typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[t]) return 'תעודות סל';
     try {
         for (const key of ['rep_uni_us_v3', 'rep_uni_il_v3']) {
             const c = JSON.parse(localStorage.getItem(key) || 'null');
-            const g = c && c.sectors && c.sectors[t];
-            if (g) return GICS_TO_DASH[g] || g;   // 'Crypto' / IL sector strings pass through
+            const map = c && c.sectors;
+            const g = map && (map[t] || map[t + '.TA']);   // IL reports keys carry the .TA suffix
+            if (g) return GICS_TO_DASH[g] || _REP_IL_SECTOR_TO_DASH[g] || g;
         }
     } catch (e) { /* ignore */ }
     return 'Other';
 }
+// TA-125 (reports) sector strings → dashboard taxonomy.
+const _REP_IL_SECTOR_TO_DASH = {
+    'Banks': 'Financials', 'Insurance': 'Financials', 'Financial Services': 'Financials', 'Investment & Holdings': 'Financials',
+    'Real-Estate & Construction': 'Real Estate', 'Construction': 'Real Estate', 'Biomed': 'Healthcare', 'Pharmaceuticals': 'Healthcare',
+    'Medical Equipment': 'Healthcare', 'Internet And Software': 'Technology', 'IT Services': 'Technology', 'Semiconductors': 'Technology',
+    'Electronics And Optics': 'Technology', 'Communications & Media': 'Communication', 'Energy': 'Energy', 'Cleantech': 'Utilities',
+    'Food': 'Consumer Staples', 'Commerce': 'Consumer Disc.', 'Services': 'Consumer Disc.', 'Defense': 'Industrials',
+};
+// Dashboard sector (English) → Hebrew label, for in-card display.
+const SECTOR_HE = {
+    'Technology': 'טכנולוגיה', 'Communication': 'תקשורת', 'Consumer Disc.': 'צריכה מחזורית', 'Consumer Staples': 'מוצרי צריכה',
+    'Healthcare': 'בריאות', 'Financials': 'פיננסים', 'Energy': 'אנרגיה', 'Industrials': 'תעשייה', 'Utilities': 'תשתיות וחשמל',
+    'Real Estate': 'נדל"ן', 'Materials': 'חומרי גלם', 'Crypto': 'קריפטו', 'תעודות סל': 'תעודת סל', 'Other': 'אחר',
+};
 
 // True if a holding should be treated/styled as a fund/ETF (for the badge class).
 function isFundLike(h) {
