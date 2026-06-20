@@ -192,6 +192,8 @@ if (typeof window !== 'undefined') {
     if (cached && cached.length > 0) {
         console.log(`[Init] Phase 0: Instant render of ${cached.length} cached portfolios (kept under the loading overlay until auth is confirmed)`);
         clients = cached;
+        // Stamp frozen model scores instantly (no build) so the badges show immediately.
+        if (typeof rmApplyFrozenScores === 'function') { try { rmApplyFrozenScores(clients); } catch (e) { } }
 
         try {
             renderSummaryBar();
@@ -302,6 +304,8 @@ async function init() {
         // correct state and we must clear any stale cache from a previous session.
         clients = freshClients;
         saveClientsToCache(clients);
+        // Re-apply the frozen model scores to the fresh objects (instant, deterministic badges).
+        if (typeof rmApplyFrozenScores === 'function') { try { rmApplyFrozenScores(clients); } catch (e) { } }
 
         // Re-render with fresh Supabase data (has last-known prices from DB)
         renderSummaryBar();

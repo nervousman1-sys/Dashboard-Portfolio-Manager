@@ -773,6 +773,7 @@ function classifyRisk(beta, vol, marketVol) {
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
 const _RM_PERSIST_KEY = 'risk_model_persist_v6'; // v6: stable per-day scoring (no partial-churn)
+const _RM_SCORE_KEY = 'rm_scores_v1'; // tiny per-signature score freeze (deterministic badges)
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
@@ -842,6 +843,7 @@ function invalidateRiskModel() {
     _riskModelInflight = null;
     _riskModelInflightSig = null;
     try { localStorage.removeItem(_RM_PERSIST_KEY); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem(_RM_SCORE_KEY); } catch (e) { /* ignore */ } // unfreeze scores — holdings changed
     if (typeof window !== 'undefined') window._lastRiskModel = null;
     // Drop the cloud mirror too — holdings changed, other devices must not rehydrate it
     try {
@@ -852,6 +854,21 @@ function invalidateRiskModel() {
         }
     } catch (e) { /* non-fatal */ }
 }
+
+// Synchronously stamp the frozen (cached) per-portfolio scores onto the clients — no model
+// build, no network. Lets the dashboard show the model score badges INSTANTLY on load, and
+// guarantees they're identical to last time (until holdings change). The full build still
+// runs in the background to refine/confirm. Returns true if any score was applied.
+function rmApplyFrozenScores(clientsList) {
+    const cl = clientsList || (typeof clients !== 'undefined' ? clients : null);
+    if (!cl || !cl.length) return false;
+    let frozen = {};
+    try { const sc = JSON.parse(localStorage.getItem(_RM_SCORE_KEY) || '{}'); if (sc.sig === _rmHoldingsSignature(cl)) frozen = sc.byClient || {}; } catch (e) { return false; }
+    let any = false;
+    for (const c of cl) { const fr = frozen[c.id]; if (fr && fr.vals) { Object.assign(c, fr.vals); any = true; } }
+    return any;
+}
+if (typeof window !== 'undefined') window.rmApplyFrozenScores = rmApplyFrozenScores;
 
 let _modelRiskApplying = false;
 async function applyModelRiskToClients(opts = {}) {
@@ -864,22 +881,38 @@ async function applyModelRiskToClients(opts = {}) {
         const byId = {};
         for (const p of model.portfolios) byId[p.id] = p;
 
+        // SCORE FREEZE per holdings-signature: the per-portfolio score must change ONLY when
+        // the holdings change — never because a data fetch (e.g. an index-tracker proxy) loaded
+        // this run but timed out the next, which otherwise swings the score (73→58). We lock in
+        // the FIRST COMPLETE (non-partial) score for a given signature and reuse it thereafter.
+        const sig = _rmHoldingsSignature(clients_);
+        let frozen = {};
+        try { const sc = JSON.parse(localStorage.getItem(_RM_SCORE_KEY) || '{}'); if (sc.sig === sig) frozen = sc.byClient || {}; } catch (e) { }
+        let frozenChanged = false;
+
         for (const c of clients) {
             const p = byId[c.id];
             if (!p || !p.hasData) continue;
-            c.risk = p.risk;
-            c.riskLabel = p.riskLabel;
-            c.riskScore = p.riskScore;
-            c.modelBeta = p.beta;
-            c.modelExpReturn = p.expReturn;
-            c.modelVol = p.vol;
-            c.modelSharpe = p.sharpe;
-            c.modelAlpha = p.alpha;
-            c.aboveCML = p.aboveCML;
-            c.complianceScore = p.complianceScore;
-            c.complianceLabel = p.complianceLabel;
-            c.compliancePartial = p.partial;
+            const fr = frozen[c.id];
+            if (fr && fr._complete) {
+                // Reuse the locked-in score — identical every open until holdings change.
+                Object.assign(c, fr.vals);
+                continue;
+            }
+            const vals = {
+                risk: p.risk, riskLabel: p.riskLabel, riskScore: p.riskScore,
+                modelBeta: p.beta, modelExpReturn: p.expReturn, modelVol: p.vol,
+                modelSharpe: p.sharpe, modelAlpha: p.alpha, aboveCML: p.aboveCML,
+                complianceScore: p.complianceScore, complianceLabel: p.complianceLabel,
+                compliancePartial: p.partial,
+            };
+            Object.assign(c, vals);
+            // Freeze it once the portfolio's data is COMPLETE (not waiting on any history).
+            frozen[c.id] = { _complete: !p.partial, vals };
+            frozenChanged = true;
         }
+        // Persist only the CURRENT signature's scores (tiny — survives the big-model cache miss).
+        if (frozenChanged) { try { localStorage.setItem(_RM_SCORE_KEY, JSON.stringify({ sig, byClient: frozen })); } catch (e) { } }
         window._lastRiskModel = model;
         if (typeof refreshDashboard === 'function') refreshDashboard();
         else {
