@@ -11,8 +11,8 @@
 // come from /api/report-ai (Gemini), loaded async into the detail view.
 
 const _REP_MKT = {
-    us: { ls: 'rep_uni_us_v3', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
-    il: { ls: 'rep_uni_il_v3', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
+    us: { ls: 'rep_uni_us_v4', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
+    il: { ls: 'rep_uni_il_v4', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
 };
 const _REP_SCORES_LS = 'rep_scores_v1';
 
@@ -196,7 +196,7 @@ async function _repLoadUniverse() {
     try {
         // IL: stocksOnly=1 → real TA-125 companies only (no index-tracking ETFs/funds,
         // which have no financial statements and would never get a score).
-        const url = `/api/technicals?mode=tickers&market=${mkt}&sv=2` + (mkt === 'il' ? '&stocksOnly=1' : '');
+        const url = `/api/technicals?mode=tickers&market=${mkt}&sv=3` + (mkt === 'il' ? '&stocksOnly=1' : '');
         const r = await fetch(url, { headers: { Accept: 'application/json' } });
         const j = await r.json();
         let tickers = (j.tickers || []).slice();

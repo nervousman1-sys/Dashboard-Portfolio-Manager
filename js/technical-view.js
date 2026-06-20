@@ -212,7 +212,7 @@ async function _techLoad(force) {
     if (prog && _techMarket === mkt) prog.style.display = '';
 
     try {
-        const tr = await fetch(`/api/technicals?mode=tickers&market=${mkt}`, { headers: { Accept: 'application/json' } });
+        const tr = await fetch(`/api/technicals?mode=tickers&market=${mkt}&sv=3`, { headers: { Accept: 'application/json' } });
         const tj = await tr.json();
         if (!tj.tickers || !tj.tickers.length) throw new Error('no tickers');
         const tickers = tj.tickers;

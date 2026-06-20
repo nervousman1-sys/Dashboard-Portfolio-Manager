@@ -51,6 +51,34 @@ const _EXTRA_SECTORS = {
     // Industrials
     FER: 'Industrials', TRI: 'Industrials', HON: 'Industrials',
 };
+// Guaranteed core of major S&P 500 / Nasdaq-100 names with GICS sectors — ALWAYS merged into
+// the universe so a flaky Wikipedia parse can never drop a household name (e.g. NFLX) from the
+// reports + technical pages.
+const _CORE_US = {
+    // Information Technology
+    AAPL: 'Information Technology', MSFT: 'Information Technology', NVDA: 'Information Technology', AVGO: 'Information Technology', AMD: 'Information Technology', ORCL: 'Information Technology', CRM: 'Information Technology', ADBE: 'Information Technology', CSCO: 'Information Technology', ACN: 'Information Technology', QCOM: 'Information Technology', TXN: 'Information Technology', AMAT: 'Information Technology', MU: 'Information Technology', INTC: 'Information Technology', IBM: 'Information Technology', NOW: 'Information Technology', INTU: 'Information Technology', ADI: 'Information Technology', LRCX: 'Information Technology', KLAC: 'Information Technology', PLTR: 'Information Technology', ANET: 'Information Technology', PANW: 'Information Technology', CRWD: 'Information Technology', SNPS: 'Information Technology', CDNS: 'Information Technology', APH: 'Information Technology',
+    // Communication Services
+    GOOGL: 'Communication Services', GOOG: 'Communication Services', META: 'Communication Services', NFLX: 'Communication Services', DIS: 'Communication Services', CMCSA: 'Communication Services', T: 'Communication Services', VZ: 'Communication Services', TMUS: 'Communication Services', CHTR: 'Communication Services', EA: 'Communication Services', TTWO: 'Communication Services', WBD: 'Communication Services', OMC: 'Communication Services',
+    // Consumer Discretionary
+    AMZN: 'Consumer Discretionary', TSLA: 'Consumer Discretionary', HD: 'Consumer Discretionary', MCD: 'Consumer Discretionary', NKE: 'Consumer Discretionary', LOW: 'Consumer Discretionary', SBUX: 'Consumer Discretionary', BKNG: 'Consumer Discretionary', TJX: 'Consumer Discretionary', ORLY: 'Consumer Discretionary', CMG: 'Consumer Discretionary', MAR: 'Consumer Discretionary', ABNB: 'Consumer Discretionary', GM: 'Consumer Discretionary', F: 'Consumer Discretionary', ROST: 'Consumer Discretionary',
+    // Consumer Staples
+    PG: 'Consumer Staples', KO: 'Consumer Staples', PEP: 'Consumer Staples', COST: 'Consumer Staples', WMT: 'Consumer Staples', MDLZ: 'Consumer Staples', PM: 'Consumer Staples', MO: 'Consumer Staples', CL: 'Consumer Staples', KMB: 'Consumer Staples', MNST: 'Consumer Staples', KHC: 'Consumer Staples', KDP: 'Consumer Staples', STZ: 'Consumer Staples', TGT: 'Consumer Staples',
+    // Health Care
+    UNH: 'Health Care', JNJ: 'Health Care', LLY: 'Health Care', ABBV: 'Health Care', MRK: 'Health Care', PFE: 'Health Care', TMO: 'Health Care', ABT: 'Health Care', DHR: 'Health Care', AMGN: 'Health Care', BMY: 'Health Care', GILD: 'Health Care', ISRG: 'Health Care', VRTX: 'Health Care', MDT: 'Health Care', CVS: 'Health Care', ELV: 'Health Care', SYK: 'Health Care', REGN: 'Health Care', CI: 'Health Care', ZTS: 'Health Care',
+    // Financials
+    JPM: 'Financials', V: 'Financials', MA: 'Financials', BAC: 'Financials', WFC: 'Financials', GS: 'Financials', MS: 'Financials', AXP: 'Financials', SCHW: 'Financials', BLK: 'Financials', C: 'Financials', SPGI: 'Financials', CB: 'Financials', PGR: 'Financials', USB: 'Financials', PNC: 'Financials', TFC: 'Financials', ICE: 'Financials', CME: 'Financials', MMC: 'Financials', PYPL: 'Financials', COF: 'Financials', AON: 'Financials',
+    // Energy
+    XOM: 'Energy', CVX: 'Energy', COP: 'Energy', SLB: 'Energy', EOG: 'Energy', PSX: 'Energy', MPC: 'Energy', VLO: 'Energy', OXY: 'Energy', WMB: 'Energy', KMI: 'Energy', OKE: 'Energy', HES: 'Energy', DVN: 'Energy',
+    // Industrials
+    CAT: 'Industrials', BA: 'Industrials', HON: 'Industrials', GE: 'Industrials', UPS: 'Industrials', RTX: 'Industrials', UNP: 'Industrials', DE: 'Industrials', LMT: 'Industrials', GD: 'Industrials', MMM: 'Industrials', EMR: 'Industrials', ETN: 'Industrials', FDX: 'Industrials', NOC: 'Industrials', CSX: 'Industrials', NSC: 'Industrials', ITW: 'Industrials',
+    // Materials
+    LIN: 'Materials', SHW: 'Materials', FCX: 'Materials', ECL: 'Materials', NEM: 'Materials', APD: 'Materials', DOW: 'Materials', NUE: 'Materials', CTVA: 'Materials', DD: 'Materials', VMC: 'Materials', MLM: 'Materials',
+    // Utilities
+    NEE: 'Utilities', SO: 'Utilities', DUK: 'Utilities', AEP: 'Utilities', D: 'Utilities', EXC: 'Utilities', SRE: 'Utilities', XEL: 'Utilities', PEG: 'Utilities', ED: 'Utilities', WEC: 'Utilities',
+    // Real Estate
+    PLD: 'Real Estate', AMT: 'Real Estate', EQIX: 'Real Estate', WELL: 'Real Estate', SPG: 'Real Estate', O: 'Real Estate', PSA: 'Real Estate', CCI: 'Real Estate', DLR: 'Real Estate', VICI: 'Real Estate', AVB: 'Real Estate',
+};
+
 async function fetchSP500() {
     const r = await fetch('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', { headers: { ...UA, Accept: 'text/html' } });
     const html = await r.text();
@@ -310,8 +338,15 @@ module.exports = async (req, res) => {
                 return;
             }
             const [sp, ndx] = await Promise.all([fetchSP500(), fetchNasdaq100()]);
-            const all = [...new Set([...sp, ...ndx])].filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t)).sort();
+            let all = [...new Set([...sp, ...ndx])].filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t));
             if (all.length < 100) throw new Error(`constituent parse too small: ${all.length}`);
+            // ALWAYS include the guaranteed core (NFLX etc.) — a flaky parse can never drop a major.
+            const _allSet = new Set(all);
+            for (const [t, sec] of Object.entries(_CORE_US)) {
+                _allSet.add(t);
+                if (!_SP_SECTORS[t] && !_EXTRA_SECTORS[t]) _EXTRA_SECTORS[t] = sec;
+            }
+            all = [..._allSet].sort();
             const sectors = {};
             all.forEach(t => { const s = _CRYPTO_OVERRIDE.has(t) ? 'Crypto' : (_SP_SECTORS[t] || _EXTRA_SECTORS[t]); if (s) sectors[t] = s; });
             res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
