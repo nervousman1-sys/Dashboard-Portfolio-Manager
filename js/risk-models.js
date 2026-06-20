@@ -779,8 +779,8 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v8'; // v8: deeper universe + Israeli-stock group + auto-sector
-const _RM_SCORE_KEY = 'rm_scores_v1'; // tiny per-signature score freeze (deterministic badges)
+const _RM_PERSIST_KEY = 'risk_model_persist_v9'; // v9: composite portfolio modelScore + count-based technical
+const _RM_SCORE_KEY = 'rm_scores_v2'; // v2: freeze now includes modelScore
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
@@ -1022,6 +1022,30 @@ const _RM_ETF_SET = new Set([
     'IYZ', 'VAW', 'IYM', 'VPU', 'IDU', 'VNQ', 'IYR',
 ]);
 
+// Technical sub-score by COUNTING active indicators from the technical-analysis table:
+// 50 for the first active indicator, +15 for each additional, capped at 100. Indicators =
+// near a major MA (200/300 day & week, ±3%), inside a monthly/quarterly FVG, or oversold RSI
+// (daily<40 / weekly<30). Overbought weekly RSI (>70) is stretched → pulls the score down.
+// 0 active → 40; no scan data yet → neutral 50.
+const _RM_TECH_NEAR = 3;
+function _rmTechIndicatorScore(t) {
+    if (!t) return 50;
+    const ma = t.ma || {};
+    const near = (d) => d != null && Math.abs(d) <= _RM_TECH_NEAR;
+    let count = 0;
+    if (near(ma.d200dist)) count++;
+    if (near(ma.d300dist)) count++;
+    if (near(ma.w200dist)) count++;
+    if (near(ma.w300dist)) count++;
+    if (t.fvgM && t.fvgM.inside) count++;
+    if (t.fvgQ && t.fvgQ.inside) count++;
+    if (t.rsiD != null && t.rsiD < 40) count++;
+    if (t.rsiW != null && t.rsiW < 30) count++;
+    let score = count >= 1 ? Math.min(100, 50 + (count - 1) * 15) : 40;
+    if (t.rsiW != null && t.rsiW > 70) score = Math.max(20, score - 20); // overbought = poor entry
+    return score;
+}
+
 // Per-portfolio COMPOSITE MODEL SCORE (0–100): the value-weighted Final Score of the HELD
 // companies — 40% fundamental (report score) + 40% SML/CML (cross-sectional α percentile) +
 // 20% technical (200-week MA / weekly RSI / FVG). Same engine as the recommendations, so the
@@ -1041,21 +1065,11 @@ function _rmComputeModelScores(model, clients_) {
         .filter(a => a && a.hasData && a.alpha != null && isFinite(a.alpha)).map(a => a.alpha).sort((a, b) => a - b);
     const n = sorted.length;
     const pctOf = (v) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; } return n > 1 ? (lo - 1) / (n - 1) : 0.5; };
-    const techScoreOf = (t) => {
-        if (!t) return 50;
-        const ma = t.ma || {};
-        const dW = ma.w200dist != null ? ma.w200dist : null, dD = ma.d200dist != null ? ma.d200dist : null, rsiW = t.rsiW != null ? t.rsiW : null;
-        const inFvg = !!((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside));
-        const extW = clamp01((dW != null ? dW : 0) / 50), rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 65) / 20), extD = clamp01((dD != null ? dD : 0) / 30);
-        let pen = 0.55 * extW + 0.30 * rsiPen + 0.15 * extD;
-        if (inFvg) pen = Math.max(0, pen - 0.20);
-        return (1 - clamp01(pen)) * 100;
-    };
     const finalOf = (ticker, alpha) => {
         const f = fund[ticker];
         const fundScore = (f && f.score != null && isFinite(f.score)) ? f.score : 50;
         const smlScore = 100 * clamp01(pctOf(alpha != null ? alpha : 0));
-        const techScore = techScoreOf(tech[ticker]);
+        const techScore = _rmTechIndicatorScore(tech[ticker]);
         return 0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore;
     };
     for (const p of model.portfolios) {
@@ -1108,27 +1122,19 @@ function _rmApplyFinalScore(cands, techOverride) {
         // Fundamental (40%) — platform report score, neutral 50 if not yet cached
         const f = fund[c.ticker];
         const fundScore = (f && f.score != null && isFinite(f.score)) ? f.score : 50;
-        // Technical (20%) — high = comfortable entry; penalise extension above the long-term
-        // MAs and a hot weekly RSI (the direct ATH guard). Neutral 50 if no scan data.
+        // Technical (20%) — COUNT of active indicators from the technical table (50 + 15 each,
+        // cap 100). More indicators active (near a major MA, inside an FVG, oversold RSI) = a
+        // better entry. Neutral 50 if no scan data.
         const t = tech[c.ticker];
         let techScore = 50, hasTech = false;
         if (t) {
             hasTech = true;
             const ma = t.ma || {};
-            const dD = ma.d200dist != null ? ma.d200dist : null;   // % vs 200-day MA  (short res)
-            const dW = ma.w200dist != null ? ma.w200dist : null;   // % vs 200-WEEK MA (long base — primary)
-            const rsiW = t.rsiW != null ? t.rsiW : null;           // weekly RSI       (long res)
-            const inFvg = !!((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside)); // monthly/quarterly FVG
-            const extW = clamp01((dW != null ? dW : 0) / 50);      // +50% above 200-week → full
-            const rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 65) / 20);  // weekly RSI 65→85
-            const extD = clamp01((dD != null ? dD : 0) / 30);
-            // WEIGHTED penalty — the high-resolution signals dominate (200-week MA 55%,
-            // weekly RSI 30%, 200-day MA only 15%).
-            let penalty = 0.55 * extW + 0.30 * rsiPen + 0.15 * extD;
-            // Inside a monthly/quarterly fair-value gap = a recognised higher-TF support
-            // zone → a better entry → ease the penalty.
-            if (inFvg) penalty = Math.max(0, penalty - 0.20);
-            techScore = (1 - clamp01(penalty)) * 100;
+            const dD = ma.d200dist != null ? ma.d200dist : null;
+            const dW = ma.w200dist != null ? ma.w200dist : null;
+            const rsiW = t.rsiW != null ? t.rsiW : null;
+            const inFvg = !!((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside));
+            techScore = _rmTechIndicatorScore(t);
             c.techRsiW = rsiW; c.techDistD = dD; c.techDistW = dW; c.techFvg = inFvg;
             // Near-ATH = stretched far above the long-term base AND/OR hot weekly RSI.
             c.nearATH = (dW != null && dW >= 40) || (rsiW != null && rsiW >= 75);
