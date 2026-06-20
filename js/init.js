@@ -171,6 +171,9 @@ let _cacheRendered = false;
 // LOADING state instead of the "אין תיקים להצגה" empty state during the first load window.
 if (typeof window !== 'undefined') {
     window._clientsLoading = true;
+    // Only true once the SERVER confirms the account genuinely has 0 portfolios. Until then the
+    // dashboard shows a loading state, never the false "אין תיקים" empty state.
+    window._clientsConfirmedEmpty = false;
     // Safety: never let the loading state stick forever (e.g. a hung/failed fetch).
     setTimeout(() => { window._clientsLoading = false; if (typeof renderClientCards === 'function') renderClientCards(); }, 20000);
 }
@@ -304,6 +307,8 @@ async function init() {
         // correct state and we must clear any stale cache from a previous session.
         clients = freshClients;
         saveClientsToCache(clients);
+        // Server CONFIRMED the portfolio count — now (and only now) the empty state is allowed.
+        if (typeof window !== 'undefined') window._clientsConfirmedEmpty = (freshClients.length === 0);
         // Re-apply the frozen model scores to the fresh objects (instant, deterministic badges).
         if (typeof rmApplyFrozenScores === 'function') { try { rmApplyFrozenScores(clients); } catch (e) { } }
 

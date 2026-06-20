@@ -1206,29 +1206,23 @@ function renderClientCards() {
         _safeDestroyChart(key);
     });
 
-    // While the initial portfolio fetch is still in flight, show a LOADING state — NOT the
-    // "no portfolios" empty state (which falsely implies the account is empty during load).
-    if ((!clients || clients.length === 0) && typeof window !== 'undefined' && window._clientsLoading) {
-        grid.innerHTML = `
-            <div class="empty-state glass-card">
-                <div class="rep-spinner" style="margin:0 auto 14px"></div>
-                <h3>טוען תיקים…</h3>
-                <p style="color:var(--text-muted)">רגע, מושך את נתוני התיקים</p>
-            </div>
-        `;
-        updateRiskMiniSummary([]);
-        return;
-    }
-
-    // Empty state — no portfolios at all (fetch completed, genuinely none)
+    // No portfolios in memory. CRITICAL: only show the "אין תיקים" empty state once the server
+    // has DEFINITIVELY confirmed the account has zero portfolios (window._clientsConfirmedEmpty).
+    // In every other case — initial load, a transient fetch error, an auth race — show a LOADING
+    // state instead, so a user who HAS portfolios never sees a false "no portfolios" flash.
     if (!clients || clients.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state glass-card">
-                <div class="empty-state-icon">📊</div>
-                <h3>אין תיקים להצגה</h3>
-                <p>לחץ על <strong style="color:var(--accent-blue)">"+ הוסף תיק"</strong> כדי להתחיל</p>
-            </div>
-        `;
+        const confirmedEmpty = (typeof window !== 'undefined') && window._clientsConfirmedEmpty === true;
+        grid.innerHTML = confirmedEmpty
+            ? `<div class="empty-state glass-card">
+                   <div class="empty-state-icon">📊</div>
+                   <h3>אין תיקים להצגה</h3>
+                   <p>לחץ על <strong style="color:var(--accent-blue)">"+ הוסף תיק"</strong> כדי להתחיל</p>
+               </div>`
+            : `<div class="empty-state glass-card">
+                   <div class="rep-spinner" style="margin:0 auto 14px"></div>
+                   <h3>טוען תיקים…</h3>
+                   <p style="color:var(--text-muted)">רגע, מושך את נתוני התיקים</p>
+               </div>`;
         updateRiskMiniSummary([]);
         return;
     }

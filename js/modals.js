@@ -2307,6 +2307,9 @@ async function deleteClient(clientId) {
         ? await supaDeleteClient(clientId)
         : await apiDeleteClient(clientId);
     clients = clients.filter(c => c.id !== clientId);
+    // Deleting the last portfolio is a CONFIRMED-empty state → allow the empty message
+    // (otherwise the dashboard would show a perpetual spinner).
+    if (typeof window !== 'undefined' && clients.length === 0) window._clientsConfirmedEmpty = true;
     closeMgmtModal();
     if (currentModalClientId === clientId) {
         document.getElementById('modalOverlay').classList.remove('active');
