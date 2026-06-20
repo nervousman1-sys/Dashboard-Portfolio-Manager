@@ -699,7 +699,7 @@ function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 // symbol + report date) and then served from localStorage on every later view — so we don't
 // re-call Gemini (whose free tier is rate-limited) for a report we already analyzed. One
 // gentle retry on a transient/rate failure; no retry storm (that only triggers more 429s).
-function _repAiCacheKey(m) { return `rep_ai_v2_${m.symbol}_${m.asOf || 'na'}`; }
+function _repAiCacheKey(m) { return `rep_ai_v3_${m.symbol}_${m.asOf || 'na'}`; }
 function _repApplyAI(j) {
     const summaryEl = document.getElementById('repSummary');
     const swotEl = document.getElementById('repSwot');

@@ -270,7 +270,7 @@ function _dnBoxImgs(box) {
 const _dnVisionInflight = {};
 async function _dnVisionText(img, mode) {
     // v6: coherence/OCR self-check pass (fixes garbled Hebrew like "חולות נפש"→"חולות נפט")
-    const cacheKey = 'dn_vision6_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
+    const cacheKey = 'dn_vision7_' + mode + '_' + (img.split('?')[0].split('/').slice(-2).join('_'));
     try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) return cached;
@@ -283,7 +283,7 @@ async function _dnVisionText(img, mode) {
         try {
             for (let i = 0; i < attempts; i++) {
                 try {
-                    const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=6`, { headers: { Accept: 'application/json' } });
+                    const res = await fetch(`/api/vision?img=${encodeURIComponent(img)}&mode=${mode}&pv=7`, { headers: { Accept: 'application/json' } });
                     const j = await res.json().catch(() => null);
                     if (j && j.text) {
                         try { localStorage.setItem(cacheKey, j.text); } catch (e) { /* full */ }

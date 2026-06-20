@@ -457,13 +457,37 @@ async function buildRiskModel(clientsList, opts = {}) {
         }
 
         // ── 4. Pairwise correlation matrix (assets with data only) ──
+        // PERF: precompute each ticker's date→return map ONCE (the old loop recomputed BOTH
+        // tickers' returns from closes on every one of the ~n²/2 pairs). Correlation is then a
+        // single pass over the smaller map. For a ~190-name universe this is the bulk of the
+        // cold-build CPU, and this cuts it by ~an order of magnitude.
         const corrTickers = tickers.filter(t => closeMaps[t]);
+        const _retMaps = {};
+        for (const t of corrTickers) {
+            const cm = closeMaps[t];
+            const ds = [...cm.keys()].sort();
+            const rmap = new Map();
+            for (let k = 1; k < ds.length; k++) {
+                const p0 = cm.get(ds[k - 1]), p1 = cm.get(ds[k]);
+                if (p0 > 0 && p1 > 0) {
+                    let r = p1 / p0 - 1;
+                    if (r > _RM_RET_CLIP) r = _RM_RET_CLIP; else if (r < -_RM_RET_CLIP) r = -_RM_RET_CLIP;
+                    rmap.set(ds[k], r);
+                }
+            }
+            _retMaps[t] = rmap;
+        }
+        const _corrFromMaps = (a, b) => {
+            const [s, l] = a.size <= b.size ? [a, b] : [b, a];
+            const ra = [], rb = [];
+            for (const [d, v] of s) { const w = l.get(d); if (w !== undefined) { ra.push(v); rb.push(w); } }
+            return ra.length > RISK_MODEL.MIN_POINTS ? _rmCorrelation(ra, rb) : 0;
+        };
         const matrix = corrTickers.map(() => new Array(corrTickers.length).fill(0));
         for (let i = 0; i < corrTickers.length; i++) {
             matrix[i][i] = 1;
             for (let j = i + 1; j < corrTickers.length; j++) {
-                const { ra, rb } = _rmAlignedReturns(closeMaps[corrTickers[i]], closeMaps[corrTickers[j]]);
-                const rho = ra.length > RISK_MODEL.MIN_POINTS ? _rmCorrelation(ra, rb) : 0;
+                const rho = _corrFromMaps(_retMaps[corrTickers[i]], _retMaps[corrTickers[j]]);
                 matrix[i][j] = rho;
                 matrix[j][i] = rho;
             }
