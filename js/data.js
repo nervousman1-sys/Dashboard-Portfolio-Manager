@@ -171,7 +171,8 @@ const SECTOR_MAP = {
     'NEE': 'Utilities', 'SO': 'Utilities',
     'PLD': 'Real Estate',
     'MSTR': 'Crypto', 'IBIT': 'Crypto', 'BITO': 'Crypto', 'GBTC': 'Crypto',
-    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto', 'HOOD': 'Crypto',
+    'COIN': 'Crypto', 'MARA': 'Crypto', 'RIOT': 'Crypto', 'CLSK': 'Crypto', 'HOOD': 'Crypto', 'MTPLF': 'Crypto',
+    'MU': 'Technology', 'APP': 'Technology', 'SHOP': 'Technology', 'NET': 'Technology', 'DDOG': 'Technology', 'SNOW': 'Technology', 'ZS': 'Technology',
     // ── Expanded candidate-universe coverage (so no candidate falls into "Other") ──
     'ARM': 'Technology', 'PLTR': 'Technology', 'ANET': 'Technology', 'TSM': 'Technology', 'ASML': 'Technology',
     'CHTR': 'Communication', 'EA': 'Communication', 'TTWO': 'Communication',
@@ -230,6 +231,31 @@ function assetTypeLabel(h) {
     if (h.typeLabel) return h.typeLabel;
     return h.type === 'bond' ? 'אג"ח' : h.type === 'index' ? 'מדד' : h.type === 'crypto' ? 'קריפטו' : 'מניה';
 }
+// GICS (reports-page taxonomy) → the dashboard's sector taxonomy.
+const GICS_TO_DASH = {
+    'Information Technology': 'Technology', 'Health Care': 'Healthcare', 'Communication Services': 'Communication',
+    'Consumer Discretionary': 'Consumer Disc.', 'Consumer Staples': 'Consumer Staples', 'Financials': 'Financials',
+    'Energy': 'Energy', 'Industrials': 'Industrials', 'Utilities': 'Utilities', 'Real Estate': 'Real Estate', 'Materials': 'Materials',
+};
+// AUTOMATIC sector resolver for ANY ticker: dashboard map → US-ETF → the reports page's
+// sector data (cached in localStorage, GICS normalised → dashboard taxonomy) → 'Other'.
+// This reuses the well-organised sector classification already collected on the reports page.
+function resolveSectorFor(ticker) {
+    const t = String(ticker || '').replace(/\.TA$/i, '').toUpperCase();
+    if (!t) return 'Other';
+    if (typeof SECTOR_MAP !== 'undefined' && SECTOR_MAP[t]) return SECTOR_MAP[t];
+    if (typeof isUsEtf === 'function' && isUsEtf(t)) return 'תעודות סל';
+    if (typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[t]) return 'תעודות סל';
+    try {
+        for (const key of ['rep_uni_us_v3', 'rep_uni_il_v3']) {
+            const c = JSON.parse(localStorage.getItem(key) || 'null');
+            const g = c && c.sectors && c.sectors[t];
+            if (g) return GICS_TO_DASH[g] || g;   // 'Crypto' / IL sector strings pass through
+        }
+    } catch (e) { /* ignore */ }
+    return 'Other';
+}
+
 // True if a holding should be treated/styled as a fund/ETF (for the badge class).
 function isFundLike(h) {
     if (!h) return false;

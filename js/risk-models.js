@@ -772,7 +772,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v6'; // v6: stable per-day scoring (no partial-churn)
+const _RM_PERSIST_KEY = 'risk_model_persist_v7'; // v7: numeric IL funds excluded from candidates + auto-sector
 const _RM_SCORE_KEY = 'rm_scores_v1'; // tiny per-signature score freeze (deterministic badges)
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
@@ -1077,6 +1077,13 @@ function _rmApplyFinalScore(cands, techOverride) {
         c.hasTech = hasTech;
         // ETFs go in their OWN category, never mixed among the stocks.
         if (_RM_ETF_SET.has(c.ticker) || /^XL[A-Z]{1,3}$/.test(c.ticker)) { c.isETF = true; c.sector = 'תעודות סל'; }
+        // AUTOMATIC sector classification: anything still uncategorised ('Other'/missing) is
+        // resolved from the dashboard map → US-ETF detection → the reports page's sector data
+        // (GICS, normalised) — so no candidate lands in "Other" when its sector is knowable.
+        else if ((!c.sector || c.sector === 'Other') && typeof resolveSectorFor === 'function') {
+            const r = resolveSectorFor(c.ticker);
+            if (r && r !== 'Other') c.sector = r;
+        }
         c.fundScore = Math.round(fundScore);
         c.smlScore = Math.round(smlScore);
         c.techScore = Math.round(techScore);
@@ -1163,7 +1170,9 @@ function buildPortfolioAdvisory(client, model) {
         // !== 'avoid' already excludes α ≤ −1.2%). This gives a DEEP bench of options
         // per sector for the "בדוק אופציה חלופית" cycler; the fit-ranking still surfaces
         // the best first.
-        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.recommendation !== 'avoid')
+        // Exclude numeric-id Israeli funds (someone else's specific KTF holding) — they're not
+        // generic recommendations and would show as a bare number. Curated tickers only.
+        .filter(a => a.hasData && !held.has(a.ticker) && a.alpha != null && a.recommendation !== 'avoid' && !/^\d{4,9}$/.test(a.ticker))
         .map(a => {
             const c = _avgCorrTo(a.ticker);
             const corr = (c == null) ? 0.35 : c;     // unknown correlation → assume mildly positive
