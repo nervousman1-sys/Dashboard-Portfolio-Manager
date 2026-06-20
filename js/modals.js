@@ -546,11 +546,19 @@ async function openModal(clientId) {
                     <div class="ov-panel">
                         <div class="ov-panel-title">מדדי סיכון</div>
                         <div class="ov-panel-grid cols-3">
-                            <div class="ov-cell ov-cell-risk-score">
-                                <div class="ov-cell-label">ציון סיכון</div>
-                                <div class="ov-cell-value ${_rm && _rm.riskScore >= 75 ? 'val-negative' : _rm && _rm.riskScore >= 40 ? 'val-warn' : 'val-positive'}">${_rm ? _rm.riskScore : '—'}<span class="ov-cell-dim">/100</span></div>
-                                <div class="ov-cell-bar"><div class="ov-cell-bar-fill" style="width:${_rm ? _rm.riskScore : 0}%;background:${_rm && _rm.riskScore >= 75 ? '#ff4d4d' : _rm && _rm.riskScore >= 40 ? '#facc15' : '#00ff94'}"></div></div>
-                            </div>
+                            ${(() => {
+                                // Composite MODEL score (fundamental + SML/CML + technical) — the SAME number as
+                                // the list view. Higher = better → green; low = red.
+                                const _ms = (typeof rmModelScoreOf === 'function' ? rmModelScoreOf(client) : null);
+                                const has = _ms != null;
+                                const col = !has ? '#8a93a6' : _ms >= 65 ? '#00ff94' : _ms >= 45 ? '#facc15' : '#ff4d4d';
+                                const cls = !has ? '' : _ms >= 65 ? 'val-positive' : _ms >= 45 ? 'val-warn' : 'val-negative';
+                                return `<div class="ov-cell ov-cell-risk-score" title="ציון מודל: 40% דוחות · 40% SML/CML · 20% טכני (החברות המוחזקות)">
+                                <div class="ov-cell-label">ציון מודל</div>
+                                <div class="ov-cell-value ${cls}">${has ? _ms : '—'}<span class="ov-cell-dim">/100</span></div>
+                                <div class="ov-cell-bar"><div class="ov-cell-bar-fill" style="width:${has ? _ms : 0}%;background:${col}"></div></div>
+                            </div>`;
+                            })()}
                             <div class="ov-cell">
                                 <div class="ov-cell-label">סטיית תקן</div>
                                 <div class="ov-cell-value ${_rm && _rm.stdDev !== '—' && parseFloat(_rm.stdDev) > 15 ? 'val-warn' : ''}">${_rm && _rm.stdDev !== '—' ? _rm.stdDev + '%' : '—'}</div>

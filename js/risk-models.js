@@ -877,6 +877,20 @@ function rmApplyFrozenScores(clientsList) {
 }
 if (typeof window !== 'undefined') window.rmApplyFrozenScores = rmApplyFrozenScores;
 
+// The composite model score for a client — read from the LIVE model (single source of truth),
+// so the list view, the modal and the card all show the SAME number. Falls back to c.modelScore.
+function rmModelScoreOf(clientOrId) {
+    const id = (clientOrId && typeof clientOrId === 'object') ? clientOrId.id : clientOrId;
+    const m = (typeof window !== 'undefined') ? window._lastRiskModel : null;
+    if (m && Array.isArray(m.portfolios)) {
+        const p = m.portfolios.find(x => x.id === id);
+        if (p && p.modelScore != null) return p.modelScore;
+    }
+    if (clientOrId && typeof clientOrId === 'object' && clientOrId.modelScore != null) return clientOrId.modelScore;
+    return null;
+}
+if (typeof window !== 'undefined') window.rmModelScoreOf = rmModelScoreOf;
+
 let _modelRiskApplying = false;
 async function applyModelRiskToClients(opts = {}) {
     if (_modelRiskApplying && !opts.force) return;

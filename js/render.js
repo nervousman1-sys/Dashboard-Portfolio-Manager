@@ -714,8 +714,8 @@ function renderSummaryBar() {
 // Incremented on each render — used as canvas key to force clean re-draw
 let _cardRenderKey = 0;
 
-// ── Portfolio view toggle (grid / list) ──
-let _portfolioView = 'grid';
+// ── Portfolio view toggle (grid / list) ── persisted so a refresh keeps the chosen view.
+let _portfolioView = (() => { try { return localStorage.getItem('portfolio_view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })();
 
 // ── List-view metrics helper ──
 // REAL data: returnPct, cumulativePnl, dailyPnl, concentration, marketExposure, totalCash,
@@ -864,9 +864,10 @@ function _renderListView(filtered, container) {
         const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
         const retSign = m.returnPct >= 0 ? '+' : '';
         const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
-        // Composite MODEL score (fundamental + SML/CML + technical of held companies). Higher =
-        // better, so colour green-high → red-low. Falls back to the heuristic until the model loads.
-        const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+        // Composite MODEL score (fundamental + SML/CML + technical of held companies). Read it
+        // from the live model (source of truth) → c.modelScore → heuristic, so it's never stuck
+        // on the old number. Higher = better → green-high / red-low.
+        const modelScore = (typeof rmModelScoreOf === 'function' ? rmModelScoreOf(c) : null) ?? (c.modelScore != null ? c.modelScore : m.riskScore);
         const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
         const cumPnlClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
         const cumPnlSign = m.cumulativePnl >= 0 ? '+' : '';
@@ -1066,7 +1067,7 @@ function _renderFullList(list) {
             const cumSign = m.cumulativePnl >= 0 ? '+' : '';
             const dailyClass = m.dailyPnl >= 0 ? 'positive' : 'negative';
             const dailySign = m.dailyPnl >= 0 ? '+' : '';
-            const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+            const modelScore = (typeof rmModelScoreOf === "function" ? rmModelScoreOf(c) : null) ?? (c.modelScore != null ? c.modelScore : m.riskScore);
             const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
             const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
             const maxDDClass = parseFloat(m.maxDD) < 0 ? 'negative' : '';
@@ -1113,7 +1114,7 @@ function _renderFullList(list) {
             const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
             const retSign = m.returnPct >= 0 ? '+' : '';
             const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
-            const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+            const modelScore = (typeof rmModelScoreOf === "function" ? rmModelScoreOf(c) : null) ?? (c.modelScore != null ? c.modelScore : m.riskScore);
             const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
             const cumClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
             const cumSign = m.cumulativePnl >= 0 ? '+' : '';
@@ -1187,6 +1188,7 @@ function _toggleMobileRow(rowEl, clientId) {
 
 function setPortfolioView(mode, btn) {
     _portfolioView = mode;
+    try { localStorage.setItem('portfolio_view', mode); } catch (e) { /* ignore */ }
     const grid = document.getElementById('clientsGrid');
     if (!grid) return;
     grid.classList.toggle('list-view', mode === 'list');
@@ -1201,8 +1203,17 @@ function renderClientCards() {
     _cardRenderKey++;
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
-    // Restore view mode after innerHTML wipe
+    // Restore view mode after innerHTML wipe — and sync the toggle button + subtitle to the
+    // persisted view, so a page refresh keeps list/grid instead of snapping back to grid.
     grid.classList.toggle('list-view', _portfolioView === 'list');
+    try {
+        const gridBtn = document.getElementById('btnGridView');
+        const listBtn = document.getElementById('btnListView');
+        if (gridBtn) gridBtn.classList.toggle('active', _portfolioView === 'grid');
+        if (listBtn) listBtn.classList.toggle('active', _portfolioView === 'list');
+        const sub = document.getElementById('portfolioSectionSub');
+        if (sub) sub.textContent = _portfolioView === 'list' ? 'דירוג לפי תשואה (TOP 12)' : '';
+    } catch (e) { /* ignore */ }
 
     // Destroy only card-level charts (doughnut + sparkline), preserve exposure/modal charts
     const preserveKeys = ['sector-exposure', 'modal-sector'];
