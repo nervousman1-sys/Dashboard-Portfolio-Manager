@@ -864,7 +864,10 @@ function _renderListView(filtered, container) {
         const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
         const retSign = m.returnPct >= 0 ? '+' : '';
         const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
-        const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+        // Composite MODEL score (fundamental + SML/CML + technical of held companies). Higher =
+        // better, so colour green-high → red-low. Falls back to the heuristic until the model loads.
+        const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+        const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
         const cumPnlClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
         const cumPnlSign = m.cumulativePnl >= 0 ? '+' : '';
         const dailyPnlClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
@@ -883,7 +886,7 @@ function _renderListView(filtered, container) {
             <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
             <div class="pl-cell pl-c-cumpnl ${cumPnlClass}">${cumPnlSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
             <div class="pl-cell pl-c-dailypnl ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
-            <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+            <div class="pl-cell pl-c-score"><span class="pl-score-badge" style="color:${_msCol};border-color:${_msCol}">${modelScore}</span></div>
             <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
             <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
             <div class="pl-cell pl-c-bondexp">${m.bondExposure}%</div>
@@ -899,7 +902,7 @@ function _renderListView(filtered, container) {
         ${isMob ? `<div class="pl-mobile-details-wrap" style="display:none" data-row-id="${c.id}">
             <div class="pl-mob-grid">
                 <div class="pl-mob-item"><span class="pl-mob-label">רווח/הפסד יומי</span><span class="pl-mob-val ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">RISK SCORE</span><span class="pl-mob-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                <div class="pl-mob-item"><span class="pl-mob-label">ציון מודל</span><span class="pl-mob-val"><span class="pl-score-badge" style="color:${_msCol};border-color:${_msCol}">${modelScore}</span></span></div>
                 <div class="pl-mob-item"><span class="pl-mob-label">ריכוזיות</span><span class="pl-mob-val">${m.concentration.toFixed(0)}% ${m.topHolding ? '(' + m.topHolding + ')' : ''}</span></div>
                 <div class="pl-mob-item"><span class="pl-mob-label">חשיפת מניות</span><span class="pl-mob-val">${m.marketExposure}%</span></div>
                 <div class="pl-mob-item"><span class="pl-mob-label">חשיפת אג"ח</span><span class="pl-mob-val">${m.bondExposure}%</span></div>
@@ -927,7 +930,7 @@ function _renderListView(filtered, container) {
                     <div class="pl-cell pl-c-ret">תשואה %</div>
                     <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
                     <div class="pl-cell pl-c-dailypnl">רווח יומי</div>
-                    <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-score">ציון מודל</div>
                     <div class="pl-cell pl-c-conc">ריכוזיות</div>
                     <div class="pl-cell pl-c-exp">חשיפת מניות</div>
                     <div class="pl-cell pl-c-bondexp">חשיפת אג"ח</div>
@@ -1063,7 +1066,8 @@ function _renderFullList(list) {
             const cumSign = m.cumulativePnl >= 0 ? '+' : '';
             const dailyClass = m.dailyPnl >= 0 ? 'positive' : 'negative';
             const dailySign = m.dailyPnl >= 0 ? '+' : '';
-            const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+            const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+            const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
             const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
             const maxDDClass = parseFloat(m.maxDD) < 0 ? 'negative' : '';
             return `
@@ -1084,7 +1088,7 @@ function _renderFullList(list) {
                     <div class="fl-detail-grid">
                         <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד מצטבר</span><span class="fl-detail-val price-change ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">רווח/הפסד יומי</span><span class="fl-detail-val price-change ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
-                        <div class="fl-detail-item"><span class="fl-detail-label">RISK SCORE</span><span class="fl-detail-val"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></span></div>
+                        <div class="fl-detail-item"><span class="fl-detail-label">ציון מודל</span><span class="fl-detail-val"><span class="pl-score-badge" style="color:${_msCol};border-color:${_msCol}">${modelScore}</span></span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">ריכוזיות</span><span class="fl-detail-val">${m.concentration.toFixed(0)}% ${m.topHolding ? '(' + m.topHolding + ')' : ''}</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">חשיפת מניות</span><span class="fl-detail-val">${m.marketExposure}%</span></div>
                         <div class="fl-detail-item"><span class="fl-detail-label">חשיפת אג"ח</span><span class="fl-detail-val">${m.bondExposure}%</span></div>
@@ -1109,7 +1113,8 @@ function _renderFullList(list) {
             const retClass = m.returnPct >= 0 ? 'price-change positive' : 'price-change negative';
             const retSign = m.returnPct >= 0 ? '+' : '';
             const maxDDClass = parseFloat(m.maxDD) < 0 ? 'price-change negative' : '';
-            const scoreClass = m.riskScore >= 75 ? 'pl-score-high' : m.riskScore >= 50 ? 'pl-score-med' : 'pl-score-low';
+            const modelScore = (c.modelScore != null) ? c.modelScore : m.riskScore;
+            const _msCol = modelScore >= 65 ? 'var(--risk-low)' : modelScore >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
             const cumClass = m.cumulativePnl >= 0 ? 'price-change positive' : 'price-change negative';
             const cumSign = m.cumulativePnl >= 0 ? '+' : '';
             const dailyClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
@@ -1123,7 +1128,7 @@ function _renderFullList(list) {
                 <div class="pl-cell pl-c-ret ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</div>
                 <div class="pl-cell pl-c-cumpnl ${cumClass}">${cumSign}${formatCurrency(Math.abs(m.cumulativePnl))}</div>
                 <div class="pl-cell pl-c-dailypnl ${dailyClass}">${dailySign}${formatCurrency(Math.abs(m.dailyPnl))}</div>
-                <div class="pl-cell pl-c-score"><span class="pl-score-badge ${scoreClass}">${m.riskScore}</span></div>
+                <div class="pl-cell pl-c-score"><span class="pl-score-badge" style="color:${_msCol};border-color:${_msCol}">${modelScore}</span></div>
                 <div class="pl-cell pl-c-conc">${m.concentration.toFixed(0)}%</div>
                 <div class="pl-cell pl-c-exp">${m.marketExposure}%</div>
                 <div class="pl-cell pl-c-bondexp">${m.bondExposure}%</div>
@@ -1147,7 +1152,7 @@ function _renderFullList(list) {
                     <div class="pl-cell pl-c-ret">תשואה %</div>
                     <div class="pl-cell pl-c-cumpnl">רווח/הפסד</div>
                     <div class="pl-cell pl-c-dailypnl">רווח יומי</div>
-                    <div class="pl-cell pl-c-score">RISK SCORE</div>
+                    <div class="pl-cell pl-c-score">ציון מודל</div>
                     <div class="pl-cell pl-c-conc">ריכוזיות</div>
                     <div class="pl-cell pl-c-exp">חשיפת מניות</div>
                     <div class="pl-cell pl-c-bondexp">חשיפת אג"ח</div>

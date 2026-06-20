@@ -466,6 +466,11 @@ async function buildRiskModel(clientsList, opts = {}) {
             marketOk,
         };
 
+        // Composite MODEL SCORE per portfolio: value-weighted Final Score of the HELD companies
+        // (40% fundamental / 40% SML-CML / 20% technical) — the same engine used for the
+        // recommendations, applied to what the portfolio actually holds.
+        try { _rmComputeModelScores(model, clients_); } catch (e) { /* non-fatal */ }
+
         // Cache the FULL model normally. Previously a "partial" model (some holding's
         // history not loaded) was cached with a near-expired timestamp → it rebuilt every
         // ~20s, and because each rebuild re-fetched data that drifts slightly (or a ticker
@@ -906,7 +911,7 @@ async function applyModelRiskToClients(opts = {}) {
                 modelBeta: p.beta, modelExpReturn: p.expReturn, modelVol: p.vol,
                 modelSharpe: p.sharpe, modelAlpha: p.alpha, aboveCML: p.aboveCML,
                 complianceScore: p.complianceScore, complianceLabel: p.complianceLabel,
-                compliancePartial: p.partial,
+                compliancePartial: p.partial, modelScore: p.modelScore,
             };
             Object.assign(c, vals);
             // Freeze it once the portfolio's data is COMPLETE (not waiting on any history).
@@ -1016,6 +1021,58 @@ const _RM_ETF_SET = new Set([
     'VGT', 'IYW', 'FTEC', 'VFH', 'IYF', 'VHT', 'IYH', 'VDE', 'IYE', 'VCR', 'IYC', 'VDC', 'KXI', 'VIS', 'IYJ', 'VOX',
     'IYZ', 'VAW', 'IYM', 'VPU', 'IDU', 'VNQ', 'IYR',
 ]);
+
+// Per-portfolio COMPOSITE MODEL SCORE (0–100): the value-weighted Final Score of the HELD
+// companies — 40% fundamental (report score) + 40% SML/CML (cross-sectional α percentile) +
+// 20% technical (200-week MA / weekly RSI / FVG). Same engine as the recommendations, so the
+// dashboard "RISK SCORE" reflects the real quality of what's actually held. Sets p.modelScore.
+function _rmComputeModelScores(model, clients_) {
+    if (!model || !model.assets || !model.portfolios) return;
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    let fund = {}, tech = {};
+    try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
+    try {
+        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
+        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
+        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
+    } catch (e) { }
+    // Universe α percentile (cross-sectional) — the SML/CML sub-score, bounded relative to all.
+    const sorted = Object.values(model.assets)
+        .filter(a => a && a.hasData && a.alpha != null && isFinite(a.alpha)).map(a => a.alpha).sort((a, b) => a - b);
+    const n = sorted.length;
+    const pctOf = (v) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; } return n > 1 ? (lo - 1) / (n - 1) : 0.5; };
+    const techScoreOf = (t) => {
+        if (!t) return 50;
+        const ma = t.ma || {};
+        const dW = ma.w200dist != null ? ma.w200dist : null, dD = ma.d200dist != null ? ma.d200dist : null, rsiW = t.rsiW != null ? t.rsiW : null;
+        const inFvg = !!((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside));
+        const extW = clamp01((dW != null ? dW : 0) / 50), rsiPen = clamp01(((rsiW != null ? rsiW : 50) - 65) / 20), extD = clamp01((dD != null ? dD : 0) / 30);
+        let pen = 0.55 * extW + 0.30 * rsiPen + 0.15 * extD;
+        if (inFvg) pen = Math.max(0, pen - 0.20);
+        return (1 - clamp01(pen)) * 100;
+    };
+    const finalOf = (ticker, alpha) => {
+        const f = fund[ticker];
+        const fundScore = (f && f.score != null && isFinite(f.score)) ? f.score : 50;
+        const smlScore = 100 * clamp01(pctOf(alpha != null ? alpha : 0));
+        const techScore = techScoreOf(tech[ticker]);
+        return 0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore;
+    };
+    for (const p of model.portfolios) {
+        const client = (clients_ || []).find(c => c.id === p.id);
+        if (!client) { p.modelScore = null; continue; }
+        let sum = 0, w = 0;
+        for (const h of (client.holdings || [])) {
+            if (!_rmIsRiskyHolding(h)) continue;
+            const a = model.assets[h.ticker];
+            if (!a || !a.hasData || a.alpha == null) continue;
+            const val = h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0);
+            if (!(val > 0)) continue;
+            sum += val * finalOf(h.ticker, a.alpha); w += val;
+        }
+        p.modelScore = w > 0 ? Math.round(sum / w) : null;
+    }
+}
 
 // Attach Fund/SML-CML/Technical sub-scores + the weighted Final Score (0–100) to each
 // candidate, in place. Reads the platform's existing client-side caches:
