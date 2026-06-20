@@ -382,6 +382,10 @@ function _dnVisionHTML(text, img, mode) {
                     if (!amount && /\d/.test(p) && p.includes('%')) { amount = p; continue; }
                 }
                 if (!amount || !amount.includes('%')) continue; // percentages only — no $B ETF rows
+                // Drop rows whose "sector" is actually a direction/summary word the transcription
+                // mistook for a sector name (e.g. "עולה"/"יורד" = rising/falling, "כניסה"/"יציאה",
+                // a bare total/header). These are noise, not real sectors.
+                if (/^(עולה|יורד|עולים|יורדים|עליי?ה|ירידה|כניסה|יציאה|נכנס|יוצא|סקטור|נכס|שינוי|תשואה|סך\s*הכל|סה["״]?כ|כולל|כללי|total|net|inflow|outflow)$/i.test((segs[0] || '').trim())) continue;
                 // Split a sector label into a clean name + the tickers in its parens.
                 // "מניות בולטות (NVDA, AMD, AVGO)" → base="מניות בולטות", tickers=[NVDA,AMD,AVGO]
                 let base = raw, tickers = [];
