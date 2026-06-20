@@ -38,16 +38,16 @@ const RISK_MODEL = {
     MARKET_SYMBOL: 'SPY',          // S&P 500 ETF — broad, liquid, FMP/TwelveData friendly
     MARKET_CURRENCY: 'USD',
     MARKET_LABEL: 'S&P 500',
-    LOOKBACK_DAYS: 756,           // 3 trading years — a long equal-weighted base so a recent
-                                  // ATH spike is only ~a few % of the sample and can't dominate
-                                  // the SML/CML positioning (this is the anti-momentum lever)
+    LOOKBACK_DAYS: 1040,          // ~4 trading years — the expected return is the AVERAGE of the
+                                  // last 4 CALENDAR-YEAR returns (each year computed separately,
+                                  // then averaged), which is what positions a stock vs the SML/CML
     TRADING_DAYS: 252,            // annualization factor
     RF_FALLBACK: 0.038,           // ~3.8% — used only if DGS3MO proxy + CORS are unreachable
     RF_SERIES: 'DGS3MO',          // FRED series: 3-Month Treasury (secondary market rate)
-    // Shrinkage of the raw 1-year mean toward CAPM (0=full CAPM, 1=raw history).
-    // 0.5 halves the overfit so the frontier is realistic and consistent with the
-    // portfolio's own position.
-    RETURN_SHRINK: 0.5,
+    // Shrinkage of the 4-year average-annual return toward CAPM (0=full CAPM, 1=raw history).
+    // 0.7 keeps the SML/CML position mostly faithful to the stock's actual yearly performance
+    // (the spec), with a light pull to CAPM so the frontier stays sane.
+    RETURN_SHRINK: 0.7,
     // Jensen alpha thresholds (annualized) for the recommendation engine. Lower than
     // before because the shrunk alpha is ~half the raw alpha.
     ALPHA_BUY: 0.012,            // α ≥ +1.2% → undervalued (above SML) → recommend
@@ -290,6 +290,27 @@ function _rmHoldingsSignature(clientsList) {
 //
 // Returns a rich model object (see header) or a structured "empty" result.
 
+// Average of the last `years` CALENDAR-YEAR returns. Each year's return = lastClose/firstClose−1
+// for that calendar year; we average the most recent complete-enough years. This is the SML/CML
+// expected-return basis (per spec: "the average of each year's return over the last 4 years").
+// Per-year returns are winsorized to ±90% so one extreme year can't distort the average.
+function _rmAvgAnnualReturn(cm, years) {
+    if (!cm || cm.size < 40) return null;
+    const dates = [...cm.keys()].sort();
+    const byYear = {};
+    for (const d of dates) { const y = String(d).slice(0, 4); (byYear[y] = byYear[y] || []).push(cm.get(d)); }
+    const rets = [];
+    for (const y of Object.keys(byYear).sort()) {
+        const arr = byYear[y];
+        if (arr.length < 20) continue;                 // skip stub years (too few trading days)
+        const first = arr[0], last = arr[arr.length - 1];
+        if (!(first > 0)) continue;
+        rets.push(Math.max(-0.9, Math.min(0.9, last / first - 1)));
+    }
+    const lastN = rets.slice(-(years || 4));
+    return lastN.length ? lastN.reduce((s, x) => s + x, 0) / lastN.length : null;
+}
+
 async function buildRiskModel(clientsList, opts = {}) {
     const clients_ = clientsList || (typeof clients !== 'undefined' ? clients : []);
     const force = !!opts.force;
@@ -350,7 +371,9 @@ async function buildRiskModel(clientsList, opts = {}) {
             [...marketMap.keys()].sort().map(d => marketMap.get(d))
         );
         const marketVar = _rmVariance(marketReturns);
-        const rm = _rmMean(marketReturns) * RISK_MODEL.TRADING_DAYS;   // annualized market return
+        // Market expected return = AVERAGE of the last 4 calendar-year returns (spec). Falls back
+        // to the annualized daily mean only if year-grouping isn't possible.
+        const rm = _rmAvgAnnualReturn(marketMap, 4) ?? (_rmMean(marketReturns) * RISK_MODEL.TRADING_DAYS);
         const marketVol = _rmStd(marketReturns) * Math.sqrt(RISK_MODEL.TRADING_DAYS);
 
         const seriesMap = {};      // ticker -> [{date,close}]
@@ -391,7 +414,9 @@ async function buildRiskModel(clientsList, opts = {}) {
             const _sortedDates = [...cm.keys()].sort();
             const ownReturns = _rmClosesToReturns(_sortedDates.map(d => cm.get(d)));
             const lastClose = _sortedDates.length ? cm.get(_sortedDates[_sortedDates.length - 1]) : null;
-            const rawExpReturn = _rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS; // equal-weight over the 3y base
+            // Expected return = AVERAGE of the stock's last 4 calendar-year returns (spec) — this
+            // is what positions it vs the SML/CML. Falls back to the annualized daily mean.
+            const rawExpReturn = _rmAvgAnnualReturn(cm, 4) ?? (_rmMean(ownReturns) * RISK_MODEL.TRADING_DAYS);
             const vol = _rmStd(ownReturns) * Math.sqrt(RISK_MODEL.TRADING_DAYS);
 
             let beta = 1, corrToMarket = 0;
@@ -779,8 +804,8 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v9'; // v9: composite portfolio modelScore + count-based technical
-const _RM_SCORE_KEY = 'rm_scores_v3'; // v3: drop frozen entries lacking modelScore
+const _RM_PERSIST_KEY = 'risk_model_persist_v10'; // v10: expected return = avg of last 4 annual returns
+const _RM_SCORE_KEY = 'rm_scores_v4'; // v4: recompute scores on the new return basis
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
@@ -1065,6 +1090,32 @@ function _rmTechIndicatorScore(t) {
     return score;
 }
 
+// Factory: returns finalScoreOf(ticker, alpha) → { final, fund, sml, tech } using the same
+// 40/40/20 composite (report score + cross-sectional α percentile + count-based technical).
+// Reads the caches + builds the universe α percentile ONCE. Shared by the portfolio score and
+// the action plan so they agree.
+function _rmFinalScoreFn(model) {
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    let fund = {}, tech = {};
+    try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
+    try {
+        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
+        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
+        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
+    } catch (e) { }
+    const sorted = Object.values(model.assets)
+        .filter(a => a && a.hasData && a.alpha != null && isFinite(a.alpha)).map(a => a.alpha).sort((a, b) => a - b);
+    const n = sorted.length;
+    const pctOf = (v) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; } return n > 1 ? (lo - 1) / (n - 1) : 0.5; };
+    return (ticker, alpha) => {
+        const f = fund[ticker];
+        const fundScore = (f && f.score != null && isFinite(f.score)) ? f.score : 50;
+        const smlScore = 100 * clamp01(pctOf(alpha != null ? alpha : 0));
+        const techScore = _rmTechIndicatorScore(tech[ticker]);
+        return { final: Math.round(0.40 * fundScore + 0.40 * smlScore + 0.20 * techScore), fund: Math.round(fundScore), sml: Math.round(smlScore), tech: Math.round(techScore) };
+    };
+}
+
 // Per-portfolio COMPOSITE MODEL SCORE (0–100): the value-weighted Final Score of the HELD
 // companies — 40% fundamental (report score) + 40% SML/CML (cross-sectional α percentile) +
 // 20% technical (200-week MA / weekly RSI / FVG). Same engine as the recommendations, so the
@@ -1198,16 +1249,19 @@ function buildPortfolioAdvisory(client, model) {
     if (!p) return null;
 
     const total = p.totalValue || 0;
+    const _fs = _rmFinalScoreFn(model);   // composite scorer: reports + SML/CML + technical
     const positions = (client.holdings || [])
         .filter(h => _rmIsRiskyHolding(h) && model.assets[h.ticker] && model.assets[h.ticker].hasData)
         .map(h => {
             const a = model.assets[h.ticker];
             const v = h._valueInDisplayCurrency != null ? h._valueInDisplayCurrency : (h.value || 0);
+            const sc = _fs(h.ticker, a.alpha);
             return {
                 ticker: h.ticker, name: a.name, sector: a.sector,
                 weight: total > 0 ? v / total : 0, value: v,
                 beta: a.beta, expReturn: a.expReturn, alpha: a.alpha,
                 recommendation: a.recommendation, corrToMarket: a.corrToMarket,
+                modelScore: sc.final, fundScore: sc.fund, smlScore: sc.sml, techScore: sc.tech,
             };
         })
         .sort((x, y) => y.weight - x.weight);
@@ -1226,10 +1280,14 @@ function buildPortfolioAdvisory(client, model) {
     const concentrated = topWeight > 0.30 || positions.length < 4;
     const highCorr = avgCorr != null && avgCorr > 0.55;
 
-    // What to REDUCE — holdings below the SML (over-priced), worst first by impact
-    const reduce = notFit.slice()
-        .sort((a, b) => (b.weight * -b.alpha) - (a.weight * -a.alpha))
-        .map(x => ({ ticker: x.ticker, name: x.name, weight: x.weight, alpha: x.alpha, beta: x.beta }));
+    // What to REDUCE — driven by the FULL model, not SML alone: a holding is a sell candidate
+    // when its COMPOSITE score (reports + SML/CML + technical) is weak (<50). A name below the
+    // SML but with strong fundamentals/technical is NOT flagged; a name weak across the board is.
+    // Weakest composite first, weighted by size.
+    const reduce = positions
+        .filter(x => x.modelScore != null && x.modelScore < 50)
+        .sort((a, b) => (a.modelScore - b.modelScore) || (b.weight - a.weight))
+        .map(x => ({ ticker: x.ticker, name: x.name, weight: x.weight, alpha: x.alpha, beta: x.beta, modelScore: x.modelScore, fundScore: x.fundScore, smlScore: x.smlScore, techScore: x.techScore }));
 
     // What to ADD — suitable assets not already held, ranked by a FIT score that
     // rewards positive alpha (above SML) AND low correlation to the current book
@@ -1321,12 +1379,16 @@ function buildPortfolioAdvisory(client, model) {
     const actions = [];
     const pct = (w) => Math.round(w * 100);
 
-    // 1. Sell/trim each over-priced (below-SML) holding — highest priority
+    // 1. Sell/trim each WEAK holding (low composite model score) — highest priority. The reason
+    //    cites the full model (reports + SML/CML + technical) and the weakest pillar.
     reduce.forEach((x) => {
         const target = x.weight > 0.08 ? '≤5%' : 'מכירה מלאה';
+        const weak = [['דוחות', x.fundScore], ['SML/CML', x.smlScore], ['טכני', x.techScore]]
+            .filter(p => p[1] != null).sort((a, b) => a[1] - b[1])[0];
+        const weakTxt = weak ? `, החולשה העיקרית: ${weak[0]}` : '';
         actions.push({
             priority: 1, kind: 'sell',
-            text: `מכור/צמצם <b>${x.ticker}</b> — מתחת ל-SML (α=${rmFmtPct(x.alpha, 1)}, מתומחר ביתר). הקטן מ-${pct(x.weight)}% ל-${target}.`
+            text: `מכור/צמצם <b>${x.ticker}</b> — ציון מודל נמוך <b>${x.modelScore}</b> (דוחות ${x.fundScore ?? '—'} · SML ${x.smlScore ?? '—'} · טכני ${x.techScore ?? '—'}${weakTxt}). הקטן מ-${pct(x.weight)}% ל-${target}.`
         });
     });
 
