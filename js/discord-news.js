@@ -134,6 +134,31 @@ function _dnLabelOf(name) {
     return _dnCleanName(n);
 }
 
+// Extract image URLs from a slimmed Discord message (content links, embeds, attachments).
+function _dnImgsOf(m) {
+    const isImg = (u) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u || '') || /(cdn|media)\.discordapp\.|hcti\.io/.test(u || '');
+    const out = [];
+    const urls = (m.content || '').match(/https?:\/\/\S+/g) || [];
+    for (const u of urls) if (isImg(u)) out.push(u);
+    for (const e of (m.embeds || [])) if (e && e.image) out.push(e.image);
+    for (const a of (m.attachments || [])) if (a && (isImg(a.url) || /\.(png|jpe?g|webp|gif)/i.test(a.name || ''))) out.push(a.url);
+    return out;
+}
+// Pre-transcribe the latest day's flows + headlines images in the background so opening the
+// panel is instant. Only the heavy daily channels; fire-and-forget (cache + dedup handle it).
+function _dnPrefetchLatestVision(data) {
+    try {
+        for (const ch of (data.channels || [])) {
+            const name = String(ch.name || '');
+            const mode = name.includes('תנועות-הון') ? 'flows' : name.includes('חדשות') ? 'headlines' : null;
+            if (!mode) continue;
+            const imgs = [];
+            for (const m of (ch.messages || []).slice(0, 3)) for (const u of _dnImgsOf(m)) imgs.push(u);
+            [...new Set(imgs)].slice(0, 2).forEach((img, i) => setTimeout(() => { try { _dnVisionText(img, mode); } catch (e) { } }, 400 + i * 600));
+        }
+    } catch (e) { /* non-fatal */ }
+}
+
 async function _dnFetchAndRender(silent) {
     const feedEl = document.getElementById('dnFeed');
     if (!feedEl) return;
@@ -167,6 +192,9 @@ async function _dnFetchAndRender(silent) {
         _dnRender();
         const live = document.getElementById('dnLive');
         if (live) live.classList.add('on');
+        // Warm the heavy daily transcriptions (flows + headlines) in the BACKGROUND so the
+        // panel opens instantly — and the result is shared via the edge/localStorage cache.
+        _dnPrefetchLatestVision(data);
     } catch (e) {
         if (!silent && feedEl) feedEl.innerHTML = '<div class="adv-empty">שגיאה בטעינת הפיד — ננסה שוב אוטומטית.</div>';
     }
