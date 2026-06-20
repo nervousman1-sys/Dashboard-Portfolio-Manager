@@ -1160,8 +1160,11 @@ const SECTOR_TOP_STOCKS = {
     SOXX: ['NVDA', 'AVGO', 'AMD', 'TSM', 'ASML', 'QCOM', 'MU', 'LRCX', 'AMAT', 'ARM'],
     SMH: ['NVDA', 'TSM', 'AVGO', 'AMD', 'ASML', 'QCOM', 'MU', 'INTC', 'AMAT', 'KLAC'],
     AIQ: ['NVDA', 'MSFT', 'GOOGL', 'META', 'AVGO', 'PLTR', 'AMD', 'CRM'],
+    CRYPTO: ['COIN', 'MARA', 'RIOT', 'MSTR', 'CLSK', 'HOOD'],
 };
 const SECTOR_HE_TO_ETF = [
+    // Crypto FIRST — so "תשתיות קריפטו" (crypto infra) doesn't fall into the תשתיות=utilities rule.
+    [/קריפטו|crypto|ביטקוין|bitcoin|בלוקצ|blockchain|מטבעות?\s*דיגיטל|כריית/i, 'CRYPTO'],
     [/שבב|מוליכים\s*למחצה|מוליכ|סמיקונדקטור|semicon/i, 'SOXX'],
     [/בינה\s*מלאכותית|\bai\b|genai|רובוטיק/i, 'AIQ'],
     [/בריאות|פארמה|תרופ/i, 'XLV'],
