@@ -291,23 +291,33 @@ function _rmHoldingsSignature(clientsList) {
 // Returns a rich model object (see header) or a structured "empty" result.
 
 // Average of the last `years` CALENDAR-YEAR returns. Each year's return = lastClose/firstClose−1
-// for that calendar year; we average the most recent complete-enough years. This is the SML/CML
-// expected-return basis (per spec: "the average of each year's return over the last 4 years").
+// for that calendar year; we average the most recent FULL years. This is the SML/CML expected-
+// return basis (per spec: "the average of each year's return over the last 4 years").
 // Per-year returns are winsorized to ±90% so one extreme year can't distort the average.
+//
+// IMPORTANT — partial years don't get counted as full years: a calendar year with <~200 trading
+// days (the current in-progress year, or a recent-IPO's first stub year) would otherwise inject a
+// 5-month move as if it were a 12-month return, biasing the basis. We prefer COMPLETE years and
+// only fall back to partial ones when there aren't at least 2 complete years (e.g. a new listing).
+const _RM_FULL_YEAR_DAYS = 200;
 function _rmAvgAnnualReturn(cm, years) {
     if (!cm || cm.size < 40) return null;
     const dates = [...cm.keys()].sort();
     const byYear = {};
     for (const d of dates) { const y = String(d).slice(0, 4); (byYear[y] = byYear[y] || []).push(cm.get(d)); }
-    const rets = [];
+    const full = [], partial = [];
     for (const y of Object.keys(byYear).sort()) {
         const arr = byYear[y];
         if (arr.length < 20) continue;                 // skip stub years (too few trading days)
         const first = arr[0], last = arr[arr.length - 1];
         if (!(first > 0)) continue;
-        rets.push(Math.max(-0.9, Math.min(0.9, last / first - 1)));
+        const r = Math.max(-0.9, Math.min(0.9, last / first - 1));
+        (arr.length >= _RM_FULL_YEAR_DAYS ? full : partial).push(r);
     }
-    const lastN = rets.slice(-(years || 4));
+    // Use complete years when we have at least two; otherwise fall back to whatever exists
+    // (new ticker) so a recent listing still gets a (best-effort) return estimate.
+    const pool = full.length >= 2 ? full : (full.length ? full : partial);
+    const lastN = pool.slice(-(years || 4));
     return lastN.length ? lastN.reduce((s, x) => s + x, 0) / lastN.length : null;
 }
 
@@ -828,8 +838,8 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v10'; // v10: expected return = avg of last 4 annual returns
-const _RM_SCORE_KEY = 'rm_scores_v4'; // v4: recompute scores on the new return basis
+const _RM_PERSIST_KEY = 'risk_model_persist_v11'; // v10: expected return = avg of last 4 annual returns
+const _RM_SCORE_KEY = 'rm_scores_v5'; // v4: recompute scores on the new return basis
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
