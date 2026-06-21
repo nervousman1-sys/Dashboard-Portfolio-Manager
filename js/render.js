@@ -127,7 +127,7 @@ function _clientDisplayValue(c) {
     if (!c) return 0;
     if (!_fxAdjustedReturn) return c.portfolioValue || 0;
     const r = _calcReturn(c); // r.totalValue = FX-adjusted holdings value (USD, no cash)
-    const ilsToUsd = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const ilsToUsd = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.7);
     const cashUsd = (c.cash?.usd || 0) + (c.cash?.ils || 0) * ilsToUsd;
     return r.totalValue + cashUsd;
 }

@@ -6,7 +6,7 @@
 let _fxRates = { USDILS: null, ILSUSD: null };
 let _fxTimestamp = 0;
 const FX_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — FX rates are slow-moving intraday
-const FX_HARDCODED_USDILS = 3.6;     // Approximate fallback if all APIs fail
+const FX_HARDCODED_USDILS = 3.7;     // Approximate fallback if all APIs fail — MUST match window.USD_ILS_RATE's fallback (init.js) so every ILS conversion agrees pre-live-rate
 
 // ========== FETCH FX RATES ==========
 // Called on app init and manual refresh. Non-blocking — always returns (has fallback).

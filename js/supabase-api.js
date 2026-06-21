@@ -117,7 +117,7 @@ async function supaAddClient(name, cashUsd = 0, cashIls = 0) {
     if (!user) { console.error('supaAddClient: no user session'); return null; }
 
     // FX-convert ILS cash to USD for portfolio_value and initial_investment
-    const ilsFx = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const ilsFx = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.7);
     const totalCashUsd = cashUsd + cashIls * ilsFx;
     const totalCashRaw = cashUsd + cashIls; // backward compat for cash_balance column
 
@@ -199,7 +199,7 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         }
     }
 
-    const _ilsFxBatch = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.6);
+    const _ilsFxBatch = (typeof getFxRate === 'function') ? getFxRate('ILS', 'USD') : (1 / 3.7);
     const totalCashUsdBatch = cashUsd + cashIls * _ilsFxBatch;
 
     // --- Step 2: Build all holding rows in memory (NO API calls) ---

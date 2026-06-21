@@ -607,7 +607,7 @@ async function openModal(clientId) {
                     const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
                     if (!hasUsd) return '';
                     const b = getPortfolioAvgUsdRate(client.id);
-                    const cur = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : 3.6;
+                    const cur = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : 3.7;
                     // FX P&L for an ILS investor: ₪ now per $ vs ₪ paid per $.
                     const fxPnl = (cur / b.rate - 1) * 100;
                     const cls = fxPnl >= 0 ? 'val-positive' : 'val-negative';
