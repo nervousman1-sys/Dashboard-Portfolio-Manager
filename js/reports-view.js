@@ -304,7 +304,7 @@ async function _repPrefetchScores() {
             if (myToken !== _repPrefetchToken || _repView !== 'list' || _repMarket !== market) return;
             const t = todo[idx++];
             try {
-                const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(t)}&market=${market}&fast=1`, { headers: { Accept: 'application/json' } });
+                const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(t)}&market=${market}&fast=1&rv=2`, { headers: { Accept: 'application/json' } });
                 if (r.ok) {
                     const rep = await r.json();
                     const model = ReportsEngine.buildReport(rep);
@@ -338,7 +338,7 @@ async function openReportDetail(symbol) {
     if (body) body.innerHTML = `<div class="rep-loading"><div class="rep-spinner"></div><span>טוען דו"ח עבור ${symbol.replace(/\.TA$/, '')}…</span></div>`;
 
     try {
-        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}`, { headers: { Accept: 'application/json' } });
+        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}&rv=2`, { headers: { Accept: 'application/json' } });
         if (!r.ok) {
             const j = await r.json().catch(() => ({}));
             const msg = r.status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
@@ -544,6 +544,13 @@ function _repRenderDetail(m) {
         <div class="rep-section-title">הערות לתשומת לב</div>
         <div class="rep-attention">
             ${m.attentionNotes.map((n, i) => `<div class="rep-attn rep-attn-${n.severity}"><span class="rep-attn-dot"></span><span>${n.he}<span class="rep-attn-why" data-attn-why="${i}"></span></span></div>`).join('')}
+        </div>` : ''}
+
+        ${(m.accountingNotes && m.accountingNotes.length) ? `
+        <div class="rep-section-title">ביאורים — סעיפים המשפיעים על הרווח הנקי</div>
+        <div class="rep-notes-sub">סעיפים שמאחורי המספרים, המחושבים ישירות מהדוחות: השקעה/מימוש רכוש קבוע (מכונות וציוד), פחת, סעיפים חד-פעמיים, מס, חוב, רכישה עצמית ומו"פ.</div>
+        <div class="rep-notes">
+            ${m.accountingNotes.map(n => `<div class="rep-note rep-note-${n.tone}"><span class="rep-note-dot"></span><span>${n.he}</span></div>`).join('')}
         </div>` : ''}
 
         <div class="rep-section-title">פרמטרים מרכזיים — עד 4 רבעונים</div>

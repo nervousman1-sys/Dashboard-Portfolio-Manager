@@ -103,6 +103,7 @@
         const valuation = { peTrailing, pb, roeTTM, fcfYield, evToEbitda, ttmNetIncome: ttmHasFull ? ttmNetIncome : null, ttmRevenue: ttmHasFull ? ttmRevenue : null };
         const keyPoints = computeKeyPoints(rows, { beat, valuation, currency: report.currency });
         const attentionNotes = computeAttentionNotes(rows);
+        const accountingNotes = computeAccountingNotes(rows, { currency: report.currency });
 
         return {
             symbol: report.symbol,
@@ -124,6 +125,7 @@
             score,
             keyPoints,
             attentionNotes,
+            accountingNotes,
             insiders: report.insiders || null,
         };
     }
@@ -280,6 +282,96 @@
         return f;
     }
 
+    // ── "ביאורים" — accounting notes derived from the REAL statements ──
+    // Surfaces concrete items behind the headline numbers — capital spending on plant/equipment
+    // (machinery bought), proceeds from asset disposals (machinery sold), non-cash D&A, one-time
+    // gaps between operating and net income, unusual effective tax, debt raised/repaid, buybacks/
+    // dilution and R&D load — i.e. the things that actually move the net income / cash. Every note
+    // is computed from the fetched financials (no fabrication). Returns [{ he, tone, tag }].
+    function computeAccountingNotes(rows, ctx) {
+        const a = rows[0];
+        if (!a) return [];
+        const cur = ctx && ctx.currency === 'ILS' ? '₪' : (ctx && ctx.currency === 'USD' ? '$' : '');
+        const money = (v) => {
+            if (!isNum(v)) return '—';
+            const abs = Math.abs(v), sign = v < 0 ? '-' : '';
+            if (abs >= 1e9) return `${sign}${cur}${(abs / 1e9).toFixed(2)}B`;
+            if (abs >= 1e6) return `${sign}${cur}${(abs / 1e6).toFixed(1)}M`;
+            if (abs >= 1e3) return `${sign}${cur}${(abs / 1e3).toFixed(0)}K`;
+            return `${sign}${cur}${abs.toFixed(0)}`;
+        };
+        const notes = [];
+        const add = (he, tone, tag) => notes.push({ he, tone: tone || 'neutral', tag });
+        const b = rows[1], y = rows[4];                 // prior quarter, year-ago quarter
+        const recent = rows.slice(1, 5).filter(r => isNum(r.capex));
+        const avgCapex = recent.length ? recent.reduce((s, r) => s + Math.abs(r.capex), 0) / recent.length : null;
+
+        // 1) CapEx — investment in property/plant/equipment (machinery). Yahoo/FMP report capex as a
+        //    cash OUTFLOW (negative); its magnitude is the spend. A jump vs the trailing average is a
+        //    meaningful "bought new machinery/equipment" signal that depresses near-term FCF.
+        if (isNum(a.capex) && a.capex < 0) {
+            const spend = Math.abs(a.capex);
+            if (avgCapex && spend > avgCapex * 1.4 && spend > 0)
+                add(`השקעה מוגברת ברכוש קבוע (מכונות/ציוד/מתקנים): ${money(spend)} ברבעון — כ-${((spend / avgCapex - 1) * 100).toFixed(0)}% מעל הממוצע. מקטין תזרים חופשי בטווח הקצר, אך מרחיב כושר ייצור.`, 'neutral', 'capex_up');
+            else
+                add(`השקעה ברכוש קבוע (CapEx): ${money(spend)} ברבעון.`, 'neutral', 'capex');
+        }
+        // 2) Asset disposals — capex turning POSITIVE means net proceeds from selling fixed assets
+        //    (machinery sold). Often a one-time boost to cash / non-operating income.
+        if (isNum(a.capex) && a.capex > 0)
+            add(`תקבולים ממימוש רכוש קבוע (מכירת מכונות/נכסים): ${money(a.capex)} — ייתכן רווח/הכנסה חד-פעמית שאינה מהפעילות השוטפת.`, 'neutral', 'asset_sale');
+
+        // 3) Depreciation & amortization — non-cash charge that reduces reported net income.
+        if (isNum(a.dna) && a.dna > 0 && isNum(a.revenue) && a.revenue > 0)
+            add(`פחת והפחתות: ${money(a.dna)} ברבעון (${(a.dna / a.revenue * 100).toFixed(1)}% מההכנסות) — הוצאה לא-תזרימית שמקטינה את הרווח הנקי המדווח.`, 'neutral', 'dna');
+
+        // 4) One-time gap between operating and net income (beyond normal interest/tax) — a likely
+        //    non-recurring item (impairment, legal settlement, asset write-down, or a one-off gain).
+        if (isNum(a.operatingIncome) && isNum(a.netIncome) && a.operatingIncome !== 0) {
+            const ratio = a.netIncome / a.operatingIncome;
+            if (a.operatingIncome > 0 && a.netIncome > a.operatingIncome * 1.15)
+                add(`הרווח הנקי (${money(a.netIncome)}) גבוה מהרווח התפעולי (${money(a.operatingIncome)}) — סימן לרווח חד-פעמי/הכנסה מימונית או הטבת מס מחוץ לפעילות השוטפת.`, 'pos', 'oneoff_gain');
+            else if (a.operatingIncome > 0 && ratio < 0.4 && ratio > -5)
+                add(`הרווח הנקי (${money(a.netIncome)}) נמוך משמעותית מהתפעולי (${money(a.operatingIncome)}) — נטל ריבית/מס כבד או הוצאה חד-פעמית (מחיקה/הפרשה).`, 'neg', 'oneoff_loss');
+        }
+        // 5) Effective tax rate — an unusual rate (very low, or a tax benefit) swings net income.
+        if (isNum(a.pretaxIncome) && isNum(a.netIncome) && a.pretaxIncome > 0) {
+            const taxRate = 1 - a.netIncome / a.pretaxIncome;
+            if (taxRate < 0)
+                add(`הטבת מס ברבעון (שיעור מס אפקטיבי שלילי) — הגדילה את הרווח הנקי באופן חד-פעמי.`, 'pos', 'tax_benefit');
+            else if (taxRate > 0.4)
+                add(`שיעור מס אפקטיבי גבוה (${(taxRate * 100).toFixed(0)}%) — מכביד על הרווח הנקי.`, 'neg', 'tax_high');
+        }
+        // 6) Debt raised / repaid — moves interest expense → net income.
+        if (isNum(a.totalDebt) && isNum(b?.totalDebt) && b.totalDebt > 0) {
+            const dDebt = a.totalDebt - b.totalDebt;
+            if (dDebt > b.totalDebt * 0.15)
+                add(`גיוס חוב נטו של ${money(dDebt)} מול הרבעון הקודם — צפוי להגדיל את הוצאות הריבית.`, 'neg', 'debt_up');
+            else if (dDebt < -b.totalDebt * 0.15)
+                add(`פירעון חוב נטו של ${money(-dDebt)} מול הרבעון הקודם — מפחית את נטל הריבית.`, 'pos', 'debt_down');
+        }
+        // 7) Buyback / dilution — share-count change moves EPS even at flat net income.
+        if (isNum(a.sharesOut) && isNum(y?.sharesOut) && y.sharesOut > 0) {
+            const dSh = a.sharesOut / y.sharesOut - 1;
+            if (dSh < -0.02)
+                add(`רכישה עצמית של מניות — מצבת המניות ירדה ב-${(Math.abs(dSh) * 100).toFixed(1)}% מול אשתקד, מה שמגדיל את הרווח למניה (EPS).`, 'pos', 'buyback');
+            else if (dSh > 0.03)
+                add(`דילול — מצבת המניות עלתה ב-${(dSh * 100).toFixed(1)}% מול אשתקד (הנפקה/תגמול הוני), מה שמדלל את הרווח למניה.`, 'neg', 'dilution');
+        }
+        // 8) R&D load — a discretionary expense that weighs on operating profit but funds growth.
+        if (isNum(a.rd) && a.rd > 0 && isNum(a.revenue) && a.revenue > 0) {
+            const rdPct = a.rd / a.revenue;
+            if (rdPct > 0.08)
+                add(`הוצאות מחקר ופיתוח: ${money(a.rd)} (${(rdPct * 100).toFixed(1)}% מההכנסות) — מכבידות על הרווח התפעולי אך מממנות צמיחה עתידית.`, 'neutral', 'rd');
+        }
+        // 9) Earnings quality — operating cash flow well below net income hints at non-cash earnings.
+        if (isNum(a.ocfToNI) && isNum(a.netIncome) && a.netIncome > 0) {
+            if (a.ocfToNI < 0.6)
+                add(`התזרים התפעולי נמוך מהרווח הנקי (יחס ${a.ocfToNI.toFixed(2)}) — חלק מהרווח אינו מגובה במזומן (רווח "על הנייר").`, 'neg', 'earnings_quality');
+        }
+        return notes;
+    }
+
     // ── Green "השתפרה" verdict — improvement vs. prior period ──
     function computeBeat(latest) {
         if (!latest) return { improved: false, yoy: false, qoq: false, label: 'אין נתונים' };
@@ -417,7 +509,7 @@
         };
     }
 
-    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, computeKeyPoints, computeAttentionNotes, aiContext };
+    const API = { buildReport, quarterMetrics, computeFlags, computeBeat, computeScore, computeKeyPoints, computeAttentionNotes, computeAccountingNotes, aiContext };
     if (typeof module !== 'undefined' && module.exports) module.exports = API;
     if (typeof root !== 'undefined') {
         root.ReportsEngine = API;
