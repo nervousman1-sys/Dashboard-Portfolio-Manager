@@ -9839,3 +9839,30 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     /* Add-portfolio / management modal: never wider than the viewport. */
     .mgmt-box { max-width: 94vw; }
 }
+
+/* ══ Geopolitical + macro-economy updates (macro page) ══ */
+.geo-macro-section { margin-bottom: 18px; }
+.gm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.gm-title { font-size: 15px; font-weight: 900; color: #67e8f9; letter-spacing: 0.2px; }
+.gm-refresh { background: transparent; border: 1px solid rgba(0,229,255,0.3); color: var(--accent-blue,#00e5ff);
+    border-radius: 8px; width: 30px; height: 30px; font-size: 15px; cursor: pointer; line-height: 1; transition: background .12s; }
+.gm-refresh:hover { background: rgba(0,229,255,0.12); }
+.gm-list { display: grid; gap: 8px; }
+.gm-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    text-decoration: none; color: var(--text-primary); background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border); border-radius: 11px; padding: 12px 15px; transition: background .12s, border-color .12s; }
+.gm-item:hover { background: rgba(0,229,255,0.06); border-color: rgba(0,229,255,0.3); }
+.gm-tag { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.gm-tag-mon    { background: rgba(56,189,248,0.14);  color: #7dd3fc; }
+.gm-tag-infl   { background: rgba(250,204,21,0.14);  color: #fde047; }
+.gm-tag-geo    { background: rgba(239,68,68,0.15);   color: #fca5a5; }
+.gm-tag-energy { background: rgba(249,115,22,0.15);  color: #fdba74; }
+.gm-tag-mkt    { background: rgba(168,85,247,0.15);  color: #d8b4fe; }
+.gm-text { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.gm-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.gm-empty { color: var(--text-muted); font-size: 13px; padding: 14px 4px; }
+@media (max-width: 768px) {
+    .gm-item { grid-template-columns: auto 1fr; }
+    .gm-meta { grid-column: 2; }
+    .gm-text { font-size: 13px; }
+}

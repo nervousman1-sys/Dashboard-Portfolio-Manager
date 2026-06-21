@@ -142,6 +142,59 @@ async function translateBatchGemini(texts) {
     return out.map((he, i) => he || texts[i]);
 }
 
+// ── Geopolitical + macro-economy updates (material only) ──
+// Pulls Finnhub's general + forex news and keeps ONLY items that materially move the economy —
+// monetary policy, inflation/growth, geopolitics, energy, broad markets — scored by keyword groups
+// so single-stock fluff is filtered out. Returns the strongest, most recent ~12, each tagged.
+const _MACRO_GROUPS = [
+    { tag: 'מוניטרי', w: 3, re: /\b(federal reserve|the fed|fed['s]?\b|fomc|interest rate|rate (cut|hike|decision|path)|rate-(cut|hike)|powell|e\.?c\.?b\.?|lagarde|bank of (england|japan)|boj\b|central bank|monetary policy|quantitative (easing|tightening)|basis points?|bps\b)/i },
+    { tag: 'אינפלציה/צמיחה', w: 3, re: /\b(inflation|cpi\b|ppi\b|pce\b|core (inflation|cpi)|gdp\b|recession|jobs report|payrolls?|unemployment|jobless|consumer (price|spending|confidence|sentiment)|retail sales|economic growth|stagflation|soft landing)/i },
+    { tag: 'גיאופוליטיקה', w: 3, re: /\b(war|conflict|military|missile|strike|sanction|tariff|trade war|geopolit|coup|ceasefire|invasion|nuclear|israel|iran|gaza|hezbollah|hamas|houthi|russia|ukraine|china|taiwan|north korea|middle east|red sea|election results?)/i },
+    { tag: 'אנרגיה', w: 2, re: /\b(opec\+?|crude|oil price|brent|wti|natural gas|energy (crisis|prices?)|per barrel|gas prices?)/i },
+    { tag: 'שווקים', w: 2, re: /\b(treasury (yield|note|bond)|10-?year yield|bond yields?|debt ceiling|sovereign|credit downgrade|default risk|the dollar|dxy|safe[- ]haven|gold (price|hits)|yield curve)/i },
+];
+async function macroNews() {
+    let arr = [];
+    for (const c of ['general', 'forex']) {
+        try {
+            const r = await fetch(`https://finnhub.io/api/v1/news?category=${c}&token=${FINNHUB_KEY}`, { headers: { Accept: 'application/json' } });
+            if (r.ok) { const j = await r.json(); if (Array.isArray(j)) arr = arr.concat(j); }
+        } catch (e) { /* try next category */ }
+    }
+    const seen = new Set();
+    const scored = [];
+    for (const n of arr) {
+        if (!n || !n.headline) continue;
+        const key = String(n.headline).toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const blob = n.headline + ' ' + (n.summary || '');
+        let score = 0, tag = null, best = 0;
+        for (const g of _MACRO_GROUPS) {
+            if (g.re.test(blob)) { score += g.w; if (g.w > best) { best = g.w; tag = g.tag; } }
+        }
+        if (score < 2) continue; // material only — needs a strong macro/geopolitical hit
+        scored.push({ en: n.headline, date: ymd((n.datetime || 0) * 1000), url: n.url || '', source: n.source || '', tag, _rank: score * 1e11 + (n.datetime || 0) });
+    }
+    scored.sort((a, b) => b._rank - a._rank);
+    return scored.slice(0, 12).map(({ _rank, ...x }) => x);
+}
+
+// Translate a list of {en} items to Hebrew in-place (Gemini batch → Google fallback), using the
+// warm-instance cache. Shared by the symbol-news and macro-news paths.
+async function translateItemsHe(items) {
+    if (!items.length) return;
+    const todo = [];
+    for (const it of items) { const c = _heCache.get(it.en); if (c) it.he = c; else todo.push(it); }
+    if (!todo.length) return;
+    const heBatch = await translateBatchGemini(todo.map(it => it.en));
+    if (heBatch) {
+        todo.forEach((it, i) => { it.he = cleanHe(heBatch[i] || it.en); if (it.he && it.he !== it.en) _heCache.set(it.en, it.he); });
+    } else {
+        await Promise.all(todo.map(async (it) => { it.he = cleanHe(await translateHe(it.en)); }));
+    }
+}
+
 async function newsFor(symbol, perSymbol) {
     let items = [];
     try { items = await finnhubNewsFor(symbol, perSymbol); } catch (e) { items = []; }
@@ -156,6 +209,17 @@ module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
     try {
+        // ── Geopolitical + macro-economy updates (material only) ──
+        if (req.query.macro) {
+            const items = await macroNews();
+            try { await translateItemsHe(items); } catch (e) { /* English headline is the fallback */ }
+            res.setHeader('Cache-Control', items.length
+                ? 's-maxage=3600, stale-while-revalidate=10800'   // refresh ~hourly
+                : 's-maxage=120');
+            res.status(200).json({ macro: items });
+            return;
+        }
+
         const perSymbol = Math.min(parseInt(req.query.perSymbol, 10) || 1, 2);
         const syms = String(req.query.symbols || '')
             .split(',').map(s => s.trim().toUpperCase()).filter(Boolean)

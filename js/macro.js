@@ -988,6 +988,7 @@ function _renderMacroPage() {
             </div>
         </div>
         <div class="macro-content">
+            <div id="geoMacroSection" class="geo-macro-section"></div>
             <div id="macroTabContent">
                 ${_renderIndicatorsTab()}
             </div>
@@ -996,7 +997,57 @@ function _renderMacroPage() {
 
     // Charts need the canvases in the DOM; analysis needs the curve data
     setTimeout(() => { try { _renderYieldCurves(); } catch (e) { /* ignore */ } }, 60);
+    // Geopolitical + macro-economy updates (loaded async — material items only)
+    _loadGeoMacroNews();
 }
+
+// ── Geopolitical + macro-economy updates ──────────────────────────────────
+// Renders ONLY material items that move the economy (monetary / inflation-growth /
+// geopolitics / energy / broad markets) — filtered + tagged server-side (/api/news?macro=1),
+// REAL Finnhub headlines translated to Hebrew. Cached ~1h client-side.
+const _GEO_MACRO_TAG_CLS = {
+    'מוניטרי': 'gm-tag-mon', 'אינפלציה/צמיחה': 'gm-tag-infl',
+    'גיאופוליטיקה': 'gm-tag-geo', 'אנרגיה': 'gm-tag-energy', 'שווקים': 'gm-tag-mkt',
+};
+async function _loadGeoMacroNews(forceRefresh) {
+    const el = document.getElementById('geoMacroSection');
+    if (!el) return;
+    const CACHE_KEY = 'geo_macro_news_v1';
+    let items = forceRefresh ? null : _cacheGet(CACHE_KEY, 60 * 60 * 1000); // 1h
+    if (!items) {
+        el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
+            <div class="macro-loading" style="padding:18px">טוען עדכונים…</div>`;
+        try {
+            const r = await _macroFetch(`/api/news?macro=1`, 12000, 1);
+            const j = await r.json();
+            items = (j && Array.isArray(j.macro)) ? j.macro : [];
+            if (items.length) _cacheSet(CACHE_KEY, items);
+        } catch (e) { items = []; }
+    }
+    if (!items || !items.length) {
+        el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
+            <div class="gm-empty">אין כרגע עדכונים מהותיים זמינים. נסה לרענן בעוד מספר דקות.</div>`;
+        return;
+    }
+    const rows = items.map(n => {
+        const tagCls = _GEO_MACRO_TAG_CLS[n.tag] || 'gm-tag-mkt';
+        const he = _macroEscape(n.he || n.en || '');
+        const src = _macroEscape(n.source || '');
+        const date = n.date ? _macroEscape(String(n.date).split('-').reverse().join('.')) : '';
+        const link = n.url ? `href="${_macroEscape(n.url)}" target="_blank" rel="noopener"` : '';
+        return `<a class="gm-item" ${link}>
+            <span class="gm-tag ${tagCls}">${_macroEscape(n.tag || 'מאקרו')}</span>
+            <span class="gm-text">${he}</span>
+            <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
+        </a>`;
+    }).join('');
+    el.innerHTML = `<div class="gm-head">
+            <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
+            <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
+        </div>
+        <div class="gm-list">${rows}</div>`;
+}
+if (typeof window !== 'undefined') window._loadGeoMacroNews = _loadGeoMacroNews;
 
 // ── Format helper for widget values ──
 function _fmtUnit(v, u) {
