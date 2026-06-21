@@ -86,11 +86,15 @@
         const ttmRevenue = sumTTM('revenue');
         const ttmFcf = sumTTM('fcf');
         const ttmEbitda = sumTTM('ebitda');
-        const peTrailing = (ttmHasFull && isNum(report.marketCap)) ? div(report.marketCap, ttmNetIncome) : null;
-        const pb = (latest && isNum(report.marketCap)) ? div(report.marketCap, latest.totalEquity) : null;
-        const roeTTM = (ttmHasFull && latest) ? div(ttmNetIncome, latest.totalEquity) : null;
-        const fcfYield = (ttmHasFull && isNum(report.marketCap)) ? div(ttmFcf, report.marketCap) : null;
-        const evToEbitda = (isNum(report.marketCap) && latest && isNum(latest.netDebt) && ttm.length === 4 && ttmEbitda)
+        // Valuation multiples require a POSITIVE denominator to be meaningful — a negative
+        // figure (a loss, or negative shareholder equity from heavy buybacks like MCD/SBUX/HD)
+        // would otherwise produce a misleading negative/inflated multiple. Show "—" (N/M) instead.
+        const peTrailing = (ttmHasFull && isNum(report.marketCap) && ttmNetIncome > 0) ? div(report.marketCap, ttmNetIncome) : null;
+        const pb = (latest && isNum(report.marketCap) && isNum(latest.totalEquity) && latest.totalEquity > 0) ? div(report.marketCap, latest.totalEquity) : null;
+        const roeTTM = (ttmHasFull && latest && isNum(latest.totalEquity) && latest.totalEquity > 0) ? div(ttmNetIncome, latest.totalEquity) : null;
+        // FCF yield CAN be negative (a cash-burning company) — that's meaningful, so only guard marketCap.
+        const fcfYield = (ttmHasFull && isNum(report.marketCap) && report.marketCap > 0) ? div(ttmFcf, report.marketCap) : null;
+        const evToEbitda = (isNum(report.marketCap) && latest && isNum(latest.netDebt) && ttm.length === 4 && ttmEbitda > 0)
             ? div(report.marketCap + latest.netDebt, ttmEbitda) : null;
 
         const flags = computeFlags(rows);
