@@ -38,14 +38,18 @@ function _loadScript(src) {
     });
 }
 
-// Column name patterns for auto-detection (Hebrew + English)
-const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'נכס', 'סימול (ticker)'];
-const SHARES_COLUMNS = ['כמות בתיק', 'כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
-const PRICE_COLUMNS = ['שער עלות', 'מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות', 'מחיר שוק'];
-// Israeli broker statements (Bank Hapoalim MyTrade, Leumi, etc.) identify a security by a numeric
-// TASE id ("מספר נייר") rather than a Latin ticker — used by the Israeli-broker PDF strategy.
-const SECURITY_ID_COLUMNS = ['מספר נייר', 'מספר ני"ע', 'מס\' נייר', 'security number', 'security'];
-const DATE_COLUMNS = ['תאריך קנייה', 'תאריך רכישה', 'תאריך עסקה', 'תאריך', 'purchase date', 'buy date', 'trade date', 'date', 'acquired'];
+// Column name patterns for auto-detection (Hebrew + English). Ordered most-specific first so the
+// matcher prefers an exact concept (e.g. "שם נייר" as a name, "סימול" as a symbol). Kept broad on
+// purpose — the goal is to read a holdings table from ANY broker/bank, in any column order, HE/EN.
+const TICKER_COLUMNS = ['סימול', 'סימבול', 'symbol', 'ticker', 'סימול (ticker)', 'stock symbol', 'security symbol', 'symbol/cusip', 'מסחר'];
+const NAME_COLUMNS = ['שם נייר', 'שם הנייר', 'שם המוצר', 'שם המכשיר', 'שם', 'נייר ערך', 'נכס', 'name', 'security name', 'security description', 'description', 'instrument', 'holding', 'asset name', 'fund name', 'תיאור', 'שם נייר ערך'];
+const SHARES_COLUMNS = ['כמות בתיק', 'כמות', 'יחידות', 'כמות יחידות', 'מספר יחידות', "כמות יח'", 'יח\'', 'shares', 'quantity', 'qty', 'units', 'no. of shares', 'number of shares', 'share count', 'position', 'נצבר', 'יתרה', 'ערך נקוב', 'ע.נ.', 'ע"נ', 'par value', 'nominal'];
+const PRICE_COLUMNS = ['שער עלות', 'מחיר עלות', 'עלות ממוצעת', 'מחיר ממוצע', 'מחיר קנייה', 'שער קנייה', 'שער רכישה', 'מחיר רכישה', 'עלות', 'avg price', 'average price', 'avg cost', 'average cost', 'cost basis', 'unit cost', 'purchase price', 'book cost', 'price paid', 'מחיר', 'price', 'שער', 'מחיר שוק', 'cost'];
+const VALUE_COLUMNS = ['שווי אחזקה', 'שווי אחזקה (₪)', 'שווי אחזקה בש"ח', 'שווי אחזקה במטבע הנייר', 'שווי בש"ח', 'שווי שוק', 'שווי נוכחי', 'שווי', 'market value', 'mkt value', 'market val', 'current value', 'holding value', 'position value', 'total value', 'value', 'שווי כולל'];
+const CURRENCY_COLUMNS = ['מטבע הנייר', 'מטבע מסחר', 'מטבע', 'currency', 'ccy', 'curr'];
+// Statements that identify a security by a numeric id / ISIN rather than a Latin ticker.
+const SECURITY_ID_COLUMNS = ['מספר נייר', 'מספר ני"ע', 'מספר ני״ע', 'מס\' נייר', 'מספר נייר ערך', 'security number', 'security no', 'security id', 'sec id', 'cusip', 'isin', 'sedol', 'wkn', 'valoren', 'מספר'];
+const DATE_COLUMNS = ['תאריך קנייה', 'תאריך רכישה', 'תאריך עסקה', 'תאריך ביצוע', 'תאריך פתיחה', 'תאריך', 'purchase date', 'buy date', 'trade date', 'open date', 'value date', 'settlement date', 'date', 'acquired'];
 
 // dd/mm/yyyy · dd.mm.yyyy · dd-mm-yyyy · yyyy-mm-dd (Israeli files are day-first)
 const _DATE_TOKEN_RE = /\b(\d{1,4})[./-](\d{1,2})[./-](\d{2,4})\b/;
@@ -125,33 +129,7 @@ async function parseExcelFile(file) {
 
                 if (!rows || rows.length === 0) { resolve([]); return; }
 
-                const headers = Object.keys(rows[0]);
-                const tickerCol = _findMatchingColumn(headers, TICKER_COLUMNS);
-                const sharesCol = _findMatchingColumn(headers, SHARES_COLUMNS);
-                const priceCol = _findMatchingColumn(headers, PRICE_COLUMNS);
-                const dateCol = _findMatchingColumn(headers, DATE_COLUMNS);
-
-                if (!tickerCol) {
-                    console.warn('[FileParser] Could not detect ticker column from headers:', headers);
-                    resolve([]);
-                    return;
-                }
-
-                const result = [];
-                for (const row of rows) {
-                    const ticker = _cleanTicker(row[tickerCol]);
-                    if (!ticker) continue;
-
-                    const shares = _cleanNumber(sharesCol ? row[sharesCol] : 0);
-                    const avgPrice = _cleanNumber(priceCol ? row[priceCol] : 0);
-                    const buyDate = dateCol ? _cleanDate(row[dateCol]) : null;
-
-                    if (shares > 0) {
-                        result.push({ ticker, shares, avgPrice: avgPrice || 0, buyDate });
-                    }
-                }
-
-                resolve(result);
+                resolve(_extractHoldingsFromRows(rows));
             } catch (err) {
                 console.error('[FileParser] Excel parse error:', err);
                 reject(err);
@@ -160,6 +138,83 @@ async function parseExcelFile(file) {
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsArrayBuffer(file);
     });
+}
+
+// ── Universal tabular holdings extractor (Excel/CSV rows → holdings) ──
+// Works for ANY broker/bank export, any column order, Hebrew or English. A security is identified
+// by whichever of {symbol, security-id/ISIN/CUSIP, name} the file provides; quantity/price are
+// taken from their columns and CROSS-FILLED from a market-value column when one is missing; the
+// currency is detected (column → symbols → Hebrew-name default) and TASE agorot are auto-converted
+// to shekels by checking shares×price/100 ≈ value. Returns [{ticker, stockName, shares, avgPrice,
+// currency, buyDate}]. Cash rows are dropped here (separateCashFromHoldings handles cash balance).
+function _extractHoldingsFromRows(rows) {
+    if (!rows || !rows.length) return [];
+    const headers = Object.keys(rows[0]);
+    const used = new Set();
+    // Resolve dedicated concepts first so one physical column isn't claimed by two roles.
+    const symCol = _findMatchingColumn(headers, TICKER_COLUMNS, used);
+    const idCol = _findMatchingColumn(headers, SECURITY_ID_COLUMNS, used);
+    const nameCol = _findMatchingColumn(headers, NAME_COLUMNS, used);
+    const sharesCol = _findMatchingColumn(headers, SHARES_COLUMNS, used);
+    const priceCol = _findMatchingColumn(headers, PRICE_COLUMNS, used);
+    const valueCol = _findMatchingColumn(headers, VALUE_COLUMNS, used);
+    const currCol = _findMatchingColumn(headers, CURRENCY_COLUMNS, used);
+    const dateCol = _findMatchingColumn(headers, DATE_COLUMNS, used);
+
+    // Must have at least one identifier column and something quantitative.
+    if (!(symCol || idCol || nameCol) || !(sharesCol || valueCol)) {
+        console.warn('[FileParser] Not a recognizable holdings table. headers:', headers);
+        return [];
+    }
+
+    const out = [];
+    for (const row of rows) {
+        const symRaw = symCol ? String(row[symCol] ?? '').trim() : '';
+        const nameRaw = nameCol ? String(row[nameCol] ?? '').trim() : '';
+        const idRaw = idCol ? String(row[idCol] ?? '').trim() : '';
+
+        // Cash line → skip (so it isn't added as a bogus security).
+        if (_isCashRow(symRaw) || _isCashRow(nameRaw)) continue;
+
+        // Identifier priority: a clean Latin ticker → numeric/ISIN/CUSIP security id → the name.
+        let ticker = _cleanTicker(symRaw);
+        const idClean = idRaw.replace(/[\s,]/g, '');
+        if (!ticker && /^\d{4,}$/.test(idClean)) ticker = idClean;                          // numeric TASE id
+        if (!ticker && /^[A-Z]{2}[A-Z0-9]{9,10}$/i.test(idClean)) ticker = idClean.toUpperCase(); // ISIN
+        if (!ticker && idClean && /^[A-Z0-9]{5,12}$/i.test(idClean)) ticker = idClean.toUpperCase(); // CUSIP/SEDOL
+        const name = nameRaw || symRaw || ticker;
+        if (!ticker && name) ticker = name;        // last resort: the name is the identifier
+        if (!ticker) continue;
+
+        let shares = _cleanNumber(sharesCol ? row[sharesCol] : 0);
+        let price = _cleanNumber(priceCol ? row[priceCol] : 0);
+        const value = _cleanNumber(valueCol ? row[valueCol] : 0);
+
+        // Cross-fill missing quantity/price from the market-value column.
+        if (!(shares > 0) && value > 0 && price > 0) shares = value / price;
+        if (!(price > 0) && value > 0 && shares > 0) price = value / shares;
+        if (!(shares > 0)) continue;
+
+        let currency = _detectCurrency(currCol ? row[currCol] : '', name, symRaw, priceCol ? row[priceCol] : '', valueCol ? row[valueCol] : '');
+        // Auto-detect agorot (TASE quotes in 1/100 ₪): if shares×price/100 fits the value better.
+        if (price > 0 && value > 0) {
+            const asWhole = Math.abs(shares * price - value);
+            const asAgorot = Math.abs(shares * price / 100 - value);
+            if (asAgorot < asWhole) { price = price / 100; currency = 'ILS'; }
+        } else if (currency === 'ILS' && /[֐-׿]/.test(name) && price > 200) {
+            price = price / 100; // Israeli security, no value to cross-check, price looks like agorot
+        }
+
+        out.push({
+            ticker: _resolveBrokerTicker(ticker, name, currency === 'ILS'),
+            stockName: String(name || ticker).replace(/\s+(INC|LTD|CORP|PLC|בע"מ)\.?$/i, '').trim() || String(name || ticker),
+            shares: +(+shares).toFixed(4),
+            avgPrice: price > 0 ? +(+price).toFixed(4) : 0,
+            currency,
+            buyDate: dateCol ? _cleanDate(row[dateCol]) : null,
+        });
+    }
+    return _deduplicateResults(out);
 }
 
 // ========== PDF PARSING (position-based row reconstruction) ==========
@@ -228,9 +283,14 @@ async function parsePDFFile(file) {
 // user confirms before saving — we never invent data we can't read.
 function _extractIsraeliBroker(items) {
     const flat = items.map(it => it.text).join(' ');
-    const looksIsraeli = /מספר\s*נייר/.test(flat) || /שער\s*עלות/.test(flat) || /תיק עדכני/.test(flat)
-        || /MyTrade/i.test(flat) || /כמות בתיק/.test(flat) || /שווי אחזקה/.test(flat);
-    if (!looksIsraeli) return [];
+    // Trigger for any statement that identifies securities by a numeric id (TASE) or carries
+    // holdings keywords in Hebrew OR English — the row anchor (6–9 digit id) keeps it precise.
+    const idRowCount = items.filter(it => /^\d{6,9}$/.test(String(it.text).replace(/[,\s]/g, ''))).length;
+    const looksTabular = /מספר\s*נייר/.test(flat) || /שער\s*עלות/.test(flat) || /תיק עדכני/.test(flat)
+        || /MyTrade/i.test(flat) || /כמות בתיק/.test(flat) || /שווי אחזקה/.test(flat)
+        || /\b(security number|holdings?|market value|quantity|cusip|isin)\b/i.test(flat)
+        || idRowCount >= 2;
+    if (!looksTabular) return [];
 
     // Group items into rows by Y, each sorted left-to-right by X.
     const rowMap = new Map();
@@ -442,7 +502,7 @@ function _findTickerInRow(row) {
         }
 
         // Match common ticker patterns: AAPL, BRK.B, GOOGL, META
-        const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
+        const tickerPattern = /^([A-Z]{1,6}(?:.[A-Z]{1,2})?)$/;
         const match = text.match(tickerPattern);
         if (match && !_isCommonWord(match[1])) {
             return { ticker: match[1], itemIndex: i, x: row[i].x };
@@ -531,7 +591,7 @@ function _extractFromFlatText(text) {
 
     // Pattern: TICKER followed by numbers anywhere nearby
     // Handles: "AAPL 150 185.2 27,780 12.50%" or "AAPL אפל 150 185.2"
-    const tickerRegex = /\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b/g;
+    const tickerRegex = /\b([A-Z]{1,6}(?:\.[A-Z]{1,2})?)\b/g;
     let match;
 
     while ((match = tickerRegex.exec(text)) !== null) {
@@ -590,7 +650,7 @@ function _extractFromScatteredItems(items) {
         if (_isCashRow(text)) {
             ticker = text;
         } else {
-            const tickerPattern = /^([A-Z]{1,5}(?:\.[A-Z]{1,2})?)$/;
+            const tickerPattern = /^([A-Z]{1,6}(?:.[A-Z]{1,2})?)$/;
             const match = text.match(tickerPattern);
             if (!match || _isCommonWord(match[1])) continue;
             ticker = match[1];
@@ -639,22 +699,47 @@ function _deduplicateResults(results) {
     });
 }
 
-function _findMatchingColumn(headers, patterns) {
-    // Exact match first (case-insensitive)
-    for (const h of headers) {
-        const lower = h.trim().toLowerCase();
-        for (const p of patterns) {
-            if (lower === p.toLowerCase()) return h;
+// Normalize a header for tolerant matching: lowercase, strip quotes/punctuation/whitespace runs.
+function _normHeader(h) {
+    return String(h == null ? '' : h).toLowerCase()
+        .replace(/["'`׳״.()\[\]:/\\]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+function _findMatchingColumn(headers, patterns, used) {
+    const norm = headers.map(h => ({ h, n: _normHeader(h) }));
+    const pats = patterns.map(p => _normHeader(p));
+    const free = (h) => !used || !used.has(h);
+    // 1) exact normalized match
+    for (const { h, n } of norm) if (free(h) && pats.includes(n)) { used && used.add(h); return h; }
+    // 2) header contains a pattern as a whole word/phrase (pattern length ≥ 2)
+    for (const { h, n } of norm) {
+        for (const p of pats) {
+            if (p.length < 2) continue;
+            if (n === p || n.startsWith(p + ' ') || n.endsWith(' ' + p) || n.includes(' ' + p + ' ') || n.includes(p)) { used && used.add(h); return h; }
         }
     }
-    // Partial match: header contains pattern or pattern contains header
-    for (const h of headers) {
-        const lower = h.trim().toLowerCase();
-        for (const p of patterns) {
-            if (lower.includes(p.toLowerCase()) || p.toLowerCase().includes(lower)) return h;
-        }
+    // 3) pattern contains the header (header length ≥ 3) — handles abbreviated headers
+    for (const { h, n } of norm) {
+        if (n.length < 3) continue;
+        for (const p of pats) if (p.includes(n)) { used && used.add(h); return h; }
     }
     return null;
+}
+
+// Best-effort currency detection from a dedicated cell and/or surrounding text/symbols.
+function _detectCurrency(currCell, name, ...textCells) {
+    const c = String(currCell == null ? '' : currCell).toUpperCase();
+    if (/ILS|NIS|ILA|₪|ש"?ח|שקל|אגור/.test(c) || /\bאג\b/.test(c)) return 'ILS';
+    if (/USD|\$|דולר/.test(c)) return 'USD';
+    if (/EUR|€|אירו|יורו/.test(c)) return 'EUR';
+    if (/GBP|£|ליש"?ט/.test(c)) return 'GBP';
+    const blob = [name, ...textCells].map(x => String(x == null ? '' : x)).join(' ');
+    if (/₪|ש"?ח|שקל/.test(blob)) return 'ILS';
+    if (/€/.test(blob)) return 'EUR';
+    if (/£/.test(blob)) return 'GBP';
+    if (/\$|USD/.test(blob)) return 'USD';
+    return /[֐-׿]/.test(String(name || '')) ? 'ILS' : 'USD'; // Hebrew name → default shekels
 }
 
 function _cleanTicker(val) {
@@ -666,7 +751,8 @@ function _cleanTicker(val) {
 
     const upper = str.toUpperCase();
     const cleaned = upper.replace(/[^A-Z0-9.]/g, '');
-    if (cleaned.length >= 1 && cleaned.length <= 6 && /^[A-Z]/.test(cleaned)) {
+    // Allow real tickers up to 10 chars (e.g. TERAWULF, BRK.B, class-share suffixes).
+    if (cleaned.length >= 1 && cleaned.length <= 10 && /^[A-Z]/.test(cleaned)) {
         return cleaned;
     }
     return '';
