@@ -153,13 +153,56 @@ const _MACRO_GROUPS = [
     { tag: 'אנרגיה', w: 2, re: /\b(opec\+?|crude|oil price|brent|wti|natural gas|energy (crisis|prices?)|per barrel|gas prices?)/i },
     { tag: 'שווקים', w: 2, re: /\b(treasury (yield|note|bond)|10-?year yield|bond yields?|debt ceiling|sovereign|credit downgrade|default risk|the dollar|dxy|safe[- ]haven|gold (price|hits)|yield curve)/i },
 ];
+function _decodeXml(s) {
+    return String(s == null ? '' : s)
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+}
+// Google News RSS — real headlines, no key, reliably reachable from datacenter IPs (unlike
+// Finnhub's general feed). `path` is a search or topic feed.
+async function googleNewsRss(path) {
+    try {
+        const r = await fetch(`https://news.google.com/rss/${path}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', Accept: 'application/rss+xml,application/xml,text/xml,*/*' },
+        });
+        if (!r.ok) return [];
+        const xml = await r.text();
+        const out = [];
+        const itemRe = /<item>([\s\S]*?)<\/item>/g;
+        let m;
+        while ((m = itemRe.exec(xml)) !== null) {
+            const blk = m[1];
+            const rawTitle = (blk.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+            const link = (blk.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
+            const pub = (blk.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1] || '';
+            const src = (blk.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || '';
+            let title = _decodeXml(rawTitle).replace(/\s+-\s+[^-]{2,40}$/, '').trim(); // strip " - Source"
+            if (!title) continue;
+            const t = pub ? new Date(pub).getTime() : 0;
+            out.push({ headline: title, url: _decodeXml(link), datetime: isFinite(t) && t > 0 ? Math.floor(t / 1000) : 0, summary: '', source: _decodeXml(src) || 'Google News' });
+        }
+        return out;
+    } catch (e) { return []; }
+}
 async function macroNews() {
     let arr = [];
+    // Primary: Google News (works from Vercel). A focused query for material macro/geopolitical
+    // topics, plus the WORLD topic for breaking geopolitics.
+    const q = encodeURIComponent('(Federal Reserve OR interest rates OR inflation OR recession OR GDP OR jobs report OR geopolitics OR war OR sanctions OR tariffs OR OPEC OR oil prices OR Treasury yields OR central bank) when:7d');
+    const feeds = await Promise.all([
+        googleNewsRss(`search?q=${q}&hl=en-US&gl=US&ceid=US:en`),
+        googleNewsRss(`headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en`),
+    ]);
+    for (const f of feeds) arr = arr.concat(f);
+    // Secondary: Finnhub general+forex (works when not IP-limited) for extra breadth.
     for (const c of ['general', 'forex']) {
         try {
             const r = await fetch(`https://finnhub.io/api/v1/news?category=${c}&token=${FINNHUB_KEY}`, { headers: { Accept: 'application/json' } });
             if (r.ok) { const j = await r.json(); if (Array.isArray(j)) arr = arr.concat(j); }
-        } catch (e) { /* try next category */ }
+        } catch (e) { /* try next */ }
     }
     const seen = new Set();
     const scored = [];
