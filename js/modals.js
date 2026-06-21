@@ -607,13 +607,16 @@ async function openModal(clientId) {
                     const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
                     if (!hasUsd) return '';
                     const b = getPortfolioAvgUsdRate(client.id);
+                    // Show the FX P&L ONLY when we have a REAL recorded purchase rate — never a
+                    // fabricated one. No conversion history → no note (keeps every figure verified).
+                    if (!b || !b.real || !(b.rate > 0)) return '';
                     const cur = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : 3.7;
                     // FX P&L for an ILS investor: ₪ now per $ vs ₪ paid per $.
                     const fxPnl = (cur / b.rate - 1) * 100;
                     const cls = fxPnl >= 0 ? 'val-positive' : 'val-negative';
                     const sign = fxPnl >= 0 ? '+' : '';
                     const word = fxPnl >= 0 ? 'רווח' : 'הפסד';
-                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק: <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח על הדולר: <b class="${cls}">${sign}${fxPnl.toFixed(1)}%</b></div>`;
+                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (לפי המרות בפועל): <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח על הדולר: <b class="${cls}">${sign}${fxPnl.toFixed(1)}%</b></div>`;
                 })()}
 
                 <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->

@@ -98,11 +98,12 @@ function _calcReturn(client) {
     const currentRate = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0)
         ? _fxRates.USDILS
         : (typeof FX_HARDCODED_USDILS !== 'undefined' ? FX_HARDCODED_USDILS : 3.65);
-    // Basis = the ₪ price the portfolio's dollars were bought at (real weighted avg
-    // when conversions are recorded — e.g. ליאור; otherwise a persisted 2.8–3.5
-    // placeholder per portfolio).
-    const basis = (typeof getPortfolioAvgUsdRate === 'function') ? getPortfolioAvgUsdRate(client.id) : { rate: 3.4 };
-    const refRate = (basis && basis.rate > 0) ? basis.rate : 3.4;
+    // Basis = the ₪ price the portfolio's dollars were actually bought at (real weighted avg of
+    // recorded ILS→USD conversions). When there's NO recorded conversion history we do NOT invent
+    // a rate — refRate falls back to the current rate so fxFactor = 1 (no adjustment), and the
+    // FX-adjusted return equals the true return rather than a fabricated one.
+    const basis = (typeof getPortfolioAvgUsdRate === 'function') ? getPortfolioAvgUsdRate(client.id) : { rate: null, real: false };
+    const refRate = (basis && basis.real && basis.rate > 0) ? basis.rate : currentRate;
     // FX factor for an ILS investor: value in ₪ now / ₪ paid = r_now / r_buy.
     // Dollar DOWN (r_now < r_buy) → factor < 1 → return correctly REDUCED.
     const fxFactor = currentRate / refRate;
