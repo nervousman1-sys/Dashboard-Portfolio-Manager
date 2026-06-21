@@ -205,9 +205,10 @@ function _extractHoldingsFromRows(rows) {
             price = price / 100; // Israeli security, no value to cross-check, price looks like agorot
         }
 
+        const _tk2 = _resolveBrokerTicker(ticker, name, currency === 'ILS');
         out.push({
-            ticker: _resolveBrokerTicker(ticker, name, currency === 'ILS'),
-            stockName: String(name || ticker).replace(/\s+(INC|LTD|CORP|PLC|בע"מ)\.?$/i, '').trim() || String(name || ticker),
+            ticker: _tk2,
+            stockName: _brokerDisplayName(_tk2, name),
             shares: +(+shares).toFixed(4),
             avgPrice: price > 0 ? +(+price).toFixed(4) : 0,
             currency,
@@ -252,6 +253,12 @@ async function parsePDFFile(file) {
 
         if (allItems.length === 0) return [];
 
+        // Strategy −1: Broker TRANSACTION-HISTORY (Bank Hapoalim "היסטורי" etc.) — a log of
+        // buys/sells/dividends/transfers. Reconstruct CURRENT net positions (like the Lior import)
+        // rather than mis-reading a single trade row as a holding. Runs first.
+        const activityResult = _extractBrokerActivity(allItems);
+        if (activityResult.length > 0) return activityResult;
+
         // Strategy 0: Israeli broker holdings statement (Bank Hapoalim MyTrade, Leumi, …) — these
         // identify securities by a numeric TASE id + Hebrew/Latin name (no Latin ticker), so the
         // generic strategies below find nothing. Try this first when the format is detected.
@@ -273,6 +280,90 @@ async function parsePDFFile(file) {
         console.error('[FileParser] PDF parse error:', err);
         return [];
     }
+}
+
+// Strategy −1: Broker TRANSACTION-HISTORY → reconstructed net positions.
+// A statement like Bank Hapoalim "היסטורי" lists every operation (קניה/מכירה/דבידנד/העברה). We
+// rebuild the CURRENT holdings: net shares = Σ buys − Σ sells per security; average cost = the
+// value-weighted buy price; dividends and zero-value transfers are ignored (they don't define a
+// position). Anchors each row on the action keyword + date, reads qty/rate from the columns to the
+// left of the date (canonical X order, so RTL/Latin reversal doesn't matter), groups by an
+// order-independent normalized name, converts TASE ₪ rates agorot→shekels, and maps the name to a
+// tradable ticker. Returns [] when the file isn't a transaction history (→ other strategies run).
+const _ACT_BUY = /^(קניה|רכישה|buy|purchase)$/;
+const _ACT_SELL = /^(מכירה|sell|sale)$/;
+const _ACT_ANY = /(קניה|רכישה|מכירה|דבידנד|העברה|עברה לזכות|buy|sell|dividend)/;
+const _ACT_STOPWORDS = new Set(['מר', 'ש', 'ניעז', 'מניות', 'תעודת', 'סל', 'שקל', 'חדש', 'דולר', 'ארהב', 'ארה"ב', 'לירה', 'שטרלינג', 'אגח', 'אג"ח', 'מק"ם', 'קרן', 'ינא', 'ע"נ', 'בע"מ']);
+function _extractBrokerActivity(items) {
+    const flat = items.map(it => it.text).join(' ');
+    const looksHistory = /סוג\s*פעולה/.test(flat) || /היסטורי/.test(flat) || /סכום עיסקה/.test(flat)
+        || (/קניה|רכישה/.test(flat) && /מכירה/.test(flat) && /שער\s*העיסקה|שער\s*ביצוע/.test(flat));
+    if (!looksHistory) return [];
+
+    // Group into rows by Y, sorted left→right.
+    const rowMap = new Map();
+    for (const it of items) { const k = Math.round(it.y / 4) * 4; (rowMap.get(k) || rowMap.set(k, []).get(k)).push(it); }
+    const rows = [...rowMap.values()].map(r => { r.sort((a, b) => a.x - b.x); return r; });
+
+    const pos = {}; // key → { buyQty, buyCost, sellQty, name, ils, firstBuy }
+    for (const row of rows) {
+        const actItem = row.find(it => _ACT_ANY.test(it.text.trim()));
+        if (!actItem) continue;
+        const act = actItem.text.trim();
+        const dateItem = row.find(it => _DATE_TOKEN_RE.test(it.text));
+        const dateX = dateItem ? dateItem.x : -Infinity;
+
+        // Numbers to the LEFT of the date = [qty, rate, gross] (canonical columns). Exclude the
+        // account number (727-531303 style) and the date itself.
+        const nums = row
+            .filter(it => it !== dateItem && it.x < dateX && !/\d+-\d+/.test(it.text) && !_DATE_TOKEN_RE.test(it.text))
+            .map(it => ({ v: parseFloat(String(it.text).replace(/[,\s₪$]/g, '')), x: it.x }))
+            .filter(n => isFinite(n.v))
+            .sort((a, b) => b.x - a.x);
+        const qty = nums.length ? nums[0].v : 0;
+        const rate = nums.length > 1 ? nums[1].v : 0;
+
+        // Name = letter tokens minus stopwords/account/date/action.
+        const nameToks = row
+            .map(it => it.text.trim().replace(/^[.…]+/, '').trim())
+            .filter(t => /[A-Za-z֐-׿]/.test(t) && !_ACT_ANY.test(t) && !_DATE_TOKEN_RE.test(t) && !/\d/.test(t))
+            .filter(t => !_ACT_STOPWORDS.has(t));
+        if (!nameToks.length) continue;
+        const name = nameToks.join(' ').replace(/\s+/g, ' ').trim();
+        const ils = /שקל|ש"ח|₪|לירה|שטרלינג/.test(row.map(it => it.text).join(' ')) && !/דולר/.test(row.map(it => it.text).join(' '));
+
+        // Order-independent group key (handles RTL/Latin token reversal like "INC TERAWULF").
+        const key = name.toUpperCase().replace(/[^A-Z֐-׿ ]/g, ' ').trim().split(/\s+/).sort().join(' ');
+        if (!key) continue;
+        const p = pos[key] || (pos[key] = { buyQty: 0, buyCost: 0, sellQty: 0, name, ils, firstBuy: null });
+        if (_ACT_BUY.test(act) && qty > 0 && rate > 0) {
+            p.buyQty += qty; p.buyCost += qty * rate; p.ils = ils;
+            const iso = dateItem ? _cleanDate(dateItem.text) : null;
+            if (iso && (!p.firstBuy || iso < p.firstBuy)) p.firstBuy = iso;
+        } else if (_ACT_SELL.test(act) && qty > 0) {
+            p.sellQty += qty;
+        }
+        // דבידנד / העברה / עברה לזכות → ignored (don't define a current position).
+    }
+
+    const out = [];
+    for (const k of Object.keys(pos)) {
+        const p = pos[k];
+        const net = p.buyQty - p.sellQty;
+        if (!(net > 0) || !(p.buyQty > 0)) continue;
+        let avg = p.buyCost / p.buyQty;
+        if (p.ils && avg > 0) avg = avg / 100;   // TASE ₪ quotes are in agorot
+        const tk = _resolveBrokerTicker(p.name, p.name, p.ils);
+        out.push({
+            ticker: tk,
+            stockName: _brokerDisplayName(tk, p.name),
+            shares: Math.round(net * 10000) / 10000,
+            avgPrice: avg > 0 ? +avg.toFixed(4) : 0,
+            currency: p.ils ? 'ILS' : 'USD',
+            buyDate: p.firstBuy || null,
+        });
+    }
+    return _deduplicateResults(out);
 }
 
 // Strategy 0: Israeli broker holdings statement (Bank Hapoalim MyTrade etc.).
@@ -385,9 +476,10 @@ function _extractIsraeliBroker(items) {
         // imports (the row stays editable for the user to correct the purchase price).
         if (!(cost > 0) && lastPrice > 0) cost = lastPrice / factor;
 
+        const _tk = _resolveBrokerTicker(secId, name, agorot);
         results.push({
-            ticker: _resolveBrokerTicker(secId, name, agorot),
-            stockName: name.replace(/\s+(INC|LTD|CORP|PLC|בע"מ)\.?$/i, '').trim() || name,
+            ticker: _tk,
+            stockName: _brokerDisplayName(_tk, name),
             shares: Math.round(qty),
             avgPrice: cost > 0 ? +cost.toFixed(4) : 0,
             currency: agorot ? 'ILS' : 'USD',
@@ -403,15 +495,43 @@ const _BROKER_NAME_TICKER = {
     'TERAWULF': 'WULF', 'TERAWULF INC': 'WULF',
     'NVIDIA': 'NVDA', 'APPLE': 'AAPL', 'MICROSOFT': 'MSFT', 'TESLA': 'TSLA', 'AMAZON': 'AMZN',
     'ALPHABET': 'GOOGL', 'META': 'META', 'MICROSTRATEGY': 'MSTR', 'STRATEGY': 'MSTR',
+    'ISHARES BITCOIN': 'IBIT', 'CANTOR EQUITY': 'CEP',
 };
+// Israeli securities → Yahoo .TA ticker, matched on the Hebrew name (the PDF's numeric "מספר נייר"
+// uses a different numbering than the platform's id map, so name-matching is the reliable bridge).
+// Resolving to a real .TA ticker is what gives the holding a live price + 52-week range.
+const _IL_NAME_TICKER = [
+    [/פועלים/, 'POLI.TA'], [/לאומי/, 'LUMI.TA'], [/מזרחי|טפחות/, 'MZTF.TA'], [/דיסקונט/, 'DSCT.TA'],
+    [/בינלאומי/, 'FIBI.TA'], [/טבע/, 'TEVA.TA'], [/נייס|נאיס/, 'NICE.TA'], [/כי"?ל|איי.?סי.?אל/, 'ICL.TA'],
+    [/אלביט/, 'ESLT.TA'], [/בזק/, 'BEZQ.TA'], [/סלקום/, 'CEL.TA'], [/פרטנר/, 'PTNR.TA'], [/הראל/, 'HARL.TA'],
+    [/פניקס/, 'PHOE.TA'], [/מגדל/, 'MGDL.TA'], [/עזריאלי/, 'AZRG.TA'], [/שופרסל/, 'SHPG.TA'], [/דלק/, 'DLEKG.TA'],
+    [/אנלייט/, 'ENLT.TA'], [/נובה/, 'NVMI.TA'], [/טאוו?ר/, 'TSEM.TA'], [/אלוני חץ/, 'ALHE.TA'],
+    [/אלקו/, 'ELCO.TA'], [/שפיר/, 'SPEN.TA'], [/פתאל|פטאל/, 'FTAL.TA'], [/אופקו|או.פי.סי/, 'OPC.TA'],
+];
 function _resolveBrokerTicker(secId, name, agorot) {
-    if (!agorot) {  // US/foreign security — try to map the name to a real ticker for live pricing
-        const key = String(name || '').toUpperCase().replace(/[.,]/g, '').trim();
-        if (_BROKER_NAME_TICKER[key]) return _BROKER_NAME_TICKER[key];
-        const firstWord = key.split(/\s+/)[0];
-        if (_BROKER_NAME_TICKER[firstWord]) return _BROKER_NAME_TICKER[firstWord];
+    const nm = String(name || '');
+    if (agorot || /[֐-׿]/.test(nm)) {  // Israeli security — map the Hebrew name to a .TA ticker
+        for (const [re, tk] of _IL_NAME_TICKER) if (re.test(nm)) return tk;
+        return secId;  // unknown Israeli → keep the numeric id (still imports, editable)
     }
-    return secId;  // TASE numeric id (Israeli securities resolve via the price service)
+    const key = nm.toUpperCase().replace(/[.,]/g, '').trim();   // US/foreign — map name → ticker
+    if (_BROKER_NAME_TICKER[key]) return _BROKER_NAME_TICKER[key];
+    for (const k of Object.keys(_BROKER_NAME_TICKER)) if (key.includes(k)) return _BROKER_NAME_TICKER[k];
+    return secId;
+}
+// Clean canonical display name for a resolved ticker (PDF extraction can reverse word order, e.g.
+// "הפועלים בנק" / "INC TERAWULF") — when we know the ticker, prefer a tidy name.
+const _BROKER_TICKER_NAME = {
+    'POLI.TA': 'בנק הפועלים', 'LUMI.TA': 'בנק לאומי', 'MZTF.TA': 'מזרחי טפחות', 'DSCT.TA': 'בנק דיסקונט',
+    'FIBI.TA': 'הבינלאומי', 'TEVA.TA': 'טבע', 'NICE.TA': 'נייס', 'ICL.TA': 'כיל', 'ESLT.TA': 'אלביט מערכות',
+    'BEZQ.TA': 'בזק', 'CEL.TA': 'סלקום', 'PTNR.TA': 'פרטנר', 'HARL.TA': 'הראל', 'PHOE.TA': 'הפניקס',
+    'MGDL.TA': 'מגדל', 'AZRG.TA': 'עזריאלי', 'SHPG.TA': 'שופרסל', 'DLEKG.TA': 'דלק קבוצה', 'ENLT.TA': 'אנלייט',
+    'NVMI.TA': 'נובה', 'TSEM.TA': 'טאוואר', 'ALHE.TA': 'אלוני חץ', 'ELCO.TA': 'אלקו', 'SPEN.TA': 'שפיר',
+    'FTAL.TA': 'פתאל', 'OPC.TA': 'או.פי.סי', 'WULF': 'TeraWulf', 'IBIT': 'iShares Bitcoin', 'CEP': 'Cantor Equity',
+};
+function _brokerDisplayName(ticker, rawName) {
+    if (_BROKER_TICKER_NAME[ticker]) return _BROKER_TICKER_NAME[ticker];
+    return String(rawName || ticker).replace(/\s+(INC|LTD|CORP|PLC|בע"מ)\.?$/i, '').trim() || String(rawName || ticker);
 }
 
 // Strategy 1: Group items into rows by Y position, then parse each row

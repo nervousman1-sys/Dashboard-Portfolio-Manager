@@ -1393,7 +1393,7 @@ function openMgmtModal(action, data) {
                     <div class="dropzone-icon">&#x2601;</div>
                     <div class="dropzone-text">גרור קובץ Excel, CSV או PDF</div>
                     <div class="dropzone-sub">או לחץ לבחירת קובץ</div>
-                    <input type="file" id="addClientFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none"
+                    <input type="file" id="addClientFileInput" accept=".xlsx,.xls,.xlsm,.csv,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf,.txt" style="display:none"
                            onchange="handleDropzoneFile(this.files[0])" />
                 </div>
                 <div id="addClientFileStatus" style="display:none;margin-bottom:10px"></div>

@@ -9806,3 +9806,28 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .rep-table-legend { font-size: 11px; line-height: 1.6; color: var(--text-primary); opacity: 0.7;
     margin: 8px 2px 0; padding: 8px 12px; background: rgba(255,255,255,0.03);
     border: 1px solid var(--border); border-radius: 9px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — fit ANY screen (portrait monitors / narrow desktop windows).
+   Mobile (≤768px) is handled by the full-screen takeover above; this covers the
+   in-between range where a portrait/narrow window previously clipped or overlapped.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1200px) {
+    /* Index ticker bar: scroll horizontally instead of overlapping when it can't fit. */
+    .qw-tickers { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .qw-tickers::-webkit-scrollbar { display: none; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+    /* The detail modal clips overflow (overflow:hidden) — on a tall/narrow window let each tab
+       scroll so nothing is cut off. */
+    .modal-body, #tab-overview, .modal-tab-content { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .modal-header { flex-wrap: wrap; gap: 8px; }
+    /* Collapse dense 3-column panels to 2 so figures stay readable, not squished. */
+    .ov-panel-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+    .ov-panels { grid-template-columns: 1fr 1fr; }
+    /* Any wide data table scrolls horizontally rather than distorting the layout. */
+    .risk-table-scroll, .rep-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table.risk-table, table.rep-table { min-width: 640px; }
+    /* Add-portfolio / management modal: never wider than the viewport. */
+    .mgmt-box { max-width: 94vw; }
+}
