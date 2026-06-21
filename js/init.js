@@ -915,6 +915,7 @@ window.addEventListener('popstate', function (e) {
         ['assetFitOverlay', () => typeof closeAssetFitPopup === 'function' && closeAssetFitPopup()],
         ['stockRecoOverlay', () => typeof closeStockRecommendations === 'function' && closeStockRecommendations()],
         ['mgmtOverlay', () => typeof closeMgmtModal === 'function' && closeMgmtModal()],
+        ['decisionCoreOverlay', () => typeof closeDecisionCore === 'function' && closeDecisionCore()],
         ['qwConfigModal', () => typeof closeTickerModal === 'function' && closeTickerModal()],
     ];
     for (const [id, closer] of popupClosers) {
