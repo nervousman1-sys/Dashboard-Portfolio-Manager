@@ -142,7 +142,7 @@ async function _dcComputeProximity() {
         parts.push({ key: 'לחצי אינפלציה', score: Math.round(s), w: 0.2, note: `CPI ${cpi}%` });
     } else { missing++; parts.push({ key: 'לחצי אינפלציה', score: 50, w: 0.2, note: 'נתון חלקי' }); }
     // 3. Monetary policy — policy-rate level
-    const rate = macro ? (num(macro.rate) ?? num(macro.fedRate) ?? num(macro.interestRate)) : null;
+    const rate = macro ? (num(macro.fed_rate) ?? num(macro.rate) ?? num(macro.fedRate) ?? num(macro.interestRate)) : null;
     if (rate != null && isFinite(rate)) {
         const s = Math.max(0, Math.min(100, rate / 6 * 100));
         parts.push({ key: 'מדיניות מוניטרית מהדקת', score: Math.round(s), w: 0.2, note: `ריבית ${rate}%` });
@@ -154,8 +154,14 @@ async function _dcComputeProximity() {
         if (r.ok) {
             const j = await r.json();
             const us = (j && (j.us || j.US)) || j;
-            const y10 = num(us && (us.y10 || us['10Y'] || us.tenYear)), y2 = num(us && (us.y2 || us['2Y'] || us.twoYear));
-            if (y10 != null && y2 != null) spread = y10 - y2;
+            let y10 = null, y2 = null;
+            if (Array.isArray(us)) {                       // [{label:'10Y', value:4.49}, …]
+                const find = (lbl) => { const e = us.find(x => x && x.label === lbl); return e ? Number(e.value) : null; };
+                y10 = find('10Y'); y2 = find('2Y');
+            } else {
+                y10 = num(us && (us.y10 || us['10Y'] || us.tenYear)); y2 = num(us && (us.y2 || us['2Y'] || us.twoYear));
+            }
+            if (y10 != null && y2 != null && isFinite(y10) && isFinite(y2)) spread = y10 - y2;
         }
     } catch (e) { }
     if (spread != null && isFinite(spread)) {
