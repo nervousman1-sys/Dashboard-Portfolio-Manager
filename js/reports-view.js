@@ -505,6 +505,7 @@ function _repRenderDetail(m) {
     <div class="rep-detail" dir="rtl">
         <div class="rep-detail-top">
             <button class="macro-back-btn" onclick="backToReportsList()">→ חזרה לרשימה</button>
+            <button class="rep-tech-link" onclick="openTechnicalForTicker('${m.symbol}')" title="פתח את ${(m.companyName || m.symbol).replace(/'/g, '')} בניתוח הטכני">📈 ניתוח טכני →</button>
         </div>
 
         <div class="rep-head">

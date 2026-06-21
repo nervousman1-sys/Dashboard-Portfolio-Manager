@@ -553,8 +553,9 @@ async function openModal(clientId) {
                                 const has = _ms != null;
                                 const col = !has ? '#8a93a6' : _ms >= 65 ? '#00ff94' : _ms >= 45 ? '#facc15' : '#ff4d4d';
                                 const cls = !has ? '' : _ms >= 65 ? 'val-positive' : _ms >= 45 ? 'val-warn' : 'val-negative';
-                                return `<div class="ov-cell ov-cell-risk-score" title="ציון מודל: 40% דוחות · 40% SML/CML · 20% טכני (החברות המוחזקות)">
-                                <div class="ov-cell-label">ציון מודל</div>
+                                const _modelTip = 'מודל התיק — ציון משוקלל (0–100) של החברות המוחזקות, הבנוי משלושה רכיבים: 40% נתוני הדוחות הכספיים (רווחיות, צמיחה, איתנות) · 40% מודל CML/SML (אלפא מול הסיכון השיטתי) · 20% ניתוח טכני (מגמה ומומנטום). לכן הוא יכול להיות שונה מציון CML/SML שמודד רק את ממד הסיכון–תשואה.';
+                                return `<div class="ov-cell ov-cell-risk-score">
+                                <div class="ov-cell-label">מודל התיק <span class="ov-info-i" title="${_modelTip.replace(/"/g, '&quot;')}">&#9432;</span></div>
                                 <div class="ov-cell-value ${cls}">${has ? _ms : '—'}<span class="ov-cell-dim">/100</span></div>
                                 <div class="ov-cell-bar"><div class="ov-cell-bar-fill" style="width:${has ? _ms : 0}%;background:${col}"></div></div>
                             </div>`;
@@ -630,7 +631,7 @@ async function openModal(clientId) {
                         <div class="ov-comp-left">
                             <span class="ov-comp-ring">${cs == null ? '—' : cs}<small>/100</small></span>
                             <div class="ov-comp-txt">
-                                <span class="ov-comp-label">עמידה במודל CML / SML</span>
+                                <span class="ov-comp-label">מודל CML / SML</span>
                                 <span class="ov-comp-sub">${sub}</span>
                             </div>
                         </div>
@@ -1617,7 +1618,7 @@ function openMgmtModal(action, data) {
                 </div>
             </div>
             <div class="mgmt-footer">
-                <button class="mgmt-btn danger" onclick="sellHolding(${c.id}, ${holdingId})">מכור</button>
+                <button class="mgmt-btn danger" id="mgmt-sell-btn" onclick="sellHolding(${c.id}, ${holdingId})">מכור</button>
                 <button class="mgmt-btn secondary" onclick="closeMgmtModal()">ביטול</button>
             </div>`;
         // Trigger initial P&L calculation after DOM is ready
@@ -1662,7 +1663,7 @@ function openMgmtModal(action, data) {
                 </div>
             </div>
             <div class="mgmt-footer">
-                <button class="mgmt-btn primary" onclick="depositCash(${c.id})">הפקד</button>
+                <button class="mgmt-btn primary" id="mgmt-deposit-btn" onclick="depositCash(${c.id})">הפקד</button>
                 <button class="mgmt-btn secondary" onclick="closeMgmtModal()">ביטול</button>
             </div>`;
     }
@@ -2311,6 +2312,7 @@ async function editClient(clientId) {
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }
@@ -2362,6 +2364,39 @@ function _setOrderType(t) {
     if (lbl) lbl.textContent = t === 'limit' ? 'מחיר לימיט' : 'מחיר קנייה';
 }
 
+// Lock an action button on submit: shows a pressed/spinner state and blocks a second click while
+// the trade is in flight (prevents the slow double-submits the user hit). Returns { ok, end }:
+// ok=false means it's already processing → abort; call end() to restore on failure (success closes
+// the modal, so the button goes away on its own).
+function _beginAction(btnId, busyLabel) {
+    const b = document.getElementById(btnId);
+    if (!b) return { ok: true, end: () => { } };
+    if (b.dataset.busy === '1') return { ok: false, end: () => { } };
+    b.dataset.busy = '1';
+    b.disabled = true;
+    b.classList.add('is-busy');
+    const idle = b.innerHTML;
+    b.innerHTML = '<span class="btn-spinner"></span> ' + (busyLabel || 'מעבד…');
+    return {
+        ok: true,
+        end: () => { b.dataset.busy = ''; b.disabled = false; b.classList.remove('is-busy'); b.innerHTML = idle; },
+    };
+}
+
+// After a trade the holdings signature changes, so the risk model must rebuild. Do it in the
+// BACKGROUND (non-blocking) and force it once — this warms the cache so opening the CML/SML tab is
+// instant instead of triggering a cold build, and refreshes the dashboard model chips. The build
+// de-dupes by signature, so a later CML/SML open reuses this in-flight build rather than starting
+// a second one.
+function _warmModelAfterTrade() {
+    setTimeout(() => {
+        try {
+            if (typeof applyModelRiskToClients === 'function') applyModelRiskToClients({ force: true });
+            else if (typeof buildRiskModel === 'function') buildRiskModel(typeof clients !== 'undefined' ? clients : []);
+        } catch (e) { /* non-fatal */ }
+    }, 80);
+}
+
 async function addHolding(clientId) {
     const price = parseInputNumber(document.getElementById('mgmt-price').value);
     const quantity = parseInputNumber(document.getElementById('mgmt-qty').value);
@@ -2391,19 +2426,24 @@ async function addHolding(clientId) {
 
     // Use portfolioBuyAsset which checks cash balance
     let updated;
-    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    const _act = _beginAction('mgmt-buy-btn', 'קונה…');
+    if (!_act.ok) return;  // already processing — ignore the repeat click
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); _act.end(); return; }
     updated = await portfolioBuyAsset(clientId, holdingData);
     if (updated && updated.error === 'insufficient_cash') {
         const cur = holdingData.currency || 'USD';
         alert(`אין מספיק מזומן (${cur}) בתיק.\nנדרש: ${formatCurrency(updated.required, cur)}\nזמין: ${formatCurrency(updated.available, cur)}`);
+        _act.end();
         return;
     }
     if (updated && updated.error) {
         alert(`שגיאה בביצוע הקנייה: ${updated.error}`);
+        _act.end();
         return;
     }
     if (!updated) {
         alert('שגיאה בשמירת הנכס. נא לנסות שנית.');
+        _act.end();
         return;
     }
 
@@ -2422,6 +2462,7 @@ async function addHolding(clientId) {
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }
@@ -2458,14 +2499,17 @@ async function depositCash(clientId) {
         }
     }
 
-    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה הפקדה.'); return; }
+    const _act = _beginAction('mgmt-deposit-btn', 'מפקיד…');
+    if (!_act.ok) return;
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה הפקדה.'); _act.end(); return; }
     const updated = await portfolioDepositCash(clientId, amount, currency);
-    if (!updated) { alert('שמירת ההפקדה נכשלה. נסה שוב.'); return; }  // keep modal open, don't dump to dashboard
+    if (!updated) { alert('שמירת ההפקדה נכשלה. נסה שוב.'); _act.end(); return; }  // keep modal open, don't dump to dashboard
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }
@@ -2487,6 +2531,7 @@ async function editHolding(clientId, holdingId) {
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }
@@ -2500,6 +2545,7 @@ async function removeHolding(clientId, holdingId) {
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }
@@ -2537,14 +2583,17 @@ async function sellHolding(clientId, holdingId) {
     const holding = client ? client.holdings.find(h => h.id === holdingId) : null;
     if (holding && sellQty > holding.shares) { alert('לא ניתן למכור יותר מהכמות שבאחזקה'); return; }
 
-    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה מכירה.'); return; }
+    const _act = _beginAction('mgmt-sell-btn', 'מוכר…');
+    if (!_act.ok) return;
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה מכירה.'); _act.end(); return; }
     const updated = await supaSellHolding(clientId, holdingId, sellQty, sellPrice);
-    if (!updated) { alert('המכירה נכשלה. נסה שוב.'); return; }
+    if (!updated) { alert('המכירה נכשלה. נסה שוב.'); _act.end(); return; }
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
     closeMgmtModal();
     refreshDashboard();
+    _warmModelAfterTrade();
     if (currentModalClientId === clientId) {
         openModal(clientId);
     }

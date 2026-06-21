@@ -3439,6 +3439,11 @@ body.filter-modal-open::after {
     letter-spacing: 0.3px;
     margin-bottom: 4px;
 }
+.ov-info-i {
+    display: inline-block; cursor: help; color: var(--accent-blue, #00e5ff);
+    opacity: 0.85; font-size: 12px; margin-inline-start: 3px; vertical-align: middle;
+}
+.ov-info-i:hover { opacity: 1; }
 
 .ov-cell-value {
     font-size: 16px;
@@ -6094,6 +6099,14 @@ body.filter-modal-open::after {
 .mgmt-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+/* Pressed/in-flight state for an action button (buy/sell/deposit) — looks clicked + un-clickable */
+.mgmt-btn.is-busy {
+    transform: translateY(1px) scale(0.99);
+    filter: saturate(0.7) brightness(0.92);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    opacity: 0.85;
 }
 
 /* Loading spinner inside buttons */
@@ -9581,7 +9594,14 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 @keyframes rep-spin { to { transform: rotate(360deg); } }
 
 /* ── Detail header ── */
-.rep-detail-top { margin-bottom: 14px; }
+.rep-detail-top { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rep-tech-link {
+    background: rgba(0, 229, 255, 0.10); color: var(--accent-blue, #00e5ff);
+    border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 9px;
+    padding: 7px 14px; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap;
+    transition: background .12s, box-shadow .12s;
+}
+.rep-tech-link:hover { background: rgba(0, 229, 255, 0.18); box-shadow: 0 0 14px rgba(0, 229, 255, 0.25); }
 .rep-head {
     display: flex; align-items: stretch; justify-content: space-between; gap: 16px;
     flex-wrap: wrap; margin-bottom: 16px;
