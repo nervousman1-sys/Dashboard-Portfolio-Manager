@@ -2239,21 +2239,25 @@ async function addClient() {
     try {
         let finalClient;
 
-        if (supabaseConnected) {
-            // 30s timeout — no external API calls during creation, only Supabase DB calls
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('timeout')), 30000)
-            );
-            // Broker import → persist the FULL operation history with real dates
-            const brokerTxs = (window._brokerImport && window._brokerImport.txs) ? window._brokerImport.txs : null;
-            const supaPromise = holdingsData.length > 0
-                ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress, brokerTxs)
-                : supaAddClient(name, cashUsd, cashIls);
-
-            finalClient = await Promise.race([supaPromise, timeoutPromise]);
-        } else {
-            finalClient = await apiAddClient(name, 'low');
+        // Supabase-only. If the connection flag isn't set yet (fresh session: cached UI can
+        // accept this click before init finishes), re-verify it — but NEVER fall through to the
+        // dead legacy /api backend, whose 401 logout()s the user out to the home screen.
+        if (!(await ensureSupabaseReady())) {
+            alert('אין כרגע חיבור לשרת. המתן רגע ונסה שוב — לא נוצר ולא נמחק דבר.');
+            return;  // finally block resets the button; modal stays open
         }
+
+        // 30s timeout — no external API calls during creation, only Supabase DB calls
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 30000)
+        );
+        // Broker import → persist the FULL operation history with real dates
+        const brokerTxs = (window._brokerImport && window._brokerImport.txs) ? window._brokerImport.txs : null;
+        const supaPromise = holdingsData.length > 0
+            ? supaAddClientWithHoldings(name, cashUsd, cashIls, holdingsData, onProgress, brokerTxs)
+            : supaAddClient(name, cashUsd, cashIls);
+
+        finalClient = await Promise.race([supaPromise, timeoutPromise]);
 
         console.log('addClient result:', finalClient ? 'success (id=' + finalClient.id + ')' : 'null — check console for supaAddClient errors');
 
@@ -2300,9 +2304,8 @@ async function editClient(clientId) {
     const name = document.getElementById('mgmt-name').value.trim();
     if (!name) { alert('נא להזין שם לקוח'); return; }
 
-    const updated = supabaseConnected
-        ? await supaEditClient(clientId, name)
-        : await apiEditClient(clientId, name);
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    const updated = await supaEditClient(clientId, name);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
@@ -2314,9 +2317,8 @@ async function editClient(clientId) {
 }
 
 async function deleteClient(clientId) {
-    supabaseConnected
-        ? await supaDeleteClient(clientId)
-        : await apiDeleteClient(clientId);
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    await supaDeleteClient(clientId);
     clients = clients.filter(c => c.id !== clientId);
     // Deleting the last portfolio is a CONFIRMED-empty state → allow the empty message
     // (otherwise the dashboard would show a perpetual spinner).
@@ -2389,23 +2391,20 @@ async function addHolding(clientId) {
 
     // Use portfolioBuyAsset which checks cash balance
     let updated;
-    if (supabaseConnected) {
-        updated = await portfolioBuyAsset(clientId, holdingData);
-        if (updated && updated.error === 'insufficient_cash') {
-            const cur = holdingData.currency || 'USD';
-            alert(`אין מספיק מזומן (${cur}) בתיק.\nנדרש: ${formatCurrency(updated.required, cur)}\nזמין: ${formatCurrency(updated.available, cur)}`);
-            return;
-        }
-        if (updated && updated.error) {
-            alert(`שגיאה בביצוע הקנייה: ${updated.error}`);
-            return;
-        }
-        if (!updated) {
-            alert('שגיאה בשמירת הנכס. נא לנסות שנית.');
-            return;
-        }
-    } else {
-        updated = await apiAddHolding(clientId, holdingData);
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    updated = await portfolioBuyAsset(clientId, holdingData);
+    if (updated && updated.error === 'insufficient_cash') {
+        const cur = holdingData.currency || 'USD';
+        alert(`אין מספיק מזומן (${cur}) בתיק.\nנדרש: ${formatCurrency(updated.required, cur)}\nזמין: ${formatCurrency(updated.available, cur)}`);
+        return;
+    }
+    if (updated && updated.error) {
+        alert(`שגיאה בביצוע הקנייה: ${updated.error}`);
+        return;
+    }
+    if (!updated) {
+        alert('שגיאה בשמירת הנכס. נא לנסות שנית.');
+        return;
     }
 
     // Save the order tag + stop-loss/target as a local annotation on this position.
@@ -2459,7 +2458,9 @@ async function depositCash(clientId) {
         }
     }
 
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה הפקדה.'); return; }
     const updated = await portfolioDepositCash(clientId, amount, currency);
+    if (!updated) { alert('שמירת ההפקדה נכשלה. נסה שוב.'); return; }  // keep modal open, don't dump to dashboard
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
@@ -2479,9 +2480,8 @@ async function editHolding(clientId, holdingId) {
     if (!newPrice || newPrice <= 0) { alert('נא להזין מחיר תקין'); return; }
     if (!newQty || newQty <= 0) { alert('נא להזין כמות תקינה'); return; }
 
-    const updated = supabaseConnected
-        ? await supaEditHolding(clientId, holdingId, { name: newName, price: newPrice, quantity: newQty })
-        : await apiEditHolding(clientId, holdingId, { name: newName, price: newPrice, quantity: newQty });
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    const updated = await supaEditHolding(clientId, holdingId, { name: newName, price: newPrice, quantity: newQty });
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
@@ -2493,9 +2493,8 @@ async function editHolding(clientId, holdingId) {
 }
 
 async function removeHolding(clientId, holdingId) {
-    const updated = supabaseConnected
-        ? await supaRemoveHolding(clientId, holdingId)
-        : await apiRemoveHolding(clientId, holdingId);
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.'); return; }
+    const updated = await supaRemoveHolding(clientId, holdingId);
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();
@@ -2538,9 +2537,9 @@ async function sellHolding(clientId, holdingId) {
     const holding = client ? client.holdings.find(h => h.id === holdingId) : null;
     if (holding && sellQty > holding.shares) { alert('לא ניתן למכור יותר מהכמות שבאחזקה'); return; }
 
-    const updated = supabaseConnected
-        ? await supaSellHolding(clientId, holdingId, sellQty, sellPrice)
-        : null;
+    if (!(await ensureSupabaseReady())) { alert('אין כרגע חיבור לשרת. נסה שוב בעוד רגע — לא בוצעה מכירה.'); return; }
+    const updated = await supaSellHolding(clientId, holdingId, sellQty, sellPrice);
+    if (!updated) { alert('המכירה נכשלה. נסה שוב.'); return; }
     const idx = clients.findIndex(c => c.id === clientId);
     if (idx !== -1 && updated) clients[idx] = updated;
     if (typeof invalidateRiskModel === 'function') invalidateRiskModel();

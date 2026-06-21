@@ -164,3 +164,18 @@ async function checkSupabaseConnection() {
         return false;
     }
 }
+
+// Robust gate for WRITE actions (create/edit/delete portfolio, buy/sell, deposit).
+// The app is Supabase-only; the legacy /api/* fallback is dead and a 401 there calls logout()
+// — which threw new users out to the login screen mid-action ("נזרק למסך הבית"). On a fresh
+// session the cached UI can render and accept clicks BEFORE init sets supabaseConnected, so the
+// flag may still be false here. Re-verify it (local, no network) and NEVER fall through to the
+// legacy backend. Returns true only when a real Supabase client is available.
+async function ensureSupabaseReady() {
+    if (supabaseConnected && supabaseClient) return true;
+    if (typeof checkSupabaseConnection === 'function') {
+        try { const ok = await checkSupabaseConnection(); if (ok && supabaseClient) return true; } catch (e) { /* fall through */ }
+    }
+    return false;
+}
+if (typeof window !== 'undefined') window.ensureSupabaseReady = ensureSupabaseReady;

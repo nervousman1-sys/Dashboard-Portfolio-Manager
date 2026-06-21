@@ -40,8 +40,11 @@ function _loadScript(src) {
 
 // Column name patterns for auto-detection (Hebrew + English)
 const TICKER_COLUMNS = ['סימול', 'נייר ערך', 'שם נייר', 'symbol', 'ticker', 'stock', 'נכס', 'סימול (ticker)'];
-const SHARES_COLUMNS = ['כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
-const PRICE_COLUMNS = ['מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות', 'מחיר שוק'];
+const SHARES_COLUMNS = ['כמות בתיק', 'כמות', 'יחידות', 'shares', 'quantity', 'qty', 'units', 'מספר יחידות', 'כמות יחידות'];
+const PRICE_COLUMNS = ['שער עלות', 'מחיר', 'מחיר קנייה', 'עלות ממוצעת', 'מחיר ממוצע', 'price', 'avg price', 'avg cost', 'cost', 'cost basis', 'עלות', 'מחיר שוק'];
+// Israeli broker statements (Bank Hapoalim MyTrade, Leumi, etc.) identify a security by a numeric
+// TASE id ("מספר נייר") rather than a Latin ticker — used by the Israeli-broker PDF strategy.
+const SECURITY_ID_COLUMNS = ['מספר נייר', 'מספר ני"ע', 'מס\' נייר', 'security number', 'security'];
 const DATE_COLUMNS = ['תאריך קנייה', 'תאריך רכישה', 'תאריך עסקה', 'תאריך', 'purchase date', 'buy date', 'trade date', 'date', 'acquired'];
 
 // dd/mm/yyyy · dd.mm.yyyy · dd-mm-yyyy · yyyy-mm-dd (Israeli files are day-first)
@@ -194,6 +197,12 @@ async function parsePDFFile(file) {
 
         if (allItems.length === 0) return [];
 
+        // Strategy 0: Israeli broker holdings statement (Bank Hapoalim MyTrade, Leumi, …) — these
+        // identify securities by a numeric TASE id + Hebrew/Latin name (no Latin ticker), so the
+        // generic strategies below find nothing. Try this first when the format is detected.
+        const israeliResult = _extractIsraeliBroker(allItems);
+        if (israeliResult.length > 0) return israeliResult;
+
         // Strategy 1: Position-based row reconstruction
         const positionResult = _extractFromPositionedItems(allItems);
         if (positionResult.length > 0) return positionResult;
@@ -209,6 +218,96 @@ async function parsePDFFile(file) {
         console.error('[FileParser] PDF parse error:', err);
         return [];
     }
+}
+
+// Strategy 0: Israeli broker holdings statement (Bank Hapoalim MyTrade etc.).
+// Securities are identified by a numeric TASE id ("מספר נייר") + a Hebrew/Latin name, with the
+// quantity ("כמות בתיק") and cost rate ("שער עלות") in their own columns. We anchor each row on the
+// 6–9 digit security id, read the name, and pick quantity/cost by nearest-X to the detected header
+// columns. TASE cost rates are quoted in AGOROT → converted to shekels. Rows stay editable so the
+// user confirms before saving — we never invent data we can't read.
+function _extractIsraeliBroker(items) {
+    const flat = items.map(it => it.text).join(' ');
+    const looksIsraeli = /מספר\s*נייר/.test(flat) || /שער\s*עלות/.test(flat) || /תיק עדכני/.test(flat)
+        || /MyTrade/i.test(flat) || /כמות בתיק/.test(flat) || /שווי אחזקה/.test(flat);
+    if (!looksIsraeli) return [];
+
+    // Group items into rows by Y, each sorted left-to-right by X.
+    const rowMap = new Map();
+    for (const item of items) {
+        const yKey = Math.round(item.y / 4) * 4;
+        if (!rowMap.has(yKey)) rowMap.set(yKey, []);
+        rowMap.get(yKey).push(item);
+    }
+    const rows = [...rowMap.entries()].sort((a, b) => b[0] - a[0]).map(([, r]) => { r.sort((a, b) => a.x - b.x); return r; });
+
+    // Detect the holdings header row → X positions of the quantity and cost columns.
+    const cols = { qty: null, cost: null };
+    for (const row of rows) {
+        const joined = row.map(it => it.text).join(' ');
+        const isHeader = SECURITY_ID_COLUMNS.some(h => joined.includes(h)) && (joined.includes('כמות') || joined.includes('שער'));
+        if (!isHeader) continue;
+        for (const it of row) {
+            if (cols.qty == null && /כמות/.test(it.text)) cols.qty = it.x;
+            if (cols.cost == null && /עלות/.test(it.text)) cols.cost = it.x;
+        }
+        break;
+    }
+
+    const results = [];
+    for (const row of rows) {
+        // Anchor: a 6–9 digit security id token.
+        const idItem = row.find(it => /^\d{6,9}$/.test(it.text.replace(/[,\s]/g, '')));
+        if (!idItem) continue;
+        const secId = idItem.text.replace(/[,\s]/g, '');
+
+        // Name: the longest token containing letters (Hebrew or Latin), minus a leading ellipsis.
+        let name = '';
+        for (const it of row) {
+            if (it === idItem) continue;
+            const t = it.text.trim().replace(/^[.…]+/, '').trim();
+            if (!/[A-Za-z֐-׿]/.test(t)) continue;        // must contain a letter
+            if (t.length > name.length) name = t;
+        }
+        if (!name) continue;
+
+        // Numeric candidates in the row (exclude the id and percentage tokens).
+        const nums = row
+            .filter(it => it !== idItem && !/%/.test(it.text))
+            .map(it => ({ v: parseFloat(it.text.replace(/[,\s₪$]/g, '')), x: it.x }))
+            .filter(n => isFinite(n.v) && n.v > 0);
+        if (!nums.length) continue;
+
+        const nearest = (targetX) => {
+            if (targetX == null) return null;
+            let best = null, bestD = Infinity;
+            for (const n of nums) { const d = Math.abs(n.x - targetX); if (d < bestD) { bestD = d; best = n; } }
+            return best ? best.v : null;
+        };
+
+        let qty = nearest(cols.qty);
+        let cost = nearest(cols.cost);
+
+        // Fallback when headers weren't located: quantity = the smallest integer in the row
+        // (share counts are far smaller than rates/values); leave cost for the user to confirm.
+        if (qty == null) {
+            const ints = nums.filter(n => Number.isInteger(n.v) && n.v < 100000).sort((a, b) => a.v - b.v);
+            qty = ints.length ? ints[0].v : null;
+        }
+        if (!(qty > 0)) continue;
+
+        const isIsraeli = /[֐-׿]/.test(name);   // Hebrew name → TASE security (cost in agorot)
+        if (cost != null && isIsraeli) cost = cost / 100; // agorot → shekels
+
+        results.push({
+            ticker: secId,
+            stockName: name,
+            shares: Math.round(qty),
+            avgPrice: cost != null && cost > 0 ? cost : 0,
+            currency: isIsraeli ? 'ILS' : 'USD',
+        });
+    }
+    return _deduplicateResults(results);
 }
 
 // Strategy 1: Group items into rows by Y position, then parse each row
