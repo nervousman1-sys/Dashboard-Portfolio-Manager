@@ -44,6 +44,34 @@ const _DC_CLASS_HE = {
     energy: 'אנרגיה', reit: 'נדל"ן (REIT)', defensive: 'מניות דפנסיביות', cyclical: 'מניות מחזוריות',
 };
 
+// ── Concrete defensive assets per scenario, with their ACTUAL behavior in that crisis ──
+// Research-grounded (real peak-to-trough/period moves) so the investor gets specific, actionable
+// hedges — not generic advice. Scenario-aware: long bonds shine in deflationary crashes (2000/2008)
+// but were a TRAP in the 2022 inflation crash, where short T-bills, gold and energy held up.
+const _DC_DEFENSIVE = {
+    dotcom: [
+        { t: 'TLT', he: 'אג"ח ממשלתי ארוך', note: 'הריבית ירדה בחדות 2000–2002 → אג"ח ארוך זינק (~+30%+).' },
+        { t: 'GLD', he: 'זהב', note: 'עלה כ-+12% בתקופה ושימש מפלט מהתרסקות הטכנולוגיה.' },
+        { t: 'XLU', he: 'תשתיות וחשמל', note: 'סקטור דפנסיבי שירד הרבה פחות מהשוק הרחב.' },
+        { t: 'XLP', he: 'מוצרי צריכה בסיסיים', note: 'ביקוש קשיח → ירידה מתונה בלבד.' },
+        { t: 'VNQ', he: 'נדל"ן מניב (REIT)', note: 'הנדל"ן דווקא עלה 2000–2002 בזכות הריבית היורדת.' },
+    ],
+    gfc: [
+        { t: 'TLT', he: 'אג"ח ממשלתי ארוך', note: 'זינק כ-+34% ב-2008 בבריחה לאיכות — הגידור הטוב ביותר.' },
+        { t: 'GLD', he: 'זהב', note: 'עלה כ-+5% ב-2008 כשהמניות קרסו.' },
+        { t: 'SHV', he: 'מק"ם דולרי קצר', note: 'שמירת ערך מלאה + נזילות לקנייה בתחתית.' },
+        { t: 'XLP', he: 'מוצרי צריכה בסיסיים', note: 'ירד רק כ-28% מול −57% ב-S&P 500.' },
+        { t: 'XLV', he: 'בריאות', note: 'ביקוש לא-מחזורי → ירידה ממותנת.' },
+    ],
+    crypto: [
+        { t: 'SGOV', he: 'מק"ם דולרי קצר', note: 'נהנה ישירות מהריבית הגבוהה של 2022 — הניב תשואה חיובית.' },
+        { t: 'GLD', he: 'זהב', note: 'נשאר כמעט ללא שינוי (~0%) בעוד נכסי סיכון קרסו.' },
+        { t: 'XLE', he: 'אנרגיה', note: 'זינק כ-+45% ב-2022 — נהנה מהאינפלציה.' },
+        { t: 'TIP', he: 'אג"ח צמוד מדד', note: 'הגנה ישירה מפני אינפלציה (עדיף על אג"ח נומינלי ארוך).' },
+        { t: 'XLP', he: 'מוצרי צריכה בסיסיים', note: 'יציב יחסית — ירד רק אחוזים בודדים.' },
+    ],
+};
+
 // ── Asset-class resolver ──
 function _dcAssetClass(h) {
     const t = String(h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
@@ -269,6 +297,43 @@ if (typeof window !== 'undefined') { window.openDecisionCore = openDecisionCore;
 
 function setDcScenario(key) { _dcScenario = key; _dcRender(); }
 function setDcClient(id) { _dcClientId = Number(id); _dcRender(); }
+
+// ── Searchable portfolio picker ──
+function _dcPpOpen(open) { const l = document.getElementById('dcPpList'); if (l) l.classList.toggle('open', open !== false); }
+function _dcPpFilter(q) {
+    q = String(q || '').toLowerCase().trim();
+    document.querySelectorAll('#dcPpList .dc-pp-item').forEach(it => {
+        it.style.display = (!q || (it.dataset.name || '').includes(q)) ? '' : 'none';
+    });
+    _dcPpOpen(true);
+}
+// Close the dropdown when clicking outside it (registered once).
+if (typeof window !== 'undefined' && !window._dcPpBound) {
+    window._dcPpBound = true;
+    document.addEventListener('click', (e) => {
+        const box = document.getElementById('dcPpBox');
+        if (box && !box.contains(e.target)) _dcPpOpen(false);
+    });
+}
+function _dcPortfolioPickerHTML(list, client) {
+    const items = list.map(c => {
+        const nm = (c.name || 'תיק');
+        const val = _dcMoney(_dcBreakdown(c).totalUsd, 'USD');
+        return `<div class="dc-pp-item ${client && c.id === client.id ? 'sel' : ''}" data-name="${nm.toLowerCase().replace(/"/g, '&quot;')}" onclick="setDcClient(${c.id})">
+            <span class="dc-pp-item-name">${nm.replace(/</g, '')}</span><span class="dc-pp-item-val">${val}</span></div>`;
+    }).join('');
+    const cur = client ? (client.name || 'תיק') : '';
+    return `<div class="dc-field dc-pp">
+        <label>תיק לבדיקה</label>
+        <div class="dc-pp-box" id="dcPpBox">
+            <input class="dc-pp-input" id="dcPpInput" autocomplete="off" placeholder="חפש תיק לפי שם…"
+                value="${cur.replace(/"/g, '&quot;')}"
+                onfocus="this.select(); _dcPpOpen(true)" oninput="_dcPpFilter(this.value)" onclick="_dcPpOpen(true)">
+            <span class="dc-pp-caret" onclick="document.getElementById('dcPpInput').focus()">▾</span>
+            <div class="dc-pp-list" id="dcPpList">${items || '<div class="dc-pp-empty">אין תיקים</div>'}</div>
+        </div>
+    </div>`;
+}
 function _dcShowReduceRisk() {
     const panel = document.getElementById('dcReducePanel');
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === _dcClientId) : null;
@@ -276,11 +341,21 @@ function _dcShowReduceRisk() {
     const sim = _dcSimulate(client, _dcScenario);
     if (!sim) return;
     const recs = _dcReduceRisk(client, _dcScenario, sim);
+    const defensive = _DC_DEFENSIVE[_dcScenario] || [];
+    const sc = _DC_SCENARIOS[_dcScenario];
+    const defHTML = defensive.length ? `
+        <div class="dc-def-title">🛡️ נכסים הגנתיים מומלצים לתרחיש "${sc.he}"</div>
+        <div class="dc-def-sub">נכסים שהוכיחו עמידות במשבר זה (לפי ביצועי-אמת היסטוריים) — הקצאה אליהם מקטינה את הנזק:</div>
+        <div class="dc-def-list">${defensive.map(d => `
+            <div class="dc-def-item">
+                <span class="dc-def-tk">${d.t}</span>
+                <div class="dc-def-txt"><div class="dc-def-name">${d.he}</div><div class="dc-def-note">${d.note}</div></div>
+            </div>`).join('')}</div>` : '';
     panel.innerHTML = `<div class="dc-recs">${recs.map(r => `
         <div class="dc-rec dc-rec-${r.tone}">
             <span class="dc-rec-icon">${r.icon}</span>
             <div class="dc-rec-txt"><div class="dc-rec-title">${r.title}</div><div class="dc-rec-body">${r.body}</div></div>
-        </div>`).join('')}</div>`;
+        </div>`).join('')}</div>${defHTML}`;
     panel.classList.add('open');
 }
 
@@ -386,12 +461,7 @@ function _dcRender() {
             <div class="dc-card glass-card">
                 <div class="dc-card-title">סימולציית קריסה</div>
                 <div class="dc-controls">
-                    <div class="dc-field">
-                        <label>תיק לבדיקה</label>
-                        <select class="dc-select" onchange="setDcClient(this.value)">
-                            ${list.map(c => `<option value="${c.id}" ${c.id === (client && client.id) ? 'selected' : ''}>${(c.name || 'תיק').replace(/</g, '')}</option>`).join('')}
-                        </select>
-                    </div>
+                    ${_dcPortfolioPickerHTML(list, client)}
                     <div class="dc-scenarios">${scenarioCards}</div>
                 </div>
                 ${simHTML}

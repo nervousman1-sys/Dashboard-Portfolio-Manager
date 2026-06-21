@@ -9968,3 +9968,50 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     .dc-prox-row, .dc-cls-row { grid-template-columns: 110px 1fr; }
     .dc-prox-val, .dc-cls-val { grid-column: 2; }
 }
+
+/* ════ Decision Core — searchable portfolio picker ════ */
+.dc-pp { position: relative; min-width: 230px; }
+.dc-pp-box { position: relative; }
+.dc-pp-input { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);
+    color: #ffffff; border-radius: 9px; padding: 10px 34px 10px 12px; font-size: 13.5px; font-weight: 700; cursor: text; }
+.dc-pp-input::placeholder { color: #b9b9c8; font-weight: 500; }
+.dc-pp-input:focus { outline: none; border-color: #00e5ff; box-shadow: 0 0 0 2px rgba(0,229,255,0.18); }
+.dc-pp-caret { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%);
+    color: #cfcfdb; pointer-events: auto; cursor: pointer; font-size: 12px; }
+.dc-pp-list { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; width: 100%; z-index: 30;
+    background: #11131c; border: 1px solid rgba(255,255,255,0.16); border-radius: 11px; box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+    max-height: 280px; overflow-y: auto; display: none; }
+.dc-pp-list.open { display: block; }
+.dc-pp-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 13px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.dc-pp-item:hover { background: rgba(0,229,255,0.10); }
+.dc-pp-item.sel { background: rgba(0,229,255,0.14); }
+.dc-pp-item-name { font-size: 13.5px; font-weight: 700; color: #ffffff; }
+.dc-pp-item-val { font-size: 12px; font-weight: 700; color: #b8f0ff; }
+.dc-pp-empty { padding: 12px 14px; color: #d8d8e2; font-size: 13px; }
+
+/* ════ Decision Core — defensive assets ════ */
+.dc-def-title { font-size: 14px; font-weight: 900; color: #6ee7b7; margin: 18px 0 4px; }
+.dc-def-sub { font-size: 12.5px; color: #dcdce6; line-height: 1.6; margin-bottom: 11px; }
+.dc-def-list { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.dc-def-item { display: grid; grid-template-columns: auto 1fr; gap: 11px; align-items: start; padding: 11px 13px;
+    background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.28); border-radius: 11px; }
+.dc-def-tk { font-size: 13px; font-weight: 900; color: #6ee7b7; background: rgba(16,185,129,0.14);
+    border-radius: 7px; padding: 4px 9px; white-space: nowrap; }
+.dc-def-name { font-size: 13px; font-weight: 800; color: #ffffff; }
+.dc-def-note { font-size: 11.5px; color: #d7d7e3; line-height: 1.55; margin-top: 2px; }
+
+/* ════ Decision Core — CLARITY PASS: clearer font + high-contrast (gray → white) ════ */
+.dc-modal, .dc-modal input, .dc-modal select, .dc-modal button {
+    font-family: 'Heebo', 'Rubik', 'Assistant', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+}
+/* Titles → pure white */
+.dc-title, .dc-card-title, .dc-cls-title, .dc-metric-value, .dc-rec-title, .dc-scenario-name,
+.dc-gauge-label, .dc-gauge-num, .dc-prox-key, .dc-cls-name, .dc-def-name, .dc-pp-item-name { color: #ffffff !important; }
+/* Secondary text that was muted-gray → light (still readable, keeps slight hierarchy) */
+.dc-subtitle, .dc-card-foot, .dc-metric-label, .dc-field label, .dc-scenario-years, .dc-sub,
+.dc-rec-body, .dc-def-sub, .dc-def-note, .dc-loading, .dc-empty, .dc-prox-val small,
+.dc-cls-name small, .dc-metric-value small, .dc-pp-empty { color: #e4e4ee !important; }
+/* a touch more weight for legibility */
+.dc-metric-label, .dc-field label { font-weight: 700; }
+.dc-cls-name small, .dc-prox-val small, .dc-metric-value small { opacity: 0.95; }
