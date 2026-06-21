@@ -241,15 +241,17 @@ async function refreshAllPrices() {
         fetchFxRates().catch(e => console.warn('[Refresh] FX rate fetch failed:', e.message));
     }
 
-    const onRefreshUpdate = () => {
+    // Debounced render — the price updater fires this 8+ times per cycle; coalesce the burst
+    // into one render (see onPriceUpdate). A trailing render is forced after the cycle completes.
+    let _ruTimer = null;
+    const _doRefreshRender = () => {
         renderSummaryBar();
         renderExposureSection();
         renderClientCards();
         saveClientsToCache(clients);
-        const now = new Date();
-        document.getElementById('lastUpdate').textContent =
-            `עודכן: ${now.toLocaleTimeString('he-IL')}`;
+        document.getElementById('lastUpdate').textContent = `עודכן: ${new Date().toLocaleTimeString('he-IL')}`;
     };
+    const onRefreshUpdate = () => { if (_ruTimer) clearTimeout(_ruTimer); _ruTimer = setTimeout(_doRefreshRender, 250); };
 
     if (supabaseConnected) {
         await updatePricesFromAPI(onRefreshUpdate);
@@ -257,7 +259,8 @@ async function refreshAllPrices() {
         await updatePricesForClients();
     }
 
-    onRefreshUpdate();
+    if (_ruTimer) clearTimeout(_ruTimer);
+    _doRefreshRender(); // final, immediate render after the cycle
 
     // Recompute CML/SML auto-risk in the background once fresh prices are in
     if (typeof applyModelRiskToClients === 'function') {
@@ -404,16 +407,20 @@ async function init() {
             _warmRiskModel();
         }
 
-        // onUpdate callback — called incrementally as each price batch arrives
-        const onPriceUpdate = () => {
+        // onUpdate callback — called incrementally as each price batch arrives. updatePricesFromAPI
+        // fires this 8+ times per cycle (fast/background/persist phases); a full re-render each time
+        // (which destroys+recreates every card's Chart.js instances) is wasteful and janky. DEBOUNCE
+        // so a burst of updates collapses into ONE render ~250ms after the last — still progressive
+        // across the seconds-apart phases, but smooth within each phase.
+        let _puTimer = null;
+        const _doPriceRender = () => {
             renderSummaryBar();
             renderExposureSection();
             renderClientCards();
             saveClientsToCache(clients);
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent =
-                `עודכן: ${now.toLocaleTimeString('he-IL')}`;
+            document.getElementById('lastUpdate').textContent = `עודכן: ${new Date().toLocaleTimeString('he-IL')}`;
         };
+        const onPriceUpdate = () => { if (_puTimer) clearTimeout(_puTimer); _puTimer = setTimeout(_doPriceRender, 250); };
 
         updatePricesFromAPI(onPriceUpdate)
             .then(() => {
