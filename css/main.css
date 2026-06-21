@@ -689,8 +689,16 @@ body {
     gap: 0;
     flex: 1;
     min-width: 0;
-    justify-content: space-around;
+    /* Each ticker keeps its natural width (.qw-ticker is flex:0 0 auto); when they don't all fit the
+       strip SCROLLS horizontally instead of squeezing items until their text overlaps. On wide
+       screens they're spread out — see the min-width:1280 rule below. */
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
 }
+.qw-tickers::-webkit-scrollbar { display: none; }
+@media (min-width: 1280px) { .qw-tickers { justify-content: space-around; } }
 
 .qw-last-update {
     font-size: 12px;
@@ -708,7 +716,7 @@ body {
     gap: 9px;
     padding: 8px 14px;
     border-left: 1px solid rgba(255, 255, 255, 0.04);
-    min-width: 0;
+    flex: 0 0 auto;        /* never shrink — keep natural width so labels/values can't overlap */
     white-space: nowrap;
 }
 
