@@ -368,7 +368,14 @@ async function buildRiskModel(clientsList, opts = {}) {
         // portfolio. These are fetched + scored just like holdings; the advisory
         // surfaces the ones NOT already held with positive alpha.
         const _sectorOf = (t) => (typeof SECTOR_MAP !== 'undefined' && SECTOR_MAP[t]) ? SECTOR_MAP[t] : 'Other';
-        for (const t of RISK_MODEL.CANDIDATE_UNIVERSE) {
+        // PERF: the cold history fetch (one /api/history call per ~40 tickers → that many server-side
+        // Yahoo fetches) is the main load-time cost, and too many at once get rate-limited. The
+        // CANDIDATE_UNIVERSE is sector-ordered, so a STRIDED sample (keep 3 of every 5) trims it
+        // ~40% while preserving the sector spread the SML percentile + "add assets" picker need;
+        // sector/index ETFs (proxies) are always kept. Held tickers are added above, never dropped.
+        const _isKeyEtf = (t) => /^(QQQ|SPY|GLD|TLT|SOXX|SMH|XL[A-Z]{1,3})$/.test(t);
+        const _univSel = RISK_MODEL.CANDIDATE_UNIVERSE.filter((t, i) => _isKeyEtf(t) || (i % 5 < 3));
+        for (const t of _univSel) {
             if (!tickerMeta[t]) tickerMeta[t] = { currency: 'USD', name: t, sector: _sectorOf(t) };
         }
         const tickers = Object.keys(tickerMeta);
@@ -851,7 +858,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v12'; // v10: expected return = avg of last 4 annual returns
+const _RM_PERSIST_KEY = 'risk_model_persist_v13'; // v10: expected return = avg of last 4 annual returns
 const _RM_SCORE_KEY = 'rm_scores_v5'; // v4: recompute scores on the new return basis
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
