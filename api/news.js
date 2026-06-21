@@ -220,7 +220,25 @@ async function macroNews() {
         scored.push({ en: n.headline, date: ymd((n.datetime || 0) * 1000), url: n.url || '', source: n.source || '', tag, _rank: score * 1e11 + (n.datetime || 0) });
     }
     scored.sort((a, b) => b._rank - a._rank);
-    return scored.slice(0, 12).map(({ _rank, ...x }) => x);
+    // Dedupe near-duplicate stories (the same event reported by many outlets) and cap how many
+    // items share a tag, so the section is varied and high-signal — not 12 versions of one story.
+    const _STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'will', 'after', 'amid', 'over', 'into', 'says', 'said', 'could', 'would', 'about', 'than', 'what', 'when', 'how', 'why', 'new', 'more', 'its', 'are', 'has', 'his', 'her']);
+    const sigOf = (en) => en.toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/)
+        .filter(w => w.length > 3 && !_STOP.has(w)).sort().slice(0, 5).join(' ');
+    const seenSig = new Set();
+    const perTag = {};
+    const picked = [];
+    for (const it of scored) {
+        const sig = sigOf(it.en);
+        if (sig && seenSig.has(sig)) continue;          // near-duplicate of an already-picked story
+        perTag[it.tag] = perTag[it.tag] || 0;
+        if (perTag[it.tag] >= 4) continue;              // diversity — max 4 per tag
+        if (sig) seenSig.add(sig);
+        perTag[it.tag]++;
+        picked.push(it);
+        if (picked.length >= 10) break;
+    }
+    return picked.map(({ _rank, ...x }) => x);
 }
 
 // Translate a list of {en} items to Hebrew in-place (Gemini batch → Google fallback), using the

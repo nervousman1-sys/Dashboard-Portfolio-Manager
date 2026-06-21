@@ -51,7 +51,7 @@ const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 // v2 prefix invalidates any history cached before the serverless-proxy fix
 // (old entries could be sparse/flat fallbacks that collapsed variance & beta to ~0).
 const TICKER_LS_PREFIX = 'ticker_hist_v3_';
-const TICKER_LS_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const TICKER_LS_TTL = 72 * 60 * 60 * 1000; // 72h — daily closes barely change; longer TTL = far fewer cold refetches of the ~200-name model universe
 
 // Session-level dedup: track tickers already fetched this session
 const _sessionTickerCache = {};

@@ -471,7 +471,20 @@ async function buildRiskModel(clientsList, opts = {}) {
         // tickers' returns from closes on every one of the ~n²/2 pairs). Correlation is then a
         // single pass over the smaller map. For a ~190-name universe this is the bulk of the
         // cold-build CPU, and this cuts it by ~an order of magnitude.
-        const corrTickers = tickers.filter(t => closeMaps[t]);
+        // PERF: the correlation matrix is O(n²) and the frontier inverts it O(n³). Over the full
+        // ~209-name universe that inversion is the single biggest CPU cost (seconds), and it reran
+        // on every model build (every trade / portfolio open). Bound it: ALWAYS include every held
+        // ticker (so the portfolio + chart are exact) + a sample of the universe up to a cap. The
+        // per-asset stats (β/α/expReturn, used by the "add assets" picker) are still computed for
+        // ALL tickers above — only the heavy matrix/frontier is capped.
+        const _MAX_CORR = 64;
+        const _heldSet = new Set();
+        for (const c of clients_) for (const h of (c.holdings || [])) {
+            if (_rmIsRiskyHolding(h) && closeMaps[h.ticker]) _heldSet.add(h.ticker);
+        }
+        const _held = [..._heldSet];
+        const _rest = tickers.filter(t => closeMaps[t] && !_heldSet.has(t));
+        const corrTickers = _held.concat(_rest).slice(0, Math.max(_MAX_CORR, _held.length));
         const _retMaps = {};
         for (const t of corrTickers) {
             const cm = closeMaps[t];
@@ -838,7 +851,7 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v11'; // v10: expected return = avg of last 4 annual returns
+const _RM_PERSIST_KEY = 'risk_model_persist_v12'; // v10: expected return = avg of last 4 annual returns
 const _RM_SCORE_KEY = 'rm_scores_v5'; // v4: recompute scores on the new return basis
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
