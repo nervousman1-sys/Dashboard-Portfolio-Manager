@@ -271,43 +271,87 @@ function _extractIsraeliBroker(items) {
         }
         if (!name) continue;
 
-        // Numeric candidates in the row (exclude the id and percentage tokens).
+        // Numeric tokens in the row (excluding the id). Keep zeros and strip %/₪/$ so column
+        // POSITIONS are preserved — the day-change columns can be 0 and must still hold their slot.
         const nums = row
-            .filter(it => it !== idItem && !/%/.test(it.text))
-            .map(it => ({ v: parseFloat(it.text.replace(/[,\s₪$]/g, '')), x: it.x }))
-            .filter(n => isFinite(n.v) && n.v > 0);
-        if (!nums.length) continue;
+            .filter(it => it !== idItem)
+            .map(it => ({ v: parseFloat(it.text.replace(/[,\s₪$%]/g, '')), x: it.x }))
+            .filter(n => isFinite(n.v));
+        if (nums.length < 3) continue;
+
+        // Canonical column order (RTL): sort by X DESCENDING → rightmost (first column) first.
+        // Bank Hapoalim MyTrade layout:
+        //   [שער אחרון, שינוי-יומי-%, שינוי-יומי-מטבע, כמות-בתיק, שווי-במטבע, שווי-בש"ח, שער-עלות]
+        const ordered = [...nums].sort((a, b) => b.x - a.x);
 
         const nearest = (targetX) => {
             if (targetX == null) return null;
             let best = null, bestD = Infinity;
-            for (const n of nums) { const d = Math.abs(n.x - targetX); if (d < bestD) { bestD = d; best = n; } }
+            for (const n of ordered) { const d = Math.abs(n.x - targetX); if (d < bestD) { bestD = d; best = n; } }
             return best ? best.v : null;
         };
 
+        // Prefer header-X mapping (single-line headers); else fall back to the fixed layout indices.
         let qty = nearest(cols.qty);
         let cost = nearest(cols.cost);
-
-        // Fallback when headers weren't located: quantity = the smallest integer in the row
-        // (share counts are far smaller than rates/values); leave cost for the user to confirm.
-        if (qty == null) {
-            const ints = nums.filter(n => Number.isInteger(n.v) && n.v < 100000).sort((a, b) => a.v - b.v);
-            qty = ints.length ? ints[0].v : null;
+        let lastPrice = ordered.length ? ordered[0].v : null;        // first column = שער אחרון
+        let valNative = null;
+        if (ordered.length >= 7) {
+            if (qty == null) qty = ordered[3].v;                     // כמות בתיק
+            if (cost == null) cost = ordered[ordered.length - 1].v;  // שער עלות (last column)
+            valNative = ordered[ordered.length - 3].v;               // שווי אחזקה במטבע הנייר
+        }
+        // Last-resort qty: the smallest positive integer in the row (share counts ≪ rates/values).
+        if (!(qty > 0)) {
+            const ints = ordered.filter(n => Number.isInteger(n.v) && n.v > 0 && n.v < 100000).sort((a, b) => a.v - b.v);
+            qty = ints.length ? ints[0].v : 0;
         }
         if (!(qty > 0)) continue;
 
-        const isIsraeli = /[֐-׿]/.test(name);   // Hebrew name → TASE security (cost in agorot)
-        if (cost != null && isIsraeli) cost = cost / 100; // agorot → shekels
+        // Auto-detect AGOROT vs whole units (currency) WITHOUT guessing from the name:
+        // a TASE quote is in agorot iff qty × price/100 ≈ holding value (not qty × price).
+        // Hebrew name is the secondary hint when we can't cross-check against a value column.
+        let agorot = false;
+        if (lastPrice > 0 && valNative > 0) {
+            const asWhole = Math.abs(qty * lastPrice - valNative);
+            const asAgorot = Math.abs(qty * lastPrice / 100 - valNative);
+            agorot = asAgorot < asWhole;
+        } else {
+            agorot = /[֐-׿]/.test(name);   // fallback: Hebrew security → agorot/shekels
+        }
+        const factor = agorot ? 100 : 1;
+        if (cost != null && cost > 0) cost = cost / factor;          // agorot → shekels
+        // Never drop a real holding for a missing cost — fall back to the current rate so it
+        // imports (the row stays editable for the user to correct the purchase price).
+        if (!(cost > 0) && lastPrice > 0) cost = lastPrice / factor;
 
         results.push({
-            ticker: secId,
-            stockName: name,
+            ticker: _resolveBrokerTicker(secId, name, agorot),
+            stockName: name.replace(/\s+(INC|LTD|CORP|PLC|בע"מ)\.?$/i, '').trim() || name,
             shares: Math.round(qty),
-            avgPrice: cost != null && cost > 0 ? cost : 0,
-            currency: isIsraeli ? 'ILS' : 'USD',
+            avgPrice: cost > 0 ? +cost.toFixed(4) : 0,
+            currency: agorot ? 'ILS' : 'USD',
         });
     }
     return _deduplicateResults(results);
+}
+
+// Map a broker security (numeric TASE id + name) to a tradable ticker where we confidently can,
+// so live pricing works. Israeli securities (agorot) keep their numeric id (resolved downstream /
+// editable); for US dual-listed names we map a few well-known ones, else fall back to the id.
+const _BROKER_NAME_TICKER = {
+    'TERAWULF': 'WULF', 'TERAWULF INC': 'WULF',
+    'NVIDIA': 'NVDA', 'APPLE': 'AAPL', 'MICROSOFT': 'MSFT', 'TESLA': 'TSLA', 'AMAZON': 'AMZN',
+    'ALPHABET': 'GOOGL', 'META': 'META', 'MICROSTRATEGY': 'MSTR', 'STRATEGY': 'MSTR',
+};
+function _resolveBrokerTicker(secId, name, agorot) {
+    if (!agorot) {  // US/foreign security — try to map the name to a real ticker for live pricing
+        const key = String(name || '').toUpperCase().replace(/[.,]/g, '').trim();
+        if (_BROKER_NAME_TICKER[key]) return _BROKER_NAME_TICKER[key];
+        const firstWord = key.split(/\s+/)[0];
+        if (_BROKER_NAME_TICKER[firstWord]) return _BROKER_NAME_TICKER[firstWord];
+    }
+    return secId;  // TASE numeric id (Israeli securities resolve via the price service)
 }
 
 // Strategy 1: Group items into rows by Y position, then parse each row

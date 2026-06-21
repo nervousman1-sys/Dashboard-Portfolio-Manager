@@ -2562,6 +2562,9 @@ function addHoldingRow(prefill = null) {
     const rowId = 'hrow_' + (++_holdingRowCounter);
     const tr = document.createElement('tr');
     tr.id = rowId;
+    // Carry the imported currency onto the row — _collectHoldingRows reads row.dataset.currency,
+    // so without this an imported ILS holding (e.g. a TASE security) would be saved as USD.
+    tr.dataset.currency = (prefill && prefill.currency) || 'USD';
     const todayIso = new Date().toISOString().slice(0, 10);
     tr.innerHTML = `
         <td class="row-ticker-cell">
