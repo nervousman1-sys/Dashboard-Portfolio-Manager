@@ -405,8 +405,7 @@ function _dcProximityHTML() {
                 </div>`;
     }).join('')}
         </div>
-        ${p.assessment ? `<div class="dc-prox-assess"><span class="dc-prox-assess-lbl">הערכת הסוכן:</span> ${String(p.assessment).replace(/[<>]/g, '')}</div>` : ''}
-        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות ותנודתיות (VIX) — נתוני אמת חיים${p.asOf ? ' · מעודכן ע"י סוכן הזיהוי' : ''}.</div>`;
+        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק (NFCI) — נתוני אמת, מתעדכן מדי יום ע"י הסוכן.</div>`;
 }
 
 function _dcRender() {
