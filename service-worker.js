@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v456';
+const CACHE_NAME = 'portfolio-dashboard-v457';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -29,6 +29,7 @@ const STATIC_ASSETS = [
     './js/reports-engine.js',
     './js/reports-view.js',
     './js/decision-core.js',
+    './js/scanner-agent.js',
     './js/render.js',
     './js/filters.js',
     './js/file-parser.js',
@@ -89,6 +90,7 @@ const NETWORK_FIRST_FILES = [
     'reports-view.js',
     'reports-engine.js',
     'decision-core.js',
+    'scanner-agent.js',
     'filters.js',
     'modals.js',
     'macro.js'
