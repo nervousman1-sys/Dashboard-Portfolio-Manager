@@ -10015,3 +10015,24 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 /* a touch more weight for legibility */
 .dc-metric-label, .dc-field label { font-weight: 700; }
 .dc-cls-name small, .dc-prox-val small, .dc-metric-value small { opacity: 0.95; }
+
+/* ════ Economic calendar (יומן כלכלי) ════ */
+.econ-cal-section { margin-bottom: 18px; }
+.ec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ec-title { font-size: 15px; font-weight: 900; color: #67e8f9; }
+.ec-legend { font-size: 11px; color: #cfcfdb; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ec-list { display: grid; gap: 4px; }
+.ec-month { font-size: 12px; font-weight: 900; color: #e9e9f2; margin: 12px 0 5px; padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08); }
+.ec-item { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 12px;
+    padding: 9px 13px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 9px; }
+.ec-item.ec-today { border-color: rgba(0,229,255,0.45); background: rgba(0,229,255,0.07); }
+.ec-date { font-size: 13px; font-weight: 800; color: #ffffff; white-space: nowrap; }
+.ec-soon { font-size: 9.5px; font-weight: 800; color: #fde047; background: rgba(250,204,21,0.14);
+    border-radius: 5px; padding: 1px 5px; margin-inline-start: 2px; }
+.ec-name { font-size: 13px; font-weight: 600; color: #f2f2f7; }
+.ec-name small { color: #c2c2d0; font-weight: 500; font-size: 10.5px; }
+.ec-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+.ec-imp-high { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+.ec-imp-med { background: #f59e0b; }
+@media (max-width: 760px) { .ec-item { grid-template-columns: 70px 1fr auto; } .ec-name { font-size: 12px; } }

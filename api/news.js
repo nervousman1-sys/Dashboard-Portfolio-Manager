@@ -275,7 +275,7 @@ module.exports = async (req, res) => {
             const items = await macroNews();
             try { await translateItemsHe(items); } catch (e) { /* English headline is the fallback */ }
             res.setHeader('Cache-Control', items.length
-                ? 's-maxage=3600, stale-while-revalidate=10800'   // refresh ~hourly
+                ? 's-maxage=900, stale-while-revalidate=3600'      // refresh ~every 15 min (continuous)
                 : 's-maxage=120');
             res.status(200).json({ macro: items });
             return;

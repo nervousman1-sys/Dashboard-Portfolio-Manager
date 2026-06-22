@@ -48,6 +48,36 @@ module.exports = async (req, res) => {
         const q = req.query || {};
         const limit = Math.min(parseInt(q.limit, 10) || 2, 24);
 
+        // ── Economic calendar (US) — REAL upcoming release dates from FRED's release/dates API ──
+        if (q.cal) {
+            const RELEASES = [
+                { id: 10, he: 'מדד המחירים לצרכן (CPI)', imp: 'high' },
+                { id: 54, he: 'הכנסה והוצאה אישית (PCE)', imp: 'high' },
+                { id: 50, he: 'דו"ח התעסוקה (NFP + אבטלה)', imp: 'high' },
+                { id: 53, he: 'תוצר מקומי גולמי (GDP)', imp: 'high' },
+                { id: 46, he: 'מדד המחירים ליצרן (PPI)', imp: 'med' },
+                { id: 9, he: 'מכירות קמעונאיות', imp: 'med' },
+            ];
+            const today = new Date().toISOString().slice(0, 10);
+            const end = new Date(Date.now() + 95 * 86400000).toISOString().slice(0, 10);
+            const all = await Promise.all(RELEASES.map(async (rel) => {
+                try {
+                    const url = `https://api.stlouisfed.org/fred/release/dates?release_id=${rel.id}` +
+                        `&api_key=${FRED_KEY}&file_type=json&include_release_dates_with_no_data=true` +
+                        `&sort_order=asc&realtime_start=${today}&realtime_end=${end}`;
+                    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+                    if (!r.ok) return [];
+                    const j = await r.json();
+                    return (j.release_dates || []).filter(d => d.date >= today)
+                        .map(d => ({ date: d.date, he: rel.he, imp: rel.imp, country: 'US' }));
+                } catch (e) { return []; }
+            }));
+            const events = all.flat().sort((a, b) => a.date.localeCompare(b.date));
+            res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+            res.status(200).json({ events });
+            return;
+        }
+
         // ── Batch mode ──
         if (q.batch) {
             const specs = String(q.batch).split(',').map(s => s.trim()).filter(Boolean);

@@ -989,6 +989,7 @@ function _renderMacroPage() {
         </div>
         <div class="macro-content">
             <div id="geoMacroSection" class="geo-macro-section"></div>
+            <div id="econCalSection" class="econ-cal-section"></div>
             <div id="macroTabContent">
                 ${_renderIndicatorsTab()}
             </div>
@@ -999,7 +1000,99 @@ function _renderMacroPage() {
     setTimeout(() => { try { _renderYieldCurves(); } catch (e) { /* ignore */ } }, 60);
     // Geopolitical + macro-economy updates (loaded async — material items only)
     _loadGeoMacroNews();
+    // Economic calendar (CPI/PPI/jobs/rate decisions — US real dates + IL schedule)
+    _loadEconCalendar();
+    // Keep it live: while the page is open, refresh the news every 5 min and the calendar +
+    // indicators hourly so values update right after each scheduled release.
+    _startMacroAutoRefresh();
 }
+
+// ── Live auto-refresh while the macro page is open ──
+let _macroNewsTimer = null, _macroDataTimer = null;
+function _startMacroAutoRefresh() {
+    _stopMacroAutoRefresh();
+    _macroNewsTimer = setInterval(() => {
+        if (!document.getElementById('macroPage')?.classList.contains('active')) return;
+        _loadGeoMacroNews(true);
+    }, 5 * 60 * 1000); // news every 5 min
+    _macroDataTimer = setInterval(() => {
+        if (!document.getElementById('macroPage')?.classList.contains('active')) return;
+        _loadEconCalendar(true);
+        if (typeof _refreshMacroData === 'function') _refreshMacroData();   // indicators re-pull (post-release values)
+    }, 60 * 60 * 1000); // calendar + indicators hourly
+}
+function _stopMacroAutoRefresh() {
+    if (_macroNewsTimer) { clearInterval(_macroNewsTimer); _macroNewsTimer = null; }
+    if (_macroDataTimer) { clearInterval(_macroDataTimer); _macroDataTimer = null; }
+}
+if (typeof window !== 'undefined') window._stopMacroAutoRefresh = _stopMacroAutoRefresh;
+
+// ── Economic calendar (יומן כלכלי) ──
+// US: REAL upcoming release dates from FRED (/api/fred?cal=1). Israel: the CBS/Bank-of-Israel
+// recurring schedule (CPI is published ~mid-month by the למ"ס) — clearly labeled as the regular
+// publication calendar. Shows this month forward, grouped by month, high-impact flagged.
+function _ilCalendarEvents() {
+    // Israeli CPI — CBS publishes around the 15th of each month (for the prior month).
+    const out = [];
+    const now = new Date();
+    for (let i = 0; i < 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 15);
+        if (d >= new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+            out.push({ date: d.toISOString().slice(0, 10), he: 'מדד המחירים לצרכן (ישראל)', imp: 'high', country: 'IL', approx: true });
+        }
+    }
+    return out;
+}
+async function _loadEconCalendar(forceRefresh) {
+    const el = document.getElementById('econCalSection');
+    if (!el) return;
+    const CACHE_KEY = 'econ_cal_v1';
+    let us = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
+    if (!us) {
+        el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
+            <div class="macro-loading" style="padding:16px">טוען יומן…</div>`;
+        try {
+            const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
+            const j = await r.json();
+            us = (j && Array.isArray(j.events)) ? j.events : [];
+            if (us.length) _cacheSet(CACHE_KEY, us);
+        } catch (e) { us = []; }
+    }
+    const events = [...(us || []), ..._ilCalendarEvents()].sort((a, b) => a.date.localeCompare(b.date));
+    if (!events.length) {
+        el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
+            <div class="gm-empty">היומן אינו זמין כעת. נסה לרענן בעוד מספר דקות.</div>`;
+        return;
+    }
+    const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+    const groups = {};
+    for (const e of events) { const k = e.date.slice(0, 7); (groups[k] = groups[k] || []).push(e); }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let html = '';
+    for (const k of Object.keys(groups).sort()) {
+        const [y, m] = k.split('-');
+        html += `<div class="ec-month">${HE_MONTHS[parseInt(m, 10) - 1]} ${y}</div>`;
+        for (const e of groups[k]) {
+            const d = new Date(e.date);
+            const dd = d.getDate(), mo = d.getMonth() + 1;
+            const flag = e.country === 'IL' ? '🇮🇱' : '🇺🇸';
+            const impCls = e.imp === 'high' ? 'ec-imp-high' : 'ec-imp-med';
+            const soon = e.date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+            html += `<div class="ec-item ${e.date === todayStr ? 'ec-today' : ''}">
+                <span class="ec-date">${dd}.${mo}${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</span>
+                <span class="ec-name">${flag} ${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער לפי לוח הלמ"ס)</small>' : ''}</span>
+                <span class="ec-dot ${impCls}" title="${e.imp === 'high' ? 'השפעה גבוהה' : 'השפעה בינונית'}"></span>
+            </div>`;
+        }
+    }
+    el.innerHTML = `<div class="ec-head">
+            <span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span>
+            <button class="gm-refresh" onclick="_loadEconCalendar(true)" title="רענן יומן">⟳</button>
+        </div>
+        <div class="ec-legend">🇺🇸 ארה"ב · 🇮🇱 ישראל · <span class="ec-dot ec-imp-high"></span> השפעה גבוהה · <span class="ec-dot ec-imp-med"></span> בינונית</div>
+        <div class="ec-list">${html}</div>`;
+}
+if (typeof window !== 'undefined') window._loadEconCalendar = _loadEconCalendar;
 
 // ── Geopolitical + macro-economy updates ──────────────────────────────────
 // Renders ONLY material items that move the economy (monetary / inflation-growth /
@@ -1013,7 +1106,7 @@ async function _loadGeoMacroNews(forceRefresh) {
     const el = document.getElementById('geoMacroSection');
     if (!el) return;
     const CACHE_KEY = 'geo_macro_news_v1';
-    let items = forceRefresh ? null : _cacheGet(CACHE_KEY, 60 * 60 * 1000); // 1h
+    let items = forceRefresh ? null : _cacheGet(CACHE_KEY, 15 * 60 * 1000); // 15min — keep it current
     if (!items) {
         el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
             <div class="macro-loading" style="padding:18px">טוען עדכונים…</div>`;
@@ -1481,6 +1574,7 @@ function markAllRead() {
 
 function closeMacroPage() {
     _advanceLastSeen();
+    if (typeof _stopMacroAutoRefresh === 'function') _stopMacroAutoRefresh();
     const mp = document.getElementById('macroPage');
     mp.classList.remove('active');
     mp.innerHTML = '';
