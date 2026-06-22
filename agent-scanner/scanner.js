@@ -281,7 +281,28 @@ async function safeCycle() {
     catch (e) { log('Cycle error (will retry next interval):', e.message); }
 }
 
+// One-off: re-run the Hebrew quality gate over EVERY existing active card and persist the result.
+// Used to upgrade cards produced before polishHebrew existed. `node scanner.js --repolish`.
+async function repolishAll() {
+    const { data, error } = await supabase.from('catalyst_cards').select('*').eq('status', 'active').order('created_at', { ascending: false });
+    if (error) { log('repolish select error:', error.message); return; }
+    log(`Re-polishing Hebrew for ${data.length} card(s)…`);
+    for (const card of data) {
+        const before = card.sector_name;
+        await polishHebrew(card);
+        const patch = {
+            sector_name: card.sector_name, thesis: card.thesis, tech_layer: card.tech_layer,
+            supply_layer: card.supply_layer, talent_layer: card.talent_layer, stealth_targets: card.stealth_targets,
+        };
+        const { error: uerr } = await supabase.rpc('update_catalyst_card', { p_secret: AGENT_WRITE_SECRET, p_id: card.id, p_patch: patch });
+        log(uerr ? `  card ${card.id} update FAILED: ${uerr.message}` : `  card ${card.id}: "${before}" → "${card.sector_name}"`);
+        await new Promise(r => setTimeout(r, 1500)); // gentle on the Gemini quota
+    }
+    log('repolish done.');
+}
+
 (async () => {
+    if (process.argv.includes('--repolish')) { await repolishAll(); process.exit(0); }
     log(`Finextium Agent Scanner online · model=${GEMINI_MODEL} · interval=${SCAN_INTERVAL_HOURS}h · dedup=${DEDUP_DAYS}d`);
     await safeCycle();                       // run immediately on boot
     if (RUN_ONCE) { log('--once: done.'); process.exit(0); }

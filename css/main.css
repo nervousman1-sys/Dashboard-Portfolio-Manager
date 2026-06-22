@@ -10087,8 +10087,20 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     padding: 18px 20px; position: relative; overflow: hidden; }
 .sa-card::before { content: ''; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; width: 4px;
     background: linear-gradient(#10b981,#00e5ff); }
-.sa-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.sa-sector { font-size: 17px; font-weight: 900; color: #fff; line-height: 1.35; }
+.sa-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; cursor: pointer; user-select: none; }
+.sa-card.collapsed .sa-card-head { margin-bottom: 0; }
+.sa-card.collapsed .sa-card-body { display: none; }
+.sa-head-row { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.sa-caret { color: #00e5ff; font-size: 12px; transition: transform .15s ease; flex-shrink: 0; }
+.sa-card:not(.collapsed) .sa-caret { transform: rotate(90deg); }
+.sa-card-head:hover .sa-sector { color: #00e5ff; }
+.sa-head-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sa-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.sa-chip { font-size: 11px; font-weight: 800; color: #67e8f9; background: rgba(0,229,255,0.10);
+    border: 1px solid rgba(0,229,255,0.22); border-radius: 6px; padding: 2px 7px; letter-spacing: .3px; }
+.sa-card-body { animation: saFade .18s ease; }
+@keyframes saFade { from { opacity: 0; } to { opacity: 1; } }
+.sa-sector { font-size: 17px; font-weight: 900; color: #fff; line-height: 1.35; transition: color .12s; }
 .sa-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .sa-badge { font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
 .sa-stage { background: rgba(16,185,129,0.16); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); }
