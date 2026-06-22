@@ -1119,9 +1119,9 @@ function _ecRender() {
 }
 
 // ── Geopolitical + macro-economy updates ──────────────────────────────────
-// Renders ONLY material items that move the economy (monetary / inflation-growth /
-// geopolitics / energy / broad markets) — filtered + tagged server-side (/api/news?macro=1),
-// REAL Finnhub headlines translated to Hebrew. Cached ~1h client-side.
+// PRIMARY source: the 24/7 macro-feed agent's curated table `macro_updates` (excellent Hebrew,
+// material-only, persistent). FALLBACK: the on-demand /api/news?macro=1 endpoint if the agent
+// hasn't populated yet. Both yield {he, en, tag, source, date, url}.
 const _GEO_MACRO_TAG_CLS = {
     'מוניטרי': 'gm-tag-mon', 'אינפלציה/צמיחה': 'gm-tag-infl',
     'גיאופוליטיקה': 'gm-tag-geo', 'אנרגיה': 'gm-tag-energy', 'שווקים': 'gm-tag-mkt',
@@ -1129,17 +1129,29 @@ const _GEO_MACRO_TAG_CLS = {
 async function _loadGeoMacroNews(forceRefresh) {
     const el = document.getElementById('geoMacroSection');
     if (!el) return;
-    const CACHE_KEY = 'geo_macro_news_v1';
-    let items = forceRefresh ? null : _cacheGet(CACHE_KEY, 15 * 60 * 1000); // 15min — keep it current
-    if (!items) {
+    if (!el.querySelector('.gm-list')) {
         el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
             <div class="macro-loading" style="padding:18px">טוען עדכונים…</div>`;
+    }
+    let items = null;
+    // 1) Agent-curated feed (Supabase) — preferred.
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('macro_updates').select('headline_he,headline_en,tag,source,url,published_at,created_at')
+                .eq('status', 'active').order('created_at', { ascending: false }).limit(40);
+            if (!error && data && data.length) {
+                items = data.map(r => ({ he: r.headline_he, en: r.headline_en, tag: r.tag, source: r.source, url: r.url, date: r.published_at || String(r.created_at || '').slice(0, 10) }));
+            }
+        }
+    } catch (e) { /* fall through to endpoint */ }
+    // 2) Fallback: on-demand endpoint (until the agent fills the table).
+    if (!items || !items.length) {
         try {
             const r = await _macroFetch(`/api/news?macro=1`, 12000, 1);
             const j = await r.json();
             items = (j && Array.isArray(j.macro)) ? j.macro : [];
-            if (items.length) _cacheSet(CACHE_KEY, items);
-        } catch (e) { items = []; }
+        } catch (e) { items = items || []; }
     }
     if (!items || !items.length) {
         el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
