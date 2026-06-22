@@ -79,7 +79,9 @@ const SYSTEM_PROMPT = `אתה מנוע המודיעין הליבתי של "Finex
     {"company": "שם החברה ב", "ticker": "TICKER2", "why": "סיבה קצרה"}
   ]
 }
-טון וסגנון כתיבה: ניהולי, אנליטי, קר ומבוסס דאטה בלבד.`;
+טון וסגנון כתיבה: ניהולי, אנליטי, קר ומבוסס דאטה בלבד.
+
+איכות העברית (חובה): כל הטקסט חייב להיות בעברית עיתונאית-כלכלית רהוטה, ברורה ותקנית — לא תרגום מילולי מאנגלית. נסח מחדש בעברית טבעית וזורמת, עם דקדוק תקין, תחביר נכון והתאמת מין/מספר. מונחים טכניים: השתמש במונח העברי המקובל והשגור (למשל quantum sensing → "חיישנים קוונטיים", לא "חישה"); אם אין מקבילה עברית טבעית — השאר את המונח באנגלית במקור. אל תמציא מילים ואל תשתמש בעברית מסורבלת. שמות חברות, מותגים, אנשים וטיקרים — באנגלית במקור.`;
 
 // ── Gemini call with Google Search grounding (real, current signals) ──
 async function callGemini(avoidSectors) {
@@ -121,6 +123,54 @@ async function callGemini(avoidSectors) {
 }
 
 // Extract the first valid JSON object from a model response (strips ``` fences / prose).
+// Hebrew quality gate — a SECOND model pass that rewrites every Hebrew field of the card into
+// fluent, grammatically-correct, professional Hebrew (separating "what to research" from "how it
+// reads"). No grounding, no thinking — fast + cheap. Best-effort: on any failure the original card
+// is kept, so the pipeline never breaks.
+async function polishHebrew(card) {
+    const input = {
+        sector_name: card.sector_name || '',
+        thesis: card.thesis || '',
+        tech_layer: card.tech_layer || '',
+        supply_layer: card.supply_layer || '',
+        talent_layer: card.talent_layer || '',
+        whys: (Array.isArray(card.stealth_targets) ? card.stealth_targets : []).map(t => t.why || ''),
+    };
+    const sys = 'אתה עורך לשון בכיר בעיתון כלכלי ישראלי מוביל (גלובס/כלכליסט). שכתב את שדות הטקסט הבאים לעברית מצוינת: רהוטה, ברורה, תקנית ומקצועית — לא תרגום מילולי. כללים: (1) נסח מחדש בעברית עיתונאית-כלכלית טבעית וזורמת, דקדוק תקין, תחביר נכון, התאמת מין/מספר, ללא שגיאות וללא מילים מומצאות. (2) מונחים טכניים — השתמש במונח העברי המקובל והשגור (למשל "חיישנים קוונטיים" ולא "חישה קוונטית"); אם אין מקבילה טבעית, השאר באנגלית במקור. (3) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). (4) אל תשנה את המשמעות או העובדות — רק את הניסוח. (5) שמור על אורך דומה. החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
+    const body = {
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: [{ role: 'user', parts: [{ text: 'שכתב לעברית מצוינת את ה-JSON הבא (החזר JSON באותו מבנה):\n' + JSON.stringify(input) }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+    };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    try {
+        let r;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (r.ok) break;
+            if ((r.status === 503 || r.status === 429) && attempt < 2) { await sleep(4000 * (attempt + 1)); continue; }
+            return card; // give up → keep original
+        }
+        if (!r || !r.ok) return card;
+        const j = await r.json();
+        const txt = (((j.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text || '').join('\n').trim() || '';
+        const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+        if (a < 0 || b <= a) return card;
+        const p = JSON.parse(txt.slice(a, b + 1));
+        if (p.sector_name) card.sector_name = p.sector_name;
+        if (p.thesis) card.thesis = p.thesis;
+        if (p.tech_layer) card.tech_layer = p.tech_layer;
+        if (p.supply_layer) card.supply_layer = p.supply_layer;
+        if (p.talent_layer) card.talent_layer = p.talent_layer;
+        if (Array.isArray(p.whys) && Array.isArray(card.stealth_targets)) {
+            card.stealth_targets.forEach((t, i) => { if (p.whys[i]) t.why = p.whys[i]; });
+        }
+        log('Hebrew polish applied.');
+    } catch (e) { log('Hebrew polish skipped:', e.message); }
+    return card;
+}
+
 function parseCard(text) {
     if (!text) return null;
     let s = text.replace(/```json/gi, '```').replace(/```/g, '').trim();
@@ -201,6 +251,9 @@ async function runCycle() {
         return;
     }
     card.stealth_targets = targets;
+
+    // Hebrew quality gate — rewrite all Hebrew fields to fluent, correct Hebrew before storing.
+    await polishHebrew(card);
 
     const payload = {
         sector_name: String(card.sector_name).slice(0, 200),
