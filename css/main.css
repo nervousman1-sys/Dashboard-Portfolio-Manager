@@ -10016,23 +10016,43 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .dc-metric-label, .dc-field label { font-weight: 700; }
 .dc-cls-name small, .dc-prox-val small, .dc-metric-value small { opacity: 0.95; }
 
-/* ════ Economic calendar (יומן כלכלי) ════ */
+/* ════ Economic calendar (יומן כלכלי) — card + date-tile design ════ */
 .econ-cal-section { margin-bottom: 18px; }
-.ec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.ec-title { font-size: 15px; font-weight: 900; color: #67e8f9; }
-.ec-legend { font-size: 11px; color: #cfcfdb; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.ec-list { display: grid; gap: 4px; }
-.ec-month { font-size: 12px; font-weight: 900; color: #e9e9f2; margin: 12px 0 5px; padding-bottom: 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.08); }
-.ec-item { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 12px;
-    padding: 9px 13px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 9px; }
-.ec-item.ec-today { border-color: rgba(0,229,255,0.45); background: rgba(0,229,255,0.07); }
-.ec-date { font-size: 13px; font-weight: 800; color: #ffffff; white-space: nowrap; }
-.ec-soon { font-size: 9.5px; font-weight: 800; color: #fde047; background: rgba(250,204,21,0.14);
-    border-radius: 5px; padding: 1px 5px; margin-inline-start: 2px; }
-.ec-name { font-size: 13px; font-weight: 600; color: #f2f2f7; }
-.ec-name small { color: #c2c2d0; font-weight: 500; font-size: 10.5px; }
+.ec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ec-title { font-size: 16px; font-weight: 900; color: #67e8f9; letter-spacing: 0.2px; }
+.ec-legend { font-size: 11.5px; color: #e4e4ee; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ec-legend-sep { color: #5b5b6b; }
+.ec-month { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 9px; }
+.ec-month-name { font-size: 14px; font-weight: 900; color: #ffffff; }
+.ec-month-count { font-size: 11px; font-weight: 700; color: #9aa0b5; }
+.ec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* Each event = a glass card with a mini calendar tile + an importance accent bar on the edge */
+.ec-card { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 13px; align-items: center;
+    padding: 12px 14px; border-radius: 13px; background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.10); overflow: hidden; transition: transform .12s, border-color .12s, box-shadow .12s; }
+.ec-card::before { content: ''; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; width: 4px; }
+.ec-card.ec-high::before { background: linear-gradient(#ef4444, #b91c1c); box-shadow: 0 0 12px rgba(239,68,68,0.5); }
+.ec-card.ec-med::before { background: linear-gradient(#f59e0b, #b45309); }
+.ec-card:hover { transform: translateY(-2px); border-color: rgba(0,229,255,0.35); box-shadow: 0 10px 28px rgba(0,0,0,0.4); }
+.ec-card.ec-today { border-color: rgba(0,229,255,0.55); background: rgba(0,229,255,0.07); }
+/* Mini calendar tile */
+.ec-tile { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 54px; height: 56px; border-radius: 11px; background: linear-gradient(160deg, #141826, #0d1019);
+    border: 1px solid rgba(255,255,255,0.12); flex: 0 0 auto; }
+.ec-tile-day { font-size: 23px; font-weight: 900; color: #ffffff; line-height: 1; }
+.ec-tile-mon { font-size: 10.5px; font-weight: 700; color: #8fd9ff; margin-top: 3px; }
+.ec-card-body { min-width: 0; }
+.ec-card-name { font-size: 13.5px; font-weight: 800; color: #ffffff; line-height: 1.4; margin-bottom: 7px; }
+.ec-card-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ec-pill { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.ec-pill-us { background: rgba(56,189,248,0.16); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.35); }
+.ec-pill-il { background: rgba(0,229,255,0.13); color: #67e8f9; border: 1px solid rgba(0,229,255,0.35); }
+.ec-imp { font-size: 10.5px; font-weight: 700; }
+.ec-imp-h { color: #fca5a5; }
+.ec-imp-m { color: #fcd34d; }
+.ec-soon { font-size: 9.5px; font-weight: 900; color: #052e16; background: #34d399; border-radius: 5px; padding: 2px 7px; }
+.ec-approx { font-size: 10px; color: #b8b8c6; margin-top: 5px; }
 .ec-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .ec-imp-high { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
 .ec-imp-med { background: #f59e0b; }
-@media (max-width: 760px) { .ec-item { grid-template-columns: 70px 1fr auto; } .ec-name { font-size: 12px; } }
+@media (max-width: 760px) { .ec-grid { grid-template-columns: 1fr; } }

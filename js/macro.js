@@ -1068,29 +1068,43 @@ async function _loadEconCalendar(forceRefresh) {
     const groups = {};
     for (const e of events) { const k = e.date.slice(0, 7); (groups[k] = groups[k] || []).push(e); }
     const todayStr = new Date().toISOString().slice(0, 10);
+    const HE_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+    const soonStr = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
     let html = '';
     for (const k of Object.keys(groups).sort()) {
         const [y, m] = k.split('-');
-        html += `<div class="ec-month">${HE_MONTHS[parseInt(m, 10) - 1]} ${y}</div>`;
+        html += `<div class="ec-month"><span class="ec-month-name">${HE_MONTHS[parseInt(m, 10) - 1]} ${y}</span><span class="ec-month-count">${groups[k].length} פרסומים</span></div>`;
+        html += '<div class="ec-grid">';
         for (const e of groups[k]) {
             const d = new Date(e.date);
-            const dd = d.getDate(), mo = d.getMonth() + 1;
-            const flag = e.country === 'IL' ? '🇮🇱' : '🇺🇸';
-            const impCls = e.imp === 'high' ? 'ec-imp-high' : 'ec-imp-med';
-            const soon = e.date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-            html += `<div class="ec-item ${e.date === todayStr ? 'ec-today' : ''}">
-                <span class="ec-date">${dd}.${mo}${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</span>
-                <span class="ec-name">${flag} ${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער לפי לוח הלמ"ס)</small>' : ''}</span>
-                <span class="ec-dot ${impCls}" title="${e.imp === 'high' ? 'השפעה גבוהה' : 'השפעה בינונית'}"></span>
+            const dd = d.getDate(), mIdx = d.getMonth();
+            const isIL = e.country === 'IL';
+            const high = e.imp === 'high';
+            const soon = e.date <= soonStr;
+            html += `<div class="ec-card ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
+                <div class="ec-tile">
+                    <span class="ec-tile-day">${dd}</span>
+                    <span class="ec-tile-mon">${HE_SHORT[mIdx]}</span>
+                </div>
+                <div class="ec-card-body">
+                    <div class="ec-card-name">${_macroEscape(e.he)}</div>
+                    <div class="ec-card-meta">
+                        <span class="ec-pill ${isIL ? 'ec-pill-il' : 'ec-pill-us'}">${isIL ? 'ישראל' : 'ארה״ב'}</span>
+                        <span class="ec-imp ${high ? 'ec-imp-h' : 'ec-imp-m'}">${high ? 'השפעה גבוהה' : 'השפעה בינונית'}</span>
+                        ${soon ? '<span class="ec-soon">בקרוב</span>' : ''}
+                    </div>
+                    ${e.approx ? '<div class="ec-approx">מועד משוער לפי לוח הפרסומים של הלמ״ס</div>' : ''}
+                </div>
             </div>`;
         }
+        html += '</div>';
     }
     el.innerHTML = `<div class="ec-head">
             <span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span>
             <button class="gm-refresh" onclick="_loadEconCalendar(true)" title="רענן יומן">⟳</button>
         </div>
-        <div class="ec-legend">🇺🇸 ארה"ב · 🇮🇱 ישראל · <span class="ec-dot ec-imp-high"></span> השפעה גבוהה · <span class="ec-dot ec-imp-med"></span> בינונית</div>
-        <div class="ec-list">${html}</div>`;
+        <div class="ec-legend"><span class="ec-pill ec-pill-us">ארה״ב</span><span class="ec-pill ec-pill-il">ישראל</span><span class="ec-legend-sep">·</span><span class="ec-dot ec-imp-high"></span> השפעה גבוהה <span class="ec-dot ec-imp-med"></span> בינונית</div>
+        <div class="ec-wrap">${html}</div>`;
 }
 if (typeof window !== 'undefined') window._loadEconCalendar = _loadEconCalendar;
 
