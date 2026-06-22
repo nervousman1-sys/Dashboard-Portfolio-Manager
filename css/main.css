@@ -10123,3 +10123,10 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     .sa-modal { border-radius: 0; min-height: 100dvh; }
     .sa-targets { grid-template-columns: 1fr; }
 }
+
+/* Scanner Agent — target market cap + action buttons */
+.sa-mcap { font-size: 11px; font-weight: 800; color: #6ee7b7; background: rgba(16,185,129,0.12); border-radius: 6px; padding: 2px 8px; margin-inline-start: auto; }
+.sa-target-actions { display: flex; gap: 7px; margin-top: 8px; }
+.sa-act { flex: 1; background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.30); color: #67e8f9;
+    font-size: 12px; font-weight: 800; padding: 7px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+.sa-act:hover { background: rgba(0,229,255,0.2); }

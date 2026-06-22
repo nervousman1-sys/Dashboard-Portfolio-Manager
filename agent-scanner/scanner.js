@@ -23,6 +23,8 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;          // optional 
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 const AGENT_WRITE_SECRET = process.env.AGENT_WRITE_SECRET;          // used with the anon-key RPC path
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01qkvh5q0aag';
+const MIN_MARKET_CAP_B = parseFloat(process.env.MIN_MARKET_CAP_B || '1');   // every target ≥ $1B
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const SCAN_INTERVAL_HOURS = parseFloat(process.env.SCAN_INTERVAL_HOURS || '4');
 const DEDUP_DAYS = parseInt(process.env.DEDUP_DAYS || '14', 10);
@@ -57,6 +59,8 @@ const SYSTEM_PROMPT = `אתה מנוע המודיעין הליבתי של "Finex
 חומת הגנה קריטית (מסנן אנטי-FOMO):
 אם סקטור, תמה או תעשייה כבר חוו זינוק מחירים מסיבי, רוויה תקשורתית (סיקור נרחב באתרים כלכליים גדולים), או מחזורי מסחר קיצוניים – אתה מחויב לסמן אותו כ-"שלב מאוחר / רווי" (Late Stage) ולהתעלם ממנו.
 דוגמאות לנושאים רווים שיש להימנע מהם כעת: זכרונות מחשב (HBM), שבבי AI גנריים (NVIDIA/AMD), או תרופות הרזיה פופולריות. התמקדות אך ורק בפרדיגמה הבאה שעוד לא התפוצצה.
+
+חוק קריטי לגבי stealth_targets (אכיפה מוחלטת): כל מטרה חייבת להיות חברה ציבורית הנסחרת בבורסה מרכזית (NYSE / NASDAQ או בורסה מוכרת אחרת) עם טיקר תקין ושווי שוק של לפחות מיליארד דולר (1B$+). אסור בהחלט לכלול חברות פרטיות, סטארט-אפים לפני הנפקה, או טיקר "N/A". המשקיע צריך להיות מסוגל לקנות את המניה כבר עכשיו. ספק 3–5 חברות ציבוריות כאלה בעלות החשיפה הישירה והפחות-מתומחרת ביותר לנישה. אם אין מספיק חברות ציבוריות מעל מיליארד דולר עם חשיפה אמיתית לנישה — בחר נישה אחרת שכן עומדת בתנאי.
 
 דרישות הפלט (Output) - מבנה קבוע שיוחזר כ-JSON נקי כדי שיוצג ב-UI של Finextium:
 {
@@ -126,6 +130,34 @@ function valid(card) {
     return card && typeof card.sector_name === 'string' && card.sector_name.trim().length > 1 && card.thesis;
 }
 
+// HARD GATE: keep only stealth targets that are REAL, exchange-listed stocks with market cap ≥ $1B.
+// Verified live via Finnhub profile2 (market cap in millions). Enriches each with the real market
+// cap + exchange. The model is told to obey this, but we enforce it here so nothing slips through.
+async function validateTargets(targets) {
+    if (!Array.isArray(targets) || !targets.length) return [];
+    const out = [];
+    await Promise.all(targets.map(async (t) => {
+        const tk = String(t.ticker || '').toUpperCase().replace(/[^A-Z.]/g, '').trim();
+        if (!tk || /^N\.?A$/.test(tk)) return;
+        try {
+            const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(tk)}&token=${FINNHUB_API_KEY}`);
+            if (!r.ok) return;
+            const p = await r.json();
+            const mcapM = p && p.marketCapitalization;            // millions of USD
+            if (!mcapM || !p.exchange || mcapM < MIN_MARKET_CAP_B * 1000) return; // not listed / < $1B
+            out.push({
+                company: p.name || t.company || tk,
+                ticker: tk,
+                why: t.why || '',
+                market_cap_b: Math.round(mcapM / 1000 * 10) / 10,
+                exchange: p.exchange,
+            });
+        } catch (e) { /* drop unverifiable */ }
+    }));
+    const seen = new Set();
+    return out.filter(x => { if (seen.has(x.ticker)) return false; seen.add(x.ticker); return true; });
+}
+
 // Skip if we already produced a card for the same sub-sector recently.
 async function isDuplicate(sectorName) {
     const cutoff = new Date(Date.now() - DEDUP_DAYS * 86400000).toISOString();
@@ -158,6 +190,14 @@ async function runCycle() {
         log(`Duplicate sector "${card.sector_name}" within ${DEDUP_DAYS}d — skipping insert.`);
         return;
     }
+
+    // Enforce: only real, exchange-listed targets ≥ $1B. No valid ones → the card isn't actionable.
+    const targets = await validateTargets(card.stealth_targets);
+    if (!targets.length) {
+        log(`"${card.sector_name}": no exchange-listed ≥$${MIN_MARKET_CAP_B}B targets — skipping.`);
+        return;
+    }
+    card.stealth_targets = targets;
 
     const payload = {
         sector_name: String(card.sector_name).slice(0, 200),

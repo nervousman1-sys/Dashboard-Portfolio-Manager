@@ -91,14 +91,19 @@ function _saCardHTML(c) {
         </div>` : '';
 
     const targetsHTML = targets.map(t => {
-        const tk = String(t.ticker || '').trim();
-        const real = tk && !/^n\/?a$/i.test(tk) && /^[A-Z.]{1,6}$/.test(tk);
-        const tkHTML = real
-            ? `<span class="sa-tk sa-tk-link" onclick="openTechnicalForTicker('${_saEsc(tk)}')" title="פתח בניתוח טכני">${_saEsc(tk)}</span>`
-            : (tk ? `<span class="sa-tk sa-tk-na">${_saEsc(tk)}</span>` : '');
+        const tk = String(t.ticker || '').trim().toUpperCase();
+        const real = tk && /^[A-Z.]{1,7}$/.test(tk);
+        const mcap = (t.market_cap_b != null) ? `<span class="sa-mcap">$${t.market_cap_b}B</span>` : '';
+        const tkHTML = tk ? `<span class="sa-tk">${_saEsc(tk)}</span>` : '';
+        const actions = real ? `
+            <div class="sa-target-actions">
+                <button class="sa-act" onclick="openTechnicalForTicker('${_saEsc(tk)}')">📈 ניתוח טכני</button>
+                <button class="sa-act" onclick="openReportForTicker('${_saEsc(tk)}')">📄 דוחות</button>
+            </div>` : '';
         return `<div class="sa-target">
-            <div class="sa-target-head">${tkHTML}<span class="sa-co">${_saEsc(t.company || '')}</span></div>
+            <div class="sa-target-head">${tkHTML}<span class="sa-co">${_saEsc(t.company || '')}</span>${mcap}</div>
             ${t.why ? `<div class="sa-why">${_saEsc(t.why)}</div>` : ''}
+            ${actions}
         </div>`;
     }).join('');
 

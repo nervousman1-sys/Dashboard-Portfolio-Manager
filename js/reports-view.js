@@ -818,8 +818,22 @@ function _repStrategyHtml(st) {
     return `${part("ויז'ן", st.vision)}${part('התקדמות לעבר היעד', st.progressToward)}${partners}${part('מבט קדימה', st.outlook)}`;
 }
 
+// Open the financial report for ANY ticker (works for non-S&P names too — the detail fetch is
+// symbol-based, not universe-gated). Used by the Scanner Agent / other pages to deep-link a stock.
+function openReportForTicker(ticker) {
+    const sym = String(ticker || '').trim().toUpperCase();
+    if (!sym) return;
+    if (typeof closeScannerAgent === 'function') closeScannerAgent();
+    if (typeof closeDecisionCore === 'function') closeDecisionCore();
+    const mo = document.getElementById('modalOverlay');
+    if (mo && mo.classList.contains('active')) { mo.classList.remove('active'); if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
+    if (typeof openReportsPage === 'function') openReportsPage();
+    setTimeout(() => { _repMarket = sym.endsWith('.TA') ? 'il' : 'us'; if (typeof openReportDetail === 'function') openReportDetail(sym); }, 70);
+}
+
 if (typeof window !== 'undefined') {
     window.openReportsPage = openReportsPage;
+    window.openReportForTicker = openReportForTicker;
     window.closeReportsPage = closeReportsPage;
     window.setRepMarket = setRepMarket;
     window._repRenderList = _repRenderList;
