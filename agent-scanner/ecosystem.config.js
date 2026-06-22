@@ -29,5 +29,12 @@ module.exports = {
             out_file: './logs/macro-out.log',
             error_file: './logs/macro-err.log',
         },
+        {
+            ...common,
+            name: 'finextium-crisis-agent',      // crisis-detection indicator + AI assessment → crisis_indicator (every 60m)
+            script: 'crisis-agent.js',
+            out_file: './logs/crisis-out.log',
+            error_file: './logs/crisis-err.log',
+        },
     ],
 };

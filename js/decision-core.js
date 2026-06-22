@@ -143,6 +143,20 @@ function _dcSimulate(client, scenarioKey) {
 
 // ── Crisis-proximity gauge (0–100) from REAL macro signals ──
 async function _dcComputeProximity() {
+    // PRIMARY: the 24/7 crisis agent's latest reading (deterministic score from real signals + an AI
+    // Hebrew assessment), persisted in Supabase. FALLBACK: compute live client-side (below).
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('crisis_indicator').select('score,label,parts,assessment_he,created_at')
+                .eq('status', 'active').order('created_at', { ascending: false }).limit(1);
+            if (!error && data && data.length && data[0].score != null && Array.isArray(data[0].parts) && data[0].parts.length) {
+                const r = data[0];
+                return { score: r.score, parts: r.parts, partial: false, assessment: r.assessment_he || '', asOf: r.created_at };
+            }
+        }
+    } catch (e) { /* fall through to live computation */ }
+
     const parts = [];
     let missing = 0;
     // 1. Valuation / complacency — CNN Fear & Greed (extreme greed → complacency → higher risk)
@@ -371,11 +385,11 @@ function _dcMoney(usd, cur) {
 
 function _dcProximityHTML() {
     const p = _dcProximity;
-    if (!p) return `<div class="dc-card-title">אינדיקטור התקרבות משברים</div><div class="dc-loading">מחשב מנתוני מאקרו חיים…</div>`;
+    if (!p) return `<div class="dc-card-title">אינדיקטור לזיהוי משברים</div><div class="dc-loading">מחשב מנתוני מאקרו חיים…</div>`;
     const score = p.score;
     const col = score >= 70 ? '#ef4444' : score >= 45 ? '#f59e0b' : '#10b981';
     const label = score >= 70 ? 'סיכון גבוה' : score >= 45 ? 'סיכון בינוני' : 'יציב';
-    return `<div class="dc-card-title">אינדיקטור התקרבות משברים${p.partial ? ' <span class="dc-partial">(נתונים חלקיים)</span>' : ''}</div>
+    return `<div class="dc-card-title">אינדיקטור לזיהוי משברים${p.partial ? ' <span class="dc-partial">(נתונים חלקיים)</span>' : ''}</div>
         <div class="dc-gauge">
             <div class="dc-gauge-num" style="color:${col}">${score}<span class="dc-gauge-max">/100</span></div>
             <div class="dc-gauge-label" style="color:${col}">${label}</div>
@@ -391,7 +405,8 @@ function _dcProximityHTML() {
                 </div>`;
     }).join('')}
         </div>
-        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות ותנודתיות (VIX) — נתוני אמת חיים.</div>`;
+        ${p.assessment ? `<div class="dc-prox-assess"><span class="dc-prox-assess-lbl">הערכת הסוכן:</span> ${String(p.assessment).replace(/[<>]/g, '')}</div>` : ''}
+        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות ותנודתיות (VIX) — נתוני אמת חיים${p.asOf ? ' · מעודכן ע"י סוכן הזיהוי' : ''}.</div>`;
 }
 
 function _dcRender() {
@@ -451,7 +466,7 @@ function _dcRender() {
         <div class="dc-header">
             <div>
                 <h2 class="dc-title">🧠 Decision Core — מנוע מבחני קיצון</h2>
-                <p class="dc-subtitle">סימולציית עמידות התיק במשברים היסטוריים + אינדיקטור התקרבות משברים בזמן אמת</p>
+                <p class="dc-subtitle">סימולציית עמידות התיק במשברים היסטוריים + אינדיקטור לזיהוי משברים בזמן אמת (מבוסס סוכן)</p>
             </div>
             <button class="dc-close" onclick="closeDecisionCore()">&times;</button>
         </div>

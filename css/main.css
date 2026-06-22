@@ -10130,3 +10130,8 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .sa-act { flex: 1; background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.30); color: #67e8f9;
     font-size: 12px; font-weight: 800; padding: 7px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
 .sa-act:hover { background: rgba(0,229,255,0.2); }
+
+/* Decision Core — crisis agent assessment callout */
+.dc-prox-assess { margin-top: 14px; font-size: 13px; line-height: 1.65; color: #f2f2f7;
+    background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.20); border-radius: 11px; padding: 12px 14px; }
+.dc-prox-assess-lbl { font-weight: 900; color: #67e8f9; }
