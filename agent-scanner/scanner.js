@@ -19,20 +19,29 @@ const { createClient } = require('@supabase/supabase-js');
 
 // ── Config (from .env) ──
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;          // optional (direct insert)
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+const AGENT_WRITE_SECRET = process.env.AGENT_WRITE_SECRET;          // used with the anon-key RPC path
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const SCAN_INTERVAL_HOURS = parseFloat(process.env.SCAN_INTERVAL_HOURS || '4');
 const DEDUP_DAYS = parseInt(process.env.DEDUP_DAYS || '14', 10);
 const RUN_ONCE = process.argv.includes('--once');
 
+// Two supported write paths:
+//   • service_role key  → direct insert (RLS bypassed).
+//   • anon key + secret → the secure insert_catalyst_card() RPC (no service_role needed).
+const USE_RPC = !SERVICE_KEY;
+const SUPABASE_KEY = SERVICE_KEY || SUPABASE_ANON_KEY;
+
 function log(...a) { console.log(`[${new Date().toISOString()}]`, ...a); }
 function fail(msg) { console.error(`[${new Date().toISOString()}] FATAL:`, msg); process.exit(1); }
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) fail('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env');
+if (!SUPABASE_URL || !SUPABASE_KEY) fail('Missing SUPABASE_URL / SUPABASE key (service_role or anon) in .env');
+if (USE_RPC && !AGENT_WRITE_SECRET) fail('Anon-key mode needs AGENT_WRITE_SECRET in .env');
 if (!GEMINI_API_KEY) fail('Missing GEMINI_API_KEY in .env');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
@@ -150,7 +159,7 @@ async function runCycle() {
         return;
     }
 
-    const row = {
+    const payload = {
         sector_name: String(card.sector_name).slice(0, 200),
         thesis: card.thesis || null,
         tech_layer: card.tech_layer || null,
@@ -160,12 +169,15 @@ async function runCycle() {
         media_saturation: card.media_saturation || null,
         stealth_targets: Array.isArray(card.stealth_targets) ? card.stealth_targets : [],
         sources,
-        raw: card,
-        status: 'active',
     };
-    const { error } = await supabase.from('catalyst_cards').insert(row);
-    if (error) throw new Error(`Supabase insert failed: ${error.message}`);
-    log(`✓ Inserted catalyst card: "${row.sector_name}" (${row.stage_score || '—'}, sources: ${sources.length})`);
+    if (USE_RPC) {
+        const { error } = await supabase.rpc('insert_catalyst_card', { p_secret: AGENT_WRITE_SECRET, p_card: payload });
+        if (error) throw new Error(`RPC insert failed: ${error.message}`);
+    } else {
+        const { error } = await supabase.from('catalyst_cards').insert({ ...payload, raw: card, status: 'active' });
+        if (error) throw new Error(`Supabase insert failed: ${error.message}`);
+    }
+    log(`✓ Inserted catalyst card: "${payload.sector_name}" (${payload.stage_score || '—'}, sources: ${sources.length})`);
 }
 
 async function safeCycle() {

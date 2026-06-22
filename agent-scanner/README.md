@@ -10,21 +10,16 @@ The database table + read policy are already created in your Supabase project.
 
 ---
 
-## 1. Fill in the secrets
+## 1. Secrets (already wired)
 
-```bash
-cp .env.example .env
-```
+The write path needs **no service_role key** — the agent writes through a secure
+`insert_catalyst_card()` RPC using the public **anon key + a shared secret** (the RPC validates the
+secret; RLS blocks any direct insert). The local `.env` is already populated with `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `AGENT_WRITE_SECRET` and `GEMINI_API_KEY` and was verified end-to-end.
 
-Edit `.env` and set the two secrets:
-
-| Var | Where to get it |
-|---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard → **Project Settings → API → `service_role`** (secret). |
-| `GEMINI_API_KEY` | Google AI Studio → https://aistudio.google.com/app/apikey |
-
-`SUPABASE_URL` is already set to your project. Tuning vars (`GEMINI_MODEL`, `SCAN_INTERVAL_HOURS`,
-`DEDUP_DAYS`) have sensible defaults.
+> Deploying to a fresh box? `.env` is git-ignored, so copy it to the server alongside the code (or
+> recreate it from `.env.example` — the anon key is public; the `AGENT_WRITE_SECRET` must match the
+> value baked into the `insert_catalyst_card` DB function).
 
 ## 2. Install + test once
 
