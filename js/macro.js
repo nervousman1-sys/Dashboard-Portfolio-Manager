@@ -1043,13 +1043,17 @@ function _ilCalendarEvents() {
     }
     return out;
 }
+let _ecTab = 'US';          // active calendar tab: 'US' | 'IL'
+let _ecCollapsed = false;    // section folded?
+let _ecData = null;          // { US:[…], IL:[…] }
+
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
     if (!el) return;
     const CACHE_KEY = 'econ_cal_v1';
     let us = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
     if (!us) {
-        el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
+        if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
             <div class="macro-loading" style="padding:16px">טוען יומן…</div>`;
         try {
             const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
@@ -1058,55 +1062,61 @@ async function _loadEconCalendar(forceRefresh) {
             if (us.length) _cacheSet(CACHE_KEY, us);
         } catch (e) { us = []; }
     }
-    const events = [...(us || []), ..._ilCalendarEvents()].sort((a, b) => a.date.localeCompare(b.date));
-    if (!events.length) {
-        el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
-            <div class="gm-empty">היומן אינו זמין כעת. נסה לרענן בעוד מספר דקות.</div>`;
-        return;
-    }
+    _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents() };
+    _ecRender();
+}
+function setEcTab(tab) { _ecTab = tab; _ecRender(); }
+function toggleEcCollapse() { _ecCollapsed = !_ecCollapsed; _ecRender(); }
+if (typeof window !== 'undefined') {
+    window._loadEconCalendar = _loadEconCalendar; window.setEcTab = setEcTab; window.toggleEcCollapse = toggleEcCollapse;
+}
+
+// Render the calendar as a collapsible TABLE, filtered by the active country tab.
+function _ecRender() {
+    const el = document.getElementById('econCalSection');
+    if (!el || !_ecData) return;
     const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
-    const groups = {};
-    for (const e of events) { const k = e.date.slice(0, 7); (groups[k] = groups[k] || []).push(e); }
+    const events = (_ecData[_ecTab] || []).slice().sort((a, b) => a.date.localeCompare(b.date));
     const todayStr = new Date().toISOString().slice(0, 10);
-    const HE_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
     const soonStr = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    let html = '';
-    for (const k of Object.keys(groups).sort()) {
-        const [y, m] = k.split('-');
-        html += `<div class="ec-month"><span class="ec-month-name">${HE_MONTHS[parseInt(m, 10) - 1]} ${y}</span><span class="ec-month-count">${groups[k].length} פרסומים</span></div>`;
-        html += '<div class="ec-grid">';
-        for (const e of groups[k]) {
-            const d = new Date(e.date);
-            const dd = d.getDate(), mIdx = d.getMonth();
-            const isIL = e.country === 'IL';
-            const high = e.imp === 'high';
-            const soon = e.date <= soonStr;
-            html += `<div class="ec-card ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
-                <div class="ec-tile">
-                    <span class="ec-tile-day">${dd}</span>
-                    <span class="ec-tile-mon">${HE_SHORT[mIdx]}</span>
-                </div>
-                <div class="ec-card-body">
-                    <div class="ec-card-name">${_macroEscape(e.he)}</div>
-                    <div class="ec-card-meta">
-                        <span class="ec-pill ${isIL ? 'ec-pill-il' : 'ec-pill-us'}">${isIL ? 'ישראל' : 'ארה״ב'}</span>
-                        <span class="ec-imp ${high ? 'ec-imp-h' : 'ec-imp-m'}">${high ? 'השפעה גבוהה' : 'השפעה בינונית'}</span>
-                        ${soon ? '<span class="ec-soon">בקרוב</span>' : ''}
-                    </div>
-                    ${e.approx ? '<div class="ec-approx">מועד משוער לפי לוח הפרסומים של הלמ״ס</div>' : ''}
-                </div>
-            </div>`;
+    let rows = '';
+    if (!events.length) {
+        rows = `<tr><td colspan="3" class="ec-empty-td">אין פרסומים קרובים זמינים עבור ${_ecTab === 'IL' ? 'ישראל' : 'ארה״ב'}.</td></tr>`;
+    } else {
+        const groups = {};
+        for (const e of events) { const k = e.date.slice(0, 7); (groups[k] = groups[k] || []).push(e); }
+        for (const k of Object.keys(groups).sort()) {
+            const [y, m] = k.split('-');
+            rows += `<tr class="ec-tr-month"><td colspan="3">${HE_MONTHS[parseInt(m, 10) - 1]} ${y} · ${groups[k].length} פרסומים</td></tr>`;
+            for (const e of groups[k]) {
+                const d = new Date(e.date); const dd = d.getDate(), mo = d.getMonth() + 1;
+                const high = e.imp === 'high'; const soon = e.date <= soonStr;
+                rows += `<tr class="ec-tr ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
+                    <td class="ec-td-date"><span class="ec-d">${dd}.${mo}</span>${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</td>
+                    <td class="ec-td-name">${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער · לוח הלמ״ס)</small>' : ''}</td>
+                    <td class="ec-td-imp"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}</td>
+                </tr>`;
+            }
         }
-        html += '</div>';
     }
-    el.innerHTML = `<div class="ec-head">
+    const tab = (t, he) => `<button class="ec-tab ${_ecTab === t ? 'active' : ''}" onclick="setEcTab('${t}')">${he}</button>`;
+    const ilNote = _ecTab === 'IL'
+        ? `<div class="ec-il-note">מוצג מדד המחירים לצרכן לפי לוח הפרסומים הקבוע של הלמ״ס (~אמצע החודש). מועדי החלטות הריבית של בנק ישראל מתפרסמים בלוח הרשמי שלו.</div>` : '';
+    el.innerHTML = `
+        <div class="ec-head">
+            <button class="ec-collapse" onclick="toggleEcCollapse()" title="קפל / פתח">${_ecCollapsed ? '▸' : '▾'}</button>
             <span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span>
             <button class="gm-refresh" onclick="_loadEconCalendar(true)" title="רענן יומן">⟳</button>
         </div>
-        <div class="ec-legend"><span class="ec-pill ec-pill-us">ארה״ב</span><span class="ec-pill ec-pill-il">ישראל</span><span class="ec-legend-sep">·</span><span class="ec-dot ec-imp-high"></span> השפעה גבוהה <span class="ec-dot ec-imp-med"></span> בינונית</div>
-        <div class="ec-wrap">${html}</div>`;
+        <div class="ec-body ${_ecCollapsed ? 'ec-hidden' : ''}" id="ecBody">
+            <div class="ec-tabs">${tab('US', 'ארה״ב')}${tab('IL', 'ישראל')}</div>
+            ${ilNote}
+            <table class="ec-table">
+                <thead><tr><th class="ec-th-date">תאריך</th><th>אירוע</th><th class="ec-th-imp">השפעה</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
 }
-if (typeof window !== 'undefined') window._loadEconCalendar = _loadEconCalendar;
 
 // ── Geopolitical + macro-economy updates ──────────────────────────────────
 // Renders ONLY material items that move the economy (monetary / inflation-growth /
