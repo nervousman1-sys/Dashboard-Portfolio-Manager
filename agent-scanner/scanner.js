@@ -79,7 +79,10 @@ async function callGemini(avoidSectors) {
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: 'user', parts: [{ text: userTask }] }],
         tools: [{ google_search: {} }],                 // live grounding → REAL data
-        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+        // thinkingBudget 0: Gemini 2.5's "thinking" tokens otherwise consume the output budget and
+        // the call returns finishReason=MAX_TOKENS with EMPTY text. Disable thinking + give ample
+        // output room so the JSON card always comes back. Grounding still works.
+        generationConfig: { temperature: 0.4, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
     };
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     const sleep = (ms) => new Promise(res => setTimeout(res, ms));
