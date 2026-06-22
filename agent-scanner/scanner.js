@@ -82,8 +82,16 @@ async function callGemini(avoidSectors) {
         generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
     };
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error(`Gemini HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+    let r;
+    // Gemini returns transient 503 ("model overloaded") / 429 (rate) under load — retry with backoff.
+    for (let attempt = 0; attempt < 4; attempt++) {
+        r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.ok) break;
+        if ((r.status === 503 || r.status === 429) && attempt < 3) { log(`Gemini ${r.status} — retry ${attempt + 1}/3`); await sleep(5000 * (attempt + 1)); continue; }
+        throw new Error(`Gemini HTTP ${r.status}: ${(await r.text()).slice(0, 250)}`);
+    }
+    if (!r || !r.ok) throw new Error('Gemini unavailable after retries');
     const j = await r.json();
     const cand = (j.candidates || [])[0] || {};
     const text = ((cand.content || {}).parts || []).map(p => p.text || '').join('\n').trim();
