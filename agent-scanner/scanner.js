@@ -16,6 +16,9 @@
 
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
+// Node < 22 has no global WebSocket; supabase-js v2 requires one at client creation even though this
+// agent only uses the REST/RPC API. Provide the `ws` polyfill so it constructs cleanly.
+try { if (!globalThis.WebSocket) globalThis.WebSocket = require('ws'); } catch (e) { /* ws optional */ }
 
 // ── Config (from .env) ──
 const SUPABASE_URL = process.env.SUPABASE_URL;

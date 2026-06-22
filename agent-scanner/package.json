@@ -1,0 +1,17 @@
+{
+  "name": "finextium-agent-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Finextium 24/7 Early-Alpha intelligence agent — writes catalyst_cards to Supabase.",
+  "main": "scanner.js",
+  "scripts": {
+    "start": "node scanner.js",
+    "once": "node scanner.js --once"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}
