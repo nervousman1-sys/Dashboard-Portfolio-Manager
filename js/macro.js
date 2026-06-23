@@ -1295,6 +1295,20 @@ async function _loadGeoMacroNews(forceRefresh) {
     const sig = items.map(n => (n.he || n.en || '') + '|' + (n.date || '')).join('§');
     if (sig === _geoMacroSig && el.querySelector('.gm-list')) return;
     _geoMacroSig = sig;
+    _geoMacroItems = items;     // remembered so the collapse toggle can re-render without re-fetching
+    _renderGeoMacro();          // ← same pattern as the calendar: store data, then render
+}
+
+// ── Collapse built EXACTLY like the economic calendar (toggleEcCollapse → _ecRender) ──────────
+// A state flag + a FULL re-render. The list body carries the calendar's own .ec-body/.ec-hidden
+// classes AND an inline display:none, so the fold works no matter which main.css is cached.
+let _geoMacroItems = null;
+let _gmCollapsed = false;
+try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
+function _renderGeoMacro() {
+    const el = document.getElementById('geoMacroSection');
+    if (!el) return;
+    const items = _geoMacroItems || [];
     const rows = items.map(n => {
         const tagCls = _GEO_MACRO_TAG_CLS[n.tag] || 'gm-tag-mkt';
         const he = _macroEscape(n.he || n.en || '');
@@ -1307,29 +1321,24 @@ async function _loadGeoMacroNews(forceRefresh) {
             <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
         </a>`;
     }).join('');
-    // Collapsible section: one click on the caret OR anywhere on the header bar folds/unfolds
-    // the WHOLE block (every headline). id-based + inline display = robust and CSS-independent.
-    // The refresh button stops propagation so it doesn't also toggle the fold.
     el.innerHTML = `
-        <div class="gm-head gm-head-toggle" onclick="_gmToggleCollapse()" title="קפל / פתח את כל הקטע" style="cursor:pointer">
-            <button class="ec-collapse" id="gmCaret" onclick="event.stopPropagation(); _gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
+        <div class="gm-head">
+            <button class="ec-collapse" onclick="toggleGmCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
             <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
-            <button class="gm-refresh" onclick="event.stopPropagation(); _loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
+            <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
         </div>
-        <div class="gm-list" id="gmList" style="${_gmCollapsed ? 'display:none' : ''}">${rows}</div>`;
+        <div class="gm-list ec-body ${_gmCollapsed ? 'ec-hidden' : ''}"${_gmCollapsed ? ' style="display:none"' : ''}>${rows}</div>`;
 }
-let _gmCollapsed = false;
-try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
-function _gmToggleCollapse() {
+function toggleGmCollapse() {
     _gmCollapsed = !_gmCollapsed;
     try { localStorage.setItem('gm_collapsed', _gmCollapsed ? '1' : '0'); } catch (e) { }
-    const list = document.getElementById('gmList');
-    const caret = document.getElementById('gmCaret');
-    // Inline display toggles the entire headline list in one click — no CSS dependency.
-    if (list) list.style.display = _gmCollapsed ? 'none' : '';
-    if (caret) caret.textContent = _gmCollapsed ? '▸' : '▾';
+    _renderGeoMacro(); // full re-render — identical mechanism to the calendar's toggleEcCollapse
 }
-if (typeof window !== 'undefined') { window._loadGeoMacroNews = _loadGeoMacroNews; window._gmToggleCollapse = _gmToggleCollapse; }
+function _gmToggleCollapse() { toggleGmCollapse(); } // back-compat alias for any cached HTML
+if (typeof window !== 'undefined') {
+    window._loadGeoMacroNews = _loadGeoMacroNews; window._renderGeoMacro = _renderGeoMacro;
+    window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse;
+}
 
 // ── Format helper for widget values ──
 function _fmtUnit(v, u) {
