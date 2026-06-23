@@ -1087,21 +1087,44 @@ function _ecRender() {
     const events = (_ecData[_ecTab] || []).slice().sort((a, b) => a.date.localeCompare(b.date));
     const todayStr = new Date().toISOString().slice(0, 10);
     const soonStr = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    // Match the latest released RESULT to its calendar indicator (by key), shown inline on the row.
+    const resultByKey = {};
+    if (_ecTab === 'US') for (const r of (_ecData.results || [])) if (r && r.key) resultByKey[r.key] = r;
+    const shownResult = {}; // show a key's result only on its first (next) occurrence to avoid repetition
+    const sentLabel = { good: 'חיובי', bad: 'שלילי', neutral: 'ניטרלי' };
+    const arrow = (d) => d === 'up' ? '▲' : d === 'down' ? '▼' : '▬';
     let rows = '';
     if (!events.length) {
         rows = `<tr><td colspan="3" class="ec-empty-td">אין פרסומים קרובים זמינים עבור ${_ecTab === 'IL' ? 'ישראל' : 'ארה״ב'}.</td></tr>`;
     } else {
         const groups = {};
         for (const e of events) { const k = e.date.slice(0, 7); (groups[k] = groups[k] || []).push(e); }
+        let rid = 0;
         for (const k of Object.keys(groups).sort()) {
             const [y, m] = k.split('-');
             rows += `<tr class="ec-tr-month"><td colspan="3">${HE_MONTHS[parseInt(m, 10) - 1]} ${y} · ${groups[k].length} פרסומים</td></tr>`;
             for (const e of groups[k]) {
                 const d = new Date(e.date); const dd = d.getDate(), mo = d.getMonth() + 1;
                 const high = e.imp === 'high'; const soon = e.date <= soonStr;
+                // Inline last-published result for this indicator (first occurrence only).
+                const r = (e.key && resultByKey[e.key] && !shownResult[e.key]) ? resultByKey[e.key] : null;
+                let resultHtml = '';
+                if (r) {
+                    shownResult[e.key] = true;
+                    const anId = 'ecAn_' + (rid++);
+                    resultHtml = `<div class="ec-row-result ec-res-${r.sentiment}">
+                        <span class="ec-rr-label">תוצאה אחרונה:</span>
+                        <b class="ec-rr-val">${_ecResVal(r.value, r.unit, r.kind)}</b>
+                        <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span>
+                        <span class="ec-rr-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span>
+                        <span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span>
+                        <button class="ec-res-inline-btn" onclick="_ecToggleRowAnalysis('${anId}')">ניתוח קצר ›</button>
+                        <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
+                    </div>`;
+                }
                 rows += `<tr class="ec-tr ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
                     <td class="ec-td-date"><span class="ec-d">${dd}.${mo}</span>${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</td>
-                    <td class="ec-td-name">${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער · לוח הלמ״ס)</small>' : ''}</td>
+                    <td class="ec-td-name">${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער · לוח הלמ״ס)</small>' : ''}${resultHtml}</td>
                     <td class="ec-td-imp"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}</td>
                 </tr>`;
             }
@@ -1110,24 +1133,6 @@ function _ecRender() {
     const tab = (t, he) => `<button class="ec-tab ${_ecTab === t ? 'active' : ''}" onclick="setEcTab('${t}')">${he}</button>`;
     const ilNote = _ecTab === 'IL'
         ? `<div class="ec-il-note">מוצג מדד המחירים לצרכן לפי לוח הפרסומים הקבוע של הלמ״ס (~אמצע החודש). מועדי החלטות הריבית של בנק ישראל מתפרסמים בלוח הרשמי שלו.</div>` : '';
-
-    // Results of recently-RELEASED data (US) — actual value, direction vs previous + a short analysis.
-    const results = (_ecTab === 'US' && Array.isArray(_ecData.results)) ? _ecData.results : [];
-    const sentLabel = { good: 'חיובי', bad: 'שלילי', neutral: 'ניטרלי' };
-    const arrow = (d) => d === 'up' ? '▲' : d === 'down' ? '▼' : '▬';
-    const resultsHtml = results.length ? `
-        <div class="ec-results">
-            <div class="ec-results-head">📊 תוצאות אחרונות שפורסמו</div>
-            <div class="ec-results-grid">
-                ${results.map((r, i) => `
-                <div class="ec-res-card ec-res-${r.sentiment}">
-                    <div class="ec-res-top"><span class="ec-res-name">${_macroEscape(r.he)}</span><span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span></div>
-                    <div class="ec-res-val">${_ecResVal(r.value, r.unit, r.kind)} <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span> <span class="ec-res-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span></div>
-                    <button class="ec-res-btn" onclick="_ecToggleAnalysis(${i})">ניתוח קצר ›</button>
-                    <div class="ec-res-analysis" id="ecRes${i}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
-                </div>`).join('')}
-            </div>
-        </div>` : '';
 
     el.innerHTML = `
         <div class="ec-head">
@@ -1138,7 +1143,6 @@ function _ecRender() {
         <div class="ec-body ${_ecCollapsed ? 'ec-hidden' : ''}" id="ecBody">
             <div class="ec-tabs">${tab('US', 'ארה״ב')}${tab('IL', 'ישראל')}</div>
             ${ilNote}
-            ${resultsHtml}
             <table class="ec-table">
                 <thead><tr><th class="ec-th-date">תאריך</th><th>אירוע</th><th class="ec-th-imp">השפעה</th></tr></thead>
                 <tbody>${rows}</tbody>
@@ -1151,8 +1155,8 @@ function _ecResVal(value, unit, kind) {
     if (kind === 'jobs') return Math.round(value) + 'K';
     return value.toFixed(1) + (unit || '');
 }
-function _ecToggleAnalysis(i) {
-    const el = document.getElementById('ecRes' + i);
+function _ecToggleRowAnalysis(id) {
+    const el = document.getElementById(id);
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 // Deterministic Hebrew result analysis (no AI dependency — always available).
@@ -1170,7 +1174,7 @@ function _ecAnalysis(r) {
     else imp = r.sentiment === 'good' ? 'הצמיחה מתחזקת — חיובי לרווחי החברות ולשוק המניות.' : 'האטה בקצב הצמיחה — סיכון לרווחי החברות ולסנטימנט בשוק.';
     return `${what} הנתון האחרון: ${v} לעומת ${p} קודם (${dirTxt}). ${imp}`;
 }
-if (typeof window !== 'undefined') window._ecToggleAnalysis = _ecToggleAnalysis;
+if (typeof window !== 'undefined') window._ecToggleRowAnalysis = _ecToggleRowAnalysis;
 
 // ── Geopolitical + macro-economy updates ──────────────────────────────────
 // PRIMARY source: the 24/7 macro-feed agent's curated table `macro_updates` (excellent Hebrew,

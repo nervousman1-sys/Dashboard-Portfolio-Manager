@@ -51,12 +51,12 @@ module.exports = async (req, res) => {
         // ── Economic calendar (US) — REAL upcoming release dates from FRED's release/dates API ──
         if (q.cal) {
             const RELEASES = [
-                { id: 10, he: 'מדד המחירים לצרכן (CPI)', imp: 'high' },
-                { id: 54, he: 'הכנסה והוצאה אישית (PCE)', imp: 'high' },
-                { id: 50, he: 'דו"ח התעסוקה (NFP + אבטלה)', imp: 'high' },
-                { id: 53, he: 'תוצר מקומי גולמי (GDP)', imp: 'high' },
-                { id: 46, he: 'מדד המחירים ליצרן (PPI)', imp: 'med' },
-                { id: 9, he: 'מכירות קמעונאיות', imp: 'med' },
+                { id: 10, key: 'CPI', he: 'מדד המחירים לצרכן (CPI)', imp: 'high' },
+                { id: 54, key: 'PCE', he: 'הכנסה והוצאה אישית (PCE)', imp: 'high' },
+                { id: 50, key: 'NFP', he: 'דו"ח התעסוקה (NFP + אבטלה)', imp: 'high' },
+                { id: 53, key: 'GDP', he: 'תוצר מקומי גולמי (GDP)', imp: 'high' },
+                { id: 46, key: 'PPI', he: 'מדד המחירים ליצרן (PPI)', imp: 'med' },
+                { id: 9, key: 'RETAIL', he: 'מכירות קמעונאיות', imp: 'med' },
             ];
             const today = new Date().toISOString().slice(0, 10);
             const end = new Date(Date.now() + 95 * 86400000).toISOString().slice(0, 10);
@@ -69,7 +69,7 @@ module.exports = async (req, res) => {
                     if (!r.ok) return [];
                     const j = await r.json();
                     return (j.release_dates || []).filter(d => d.date >= today)
-                        .map(d => ({ date: d.date, he: rel.he, imp: rel.imp, country: 'US' }));
+                        .map(d => ({ date: d.date, key: rel.key, he: rel.he, imp: rel.imp, country: 'US' }));
                 } catch (e) { return []; }
             }));
             const events = all.flat().sort((a, b) => a.date.localeCompare(b.date));
@@ -77,14 +77,14 @@ module.exports = async (req, res) => {
             // Latest RELEASED values per key indicator (actual + previous) → result analysis.
             // betterLower=true for inflation gauges (lower reading is the "good" outcome).
             const SERIES = {
-                10: { he: 'מדד המחירים לצרכן (CPI)', series: 'CPIAUCSL', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
-                54: { he: 'הוצאה אישית (PCE)', series: 'PCEPI', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
-                50: { he: 'תעסוקה — משרות שנוספו (NFP)', series: 'PAYEMS', units: 'chg', unit: 'K', betterLower: false, kind: 'jobs' },
-                53: { he: 'תוצר מקומי גולמי (GDP)', series: 'A191RL1Q225SBEA', units: 'lin', unit: '%', betterLower: false, kind: 'growth' },
-                46: { he: 'מדד המחירים ליצרן (PPI)', series: 'PPIFIS', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
-                9: { he: 'מכירות קמעונאיות', series: 'RSAFS', units: 'pc1', unit: '%', betterLower: false, kind: 'growth' },
+                CPI: { he: 'מדד המחירים לצרכן (CPI)', series: 'CPIAUCSL', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                PCE: { he: 'הוצאה אישית (PCE)', series: 'PCEPI', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                NFP: { he: 'תעסוקה — משרות שנוספו (NFP)', series: 'PAYEMS', units: 'chg', unit: 'K', betterLower: false, kind: 'jobs' },
+                GDP: { he: 'תוצר מקומי גולמי (GDP)', series: 'A191RL1Q225SBEA', units: 'lin', unit: '%', betterLower: false, kind: 'growth' },
+                PPI: { he: 'מדד המחירים ליצרן (PPI)', series: 'PPIFIS', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                RETAIL: { he: 'מכירות קמעונאיות', series: 'RSAFS', units: 'pc1', unit: '%', betterLower: false, kind: 'growth' },
             };
-            const results = (await Promise.all(Object.values(SERIES).map(async (s) => {
+            const results = (await Promise.all(Object.entries(SERIES).map(async ([key, s]) => {
                 try {
                     const obs = await fetchSeries(s.series, s.units, 2);
                     if (!obs.length) return null;
@@ -93,7 +93,7 @@ module.exports = async (req, res) => {
                     const dir = previous == null ? 'flat' : (value > previous ? 'up' : value < previous ? 'down' : 'flat');
                     const sentiment = previous == null || dir === 'flat' ? 'neutral'
                         : (s.betterLower ? (dir === 'down' ? 'good' : 'bad') : (dir === 'up' ? 'good' : 'bad'));
-                    return { he: s.he, kind: s.kind, unit: s.unit, value, previous, date: obs[0].date, dir, sentiment, betterLower: s.betterLower };
+                    return { key, he: s.he, kind: s.kind, unit: s.unit, value, previous, date: obs[0].date, dir, sentiment, betterLower: s.betterLower };
                 } catch (e) { return null; }
             }))).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
 
