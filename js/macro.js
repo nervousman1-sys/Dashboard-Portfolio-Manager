@@ -1084,7 +1084,7 @@ function _ecToggleHist() {
     try { localStorage.setItem('ec_hist_collapsed', _ecHistCollapsed ? '1' : '0'); } catch (e) { }
     const body = document.getElementById('ecHistBody');
     const caret = document.querySelector('.ec-hist .ec-collapse');
-    if (body) body.classList.toggle('ec-hidden', _ecHistCollapsed);
+    if (body) body.style.display = _ecHistCollapsed ? 'none' : ''; // inline → CSS-independent
     if (caret) caret.textContent = _ecHistCollapsed ? '▸' : '▾';
 }
 if (typeof window !== 'undefined') {
@@ -1196,7 +1196,7 @@ function _ecHistHTML() {
             <button class="ec-collapse" onclick="_ecToggleHist()" title="קפל / פתח">${_ecHistCollapsed ? '▸' : '▾'}</button>
             <span class="ec-hist-title">🗂️ נתונים היסטוריים — פרסומים שכבר התפרסמו</span>
         </div>
-        <div class="ec-hist-body ${_ecHistCollapsed ? 'ec-hidden' : ''}" id="ecHistBody">${inner}</div>
+        <div class="ec-hist-body" id="ecHistBody" style="${_ecHistCollapsed ? 'display:none' : ''}">${inner}</div>
     </div>`;
 }
 
@@ -1312,7 +1312,7 @@ async function _loadGeoMacroNews(forceRefresh) {
             <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
             <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
         </div>
-        <div class="gm-list ${_gmCollapsed ? 'ec-hidden' : ''}">${rows}</div>`;
+        <div class="gm-list" style="${_gmCollapsed ? 'display:none' : ''}">${rows}</div>`;
 }
 let _gmCollapsed = false;
 try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
@@ -1323,7 +1323,9 @@ function _gmToggleCollapse() {
     if (!el) return;
     const list = el.querySelector('.gm-list');
     const caret = el.querySelector('.ec-collapse');
-    if (list) list.classList.toggle('ec-hidden', _gmCollapsed);
+    // Inline display — independent of CSS so it works even before the (stale-while-revalidate)
+    // main.css refreshes. This is the actual fix for "הקיפול לא עובד".
+    if (list) list.style.display = _gmCollapsed ? 'none' : '';
     if (caret) caret.textContent = _gmCollapsed ? '▸' : '▾';
 }
 if (typeof window !== 'undefined') { window._loadGeoMacroNews = _loadGeoMacroNews; window._gmToggleCollapse = _gmToggleCollapse; }
