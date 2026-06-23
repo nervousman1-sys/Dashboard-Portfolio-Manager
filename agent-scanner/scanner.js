@@ -295,9 +295,12 @@ async function safeCycle() {
 // One-off: re-run the Hebrew quality gate over EVERY existing active card and persist the result.
 // Used to upgrade cards produced before polishHebrew existed. `node scanner.js --repolish`.
 async function repolishAll() {
-    const { data, error } = await supabase.from('catalyst_cards').select('*').eq('status', 'active').order('created_at', { ascending: false });
+    const onlyId = (process.argv.find(a => a.startsWith('--id=')) || '').split('=')[1];
+    let q = supabase.from('catalyst_cards').select('*').eq('status', 'active');
+    if (onlyId) q = q.eq('id', Number(onlyId));
+    const { data, error } = await q.order('created_at', { ascending: false });
     if (error) { log('repolish select error:', error.message); return; }
-    log(`Re-polishing Hebrew for ${data.length} card(s)…`);
+    log(`Re-polishing Hebrew for ${data.length} card(s)${onlyId ? ` (id=${onlyId})` : ''}…`);
     for (const card of data) {
         const before = card.sector_name;
         await polishHebrew(card);
