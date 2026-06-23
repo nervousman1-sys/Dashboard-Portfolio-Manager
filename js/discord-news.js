@@ -24,8 +24,9 @@ function _dnMergeInsiderHistory(data) {
         const store = JSON.parse(localStorage.getItem(_DN_INSIDER_LS) || '{}');
         const byId = store.byId || {};
         (ch.messages || []).forEach(m => { const k = m.id || m.ts; if (k) byId[k] = m; });
-        // Cap: keep the newest _DN_INSIDER_CAP by timestamp.
-        let all = Object.values(byId).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        // Cap: keep the newest _DN_INSIDER_CAP by timestamp. NOTE: m.ts is an ISO STRING — subtracting
+        // strings yields NaN (broken sort, old posts on top). Compare ISO strings lexicographically.
+        let all = Object.values(byId).sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
         if (all.length > _DN_INSIDER_CAP) all = all.slice(0, _DN_INSIDER_CAP);
         const capped = {}; all.forEach(m => { capped[m.id || m.ts] = m; });
         localStorage.setItem(_DN_INSIDER_LS, JSON.stringify({ byId: capped }));
@@ -34,7 +35,7 @@ function _dnMergeInsiderHistory(data) {
     } catch (e) { /* keep API messages as-is on any storage error */ }
 }
 function _dnInsiderHistory() {
-    try { const s = JSON.parse(localStorage.getItem(_DN_INSIDER_LS) || '{}'); return Object.values(s.byId || {}).sort((a, b) => (b.ts || 0) - (a.ts || 0)); } catch (e) { return []; }
+    try { const s = JSON.parse(localStorage.getItem(_DN_INSIDER_LS) || '{}'); return Object.values(s.byId || {}).sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || ''))); } catch (e) { return []; }
 }
 // Extract the stock ticker from an insider post (it appears as "(EQPT)").
 function _dnTickerOf(m) {
