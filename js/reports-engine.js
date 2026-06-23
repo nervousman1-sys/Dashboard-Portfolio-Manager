@@ -117,6 +117,8 @@
             marketCap: report.marketCap,
             beta: report.beta,
             asOf: report.asOf,
+            nextEarningsDate: report.nextEarningsDate || null,
+            earningsIsEstimate: report.earningsIsEstimate || false,
             rows,
             latest,
             valuation,

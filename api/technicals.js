@@ -322,6 +322,26 @@ module.exports = async (req, res) => {
             return;
         }
 
+        // mode=peers — sector peer-multiples comparison (Yahoo quoteSummary per symbol).
+        // The client passes same-sector tickers via &peers=A,B,C; we fetch the base + peers in
+        // parallel, keep those with usable multiples, and return the largest by market cap.
+        if (mode === 'peers') {
+            const { fetchYahooStats } = require('../lib/reports-data.js');
+            const symbol = String(req.query.symbol || '').trim().toUpperCase();
+            if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
+            const peerList = String(req.query.peers || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            const targets = [symbol, ...peerList.filter(p => p !== symbol)].slice(0, 16);
+            const settled = await Promise.allSettled(targets.map(t => fetchYahooStats(t)));
+            const stats = settled.map(s => (s.status === 'fulfilled' ? s.value : null)).filter(Boolean);
+            const base = stats.find(s => s.symbol === symbol) || null;
+            let peers = stats.filter(s => s.symbol !== symbol && (s.pe != null || s.pb != null || s.ps != null || s.evToEbitda != null));
+            peers.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+            peers = peers.slice(0, 8);
+            res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+            res.status(200).json({ base, peers, asOf: new Date().toISOString().slice(0, 10) });
+            return;
+        }
+
         if (mode === 'tickers') {
             const market = (req.query.market || 'us').toLowerCase();
             if (market === 'il') {

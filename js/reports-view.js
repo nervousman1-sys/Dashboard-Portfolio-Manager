@@ -455,6 +455,7 @@ function _repDeltaClass(v) { return v == null || isNaN(v) ? '' : (v > 0 ? 'rep-u
 function _repRenderDetail(m) {
     const body = document.getElementById('repBody');
     if (!body) return;
+    _repPeersLoaded = false; // fresh peer-comparison per company
     const cur = m.currency === 'USD' ? '$' : (m.currency === 'ILS' ? '₪' : (m.currency ? m.currency + ' ' : '$'));
     const rows = m.rows.slice(0, 4); // up to 4 latest quarters in the table
     const score = m.score || {};
@@ -530,7 +531,17 @@ function _repRenderDetail(m) {
             ${keyFig('EV/EBITDA', _repFmtRatio(v.evToEbitda, 1))}
             ${keyFig('תשואת FCF', _repFmtPct(v.fcfYield))}
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
+            ${m.nextEarningsDate ? `<div class="rep-keyfig rep-keyfig-earn"><span class="rep-keyfig-label">מועד הדוח הבא</span><span class="rep-keyfig-val">${_repHeDate(m.nextEarningsDate)}${m.earningsIsEstimate ? ' <span class="rep-est">משוער</span>' : ''}</span></div>` : ''}
         </div>
+
+        <div class="rep-peers-cta">
+            <button class="rep-peers-btn" onclick="_repTogglePeers()">
+                📊 השוואת מכפילים מול הסקטור${m.sector ? ' · ' + m.sector : ''}
+                <span class="rep-peers-chev" id="repPeersChev">▾</span>
+            </button>
+            <span class="rep-peers-hint">P/E · P/B · P/S · EV/EBITDA · ROE מול חברות באותו ענף</span>
+        </div>
+        <div id="repPeersPanel" class="rep-peers-panel" style="display:none"></div>
 
         <div class="rep-section-title">סיכום קצר</div>
         <div id="repSummary" class="rep-summary"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר סיכום עסקי…</div></div>
@@ -605,6 +616,101 @@ function _repRenderDetail(m) {
 
     _repRenderCharts(m, cur);
 }
+
+// ── Next-earnings date + sector peer-multiples comparison ──
+function _repEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _repHeDate(iso) {
+    if (!iso) return '';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+    const d = new Date(iso);
+    return isNaN(d) ? String(iso) : `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
+}
+function _repMedian(arr) {
+    const a = arr.filter(x => x != null && isFinite(x)).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+let _repPeersLoaded = false;
+function _repTogglePeers() {
+    const panel = document.getElementById('repPeersPanel');
+    const chev = document.getElementById('repPeersChev');
+    if (!panel) return;
+    const show = panel.style.display === 'none';
+    panel.style.display = show ? 'block' : 'none';
+    if (chev) chev.textContent = show ? '▴' : '▾';
+    if (show && !_repPeersLoaded) _repLoadPeers();
+}
+async function _repLoadPeers() {
+    const panel = document.getElementById('repPeersPanel');
+    const m = _repCurrent;
+    if (!panel || !m) return;
+    panel.innerHTML = '<div class="rep-ai-loading"><div class="rep-spinner"></div>טוען השוואת מכפילים לסקטור…</div>';
+    // Same-sector peers from the already-loaded universe (the board groups by sector).
+    const secMap = _repSectors[_repMarket] || {};
+    const mySec = secMap[m.symbol];
+    let peers = mySec ? Object.keys(secMap).filter(t => t !== m.symbol && secMap[t] === mySec) : [];
+    peers = peers.slice(0, 14);
+    if (!peers.length) {
+        panel.innerHTML = '<div class="rep-peers-empty">לא נמצאו חברות באותו סקטור להשוואה.</div>';
+        _repPeersLoaded = true;
+        return;
+    }
+    try {
+        const r = await fetch(`/api/technicals?mode=peers&symbol=${encodeURIComponent(m.symbol)}&market=${_repMarket}&peers=${encodeURIComponent(peers.join(','))}&rv=1`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) throw new Error('peers ' + r.status);
+        const data = await r.json();
+        _repPeersLoaded = true;
+        _repRenderPeers(data, m);
+    } catch (e) {
+        panel.innerHTML = '<div class="rep-peers-empty">לא ניתן לטעון השוואת מכפילים כרגע. נסה שוב מאוחר יותר.</div>';
+    }
+}
+function _repRenderPeers(data, m) {
+    const panel = document.getElementById('repPeersPanel');
+    if (!panel) return;
+    const base = data.base || null;
+    const peers = Array.isArray(data.peers) ? data.peers : [];
+    if (!base && !peers.length) {
+        panel.innerHTML = '<div class="rep-peers-empty">אין נתוני מכפילים זמינים להשוואה בסקטור זה (כיסוי הנתונים חלקי בעיקר במניות קטנות / ת"א).</div>';
+        return;
+    }
+    const all = [...(base ? [base] : []), ...peers];
+    const med = {
+        pe: _repMedian(all.map(x => x.pe)), pb: _repMedian(all.map(x => x.pb)), ps: _repMedian(all.map(x => x.ps)),
+        ev: _repMedian(all.map(x => x.evToEbitda)), roe: _repMedian(all.map(x => x.roe)),
+    };
+    const f = (v, d = 1) => (v == null || !isFinite(v)) ? '—' : v.toFixed(d);
+    const fRoe = (v) => (v == null || !isFinite(v)) ? '—' : (v * 100).toFixed(1) + '%';
+    const fCap = (v) => (v == null || !isFinite(v)) ? '—' : (v >= 1e9 ? '$' + (v / 1e9).toFixed(1) + 'B' : v >= 1e6 ? '$' + (v / 1e6).toFixed(0) + 'M' : '$' + Math.round(v));
+    // Colour the BASE row vs the sector median (lower P/E·P/B·P/S·EV = cheaper = green; higher ROE = green).
+    const cls = (v, mv, lowerBetter) => {
+        if (v == null || mv == null || !isFinite(v) || !isFinite(mv)) return '';
+        return (lowerBetter ? v < mv : v > mv) ? 'rep-peer-good' : 'rep-peer-bad';
+    };
+    const row = (s, isBase) => `<tr class="${isBase ? 'rep-peer-base' : ''}">
+        <td class="rep-peer-name">${isBase ? '★ ' : ''}${_repEsc(s.name || s.symbol)} <span class="rep-peer-tk">${_repEsc((s.symbol || '').replace(/\.TA$/, ''))}</span></td>
+        <td class="${isBase ? cls(s.pe, med.pe, true) : ''}">${f(s.pe)}</td>
+        <td class="${isBase ? cls(s.pb, med.pb, true) : ''}">${f(s.pb, 2)}</td>
+        <td class="${isBase ? cls(s.ps, med.ps, true) : ''}">${f(s.ps, 2)}</td>
+        <td class="${isBase ? cls(s.evToEbitda, med.ev, true) : ''}">${f(s.evToEbitda)}</td>
+        <td class="${isBase ? cls(s.roe, med.roe, false) : ''}">${fRoe(s.roe)}</td>
+        <td>${fCap(s.marketCap)}</td></tr>`;
+    panel.innerHTML = `
+        <div class="rep-peers-head">השוואת מכפילים מול ${peers.length} חברות בסקטור${m && m.sector ? ' · ' + _repEsc(m.sector) : ''} · מקור: Yahoo</div>
+        <div class="risk-table-scroll" style="max-height:none">
+        <table class="risk-table rep-peers-table">
+            <thead><tr><th>חברה</th><th>P/E</th><th>P/B</th><th>P/S</th><th>EV/EBITDA</th><th>ROE</th><th>שווי שוק</th></tr></thead>
+            <tbody>
+                ${base ? row(base, true) : ''}
+                <tr class="rep-peer-median"><td>חציון הסקטור</td><td>${f(med.pe)}</td><td>${f(med.pb, 2)}</td><td>${f(med.ps, 2)}</td><td>${f(med.ev)}</td><td>${fRoe(med.roe)}</td><td>—</td></tr>
+                ${peers.map(p => row(p, false)).join('')}
+            </tbody>
+        </table></div>
+        <div class="rep-peers-legend">★ = החברה הנוכחית. צבע ירוק/אדום במכפילי החברה = זול/יקר ביחס לחציון הסקטור (ב-ROE: ירוק = גבוה מהחציון). חברות מוצגות לפי שווי שוק יורד.</div>`;
+}
+if (typeof window !== 'undefined') window._repTogglePeers = _repTogglePeers;
 
 function _repQuarterLabel(q) {
     if (!q) return '';
