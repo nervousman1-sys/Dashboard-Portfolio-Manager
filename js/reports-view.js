@@ -215,6 +215,14 @@ function _repScoreCache() { try { return JSON.parse(localStorage.getItem(_REP_SC
 function _repSaveScore(symbol, info) {
     try { const m = _repScoreCache(); m[symbol] = { ...info, ts: Date.now() }; localStorage.setItem(_REP_SCORES_LS, JSON.stringify(m)); } catch (e) { }
 }
+// A report counts as having data only if at least one quarter carries a real core figure.
+// Israeli (ת"א) coverage is partial — many TA-125 names return an empty skeleton; those are
+// hidden from the list and shown a clean "no data" view instead of a page full of "—".
+function _repHasData(m) {
+    if (!m || !Array.isArray(m.rows) || !m.rows.length) return false;
+    const CORE = ['revenue', 'netIncome', 'totalEquity', 'operatingCashFlow', 'grossProfit', 'totalLiabilities'];
+    return m.rows.some(q => CORE.some(k => typeof q[k] === 'number' && !isNaN(q[k])));
+}
 
 function _repScoreClass(v) {
     if (v == null) return '';
@@ -234,7 +242,10 @@ function _repRenderList() {
     if (!uni) { body.innerHTML = '<div class="adv-empty">טוען רשימת חברות…</div>'; return; }
 
     const scores = _repScoreCache();
-    let list = uni.filter(t => !_repSearch || t.includes(_repSearch));
+    // Hide Israeli (ת"א) names confirmed to have no report data — what we have nothing on
+    // simply doesn't appear. US is left intact (near-full coverage).
+    const hideNoData = _repMarket === 'il';
+    let list = uni.filter(t => (!_repSearch || t.includes(_repSearch)) && !(hideNoData && scores[t] && scores[t].noData));
     const total = list.length;
     // Show the full universe (S&P 500 ∪ Nasdaq-100 ≈ 514, or TA-125) — ~hundreds of
     // lightweight buttons render fine; a report is only fetched when one is clicked.
@@ -294,7 +305,12 @@ async function _repPrefetchScores() {
     const TTL = 3 * 24 * 3600 * 1000;    // refresh scores older than 3 days (rolling updates)
     const now = Date.now();
     const scores = _repScoreCache();
-    const todo = uni.filter(t => { const s = scores[t]; return !s || s.score == null || (now - (s.ts || 0) > TTL); });
+    const todo = uni.filter(t => {
+        const s = scores[t];
+        if (!s) return true;
+        if (now - (s.ts || 0) > TTL) return true; // re-check stale entries (data may have appeared since)
+        return s.score == null && !s.noData;       // still need a score, and not already known-empty
+    });
     if (!todo.length) return;
 
     let idx = 0;
@@ -305,15 +321,22 @@ async function _repPrefetchScores() {
             const t = todo[idx++];
             try {
                 const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(t)}&market=${market}&fast=1&rv=4`, { headers: { Accept: 'application/json' } });
+                const stillCurrent = () => myToken === _repPrefetchToken && _repView === 'list' && _repMarket === market;
                 if (r.ok) {
                     const rep = await r.json();
                     const model = ReportsEngine.buildReport(rep);
                     if (model.score && model.score.value != null) {
                         _repSaveScore(t, { score: model.score.value, improved: model.beat && model.beat.improved });
-                        if (myToken === _repPrefetchToken && _repView === 'list' && _repMarket === market) _repUpdateCardChip(t, model.score.value, model.beat && model.beat.improved);
+                        if (stillCurrent()) _repUpdateCardChip(t, model.score.value, model.beat && model.beat.improved);
+                    } else if (market === 'il' && !_repHasData(model)) {
+                        _repSaveScore(t, { noData: true });          // confirmed empty ת"א name → drop from the list
+                        if (stillCurrent()) _repRemoveCard(t);
                     }
+                } else if (market === 'il' && r.status === 404) {
+                    _repSaveScore(t, { noData: true });
+                    if (stillCurrent()) _repRemoveCard(t);
                 }
-            } catch (e) { /* skip — try the next ticker */ }
+            } catch (e) { /* skip — transient errors must NOT mark a ticker as no-data */ }
             await new Promise(res => setTimeout(res, 140)); // gentle on the data source
         }
     };
@@ -326,6 +349,21 @@ function _repUpdateCardChip(symbol, score, improved) {
     if (improved) {
         const slot = document.querySelector(`[data-rep-beat="${symbol}"]`);
         if (slot && !slot.innerHTML) slot.innerHTML = '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>';
+    }
+}
+
+// Live-remove a card once prefetch confirms it has no data (Israeli list). Drops an emptied
+// sector group too, and keeps the remaining sector count accurate.
+function _repRemoveCard(symbol) {
+    const chip = document.querySelector(`[data-rep-score="${symbol}"]`);
+    const card = chip && chip.closest('.rep-card');
+    if (!card) return;
+    const group = card.closest('.rep-sector-group');
+    card.remove();
+    if (group) {
+        const remaining = group.querySelectorAll('.rep-card').length;
+        if (!remaining) group.remove();
+        else { const c = group.querySelector('.rep-sector-count'); if (c) c.textContent = remaining; }
     }
 }
 
@@ -344,15 +382,18 @@ async function openReportDetail(symbol) {
             const msg = r.status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
                 : r.status === 404 ? 'לא נמצאו נתונים פונדמנטליים לחברה זו.'
                 : 'משיכת הדו"ח נכשלה.';
+            if (r.status === 404 && _repMarket === 'il') _repSaveScore(symbol, { noData: true }); // remember → drops from the IL list
             if (body) body.innerHTML = `<div class="adv-empty">${msg}<br><button class="macro-back-btn" style="margin-top:12px" onclick="backToReportsList()">חזרה לרשימה</button></div>`;
             return;
         }
         const report = await r.json();
         const model = ReportsEngine.buildReport(report);
         _repCurrent = model;
+        const hasData = _repHasData(model);
         if (model.score && model.score.value != null) _repSaveScore(symbol, { score: model.score.value, improved: model.beat && model.beat.improved });
-        _repRenderDetail(model);
-        _repLoadAI(model); // async SWOT + strategy
+        else if (!hasData && _repMarket === 'il') _repSaveScore(symbol, { noData: true });
+        _repRenderDetail(model);         // a clean "no data" view is rendered when hasData is false
+        if (hasData) _repLoadAI(model);  // async SWOT + strategy only when there's something to analyze
     } catch (e) {
         if (body) body.innerHTML = `<div class="adv-empty">שגיאה בטעינת הדו"ח.<br><button class="macro-back-btn" style="margin-top:12px" onclick="backToReportsList()">חזרה לרשימה</button></div>`;
     }
@@ -455,6 +496,21 @@ function _repDeltaClass(v) { return v == null || isNaN(v) ? '' : (v > 0 ? 'rep-u
 function _repRenderDetail(m) {
     const body = document.getElementById('repBody');
     if (!body) return;
+    // No usable financials (common for partially-covered ת"א names) → a clean message instead of a
+    // skeleton full of "—" and endless AI spinners. The IL list hides the name once prefetch confirms it.
+    if (!_repHasData(m)) {
+        const il = m.market === 'il' || /\.TA$/.test(m.symbol || '');
+        body.innerHTML = `
+        <div class="rep-detail" dir="rtl">
+            <div class="rep-detail-top"><button class="macro-back-btn" onclick="backToReportsList()">→ חזרה לרשימה</button></div>
+            <div class="rep-head"><div class="rep-head-id">
+                <div class="rep-head-name">${m.companyName || m.symbol}</div>
+                <div class="rep-head-sub">${m.symbol.replace(/\.TA$/, '')}${m.sector ? ' · ' + m.sector : ''}</div>
+            </div></div>
+            <div class="adv-empty">אין כרגע נתונים פיננסיים זמינים לחברה זו${il ? ' — הכיסוי למניות ת"א חלקי. החברה תוסתר מהרשימה ותחזור אוטומטית כשיהיו נתונים.' : '.'}</div>
+        </div>`;
+        return;
+    }
     _repPeersLoaded = false; // fresh peer-comparison per company
     const cur = m.currency === 'USD' ? '$' : (m.currency === 'ILS' ? '₪' : (m.currency ? m.currency + ' ' : '$'));
     const rows = m.rows.slice(0, 4); // up to 4 latest quarters in the table
@@ -543,11 +599,13 @@ function _repRenderDetail(m) {
         </div>
         <div id="repPeersPanel" class="rep-peers-panel" style="display:none"></div>
 
-        <div class="rep-section-title">סיכום קצר</div>
-        <div id="repSummary" class="rep-summary"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר סיכום עסקי…</div></div>
+        <div class="rep-ai-sec" id="repSecSummary">
+            <div class="rep-section-title">סיכום קצר</div>
+            <div id="repSummary" class="rep-summary"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר סיכום עסקי…</div></div>
+        </div>
 
-        <div class="rep-section-title">נקודות מפתח מהדוח</div>
-        <ul class="rep-keypoints">${keyPointsHtml}</ul>
+        ${kp.length ? `<div class="rep-section-title">נקודות מפתח מהדוח</div>
+        <ul class="rep-keypoints">${keyPointsHtml}</ul>` : ''}
 
         <div class="rep-section-title">דגלי סיכון</div>
         <div class="rep-flags">${flagsHtml}</div>
@@ -604,14 +662,20 @@ function _repRenderDetail(m) {
             </div>`).join('')}
         </div>
 
-        <div class="rep-section-title">ניתוח SWOT</div>
-        <div id="repSwot" class="rep-swot"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח SWOT…</div></div>
+        <div class="rep-ai-sec" id="repSecSwot">
+            <div class="rep-section-title">ניתוח SWOT</div>
+            <div id="repSwot" class="rep-swot"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח SWOT…</div></div>
+        </div>
 
-        <div class="rep-section-title">אסטרטגיה וויז'ן</div>
-        <div id="repStrategy" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח אסטרטגי…</div></div>
+        <div class="rep-ai-sec" id="repSecStrategy">
+            <div class="rep-section-title">אסטרטגיה וויז'ן</div>
+            <div id="repStrategy" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח אסטרטגי…</div></div>
+        </div>
 
-        <div class="rep-section-title">תלות בספקים וסיכונים גיאופוליטיים</div>
-        <div id="repRisks" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח סיכונים…</div></div>
+        <div class="rep-ai-sec" id="repSecRisks">
+            <div class="rep-section-title">תלות בספקים וסיכונים גיאופוליטיים</div>
+            <div id="repRisks" class="rep-strategy"><div class="rep-ai-loading"><div class="rep-spinner"></div>מייצר ניתוח סיכונים…</div></div>
+        </div>
     </div>`;
 
     _repRenderCharts(m, cur);
@@ -814,15 +878,21 @@ function _repChartModalEsc(e) { if (e.key === 'Escape') _repCloseChartModal(); }
 // re-call Gemini (whose free tier is rate-limited) for a report we already analyzed. One
 // gentle retry on a transient/rate failure; no retry storm (that only triggers more 429s).
 function _repAiCacheKey(m) { return `rep_ai_v4_${m.symbol}_${m.asOf || 'na'}`; }
+// Fill an AI section, and hide its whole section (title included) when there's nothing to show —
+// "what we have no data on simply doesn't appear", rather than an empty heading or a placeholder.
+function _repSetAiSec(containerId, wrapperId, html) {
+    const el = document.getElementById(containerId);
+    if (el) el.innerHTML = html || '';
+    const wrap = document.getElementById(wrapperId);
+    if (wrap) wrap.style.display = (html && html.trim()) ? '' : 'none';
+}
 function _repApplyAI(j) {
-    const summaryEl = document.getElementById('repSummary');
-    const swotEl = document.getElementById('repSwot');
-    const stratEl = document.getElementById('repStrategy');
-    const risksEl = document.getElementById('repRisks');
-    if (summaryEl) summaryEl.innerHTML = _repSummaryHtml(j.summary || {});
-    if (swotEl) swotEl.innerHTML = _repSwotHtml(j.swot || {});
-    if (stratEl) stratEl.innerHTML = _repStrategyHtml(j.strategy || {});
-    if (risksEl) risksEl.innerHTML = _repRisksHtml(j.risks || {});
+    const swot = j.swot || {};
+    const swotHasContent = ['strengths', 'weaknesses', 'opportunities', 'threats'].some(k => Array.isArray(swot[k]) && swot[k].length);
+    _repSetAiSec('repSummary', 'repSecSummary', _repSummaryHtml(j.summary || {}));
+    _repSetAiSec('repSwot', 'repSecSwot', swotHasContent ? _repSwotHtml(swot) : '');
+    _repSetAiSec('repStrategy', 'repSecStrategy', _repStrategyHtml(j.strategy || {}));
+    _repSetAiSec('repRisks', 'repSecRisks', _repRisksHtml(j.risks || {}));
     const exps = Array.isArray(j.declineExplanations) ? j.declineExplanations : [];
     document.querySelectorAll('[data-attn-why]').forEach(el => {
         const i = parseInt(el.getAttribute('data-attn-why'), 10);
@@ -859,7 +929,7 @@ async function _repLoadAI(m, attempt) {
         if (attempt < 1) {
             const note = `<div class="rep-ai-loading"><div class="rep-spinner"></div>שרת ה-AI עמוס כרגע — מנסה שוב בעוד מספר שניות…</div>`;
             if (summaryEl) summaryEl.innerHTML = note;
-            ['repSwot', 'repStrategy', 'repRisks'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+            _repSetAiSec('repSwot', 'repSecSwot', ''); _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
             setTimeout(() => { if (stillHere()) _repLoadAI(m, attempt + 1); }, 9000);
             return;
         }
@@ -868,7 +938,7 @@ async function _repLoadAI(m, attempt) {
             ? '<div class="adv-empty">מכסת ה-AI היומית/דקתית של Gemini מוצתה כרגע. הניתוח יתחדש מאליו בהמשך — או רענן בעוד מספר דקות. (דוחות שכבר נותחו נשמרים ולא נטענים מחדש.)</div>'
             : '<div class="adv-empty">ניתוח ה-AI אינו זמין כרגע (שרת ג\'מיני עמוס). נסה לרענן בעוד מספר דקות.</div>';
         if (summaryEl) summaryEl.innerHTML = msg;
-        ['repSwot', 'repStrategy', 'repRisks'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+        _repSetAiSec('repSwot', 'repSecSwot', ''); _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
     }
 }
 // Short business summary: activity sector, growth/hurt divisions, decline reasons,
@@ -895,13 +965,13 @@ function _repSummaryHtml(s) {
         row('חוזים ועסקאות גדולות לאחרונה', s.recentDeals),
         row('עסקאות בעלי עניין (בעיקר קניות)', s.insiderActivity),
     ].join('');
-    return html || '<div class="adv-empty">לא נוצר סיכום.</div>';
+    return html || ''; // empty → the whole "סיכום קצר" section is hidden by _repSetAiSec
 }
 function _repRisksHtml(rk) {
     rk = rk || {};
     const part = (label, txt) => txt ? `<div class="rep-strat-part"><span class="rep-strat-label">${label}</span><p>${txt}</p></div>` : '';
     const html = `${part('תלות בספקים ובלקוחות', rk.supplierDependency)}${part('חשיפה גיאופוליטית', rk.geopolitical)}`;
-    return html || '<div class="adv-empty">לא זוהו סיכוני ספקים/גיאופוליטיקה מהותיים.</div>';
+    return html || ''; // empty → the whole risks section is hidden by _repSetAiSec
 }
 function _repList(items) {
     if (!Array.isArray(items) || !items.length) return '<li class="rep-swot-empty">—</li>';

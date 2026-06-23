@@ -57,10 +57,22 @@ function _saRenderShell() {
     </div>`;
 }
 
+const SA_CACHE = 'sa_cards_v1';
 async function _saLoad(force) {
     const body = document.getElementById('saBody');
     if (!body) return;
     if (force) { body.innerHTML = '<div class="sa-loading">מרענן…</div>'; _saSig = ''; }
+    // Instant paint from the last-seen intel while the fresh Supabase fetch is in flight — opening
+    // the overlay shows cards immediately instead of a long "טוען מודיעין…" spinner (cold fetch).
+    if (!force && body.querySelector('.sa-loading')) {
+        try {
+            const c = JSON.parse(localStorage.getItem(SA_CACHE) || 'null');
+            if (c && Array.isArray(c.cards) && c.cards.length) {
+                body.innerHTML = _saStatusHTML(c.status, c.cards.length) + c.cards.map(_saCardHTML).join('');
+                _saLoaded = true; // keep _saSig empty so the fresh fetch still re-renders when it differs
+            }
+        } catch (e) { /* ignore corrupt cache */ }
+    }
     let cards = null, status = null;
     try {
         if (typeof supabaseClient === 'undefined' || !supabaseClient) throw new Error('no supabase client');
@@ -78,6 +90,7 @@ async function _saLoad(force) {
     if (!cards.length) {
         body.innerHTML = _saStatusHTML(status, 0) + `<div class="sa-empty">📡 הסוכן סורק — עדיין לא נמצא מודיעין חדש בעל ודאות מספקת.<br>ברגע שיימצא, כרטיס Early-Alpha יופיע כאן אוטומטית.</div>`;
         _saSig = '';
+        try { localStorage.removeItem(SA_CACHE); } catch (e) { } // don't keep showing intel that's no longer active
         return;
     }
     // Re-render the card list only when it actually changed — keeps any open card open during 24/7
@@ -91,6 +104,8 @@ async function _saLoad(force) {
     _saSig = sig;
     _saLoaded = true;
     body.innerHTML = _saStatusHTML(status, cards.length) + cards.map(_saCardHTML).join('');
+    // Persist for the next open's instant paint (cap to bound localStorage size).
+    try { localStorage.setItem(SA_CACHE, JSON.stringify({ cards: cards.slice(0, 40), status })); } catch (e) { /* quota — fine */ }
 }
 
 function _saEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }

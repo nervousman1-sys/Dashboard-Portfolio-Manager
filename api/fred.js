@@ -84,21 +84,35 @@ module.exports = async (req, res) => {
                 PPI: { he: 'מדד המחירים ליצרן (PPI)', series: 'PPIFIS', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
                 RETAIL: { he: 'מכירות קמעונאיות', series: 'RSAFS', units: 'pc1', unit: '%', betterLower: false, kind: 'growth' },
             };
-            const results = (await Promise.all(Object.entries(SERIES).map(async ([key, s]) => {
+            // Pull ~1 year of prints per indicator → `results` (latest, shown inline) and
+            // `history` (the earlier prints — the collapsible historical archive in the calendar).
+            const HIST_N = 13; // ~12 monthly prints + 1 (GDP is quarterly → naturally fewer)
+            const sentimentOf = (value, previous, betterLower) => {
+                if (previous == null) return { dir: 'flat', sentiment: 'neutral' };
+                const dir = value > previous ? 'up' : value < previous ? 'down' : 'flat';
+                const sentiment = dir === 'flat' ? 'neutral'
+                    : (betterLower ? (dir === 'down' ? 'good' : 'bad') : (dir === 'up' ? 'good' : 'bad'));
+                return { dir, sentiment };
+            };
+            const perSeries = await Promise.all(Object.entries(SERIES).map(async ([key, s]) => {
                 try {
-                    const obs = await fetchSeries(s.series, s.units, 2);
-                    if (!obs.length) return null;
-                    const value = parseFloat(obs[0].value);
-                    const previous = obs[1] ? parseFloat(obs[1].value) : null;
-                    const dir = previous == null ? 'flat' : (value > previous ? 'up' : value < previous ? 'down' : 'flat');
-                    const sentiment = previous == null || dir === 'flat' ? 'neutral'
-                        : (s.betterLower ? (dir === 'down' ? 'good' : 'bad') : (dir === 'up' ? 'good' : 'bad'));
-                    return { key, he: s.he, kind: s.kind, unit: s.unit, value, previous, date: obs[0].date, dir, sentiment, betterLower: s.betterLower };
-                } catch (e) { return null; }
-            }))).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
+                    const obs = await fetchSeries(s.series, s.units, HIST_N); // newest first
+                    const pts = [];
+                    for (let i = 0; i < obs.length; i++) {
+                        const value = parseFloat(obs[i].value);
+                        if (isNaN(value)) continue;
+                        const previous = obs[i + 1] ? parseFloat(obs[i + 1].value) : null;
+                        const { dir, sentiment } = sentimentOf(value, previous, s.betterLower);
+                        pts.push({ key, he: s.he, kind: s.kind, unit: s.unit, value, previous, date: obs[i].date, dir, sentiment, betterLower: s.betterLower });
+                    }
+                    return pts;
+                } catch (e) { return []; }
+            }));
+            const results = perSeries.map(pts => pts[0]).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
+            const history = perSeries.flatMap(pts => pts.slice(1)).sort((a, b) => b.date.localeCompare(a.date));
 
             res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
-            res.status(200).json({ events, results });
+            res.status(200).json({ events, results, history });
             return;
         }
 
