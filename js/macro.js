@@ -1299,9 +1299,11 @@ async function _loadGeoMacroNews(forceRefresh) {
     _renderGeoMacro();          // ← same pattern as the calendar: store data, then render
 }
 
-// ── Collapse built EXACTLY like the economic calendar (toggleEcCollapse → _ecRender) ──────────
-// A state flag + a FULL re-render. The list body carries the calendar's own .ec-body/.ec-hidden
-// classes AND an inline display:none, so the fold works no matter which main.css is cached.
+// ── NEW FRAME — native <details>/<summary> collapse ───────────────────────────────────────────
+// Rebuilt from scratch inside a fresh frame. The fold is handled by the BROWSER itself
+// (<details> hides everything after <summary> when not open) — it depends on no JS handler and
+// no CSS rule, so it cannot break from a cached stylesheet or a missed event. One click on the
+// header bar folds/unfolds ALL the headlines. State is remembered in localStorage via ontoggle.
 let _geoMacroItems = null;
 let _gmCollapsed = false;
 try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
@@ -1322,22 +1324,26 @@ function _renderGeoMacro() {
         </a>`;
     }).join('');
     el.innerHTML = `
-        <div class="gm-head">
-            <button class="ec-collapse" onclick="toggleGmCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
-            <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
-            <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
-        </div>
-        <div class="gm-list ec-body ${_gmCollapsed ? 'ec-hidden' : ''}"${_gmCollapsed ? ' style="display:none"' : ''}>${rows}</div>`;
+        <details class="gm-frame" ${_gmCollapsed ? '' : 'open'} ontoggle="_gmOnToggle(this)">
+            <summary class="gm-frame-head">
+                <span class="gm-frame-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
+                <span class="gm-frame-refresh" role="button" tabindex="0" title="רענן עדכונים"
+                      onclick="event.preventDefault(); event.stopPropagation(); _loadGeoMacroNews(true)">⟳</span>
+            </summary>
+            <div class="gm-list">${rows}</div>
+        </details>`;
 }
-function toggleGmCollapse() {
-    _gmCollapsed = !_gmCollapsed;
+// Persist the open/closed state whenever the browser toggles the <details>.
+function _gmOnToggle(d) {
+    _gmCollapsed = !d.open;
     try { localStorage.setItem('gm_collapsed', _gmCollapsed ? '1' : '0'); } catch (e) { }
-    _renderGeoMacro(); // full re-render — identical mechanism to the calendar's toggleEcCollapse
 }
-function _gmToggleCollapse() { toggleGmCollapse(); } // back-compat alias for any cached HTML
+// Back-compat aliases for any cached HTML that still calls the old function names.
+function toggleGmCollapse() { const d = document.querySelector('#geoMacroSection .gm-frame'); if (d) d.open = !d.open; }
+function _gmToggleCollapse() { toggleGmCollapse(); }
 if (typeof window !== 'undefined') {
     window._loadGeoMacroNews = _loadGeoMacroNews; window._renderGeoMacro = _renderGeoMacro;
-    window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse;
+    window._gmOnToggle = _gmOnToggle; window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse;
 }
 
 // ── Format helper for widget values ──

@@ -9878,6 +9878,21 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 
 /* ══ Geopolitical + macro-economy updates (macro page) ══ */
 .geo-macro-section { margin-bottom: 18px; }
+/* NEW collapsible frame — native <details>. Works even with no CSS (browser handles the fold);
+   these rules are only cosmetic (cyber-noir frame + custom caret). */
+.gm-frame { border: 1px solid rgba(255,255,255,0.10); border-radius: 14px;
+    background: rgba(255,255,255,0.03); padding: 4px 16px 14px; }
+.gm-frame-head { display: flex; align-items: center; gap: 10px; cursor: pointer;
+    padding: 12px 2px; list-style: none; user-select: none; }
+.gm-frame-head::-webkit-details-marker { display: none; }
+.gm-frame-head::before { content: '▾'; font-size: 14px; color: #e4e4ee; flex: 0 0 auto; }
+.gm-frame:not([open]) .gm-frame-head::before { content: '▸'; }
+.gm-frame-title { flex: 1; font-size: 16px; font-weight: 900; color: #67e8f9; letter-spacing: 0.2px; }
+.gm-frame-refresh { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(0,229,255,0.3);
+    color: var(--accent-blue,#00e5ff); font-size: 15px; cursor: pointer; transition: background .12s; }
+.gm-frame-refresh:hover { background: rgba(0,229,255,0.12); }
+.gm-frame .gm-list { margin-top: 4px; }
 .gm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .gm-title { font-size: 15px; font-weight: 900; color: #67e8f9; letter-spacing: 0.2px; }
 .gm-refresh { background: transparent; border: 1px solid rgba(0,229,255,0.3); color: var(--accent-blue,#00e5ff);
