@@ -379,6 +379,15 @@ async function init() {
         }
     }
 
+    // Preload USD/ILS daily history (real reference rate for the FX-adjusted return + ₪ currency
+    // P&L). Non-blocking — repaint when it lands so the FX figures appear for every portfolio.
+    if (typeof ensureUsdIlsHistory === 'function') {
+        ensureUsdIlsHistory().then(() => {
+            if (typeof renderClientCards === 'function') renderClientCards();
+            if (typeof renderSummaryBar === 'function') renderSummaryBar();
+        }).catch(() => { });
+    }
+
     // ── Phase 2: Update live market prices in background ──
     // Use requestIdleCallback so we don't compete with rendering
     const startPriceUpdate = () => {

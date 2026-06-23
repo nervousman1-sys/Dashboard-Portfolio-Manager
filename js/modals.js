@@ -607,17 +607,17 @@ async function openModal(clientId) {
                     if (typeof getPortfolioAvgUsdRate !== 'function') return '';
                     const hasUsd = (client.holdings || []).some(h => (h.currency || 'USD').toUpperCase() === 'USD');
                     if (!hasUsd) return '';
-                    const b = getPortfolioAvgUsdRate(client.id);
-                    // Show the FX P&L ONLY when we have a REAL recorded purchase rate — never a
-                    // fabricated one. No conversion history → no note (keeps every figure verified).
+                    const b = getPortfolioAvgUsdRate(client); // recorded conversions, else historical buy-date rate
                     if (!b || !b.real || !(b.rate > 0)) return '';
                     const cur = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : 3.7;
-                    // FX P&L for an ILS investor: ₪ now per $ vs ₪ paid per $.
-                    const fxPnl = (cur / b.rate - 1) * 100;
-                    const cls = fxPnl >= 0 ? 'val-positive' : 'val-negative';
-                    const sign = fxPnl >= 0 ? '+' : '';
-                    const word = fxPnl >= 0 ? 'רווח' : 'הפסד';
-                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (לפי המרות בפועל): <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח על הדולר: <b class="${cls}">${sign}${fxPnl.toFixed(1)}%</b></div>`;
+                    const fxPct = (cur / b.rate - 1) * 100;
+                    const pnl = (typeof calcFxPnlIls === 'function') ? calcFxPnlIls(client) : null;
+                    const cls = fxPct >= 0 ? 'val-positive' : 'val-negative';
+                    const sign = fxPct >= 0 ? '+' : '';
+                    const word = fxPct >= 0 ? 'רווח' : 'הפסד';
+                    const ilsAmt = (pnl && isFinite(pnl.ils)) ? `${pnl.ils >= 0 ? '+' : '−'}₪${Math.abs(Math.round(pnl.ils)).toLocaleString('en-US')}` : '';
+                    const srcTxt = b.src === 'conversions' ? 'לפי המרות בפועל' : 'לפי שער ה-₪/$ במועד הרכישה';
+                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (${srcTxt}): <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח: <b class="${cls}">${sign}${fxPct.toFixed(1)}%</b>${ilsAmt ? ` · רווח/הפסד מהחזקת המטבע: <b class="${cls}">${ilsAmt}</b>` : ''}</div>`;
                 })()}
 
                 <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->

@@ -102,7 +102,7 @@ function _calcReturn(client) {
     // recorded ILS→USD conversions). When there's NO recorded conversion history we do NOT invent
     // a rate — refRate falls back to the current rate so fxFactor = 1 (no adjustment), and the
     // FX-adjusted return equals the true return rather than a fabricated one.
-    const basis = (typeof getPortfolioAvgUsdRate === 'function') ? getPortfolioAvgUsdRate(client.id) : { rate: null, real: false };
+    const basis = (typeof getPortfolioAvgUsdRate === 'function') ? getPortfolioAvgUsdRate(client) : { rate: null, real: false };
     const refRate = (basis && basis.real && basis.rate > 0) ? basis.rate : currentRate;
     // FX factor for an ILS investor: value in ₪ now / ₪ paid = r_now / r_buy.
     // Dollar DOWN (r_now < r_buy) → factor < 1 → return correctly REDUCED.
@@ -1519,6 +1519,14 @@ function renderClientCards() {
                 <div class="card-cur-track"><div class="card-cur-fill" style="width:${_cardUsdPct}%"></div></div>
                 <span class="card-cur-label">₪ ${_cardIlsPct}%</span>
             </div>
+            ${(() => {
+                if (typeof calcFxPnlIls !== 'function') return '';
+                const pnl = calcFxPnlIls(client);
+                if (!pnl || !isFinite(pnl.ils) || Math.abs(pnl.ils) < 1) return '';
+                const cls = pnl.ils >= 0 ? 'val-positive' : 'val-negative';
+                const sign = pnl.ils >= 0 ? '+' : '−';
+                return `<div class="card-fx-pnl" title="הרווח/הפסד בשקלים הנובע משינוי שער הדולר על אחזקות ה-USD בתיק">רווח/הפסד מהחזקת מט"ח ($): <b class="${cls}">${sign}₪${Math.abs(Math.round(pnl.ils)).toLocaleString('en-US')}</b></div>`;
+            })()}
         `;
 
         grid.appendChild(card);

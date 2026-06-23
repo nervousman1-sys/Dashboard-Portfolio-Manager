@@ -149,14 +149,88 @@ function getClientFxRefRate(clientId) {
 // captured on broker import or on a USD deposit entered with its rate (see addClientFxBasis).
 // If no conversion history exists we return { rate: null, real: false } and DO NOT fabricate a
 // rate — callers then apply no FX adjustment / hide the FX P&L, so every figure shown is real.
-function getPortfolioAvgUsdRate(clientId) {
-    const real = getClientFxRefRate(clientId);
-    if (real && real > 0) return { rate: real, real: true };
+// ── USD/ILS daily history — gives a REAL reference rate per portfolio even with no recorded
+// conversion: the value-weighted USD/ILS at each USD holding's buy date. Fetched once (same-origin
+// Yahoo proxy, "ILS=X" = USD/ILS), cached 24h. Lets the FX-adjusted return + ₪ FX P&L work for
+// EVERY portfolio without ever fabricating a rate. ──
+let _usdIlsHist = null; // [{ d:'YYYY-MM-DD', c:rate }] chronological
+async function ensureUsdIlsHistory() {
+    if (_usdIlsHist) return _usdIlsHist;
+    try {
+        const c = JSON.parse(localStorage.getItem('fx_usdils_hist_v1') || 'null');
+        if (c && c.ts && (Date.now() - c.ts < 86400000) && Array.isArray(c.data) && c.data.length) { _usdIlsHist = c.data; return _usdIlsHist; }
+    } catch (e) { }
+    try {
+        const r = await fetch('/api/history?symbol=' + encodeURIComponent('ILS=X') + '&range=10y');
+        const j = await r.json();
+        const pts = (j && Array.isArray(j.points)) ? j.points : [];
+        _usdIlsHist = pts.filter(p => p && p.close > 0).map(p => ({ d: p.date, c: p.close }));
+        if (_usdIlsHist.length) localStorage.setItem('fx_usdils_hist_v1', JSON.stringify({ ts: Date.now(), data: _usdIlsHist }));
+    } catch (e) { _usdIlsHist = _usdIlsHist || []; }
+    return _usdIlsHist;
+}
+function getUsdIlsAtDate(dateISO) {
+    if (!dateISO || !_usdIlsHist || !_usdIlsHist.length) return null;
+    let best = null;
+    for (const p of _usdIlsHist) { if (p.d <= dateISO) best = p; else break; }
+    if (!best) best = _usdIlsHist[0];
+    return best ? best.c : null;
+}
+function _fxResolveClient(arg) {
+    if (arg && typeof arg === 'object') return arg;
+    const list = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients
+        : (typeof window !== 'undefined' && Array.isArray(window.clients) ? window.clients : []);
+    return list.find(c => c && c.id === arg) || null;
+}
+// Real reference USD/ILS rate for a portfolio: recorded conversions first, else value-weighted
+// historical USD/ILS at each USD holding's buy date (or the portfolio open date). Never fabricated.
+function getPortfolioUsdRef(arg) {
+    const client = _fxResolveClient(arg);
+    const recorded = client ? getClientFxRefRate(client.id) : null;
+    if (recorded && recorded > 0) return { rate: recorded, real: true, src: 'conversions' };
+    if (client && Array.isArray(client.holdings) && _usdIlsHist && _usdIlsHist.length) {
+        let w = 0, rw = 0;
+        for (const h of client.holdings) {
+            if ((h.currency || 'USD').toUpperCase() !== 'USD') continue;
+            const v = h.value || 0; if (!(v > 0)) continue;
+            const d = h.buyDate || client.openDate || client.createdAt || null;
+            const r = d ? getUsdIlsAtDate(d) : null;
+            if (r > 0) { w += v; rw += v * r; }
+        }
+        if (w > 0) return { rate: rw / w, real: true, src: 'history' };
+    }
     return { rate: null, real: false };
+}
+// Currency (FX) profit/loss in ₪ on the portfolio's USD exposure: Σ value$ × (rate_now − rate_at_buy).
+// Positive = the dollar strengthened vs ₪ since purchase (gain for an ILS investor holding USD).
+function calcFxPnlIls(arg) {
+    const client = _fxResolveClient(arg);
+    if (!client || !Array.isArray(client.holdings)) return null;
+    const rNow = (typeof _fxRates !== 'undefined' && _fxRates.USDILS > 0) ? _fxRates.USDILS : FX_HARDCODED_USDILS;
+    const recorded = client ? getClientFxRefRate(client.id) : null;
+    let ils = 0, usdValue = 0, refW = 0, refSum = 0, any = false;
+    for (const h of client.holdings) {
+        if ((h.currency || 'USD').toUpperCase() !== 'USD') continue;
+        const v = h.value || 0; if (!(v > 0)) continue;
+        const d = h.buyDate || client.openDate || client.createdAt || null;
+        // Recorded conversions (when present) take priority — same basis as getPortfolioUsdRef.
+        const rBuy = (recorded && recorded > 0) ? recorded : (d ? getUsdIlsAtDate(d) : null);
+        if (rBuy > 0) { ils += v * (rNow - rBuy); usdValue += v; refW += v; refSum += v * rBuy; any = true; }
+    }
+    return any ? { ils, usdValue, rateNow: rNow, avgBuyRate: refW > 0 ? refSum / refW : null } : null;
+}
+
+// Returns { rate, real, src }. Accepts a client object OR a client id (back-compat).
+function getPortfolioAvgUsdRate(arg) {
+    return getPortfolioUsdRef(arg);
 }
 
 if (typeof window !== 'undefined') {
     window.getPortfolioAvgUsdRate = getPortfolioAvgUsdRate;
+    window.getPortfolioUsdRef = getPortfolioUsdRef;
+    window.calcFxPnlIls = calcFxPnlIls;
+    window.ensureUsdIlsHistory = ensureUsdIlsHistory;
+    window.getUsdIlsAtDate = getUsdIlsAtDate;
 }
 
 // ========== FX RATE ACCESSORS ==========
