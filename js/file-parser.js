@@ -507,6 +507,13 @@ const _IL_NAME_TICKER = [
     [/פניקס/, 'PHOE.TA'], [/מגדל/, 'MGDL.TA'], [/עזריאלי/, 'AZRG.TA'], [/שופרסל/, 'SHPG.TA'], [/דלק/, 'DLEKG.TA'],
     [/אנלייט/, 'ENLT.TA'], [/נובה/, 'NVMI.TA'], [/טאוו?ר/, 'TSEM.TA'], [/אלוני חץ/, 'ALHE.TA'],
     [/אלקו/, 'ELCO.TA'], [/שפיר/, 'SPEN.TA'], [/פתאל|פטאל/, 'FTAL.TA'], [/אופקו|או.פי.סי/, 'OPC.TA'],
+    // Additional widely-held TASE names (distinctive patterns to avoid false matches)
+    [/אנרג['׳]?יקס/, 'ENRG.TA'], [/אנרג['׳]?יאן|energean/i, 'ENOG.TA'], [/סאפיינס|sapiens/i, 'SPNS.TA'],
+    [/קמטק|camtek/i, 'CAMT.TA'], [/מטריקס/, 'MTRX.TA'], [/שטראוס/, 'STRS.TA'], [/אל[- ]?על/, 'ELAL.TA'],
+    [/רמי לוי/, 'RMLI.TA'], [/מליסרון/, 'MLSR.TA'], [/אמות השקעות|^אמות/, 'AMOT.TA'], [/אורמת|ormat/i, 'ORA.TA'],
+    [/פורמולה מערכות|formula systems/i, 'FORTY.TA'], [/וואן טכנולוגיות|one technologies/i, 'ONE.TA'],
+    [/פז נפט|פז קבוצת|פז חברת/, 'PZOL.TA'], [/נקסט ?ויז['׳]?ן|nextvision/i, 'NXSN.TA'],
+    [/מקס סטוק|max ?stock/i, 'MAXO.TA'], [/ישראכרט|isracard/i, 'ISCD.TA'], [/מקס איט|max it/i, 'MXIT.TA'],
 ];
 function _resolveBrokerTicker(secId, name, agorot) {
     const nm = String(name || '');
@@ -527,7 +534,12 @@ const _BROKER_TICKER_NAME = {
     'BEZQ.TA': 'בזק', 'CEL.TA': 'סלקום', 'PTNR.TA': 'פרטנר', 'HARL.TA': 'הראל', 'PHOE.TA': 'הפניקס',
     'MGDL.TA': 'מגדל', 'AZRG.TA': 'עזריאלי', 'SHPG.TA': 'שופרסל', 'DLEKG.TA': 'דלק קבוצה', 'ENLT.TA': 'אנלייט',
     'NVMI.TA': 'נובה', 'TSEM.TA': 'טאוואר', 'ALHE.TA': 'אלוני חץ', 'ELCO.TA': 'אלקו', 'SPEN.TA': 'שפיר',
-    'FTAL.TA': 'פתאל', 'OPC.TA': 'או.פי.סי', 'WULF': 'TeraWulf', 'IBIT': 'iShares Bitcoin', 'CEP': 'Cantor Equity',
+    'FTAL.TA': 'פתאל', 'OPC.TA': 'או.פי.סי',
+    'ENRG.TA': 'אנרג׳יקס', 'ENOG.TA': 'אנרג׳יאן', 'SPNS.TA': 'סאפיינס', 'CAMT.TA': 'קמטק', 'MTRX.TA': 'מטריקס',
+    'STRS.TA': 'שטראוס', 'ELAL.TA': 'אל על', 'RMLI.TA': 'רמי לוי', 'MLSR.TA': 'מליסרון', 'AMOT.TA': 'אמות',
+    'ORA.TA': 'אורמת', 'FORTY.TA': 'פורמולה מערכות', 'ONE.TA': 'וואן טכנולוגיות', 'PZOL.TA': 'פז', 'NXSN.TA': 'נקסט ויזן',
+    'MAXO.TA': 'מקס סטוק', 'ISCD.TA': 'ישראכרט', 'MXIT.TA': 'מקס איט',
+    'WULF': 'TeraWulf', 'IBIT': 'iShares Bitcoin', 'CEP': 'Cantor Equity',
 };
 function _brokerDisplayName(ticker, rawName) {
     if (_BROKER_TICKER_NAME[ticker]) return _BROKER_TICKER_NAME[ticker];

@@ -2223,6 +2223,18 @@ async function addClient() {
     // Collect holdings from dynamic table
     const holdingsData = _collectHoldingRows();
 
+    // Guard against SILENT data loss on import: if an asset+quantity row was skipped purely for a
+    // missing price (e.g. a holdings snapshot with no cost column and no live price yet), tell the
+    // user instead of dropping it quietly.
+    const _rowsWithAsset = Array.from(document.querySelectorAll('#mgmt-holdings-tbody tr')).filter(r =>
+        (r.querySelector('.row-ticker-symbol')?.value || '').trim() &&
+        parseInputNumber(r.querySelector('.row-shares')?.value) > 0).length;
+    if (_rowsWithAsset > holdingsData.length) {
+        const skipped = _rowsWithAsset - holdingsData.length;
+        const ok = confirm(`שים לב: ל-${skipped} נכס(ים) חסר מחיר (לא נמצא מחיר שוק עדכני ולא הוזן מחיר עלות), ולכן הם לא ייכללו בתיק.\n\nטיפ: המתן 2–3 שניות לטעינת המחירים האוטומטית, או הזן מחיר ידנית בשורות המסומנות, ואז שמור.\n\nלהמשיך בכל זאת (ללא הנכסים האלה)?`);
+        if (!ok) return;
+    }
+
     const portfolioData = { name, cashUsd, cashIls, holdingsCount: holdingsData.length };
     console.log('addClient: submitting data:', portfolioData);
 
@@ -2940,6 +2952,21 @@ async function _fetchRowLivePrice(rowId, symbol, currency) {
         if (result && result.price > 0) {
             const currSym = currency === 'ILS' ? '₪' : '$';
             el.innerHTML = `<span style="color:var(--accent-blue);font-weight:600;font-size:12px">${result.price.toFixed(2)} ${currSym}</span>`;
+            // CRITICAL: a holdings snapshot (assets + quantities, no cost column) imports with an empty
+            // price. Without backfilling it, _collectHoldingRows drops the row on save (price<=0) and the
+            // imported holding silently vanishes. Value such a holding at the current market price (the
+            // user can still edit). Never overwrite a price the file already provided.
+            const rowEl = document.getElementById(rowId);
+            if (rowEl) {
+                rowEl.dataset.livePrice = String(result.price);
+                const priceInput = rowEl.querySelector('.row-price');
+                if (priceInput && !(parseInputNumber(priceInput.value) > 0)) {
+                    priceInput.value = formatPrice(result.price);
+                    priceInput.dataset.fromLive = '1';
+                    _updateRowValue(rowId);
+                    if (typeof updateAddClientRisk === 'function') updateAddClientRisk();
+                }
+            }
         } else {
             el.innerHTML = '<span style="color:var(--text-muted);font-size:11px">—</span>';
         }
@@ -2961,8 +2988,12 @@ function _collectHoldingRows() {
     rows.forEach(row => {
         const ticker = row.querySelector('.row-ticker-symbol')?.value?.trim().toUpperCase();
         const shares = parseInputNumber(row.querySelector('.row-shares')?.value);
-        const price = parseInputNumber(row.querySelector('.row-price')?.value);
+        let price = parseInputNumber(row.querySelector('.row-price')?.value);
         const currency = row.dataset?.currency || 'USD';
+
+        // Save-time fallback: imported holdings snapshot with no cost column → use the fetched live
+        // price so a valid asset+quantity is never silently dropped just because price was blank.
+        if (!(price > 0) && row.dataset?.livePrice) price = parseFloat(row.dataset.livePrice) || 0;
 
         if (!ticker || shares <= 0 || price <= 0) return;
 

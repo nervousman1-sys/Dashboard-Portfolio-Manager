@@ -1046,6 +1046,7 @@ function _ilCalendarEvents() {
 let _ecTab = 'US';          // active calendar tab: 'US' | 'IL'
 let _ecCollapsed = false;    // section folded?
 let _ecData = null;          // { US:[…], IL:[…] }
+let _ecSig = '';             // last-rendered signature (skip needless refresh re-renders)
 
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
@@ -1063,6 +1064,11 @@ async function _loadEconCalendar(forceRefresh) {
         } catch (e) { us = []; }
     }
     _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents() };
+    // Avoid needless re-render on the hourly auto-refresh (prevents page jumps); tab/collapse below
+    // always call _ecRender directly.
+    const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
+    if (forceRefresh && sig === _ecSig && document.querySelector('.ec-table')) return;
+    _ecSig = sig;
     _ecRender();
 }
 function setEcTab(tab) { _ecTab = tab; _ecRender(); }
@@ -1126,6 +1132,7 @@ const _GEO_MACRO_TAG_CLS = {
     'מוניטרי': 'gm-tag-mon', 'אינפלציה/צמיחה': 'gm-tag-infl',
     'גיאופוליטיקה': 'gm-tag-geo', 'אנרגיה': 'gm-tag-energy', 'שווקים': 'gm-tag-mkt',
 };
+let _geoMacroSig = '';
 async function _loadGeoMacroNews(forceRefresh) {
     const el = document.getElementById('geoMacroSection');
     if (!el) return;
@@ -1154,10 +1161,16 @@ async function _loadGeoMacroNews(forceRefresh) {
         } catch (e) { items = items || []; }
     }
     if (!items || !items.length) {
-        el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
+        if (!el.querySelector('.gm-list')) el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
             <div class="gm-empty">אין כרגע עדכונים מהותיים זמינים. נסה לרענן בעוד מספר דקות.</div>`;
+        _geoMacroSig = '';
         return;
     }
+    // Skip the DOM rebuild when nothing changed — prevents the periodic auto-refresh from reflowing
+    // the page (the "jumps"). Only re-render when the items actually differ.
+    const sig = items.map(n => (n.he || n.en || '') + '|' + (n.date || '')).join('§');
+    if (sig === _geoMacroSig && el.querySelector('.gm-list')) return;
+    _geoMacroSig = sig;
     const rows = items.map(n => {
         const tagCls = _GEO_MACRO_TAG_CLS[n.tag] || 'gm-tag-mkt';
         const he = _macroEscape(n.he || n.en || '');
