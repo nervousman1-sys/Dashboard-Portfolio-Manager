@@ -1307,10 +1307,12 @@ async function _loadGeoMacroNews(forceRefresh) {
             <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
         </a>`;
     }).join('');
-    el.innerHTML = `<div class="gm-head">
-            <button class="ec-collapse" onclick="_gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
+    // The whole header bar folds the section (click the caret OR anywhere on the title). The
+    // refresh button stops propagation so it doesn't also toggle.
+    el.innerHTML = `<div class="gm-head gm-head-toggle" onclick="_gmToggleCollapse()" title="קפל / פתח את כל הקטע" style="cursor:pointer">
+            <button class="ec-collapse" onclick="event.stopPropagation(); _gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
             <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
-            <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
+            <button class="gm-refresh" onclick="event.stopPropagation(); _loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
         </div>
         <div class="gm-list" style="${_gmCollapsed ? 'display:none' : ''}">${rows}</div>`;
 }

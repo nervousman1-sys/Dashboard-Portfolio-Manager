@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v472';
+const CACHE_NAME = 'portfolio-dashboard-v473';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -72,6 +72,8 @@ self.addEventListener('activate', (event) => {
 // cached version could cause the price overwrite loop or auth UI disappearance.
 const NETWORK_FIRST_FILES = [
     'index.html',
+    'main.css',   // design/CSS updates must apply on the first reload (no stale-while-revalidate lag)
+    'auth.css',
     'auth.js',
     'init.js',
     'price-service.js',
