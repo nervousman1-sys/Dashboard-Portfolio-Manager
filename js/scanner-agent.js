@@ -61,33 +61,65 @@ async function _saLoad(force) {
     const body = document.getElementById('saBody');
     if (!body) return;
     if (force) { body.innerHTML = '<div class="sa-loading">מרענן…</div>'; _saSig = ''; }
-    let cards = null;
+    let cards = null, status = null;
     try {
         if (typeof supabaseClient === 'undefined' || !supabaseClient) throw new Error('no supabase client');
-        const { data, error } = await supabaseClient
-            .from('catalyst_cards').select('*').eq('status', 'active')
-            .order('created_at', { ascending: false }).limit(60);
-        if (error) throw error;
-        cards = data || [];
+        const [cardsRes, statusRes] = await Promise.all([
+            supabaseClient.from('catalyst_cards').select('*').eq('status', 'active').order('created_at', { ascending: false }).limit(60),
+            supabaseClient.from('agent_status').select('*').eq('agent', 'scanner').maybeSingle(),
+        ]);
+        if (cardsRes.error) throw cardsRes.error;
+        cards = cardsRes.data || [];
+        status = statusRes && statusRes.data ? statusRes.data : null;
     } catch (e) {
         if (!_saLoaded) body.innerHTML = `<div class="sa-empty">שגיאה בטעינת המודיעין. נסה לרענן בעוד רגע.<br><small>${(e && e.message) || ''}</small></div>`;
         return;
     }
     if (!cards.length) {
-        body.innerHTML = `<div class="sa-empty">📡 הסוכן עדיין לא הפיק כרטיסים.<br>ברגע שהסוכן ירוץ, תובנות ה-Early-Alpha יופיעו כאן אוטומטית.</div>`;
+        body.innerHTML = _saStatusHTML(status, 0) + `<div class="sa-empty">📡 הסוכן סורק — עדיין לא נמצא מודיעין חדש בעל ודאות מספקת.<br>ברגע שיימצא, כרטיס Early-Alpha יופיע כאן אוטומטית.</div>`;
         _saSig = '';
         return;
     }
-    // Re-render only when the set of cards actually changed — keeps any open card open during 24/7 refresh.
+    // Re-render the card list only when it actually changed — keeps any open card open during 24/7
+    // refresh — but always refresh the live status line.
     const sig = cards.map(c => `${c.id}:${c.created_at}`).join('|');
-    if (!force && sig === _saSig) return;
+    if (!force && sig === _saSig) {
+        const sEl = document.getElementById('saStatus');
+        if (sEl) sEl.outerHTML = _saStatusHTML(status, cards.length);
+        return;
+    }
     _saSig = sig;
     _saLoaded = true;
-    body.innerHTML = `<div class="sa-meta-bar">${cards.length} כרטיסי מודיעין · מתעדכן אוטומטית מהסוכן 24/7</div>` + cards.map(_saCardHTML).join('');
+    body.innerHTML = _saStatusHTML(status, cards.length) + cards.map(_saCardHTML).join('');
 }
 
 function _saEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function _saDate(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`; }
+function _saRel(ts, future) {
+    if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return '';
+    let s = Math.round((future ? d.getTime() - Date.now() : Date.now() - d.getTime()) / 1000); if (s < 0) s = 0;
+    if (s < 60) return future ? 'בעוד רגע' : 'ממש עכשיו';
+    const m = Math.round(s / 60); if (m < 60) return (future ? 'בעוד ' : 'לפני ') + m + ' דק׳';
+    const h = Math.round(m / 60); if (h < 24) return (future ? 'בעוד ' : 'לפני ') + h + ' שע׳';
+    return (future ? 'בעוד ' : 'לפני ') + Math.round(h / 24) + ' ימים';
+}
+
+// Live "agent is scanning" status line — proves the 24/7 daemon is alive (heartbeat from agent_status).
+function _saStatusHTML(st, count) {
+    const last = st && st.last_run ? new Date(st.last_run) : null;
+    const live = !!last && (Date.now() - last.getTime() < 6 * 3600 * 1000); // healthy if it reported within 6h
+    const label = live ? 'הסוכן פעיל וסורק מודיעין 24/7' : (last ? 'הסוכן לא דיווח לאחרונה — בודק' : 'ממתין לדיווח ראשון מהסוכן');
+    const bits = [];
+    if (last) bits.push(`סריקה אחרונה ${_saRel(st.last_run, false)}`);
+    if (st && st.next_run) bits.push(`הסריקה הבאה ${_saRel(st.next_run, true)}`);
+    if (st && st.cycles) bits.push(`${st.cycles} סבבי סריקה`);
+    bits.push(`${count} כרטיסים`);
+    const note = st && st.last_result ? `<div class="sa-status-note">↳ ${_saEsc(st.last_result)}</div>` : '';
+    return `<div class="sa-meta-bar" id="saStatus">
+        <div class="sa-status-line"><span class="sa-live ${live ? 'sa-live-on' : 'sa-live-warn'}"></span><b>${label}</b></div>
+        <div class="sa-status-sub">${bits.join(' · ')}</div>${note}
+    </div>`;
+}
 
 function _saToggle(id) {
     const el = document.getElementById('sa-card-' + id);

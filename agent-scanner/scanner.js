@@ -81,7 +81,7 @@ const SYSTEM_PROMPT = `אתה מנוע המודיעין הליבתי של "Finex
 }
 טון וסגנון כתיבה: ניהולי, אנליטי, קר ומבוסס דאטה בלבד.
 
-איכות העברית (חובה): כל הטקסט חייב להיות בעברית עיתונאית-כלכלית רהוטה, ברורה ותקנית — לא תרגום מילולי מאנגלית. נסח מחדש בעברית טבעית וזורמת, עם דקדוק תקין, תחביר נכון והתאמת מין/מספר. מונחים טכניים: השתמש במונח העברי המקובל והשגור (למשל quantum sensing → "חיישנים קוונטיים", לא "חישה"); אם אין מקבילה עברית טבעית — השאר את המונח באנגלית במקור. אל תמציא מילים ואל תשתמש בעברית מסורבלת. שמות חברות, מותגים, אנשים וטיקרים — באנגלית במקור.`;
+איכות העברית (חובה): כל הטקסט חייב להיות בעברית עיתונאית-כלכלית רהוטה, ברורה, תקנית וקלה להבנה — לא תרגום מילולי מאנגלית. נסח מחדש בעברית טבעית וזורמת, עם דקדוק תקין, תחביר נכון והתאמת מין/מספר. הכותרת (sector_name) חייבת להיות בעברית מלאה וברורה (אפשר עם המונח הלועזי בסוגריים) — לא באנגלית בלבד. מונחים טכניים: השתמש במונח העברי המקובל והשגור (למשל quantum sensing → "חיישנים קוונטיים", לעולם לא "חישה"); אם אין מקבילה עברית טבעית — השאר את המונח באנגלית בסוגריים. אל תמציא מילים ואל תשתמש בעברית מסורבלת. שמות חברות, מותגים, אנשים וטיקרים — באנגלית במקור.`;
 
 // ── Gemini call with Google Search grounding (real, current signals) ──
 async function callGemini(avoidSectors) {
@@ -136,7 +136,7 @@ async function polishHebrew(card) {
         talent_layer: card.talent_layer || '',
         whys: (Array.isArray(card.stealth_targets) ? card.stealth_targets : []).map(t => t.why || ''),
     };
-    const sys = 'אתה עורך לשון בכיר בעיתון כלכלי ישראלי מוביל (גלובס/כלכליסט). שכתב את שדות הטקסט הבאים לעברית מצוינת: רהוטה, ברורה, תקנית ומקצועית — לא תרגום מילולי. כללים: (1) נסח מחדש בעברית עיתונאית-כלכלית טבעית וזורמת, דקדוק תקין, תחביר נכון, התאמת מין/מספר, ללא שגיאות וללא מילים מומצאות. (2) מונחים טכניים — השתמש במונח העברי המקובל והשגור (למשל "חיישנים קוונטיים" ולא "חישה קוונטית"); אם אין מקבילה טבעית, השאר באנגלית במקור. (3) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). (4) אל תשנה את המשמעות או העובדות — רק את הניסוח. (5) שמור על אורך דומה. החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
+    const sys = 'אתה עורך לשון בכיר בעיתון כלכלי ישראלי מוביל (גלובס/כלכליסט). שכתב את שדות הטקסט הבאים לעברית מצוינת: רהוטה, ברורה, תקנית, מקצועית וקלה להבנה — לא תרגום מילולי. כללים: (1) נסח מחדש בעברית עיתונאית-כלכלית טבעית וזורמת, דקדוק תקין, תחביר נכון, התאמת מין/מספר, ללא שגיאות וללא מילים מומצאות. (2) sector_name (הכותרת) — חייב להיות בעברית מלאה וברורה. אם הכותרת באנגלית, תרגם אותה לעברית טבעית, ואפשר להוסיף את המונח הלועזי בסוגריים. (3) מונחים טכניים — השתמש במונח העברי המקובל והשגור. שים לב: "חישה" איננה מילה ברורה — quantum sensing הוא "חיישנים קוונטיים"/"חיישני קוונטים", לעולם לא "חישה". אם אין מקבילה עברית טבעית, השאר את המונח באנגלית בסוגריים. (4) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). (5) אל תשנה את המשמעות או העובדות — רק את הניסוח. (6) שמור על אורך דומה. החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
     const body = {
         systemInstruction: { parts: [{ text: sys }] },
         contents: [{ role: 'user', parts: [{ text: 'שכתב לעברית מצוינת את ה-JSON הבא (החזר JSON באותו מבנה):\n' + JSON.stringify(input) }] }],
@@ -146,10 +146,10 @@ async function polishHebrew(card) {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     try {
         let r;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 6; attempt++) {
             r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (r.ok) break;
-            if ((r.status === 503 || r.status === 429) && attempt < 2) { await sleep(4000 * (attempt + 1)); continue; }
+            if ((r.status === 503 || r.status === 429) && attempt < 5) { await sleep(5000 * (attempt + 1)); continue; }
             return card; // give up → keep original
         }
         if (!r || !r.ok) return card;
@@ -237,18 +237,18 @@ async function runCycle() {
     const avoid = await recentSectors();
     const { text, sources } = await callGemini(avoid);
     const card = parseCard(text);
-    if (!valid(card)) { log('No valid card this cycle (model returned non-JSON / empty). Skipping.'); return; }
+    if (!valid(card)) { log('No valid card this cycle (model returned non-JSON / empty). Skipping.'); return 'נסרק — אין מודיעין חדש בעל ודאות מספקת'; }
 
     if (await isDuplicate(card.sector_name)) {
         log(`Duplicate sector "${card.sector_name}" within ${DEDUP_DAYS}d — skipping insert.`);
-        return;
+        return `נסרק — הסקטור "${card.sector_name}" כבר קיים`;
     }
 
     // Enforce: only real, exchange-listed targets ≥ $1B. No valid ones → the card isn't actionable.
     const targets = await validateTargets(card.stealth_targets);
     if (!targets.length) {
         log(`"${card.sector_name}": no exchange-listed ≥$${MIN_MARKET_CAP_B}B targets — skipping.`);
-        return;
+        return `נסרק — לא נמצאו מניות נסחרות ≥$${MIN_MARKET_CAP_B}B`;
     }
     card.stealth_targets = targets;
 
@@ -274,11 +274,22 @@ async function runCycle() {
         if (error) throw new Error(`Supabase insert failed: ${error.message}`);
     }
     log(`✓ Inserted catalyst card: "${payload.sector_name}" (${payload.stage_score || '—'}, sources: ${sources.length})`);
+    return `נמצא מודיעין חדש: ${payload.sector_name}`;
+}
+
+// Write a heartbeat so the UI can prove the agent is alive + scanning continuously.
+async function heartbeat(result) {
+    try {
+        const next = new Date(Date.now() + Math.max(0.25, SCAN_INTERVAL_HOURS) * 3600 * 1000).toISOString();
+        await supabase.rpc('upsert_agent_status', { p_secret: AGENT_WRITE_SECRET, p_agent: 'scanner', p_next_run: next, p_result: (result || '').slice(0, 200) });
+    } catch (e) { log('heartbeat warn:', e.message); }
 }
 
 async function safeCycle() {
-    try { await runCycle(); }
-    catch (e) { log('Cycle error (will retry next interval):', e.message); }
+    let res;
+    try { res = await runCycle(); }
+    catch (e) { res = `שגיאה זמנית — ניסיון חוזר בסבב הבא`; log('Cycle error (will retry next interval):', e.message); }
+    await heartbeat(res);
 }
 
 // One-off: re-run the Hebrew quality gate over EVERY existing active card and persist the result.
