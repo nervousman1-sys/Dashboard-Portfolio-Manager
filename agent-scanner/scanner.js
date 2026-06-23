@@ -277,19 +277,28 @@ async function runCycle() {
     return `נמצא מודיעין חדש: ${payload.sector_name}`;
 }
 
-// Write a heartbeat so the UI can prove the agent is alive + scanning continuously.
-async function heartbeat(result) {
+// Write a heartbeat so the UI can prove the agent is alive + scanning continuously. On a soft-fail
+// (ok=false) we pass null so the RPC KEEPS the last real finding (only last_run advances) — the
+// status then shows the agent as active with its last result, never a quota/error message.
+async function heartbeat(result, ok) {
     try {
         const next = new Date(Date.now() + Math.max(0.25, SCAN_INTERVAL_HOURS) * 3600 * 1000).toISOString();
-        await supabase.rpc('upsert_agent_status', { p_secret: AGENT_WRITE_SECRET, p_agent: 'scanner', p_next_run: next, p_result: (result || '').slice(0, 200) });
+        const p_result = ok === false ? null : (result || '').slice(0, 200);
+        await supabase.rpc('upsert_agent_status', { p_secret: AGENT_WRITE_SECRET, p_agent: 'scanner', p_next_run: next, p_result });
     } catch (e) { log('heartbeat warn:', e.message); }
 }
 
 async function safeCycle() {
-    let res;
+    let res, ok = true;
     try { res = await runCycle(); }
-    catch (e) { res = `שגיאה זמנית — ניסיון חוזר בסבב הבא`; log('Cycle error (will retry next interval):', e.message); }
-    await heartbeat(res);
+    catch (e) {
+        ok = false;
+        // Don't surface a raw error to the UI. Quota/rate limits are expected on the free tier —
+        // show a calm "waiting for an API window" status; the daemon keeps retrying automatically.
+        res = /429|quota|rate|exhaust/i.test(e.message || '') ? 'פעיל · ממתין לחלון API פנוי (ימשיך אוטומטית)' : 'פעיל · סורק (ניסיון חוזר בסבב הבא)';
+        log('Cycle soft-fail (will retry next interval):', e.message);
+    }
+    await heartbeat(res, ok);
 }
 
 // One-off: re-run the Hebrew quality gate over EVERY existing active card and persist the result.

@@ -1133,6 +1133,27 @@ const _GEO_MACRO_TAG_CLS = {
     'גיאופוליטיקה': 'gm-tag-geo', 'אנרגיה': 'gm-tag-energy', 'שווקים': 'gm-tag-mkt',
 };
 let _geoMacroSig = '';
+// Remove near-duplicate items (same story from different outlets / slightly different wording).
+// Tokenize the Hebrew/English headline and drop an item whose word-overlap (Jaccard) with an
+// already-kept item is high. Keeps the first (newest, since the list is ordered newest-first).
+function _macroNormTokens(s) {
+    return String(s || '').toLowerCase().replace(/[^֐-׿a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3);
+}
+function _macroDedupe(items) {
+    const out = [], kept = [];
+    for (const it of items) {
+        const toks = new Set(_macroNormTokens(it.he || it.en || ''));
+        if (toks.size < 3) { out.push(it); kept.push(toks); continue; }
+        let dup = false;
+        for (const prev of kept) {
+            let inter = 0; toks.forEach(t => { if (prev.has(t)) inter++; });
+            const uni = toks.size + prev.size - inter;
+            if (uni > 0 && inter / uni >= 0.55) { dup = true; break; }
+        }
+        if (!dup) { out.push(it); kept.push(toks); }
+    }
+    return out;
+}
 async function _loadGeoMacroNews(forceRefresh) {
     const el = document.getElementById('geoMacroSection');
     if (!el) return;
@@ -1166,6 +1187,7 @@ async function _loadGeoMacroNews(forceRefresh) {
         _geoMacroSig = '';
         return;
     }
+    items = _macroDedupe(items); // drop near-duplicate stories from different outlets
     // Skip the DOM rebuild when nothing changed — prevents the periodic auto-refresh from reflowing
     // the page (the "jumps"). Only re-render when the items actually differ.
     const sig = items.map(n => (n.he || n.en || '') + '|' + (n.date || '')).join('§');

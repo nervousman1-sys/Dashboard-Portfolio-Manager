@@ -383,13 +383,23 @@ function _dcMoney(usd, cur) {
     return `${sign}${sym}${Math.round(a).toLocaleString('en-US')}`;
 }
 
+function _dcAgo(ts) {
+    if (!ts) return '';
+    const d = new Date(ts); if (isNaN(d)) return '';
+    let s = Math.round((Date.now() - d.getTime()) / 1000); if (s < 0) s = 0;
+    if (s < 90) return 'ממש עכשיו';
+    const m = Math.round(s / 60); if (m < 60) return `לפני ${m} דק׳`;
+    const h = Math.round(m / 60); if (h < 24) return `לפני ${h} שע׳`;
+    return `לפני ${Math.round(h / 24)} ימים`;
+}
 function _dcProximityHTML() {
     const p = _dcProximity;
     if (!p) return `<div class="dc-card-title">אינדיקטור לזיהוי משברים</div><div class="dc-loading">מחשב מנתוני מאקרו חיים…</div>`;
     const score = p.score;
     const col = score >= 70 ? '#ef4444' : score >= 45 ? '#f59e0b' : '#10b981';
     const label = score >= 70 ? 'סיכון גבוה' : score >= 45 ? 'סיכון בינוני' : 'יציב';
-    return `<div class="dc-card-title">אינדיקטור לזיהוי משברים${p.partial ? ' <span class="dc-partial">(נתונים חלקיים)</span>' : ''}</div>
+    const liveTag = p.asOf ? `<span class="dc-live-tag"><span class="dc-live-dot"></span>סוכן 24/7 · עודכן ${_dcAgo(p.asOf)}</span>` : '';
+    return `<div class="dc-card-title">אינדיקטור לזיהוי משברים${p.partial ? ' <span class="dc-partial">(נתונים חלקיים)</span>' : ''}${liveTag}</div>
         <div class="dc-gauge">
             <div class="dc-gauge-num" style="color:${col}">${score}<span class="dc-gauge-max">/100</span></div>
             <div class="dc-gauge-label" style="color:${col}">${label}</div>
@@ -405,7 +415,7 @@ function _dcProximityHTML() {
                 </div>`;
     }).join('')}
         </div>
-        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק (NFCI) — נתוני אמת, מתעדכן מדי יום ע"י הסוכן.</div>`;
+        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק (NFCI) — נתוני אמת. סוכן ייעודי סורק את המצב בשוק ומעדכן את האינדיקטור באופן שוטף 24/7.</div>`;
 }
 
 function _dcRender() {
