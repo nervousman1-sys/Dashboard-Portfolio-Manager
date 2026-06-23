@@ -73,8 +73,32 @@ module.exports = async (req, res) => {
                 } catch (e) { return []; }
             }));
             const events = all.flat().sort((a, b) => a.date.localeCompare(b.date));
+
+            // Latest RELEASED values per key indicator (actual + previous) → result analysis.
+            // betterLower=true for inflation gauges (lower reading is the "good" outcome).
+            const SERIES = {
+                10: { he: 'מדד המחירים לצרכן (CPI)', series: 'CPIAUCSL', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                54: { he: 'הוצאה אישית (PCE)', series: 'PCEPI', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                50: { he: 'תעסוקה — משרות שנוספו (NFP)', series: 'PAYEMS', units: 'chg', unit: 'K', betterLower: false, kind: 'jobs' },
+                53: { he: 'תוצר מקומי גולמי (GDP)', series: 'A191RL1Q225SBEA', units: 'lin', unit: '%', betterLower: false, kind: 'growth' },
+                46: { he: 'מדד המחירים ליצרן (PPI)', series: 'PPIFIS', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                9: { he: 'מכירות קמעונאיות', series: 'RSAFS', units: 'pc1', unit: '%', betterLower: false, kind: 'growth' },
+            };
+            const results = (await Promise.all(Object.values(SERIES).map(async (s) => {
+                try {
+                    const obs = await fetchSeries(s.series, s.units, 2);
+                    if (!obs.length) return null;
+                    const value = parseFloat(obs[0].value);
+                    const previous = obs[1] ? parseFloat(obs[1].value) : null;
+                    const dir = previous == null ? 'flat' : (value > previous ? 'up' : value < previous ? 'down' : 'flat');
+                    const sentiment = previous == null || dir === 'flat' ? 'neutral'
+                        : (s.betterLower ? (dir === 'down' ? 'good' : 'bad') : (dir === 'up' ? 'good' : 'bad'));
+                    return { he: s.he, kind: s.kind, unit: s.unit, value, previous, date: obs[0].date, dir, sentiment, betterLower: s.betterLower };
+                } catch (e) { return null; }
+            }))).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
+
             res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
-            res.status(200).json({ events });
+            res.status(200).json({ events, results });
             return;
         }
 

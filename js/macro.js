@@ -1051,8 +1051,9 @@ let _ecSig = '';             // last-rendered signature (skip needless refresh r
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
     if (!el) return;
-    const CACHE_KEY = 'econ_cal_v1';
-    let us = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
+    const CACHE_KEY = 'econ_cal_v2';
+    let cached = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
+    let us = cached ? cached.events : null, results = cached ? cached.results : [];
     if (!us) {
         if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
             <div class="macro-loading" style="padding:16px">טוען יומן…</div>`;
@@ -1060,13 +1061,14 @@ async function _loadEconCalendar(forceRefresh) {
             const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
             const j = await r.json();
             us = (j && Array.isArray(j.events)) ? j.events : [];
-            if (us.length) _cacheSet(CACHE_KEY, us);
-        } catch (e) { us = []; }
+            results = (j && Array.isArray(j.results)) ? j.results : [];
+            if (us.length) _cacheSet(CACHE_KEY, { events: us, results });
+        } catch (e) { us = []; results = []; }
     }
-    _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents() };
+    _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents(), results: results || [] };
     // Avoid needless re-render on the hourly auto-refresh (prevents page jumps); tab/collapse below
     // always call _ecRender directly.
-    const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
+    const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he])) + '|' + JSON.stringify((_ecData.results || []).map(r => [r.he, r.value])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
     if (forceRefresh && sig === _ecSig && document.querySelector('.ec-table')) return;
     _ecSig = sig;
     _ecRender();
@@ -1108,21 +1110,67 @@ function _ecRender() {
     const tab = (t, he) => `<button class="ec-tab ${_ecTab === t ? 'active' : ''}" onclick="setEcTab('${t}')">${he}</button>`;
     const ilNote = _ecTab === 'IL'
         ? `<div class="ec-il-note">מוצג מדד המחירים לצרכן לפי לוח הפרסומים הקבוע של הלמ״ס (~אמצע החודש). מועדי החלטות הריבית של בנק ישראל מתפרסמים בלוח הרשמי שלו.</div>` : '';
+
+    // Results of recently-RELEASED data (US) — actual value, direction vs previous + a short analysis.
+    const results = (_ecTab === 'US' && Array.isArray(_ecData.results)) ? _ecData.results : [];
+    const sentLabel = { good: 'חיובי', bad: 'שלילי', neutral: 'ניטרלי' };
+    const arrow = (d) => d === 'up' ? '▲' : d === 'down' ? '▼' : '▬';
+    const resultsHtml = results.length ? `
+        <div class="ec-results">
+            <div class="ec-results-head">📊 תוצאות אחרונות שפורסמו</div>
+            <div class="ec-results-grid">
+                ${results.map((r, i) => `
+                <div class="ec-res-card ec-res-${r.sentiment}">
+                    <div class="ec-res-top"><span class="ec-res-name">${_macroEscape(r.he)}</span><span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span></div>
+                    <div class="ec-res-val">${_ecResVal(r.value, r.unit, r.kind)} <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span> <span class="ec-res-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span></div>
+                    <button class="ec-res-btn" onclick="_ecToggleAnalysis(${i})">ניתוח קצר ›</button>
+                    <div class="ec-res-analysis" id="ecRes${i}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
+                </div>`).join('')}
+            </div>
+        </div>` : '';
+
     el.innerHTML = `
         <div class="ec-head">
             <button class="ec-collapse" onclick="toggleEcCollapse()" title="קפל / פתח">${_ecCollapsed ? '▸' : '▾'}</button>
-            <span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span>
+            <span class="ec-title">🗓️ יומן כלכלי — תוצאות ופרסומים קרובים</span>
             <button class="gm-refresh" onclick="_loadEconCalendar(true)" title="רענן יומן">⟳</button>
         </div>
         <div class="ec-body ${_ecCollapsed ? 'ec-hidden' : ''}" id="ecBody">
             <div class="ec-tabs">${tab('US', 'ארה״ב')}${tab('IL', 'ישראל')}</div>
             ${ilNote}
+            ${resultsHtml}
             <table class="ec-table">
                 <thead><tr><th class="ec-th-date">תאריך</th><th>אירוע</th><th class="ec-th-imp">השפעה</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
 }
+
+function _ecResVal(value, unit, kind) {
+    if (value == null || isNaN(value)) return '—';
+    if (kind === 'jobs') return Math.round(value) + 'K';
+    return value.toFixed(1) + (unit || '');
+}
+function _ecToggleAnalysis(i) {
+    const el = document.getElementById('ecRes' + i);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+// Deterministic Hebrew result analysis (no AI dependency — always available).
+function _ecAnalysis(r) {
+    const v = _ecResVal(r.value, r.unit, r.kind), p = _ecResVal(r.previous, r.unit, r.kind);
+    const what = {
+        inflation: `${r.he} מודד את קצב עליית המחירים — מדד מרכזי לאינפלציה ולמדיניות הריבית של הפד.`,
+        jobs: 'הנתון מודד את מספר המשרות שנוספו במשק (מחוץ לחקלאות) — אינדיקטור מרכזי לחוזק שוק העבודה.',
+        growth: `${r.he} מודד את קצב הצמיחה הכלכלית של ארה"ב.`,
+    }[r.kind] || '';
+    const dirTxt = r.dir === 'up' ? 'עלייה לעומת הקריאה הקודמת' : r.dir === 'down' ? 'ירידה לעומת הקריאה הקודמת' : 'ללא שינוי מהותי';
+    let imp;
+    if (r.kind === 'inflation') imp = r.sentiment === 'good' ? 'התמתנות האינפלציה — חיובי לשווקים ומגדיל את הסיכוי להורדת ריבית.' : r.sentiment === 'bad' ? 'התחממות האינפלציה — עלול לעכב הורדות ריבית וללחוץ על מניות ואג"ח.' : 'יציבות יחסית במחירים.';
+    else if (r.kind === 'jobs') imp = r.sentiment === 'good' ? 'שוק עבודה חזק — תומך בצמיחה וברווחי החברות, אך עלול לשמר אינפלציה ולעכב הורדות ריבית.' : 'היחלשות בשוק העבודה — מעיב על הצמיחה, אך מגדיל את הסיכוי להורדות ריבית.';
+    else imp = r.sentiment === 'good' ? 'הצמיחה מתחזקת — חיובי לרווחי החברות ולשוק המניות.' : 'האטה בקצב הצמיחה — סיכון לרווחי החברות ולסנטימנט בשוק.';
+    return `${what} הנתון האחרון: ${v} לעומת ${p} קודם (${dirTxt}). ${imp}`;
+}
+if (typeof window !== 'undefined') window._ecToggleAnalysis = _ecToggleAnalysis;
 
 // ── Geopolitical + macro-economy updates ──────────────────────────────────
 // PRIMARY source: the 24/7 macro-feed agent's curated table `macro_updates` (excellent Hebrew,
