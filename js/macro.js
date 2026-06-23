@@ -1307,26 +1307,25 @@ async function _loadGeoMacroNews(forceRefresh) {
             <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
         </a>`;
     }).join('');
-    // The whole header bar folds the section (click the caret OR anywhere on the title). The
-    // refresh button stops propagation so it doesn't also toggle.
-    el.innerHTML = `<div class="gm-head gm-head-toggle" onclick="_gmToggleCollapse()" title="קפל / פתח את כל הקטע" style="cursor:pointer">
-            <button class="ec-collapse" onclick="event.stopPropagation(); _gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
+    // Collapsible section: one click on the caret OR anywhere on the header bar folds/unfolds
+    // the WHOLE block (every headline). id-based + inline display = robust and CSS-independent.
+    // The refresh button stops propagation so it doesn't also toggle the fold.
+    el.innerHTML = `
+        <div class="gm-head gm-head-toggle" onclick="_gmToggleCollapse()" title="קפל / פתח את כל הקטע" style="cursor:pointer">
+            <button class="ec-collapse" id="gmCaret" onclick="event.stopPropagation(); _gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
             <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
             <button class="gm-refresh" onclick="event.stopPropagation(); _loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
         </div>
-        <div class="gm-list" style="${_gmCollapsed ? 'display:none' : ''}">${rows}</div>`;
+        <div class="gm-list" id="gmList" style="${_gmCollapsed ? 'display:none' : ''}">${rows}</div>`;
 }
 let _gmCollapsed = false;
 try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
 function _gmToggleCollapse() {
     _gmCollapsed = !_gmCollapsed;
     try { localStorage.setItem('gm_collapsed', _gmCollapsed ? '1' : '0'); } catch (e) { }
-    const el = document.getElementById('geoMacroSection');
-    if (!el) return;
-    const list = el.querySelector('.gm-list');
-    const caret = el.querySelector('.ec-collapse');
-    // Inline display — independent of CSS so it works even before the (stale-while-revalidate)
-    // main.css refreshes. This is the actual fix for "הקיפול לא עובד".
+    const list = document.getElementById('gmList');
+    const caret = document.getElementById('gmCaret');
+    // Inline display toggles the entire headline list in one click — no CSS dependency.
     if (list) list.style.display = _gmCollapsed ? 'none' : '';
     if (caret) caret.textContent = _gmCollapsed ? '▸' : '▾';
 }
