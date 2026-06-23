@@ -8262,7 +8262,10 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
 .dn-flow-group.out { color: #f87171; }
 
 /* Structured (market-data) money-flow card — sector rotation from real ETF performance */
-.dn-mflows { margin-bottom: 14px; }
+/* Reserve vertical space so the async load (feed → vision/market-flows panels, images) doesn't
+   collapse-then-grow the page — that reflow is what made the page "jump" on entry. */
+#dnFeed { min-height: 72vh; }
+.dn-mflows { margin-bottom: 14px; min-height: 120px; }
 .dn-mflow-card { background: rgba(0,229,255,0.04); border: 1px solid rgba(0,229,255,0.25); border-radius: 14px; padding: 14px 16px; }
 .dn-mflow-head { font-size: 14px; font-weight: 900; color: #67e8f9; margin-bottom: 4px; }
 .dn-mflow-sub { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 8px; }

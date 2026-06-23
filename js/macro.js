@@ -1051,7 +1051,7 @@ let _ecSig = '';             // last-rendered signature (skip needless refresh r
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
     if (!el) return;
-    const CACHE_KEY = 'econ_cal_v2';
+    const CACHE_KEY = 'econ_cal_v3'; // v3: includes per-event/result keys for inline result matching
     let cached = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
     let us = cached ? cached.events : null, results = cached ? cached.results : [];
     if (!us) {
@@ -1258,12 +1258,25 @@ async function _loadGeoMacroNews(forceRefresh) {
         </a>`;
     }).join('');
     el.innerHTML = `<div class="gm-head">
+            <button class="ec-collapse" onclick="_gmToggleCollapse()" title="קפל / פתח">${_gmCollapsed ? '▸' : '▾'}</button>
             <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
             <button class="gm-refresh" onclick="_loadGeoMacroNews(true)" title="רענן עדכונים">⟳</button>
         </div>
-        <div class="gm-list">${rows}</div>`;
+        <div class="gm-list ${_gmCollapsed ? 'ec-hidden' : ''}">${rows}</div>`;
 }
-if (typeof window !== 'undefined') window._loadGeoMacroNews = _loadGeoMacroNews;
+let _gmCollapsed = false;
+try { _gmCollapsed = localStorage.getItem('gm_collapsed') === '1'; } catch (e) { }
+function _gmToggleCollapse() {
+    _gmCollapsed = !_gmCollapsed;
+    try { localStorage.setItem('gm_collapsed', _gmCollapsed ? '1' : '0'); } catch (e) { }
+    const el = document.getElementById('geoMacroSection');
+    if (!el) return;
+    const list = el.querySelector('.gm-list');
+    const caret = el.querySelector('.ec-collapse');
+    if (list) list.classList.toggle('ec-hidden', _gmCollapsed);
+    if (caret) caret.textContent = _gmCollapsed ? '▸' : '▾';
+}
+if (typeof window !== 'undefined') { window._loadGeoMacroNews = _loadGeoMacroNews; window._gmToggleCollapse = _gmToggleCollapse; }
 
 // ── Format helper for widget values ──
 function _fmtUnit(v, u) {
