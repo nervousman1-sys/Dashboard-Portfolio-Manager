@@ -1323,27 +1323,36 @@ function _renderGeoMacro() {
             <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
         </a>`;
     }).join('');
+    // Two REAL buttons, each with its own direct onclick — no <details>, no nested-click quirks.
+    // Collapse hides the list via inline display (CSS-independent); refresh re-fetches.
+    const hidden = _gmCollapsed ? ' style="display:none"' : '';
+    const caret = _gmCollapsed ? '▸' : '▾';
     el.innerHTML = `
-        <details class="gm-frame" ${_gmCollapsed ? '' : 'open'} ontoggle="_gmOnToggle(this)">
-            <summary class="gm-frame-head">
-                <span class="gm-frame-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
-                <span class="gm-frame-refresh" role="button" tabindex="0" title="רענן עדכונים"
-                      onclick="event.preventDefault(); event.stopPropagation(); _loadGeoMacroNews(true)">⟳</span>
-            </summary>
-            <div class="gm-list">${rows}</div>
-        </details>`;
+        <div class="gm-head">
+            <button type="button" class="ec-collapse" id="gmCollapseBtn" title="קפל / פתח את כל הקטע" onclick="gmToggleCollapse()">${caret}</button>
+            <span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span>
+            <button type="button" class="gm-refresh" id="gmRefreshBtn" title="רענן עדכונים" onclick="gmRefresh()">⟳</button>
+        </div>
+        <div class="gm-list" id="gmListWrap"${hidden}>${rows}</div>`;
 }
-// Persist the open/closed state whenever the browser toggles the <details>.
-function _gmOnToggle(d) {
-    _gmCollapsed = !d.open;
+// Collapse/expand: hide the list directly (inline display) + flip the caret. No re-render, no CSS rule.
+function gmToggleCollapse() {
+    _gmCollapsed = !_gmCollapsed;
     try { localStorage.setItem('gm_collapsed', _gmCollapsed ? '1' : '0'); } catch (e) { }
+    const wrap = document.getElementById('gmListWrap');
+    const btn = document.getElementById('gmCollapseBtn');
+    if (wrap) wrap.style.display = _gmCollapsed ? 'none' : '';
+    if (btn) btn.textContent = _gmCollapsed ? '▸' : '▾';
 }
-// Back-compat aliases for any cached HTML that still calls the old function names.
-function toggleGmCollapse() { const d = document.querySelector('#geoMacroSection .gm-frame'); if (d) d.open = !d.open; }
-function _gmToggleCollapse() { toggleGmCollapse(); }
+function gmRefresh() { _loadGeoMacroNews(true); }
+// Aliases so any cached HTML calling the old names still works.
+function toggleGmCollapse() { gmToggleCollapse(); }
+function _gmToggleCollapse() { gmToggleCollapse(); }
+function _gmOnToggle() { /* no-op (old <details> handler) */ }
 if (typeof window !== 'undefined') {
     window._loadGeoMacroNews = _loadGeoMacroNews; window._renderGeoMacro = _renderGeoMacro;
-    window._gmOnToggle = _gmOnToggle; window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse;
+    window.gmToggleCollapse = gmToggleCollapse; window.gmRefresh = gmRefresh;
+    window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse; window._gmOnToggle = _gmOnToggle;
 }
 
 // ── Format helper for widget values ──
