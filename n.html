@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#020202">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Finextium">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <title>Finextium — Portfolio Intelligence</title>
+    <!-- Critical: Supabase must load before app scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <!-- Chart.js can defer — charts render after DOM is ready -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script defer
+        src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <!-- xlsx and pdf.js are lazy-loaded only when the Add Portfolio modal opens -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/main.css?v=136.0">
+    <link rel="stylesheet" href="css/auth.css?v=15.0">
+    <!-- Apply the saved theme BEFORE first paint (no flash) -->
+    <script>
+        try { if (localStorage.getItem('ui_theme') === 'day') document.documentElement.classList.add('day-mode'); } catch (e) { }
+    </script>
+</head>
+
+<body>
+
+    <!-- Auth overlay (login/register) — OUTSIDE app-shell for z-index independence -->
+    <div class="auth-overlay hidden" id="authOverlay"></div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">טוען נתוני שוק...</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         App Shell — Sidebar + Main Content
+         ══════════════════════════════════════════════════ -->
+    <div class="app-shell" id="appShell">
+
+        <!-- ── Desktop / Mobile Sidebar ── -->
+        <aside class="sidebar" id="appSidebar">
+            <div class="sidebar-header">
+                <!-- Brand (visible when expanded / on mobile) -->
+                <div class="sidebar-brand">
+                    <div class="sidebar-brand-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                            <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                        </svg>
+                    </div>
+                    <div class="sidebar-brand-text">
+                        <span class="sidebar-brand-name">FINEXTIUM</span>
+                        <span class="sidebar-brand-sub">INTELLIGENCE</span>
+                    </div>
+                </div>
+                <!-- Desktop toggle (hamburger) -->
+                <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="פתח/סגור תפריט">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <line x1="4" y1="6" x2="20" y2="6" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <line x1="4" y1="18" x2="20" y2="18" />
+                    </svg>
+                </button>
+                <!-- Mobile close button -->
+                <button class="sidebar-close-btn" onclick="toggleMobileSidebar()" title="סגור">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <!-- Dashboard -->
+                <a class="sidebar-item active" data-nav="dashboard" onclick="navigateTo('dashboard')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">דאשבורד</span>
+                </a>
+                <!-- CML / SML Risk Analysis -->
+                <a class="sidebar-item" data-nav="riskmodel" onclick="navigateTo('riskmodel')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <line x1="3" y1="3" x2="3" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="7" />
+                            <circle cx="9" cy="15" r="1.6" />
+                            <circle cx="14" cy="11" r="1.6" />
+                            <circle cx="18" cy="9" r="1.6" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח CML/SML</span>
+                </a>
+                <!-- Technical analysis scanner -->
+                <a class="sidebar-item" data-nav="technical" onclick="navigateTo(&#39;technical&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12h4l3-9 4 18 3-9h4" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח טכני למניות</span>
+                </a>
+                <!-- Financial reports analysis -->
+                <a class="sidebar-item" data-nav="reports" onclick="navigateTo(&#39;reports&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="8" y1="13" x2="16" y2="13" />
+                            <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניתוח דוחות כספיים</span>
+                </a>
+                <!-- Smart bulk management -->
+                <a class="sidebar-item" data-nav="bulkmgr" onclick="navigateTo(&#39;bulkmgr&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="17 1 21 5 17 9" />
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                            <polyline points="7 23 3 19 7 15" />
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">ניהול תיקים חכם</span>
+                </a>
+                <!-- Economy & market news (Discord feed) -->
+                <a class="sidebar-item" data-nav="disconews" onclick="navigateTo(&#39;disconews&#39;)">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 11a9 9 0 0 1 9 9" />
+                            <path d="M4 4a16 16 0 0 1 16 16" />
+                            <circle cx="5" cy="19" r="1.6" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">חדשות כלכלה ושוק ההון</span>
+                </a>
+                <!-- Macro Indicators -->
+                <a class="sidebar-item" data-nav="macro" onclick="navigateTo('macro')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path
+                                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">נתוני מאקרו</span>
+                </a>
+
+                <a class="sidebar-item" data-nav="decisioncore" onclick="_closeMobileSidebar && _closeMobileSidebar(); openDecisionCore()">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <polyline points="8.5 12 11 14.5 15.5 9.5" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">מבחני קיצון</span>
+                </a>
+
+                <a class="sidebar-item" data-nav="scanneragent" onclick="_closeMobileSidebar && _closeMobileSidebar(); openScannerAgent()">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="2.2" />
+                            <path d="M12 2a10 10 0 0 1 10 10" />
+                            <path d="M12 7a5 5 0 0 1 5 5" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">Scanner Agent</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <!-- Clock (mirrors header clock, visible on mobile) -->
+                <div class="sidebar-clock-group">
+                    <div class="sidebar-clock" id="sidebarClock">00:00:00</div>
+                    <div class="sidebar-tz-toggle">
+                        <button class="sidebar-tz-btn active" onclick="setClockTZ('ISR', null); document.querySelectorAll('.sidebar-tz-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">ישראל</button>
+                        <button class="sidebar-tz-btn" onclick="setClockTZ('EST', null); document.querySelectorAll('.sidebar-tz-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">ארה״ב</button>
+                    </div>
+                </div>
+                <!-- Generate Report -->
+                <button class="sidebar-report-btn" onclick="_closeMobileSidebar(); if(typeof generateReport==='function') generateReport();">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <span class="sidebar-logout-text">הפק דוח</span>
+                </button>
+                <!-- Day / night theme toggle -->
+                <button class="sidebar-theme-btn" id="themeToggleBtn" onclick="toggleDayMode()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <span class="sidebar-logout-text" id="themeToggleLabel">מצב יום</span>
+                </button>
+                <button class="sidebar-logout" onclick="logout()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    <span class="sidebar-logout-text">התנתק</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Mobile sidebar backdrop -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
+
+        <!-- ── Main Content ── -->
+        <main class="main-content" id="mainContent">
+
+            <!-- ═══ Top Header ═══ -->
+            <header class="header">
+
+                <!-- ── Screen RIGHT (RTL start): Sentiment + Clock ── -->
+                <div class="header-right">
+                    <div class="header-sentiment" id="headerSentiment">
+                        <div class="sentiment-score-badge" id="sentimentScoreBadge">—</div>
+                        <div class="sentiment-bars">
+                            <span class="s-bar s-bar-dim"></span>
+                            <span class="s-bar s-bar-dim"></span>
+                            <span class="s-bar s-bar-dim"></span>
+                            <span class="s-bar s-bar-dim"></span>
+                            <span class="s-bar s-bar-dim"></span>
+                        </div>
+                        <div class="sentiment-text">
+                            <span class="sentiment-label" style="opacity:0.4">LOADING...</span>
+                            <span class="sentiment-sub">MARKET SENTIMENT</span>
+                        </div>
+                    </div>
+                    <div class="header-clock-group">
+                        <div class="header-clock-tz">
+                            <button class="tz-btn active" id="tzISR" onclick="setClockTZ('ISR', this)">ISR</button>
+                            <button class="tz-btn" id="tzEST" onclick="setClockTZ('EST', this)">USA</button>
+                        </div>
+                        <div class="header-clock" id="headerClock">00:00:00</div>
+                    </div>
+                </div>
+
+                <!-- ── Screen CENTER: 4 Action Buttons ── -->
+                <div class="header-center">
+                    <span class="header-alert-wrap">
+                        <button class="header-action-btn" onclick="toggleAlerts()" title="נתוני מאקרו">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span>נתוני מאקרו</span>
+                        </button>
+                        <span class="alert-count" id="alertCount" style="display:none">0</span>
+                    </span>
+                    <button class="header-action-btn primary" onclick="openMgmtModal('addClient')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        <span>הוסף תיק</span>
+                    </button>
+                    <button class="header-action-btn" onclick="navigateTo('riskmodel')" title="ניתוח CML/SML">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="3" x2="3" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="7" />
+                        </svg>
+                        <span>ניתוח CML/SML</span>
+                    </button>
+                    <button class="header-action-btn" onclick="if(typeof generateReport==='function') generateReport()" title="הפקת דוח מרוכז — כל התיקים">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                        </svg>
+                        <span>הפקת דוח</span>
+                    </button>
+                </div>
+
+                <!-- ── Screen LEFT (RTL end): Currency Toggle + Bell ── -->
+                <div class="header-left">
+                    <div class="currency-toggle" id="currencyToggle">
+                        <button class="currency-btn" data-currency="ILS"
+                            onclick="setCurrency('ILS', this)">ILS</button>
+                        <button class="currency-btn active" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
+                    </div>
+                    <button class="header-bell-btn" id="headerBellBtn" title="התראות">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                        <span class="bell-dot" id="bellDot"></span>
+                    </button>
+                    <div id="userArea" style="display:none"></div>
+                </div>
+
+            </header>
+
+            <!-- ══ Hero wrapper — ensures portfolio grid is below the fold ══ -->
+            <div class="hero-above-fold">
+
+            <!-- ═══ Quick-Watch Ticker Bar ═══ -->
+            <div class="quick-watch-bar" id="quickWatchBar">
+                <!-- Ticker items built dynamically by _renderQWTickers() in init.js -->
+                <div class="qw-tickers" id="qwTickers"></div>
+                <!-- Fixed USD/ILS FX badge — measures shekel strength vs the dollar -->
+                <div class="qw-fx" id="qwFxBadge" title="שער דולר/שקל — מודד התחזקות/היחלשות השקל מול הדולר">
+                    <span class="qw-fx-label">USD/ILS</span>
+                    <span class="qw-fx-rate" id="qwFxRate">—</span>
+                    <span class="qw-fx-chg" id="qwFxChg"></span>
+                </div>
+                <span class="qw-last-update" id="lastUpdate"></span>
+                <!-- Settings button on left (RTL end) -->
+                <button class="qw-settings-btn" title="הגדרות מעקב" onclick="openTickerModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- ═══ Ticker Config Modal ═══ -->
+            <div class="qw-config-modal" id="qwConfigModal" onclick="if(event.target===this)closeTickerModal()">
+                <div class="qw-config-inner" dir="rtl">
+                    <div class="qw-config-header">
+                        <h3 class="qw-config-title">הגדרת נכסים לצפייה</h3>
+                        <button class="qw-config-close" onclick="closeTickerModal()">✕</button>
+                    </div>
+                    <p class="qw-config-hint">בחר עד 4 נכסים שיוצגו בסרגל המעקב</p>
+                    <input type="text" id="qwSearchInput" class="qw-search-input" placeholder="חיפוש לפי שם או סימול..."
+                        oninput="_renderModalAssetList(this.value)" />
+                    <div class="qw-config-cols">
+                        <div class="qw-config-col">
+                            <div class="qw-config-col-title">כל הנכסים</div>
+                            <div class="qw-pool-list" id="qwPoolList"></div>
+                        </div>
+                        <div class="qw-config-col">
+                            <div class="qw-config-col-title">נבחרו <span id="qwSelectedCount">0/5</span></div>
+                            <div class="qw-selected-list" id="qwSelectedList"></div>
+                        </div>
+                    </div>
+                    <div class="qw-config-actions">
+                        <button class="qw-save-btn" onclick="saveTickerConfig()">שמור שינויים</button>
+                        <button class="qw-cancel-btn" onclick="closeTickerModal()">ביטול</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="macro-page" id="macroPage"></div>
+
+            <!-- ═══ CML / SML Risk Analysis Page ═══ -->
+            <div class="riskmodel-page" id="riskmodelPage"></div>
+            <div class="riskmodel-page" id="bulkPage"></div>
+            <div class="riskmodel-page" id="discordNewsPage"></div>
+            <div class="riskmodel-page" id="technicalPage"></div>
+            <div class="riskmodel-page" id="reportsPage"></div>
+
+            <!-- ═══ 6-Card Summary ═══ -->
+            <div class="summary-bar" id="summaryBar"></div>
+
+            <!-- ═══ Top spacer — pushes exposure section down toward fold center ═══ -->
+            <div class="top-fold-spacer"></div>
+
+            <!-- ═══ Exposure Section ═══ -->
+            <div class="exposure-section" id="exposureSection"></div>
+
+            <!-- ═══ Flexible spacer — pushes bottom-fold-group to end of fold without hardcoded margins ═══ -->
+            <div class="fold-spacer"></div>
+
+            <!-- ═══ Bottom Fold Group — filters + risk anchored together ═══ -->
+            <div class="bottom-fold-group">
+
+            <!-- ═══ Filter Bar + Search (above portfolio grid) ═══ -->
+            <div class="filters-search-row">
+                <!-- FX-adjusted return toggle -->
+                <label class="fx-toggle-wrap" title="מחשב תשואה בהתחשב בשינוי שער USD/ILS">
+                    <input type="checkbox" id="fxAdjToggle" onchange="setFxAdjusted(this.checked)" />
+                    <span class="fx-toggle-slider"></span>
+                    <span class="fx-toggle-label">תשואה מותאמת מט"ח</span>
+                </label>
+                <div class="header-search-wrap">
+                    <svg class="header-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input type="text" class="header-search" placeholder="חיפוש לקוח, נייר ערך או סקטור..."
+                        oninput="searchClients(this.value)" />
+                </div>
+                <div class="filters" id="filtersBar">
+                    <button class="filter-drawer-toggle" id="filterDrawerToggle" onclick="toggleInlineFilters()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="4" y1="6" x2="20" y2="6" />
+                            <line x1="4" y1="12" x2="16" y2="12" />
+                            <line x1="4" y1="18" x2="12" y2="18" />
+                        </svg>
+                        <span id="toggleFilterLabel">סינונים נוספים</span>
+                        <span class="drawer-badge" id="drawerBadge" style="display:none">0</span>
+                    </button>
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="risk" data-value="all"
+                            onclick="setFilter('risk', 'all', this)">הכל</button>
+                        <button class="filter-btn" data-filter="risk" data-value="high"
+                            onclick="setFilter('risk', 'high', this)">סיכון גבוה</button>
+                        <button class="filter-btn" data-filter="risk" data-value="medium"
+                            onclick="setFilter('risk', 'medium', this)">סיכון בינוני</button>
+                        <button class="filter-btn" data-filter="risk" data-value="low"
+                            onclick="setFilter('risk', 'low', this)">סיכון נמוך</button>
+                    </div>
+                    <button class="clear-filters-btn" id="clearFiltersBtn" onclick="clearAllFilters()"
+                        style="display:none">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                        נקה סינונים
+                    </button>
+                    <!-- Inline expandable filters -->
+                    <div class="inline-filters-glow"></div>
+                    <div class="additional-filters-inline" id="additionalFiltersInline">
+                        <div class="filter-group">
+                            <label>נכס:</label>
+                            <button class="filter-btn active" data-filter="asset" data-value="all"
+                                onclick="setFilter('asset', 'all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="asset" data-value="stocks"
+                                onclick="setFilter('asset', 'stocks', this)">מניות</button>
+                            <button class="filter-btn" data-filter="asset" data-value="bonds"
+                                onclick="setFilter('asset', 'bonds', this)">אג"ח</button>
+                        </div>
+                        <div class="filter-separator"></div>
+                        <div class="filter-group">
+                            <label>סקטור:</label>
+                            <button class="filter-btn active" data-filter="sector" data-value="all"
+                                onclick="setFilter('sector', 'all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Technology"
+                                onclick="setFilter('sector', 'Technology', this)">טכנולוגיה</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Healthcare"
+                                onclick="setFilter('sector', 'Healthcare', this)">בריאות</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Financials"
+                                onclick="setFilter('sector', 'Financials', this)">פיננסים</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Energy"
+                                onclick="setFilter('sector', 'Energy', this)">אנרגיה</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Crypto"
+                                onclick="setFilter('sector', 'Crypto', this)">קריפטו</button>
+                            <button class="filter-btn" data-filter="sector" data-value="Retail"
+                                onclick="setFilter('sector', 'Retail', this)">קמעונאות</button>
+                        </div>
+                        <div class="filter-separator"></div>
+                        <div class="filter-group">
+                            <label>גודל תיק:</label>
+                            <button class="filter-btn active" data-filter="size" data-value="all"
+                                onclick="setSizeFilter('all', this)">הכל</button>
+                            <button class="filter-btn" data-filter="size" data-value="small"
+                                onclick="setSizeFilter('small', this)">קטן מ-250K</button>
+                            <button class="filter-btn" data-filter="size" data-value="medium"
+                                onclick="setSizeFilter('medium', this)">250K-500K</button>
+                            <button class="filter-btn" data-filter="size" data-value="large"
+                                onclick="setSizeFilter('large', this)">500K+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ Risk Mini Summary (compact inline bar) ═══ -->
+            <div class="risk-mini-summary" id="riskMiniSummary"></div>
+
+            </div><!-- /bottom-fold-group -->
+
+            </div><!-- /hero-above-fold -->
+
+            <!-- ═══ Portfolio Section Header (title + view toggle) ═══ -->
+            <div class="portfolio-section-header">
+                <div class="portfolio-section-title-group">
+                    <h2 class="section-title">ניהול תיקי השקעה</h2>
+                    <span class="portfolio-section-sub" id="portfolioSectionSub"></span>
+                </div>
+                <div class="view-toggle-group" id="viewToggleGroup">
+                    <button class="view-toggle-btn active" id="btnGridView" onclick="setPortfolioView('grid', this)"
+                        title="תצוגת כרטיסים">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                    </button>
+                    <button class="view-toggle-btn" id="btnListView" onclick="setPortfolioView('list', this)"
+                        title="תצוגת רשימה">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6" />
+                            <line x1="8" y1="12" x2="21" y2="12" />
+                            <line x1="8" y1="18" x2="21" y2="18" />
+                            <line x1="3" y1="6" x2="3.01" y2="6" />
+                            <line x1="3" y1="12" x2="3.01" y2="12" />
+                            <line x1="3" y1="18" x2="3.01" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ═══ Portfolio Cards Grid ═══ -->
+            <div class="clients-grid" id="clientsGrid"></div>
+
+        </main>
+    </div>
+    <!-- ══════ End App Shell ══════ -->
+
+    <!-- Modals — OUTSIDE app-shell for z-index independence -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="modal" id="modalContent"></div>
+    </div>
+
+    <div class="report-view" id="reportView"></div>
+
+    <div class="mgmt-overlay" id="mgmtOverlay" onclick="closeMgmtModal(event)">
+        <div class="mgmt-box" id="mgmtBox"></div>
+    </div>
+
+    <div class="fullscreen-chart-overlay" id="fullscreenOverlay" onclick="closeFullscreen(event)">
+        <div class="fullscreen-chart-box">
+            <div class="fullscreen-chart-header">
+                <h3 id="fullscreenTitle">מעקב תשואה</h3>
+                <div class="fullscreen-chart-controls">
+                    <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
+                    <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">−</button>
+                    <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום">איפוס</button>
+                    <button class="modal-close" onclick="closeFullscreen()" title="סגור">&times;</button>
+                </div>
+            </div>
+            <div class="fullscreen-chart-body">
+                <canvas id="fullscreen-chart"></canvas>
+            </div>
+            <div class="zoom-hint">גלגל עכבר לזום | גרור לצפייה | לחץ פעמיים לאיפוס</div>
+        </div>
+    </div>
+
+    <!-- Mobile Bottom Navigation — single source of truth for mobile actions -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <button class="mobile-nav-btn active" data-nav="dashboard" onclick="navigateTo('dashboard')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+            </svg>
+            <span>דאשבורד</span>
+        </button>
+        <button class="mobile-nav-btn" onclick="refreshAllPrices()" title="רענן">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            <span>רענן</span>
+        </button>
+        <button class="mobile-nav-btn mobile-fab" onclick="openMgmtModal('addClient')" title="הוסף תיק">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+        </button>
+        <button class="mobile-nav-btn" onclick="toggleAlerts()" title="מאקרו">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            <span>מאקרו</span>
+        </button>
+        <button class="mobile-nav-btn" onclick="toggleMobileSidebar()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+            <span id="mobileMenuLabel">תפריט</span>
+        </button>
+    </nav>
+
+    <!-- JavaScript modules - load order matters -->
+    <script src="js/env-config.js?v=482"></script>
+    <script src="js/supabase-config.js?v=482"></script>
+    <script src="js/supabase-api.js?v=482"></script>
+    <script src="js/data.js?v=482"></script>
+    <script src="js/app.js?v=482"></script>
+    <script src="js/api.js?v=482"></script>
+    <script src="js/fx-service.js?v=482"></script>
+    <script src="js/price-service.js?v=482"></script>
+    <script src="js/sentiment-service.js?v=482"></script>
+    <script src="js/clients.js?v=482"></script>
+    <script src="js/charts.js?v=482"></script>
+    <script src="js/synthetic-history.js?v=482"></script>
+    <script src="js/risk-models.js?v=482"></script>
+    <script src="js/render.js?v=482">
+    <script src="js/filters.js?v=482"></script>
+    <script src="js/file-parser.js?v=482"></script>
+    <script src="js/modals.js?v=482">
+    <script src="js/portfolio.js?v=482"></script>
+    <script src="js/macro.js?v=482">
+    <script src="js/risk-analysis-view.js?v=482"></script>
+    <script src="js/bulk-actions.js?v=482"></script>
+    <script src="js/discord-news.js?v=482"></script>
+    <script src="js/technical-view.js?v=482"></script>
+    <script src="js/reports-engine.js?v=482"></script>
+    <script src="js/reports-view.js?v=482">
+    <script src="js/decision-core.js?v=482"></script>
+    <script src="js/scanner-agent.js?v=482">
+    <script src="js/sidebar.js?v=482"></script>
+    <script src="js/auth.js?v=482"></script>
+    <script src="js/init.js?v=482"></script>
+
+</body>
+
+</html>
