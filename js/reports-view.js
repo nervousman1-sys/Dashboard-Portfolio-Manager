@@ -241,6 +241,7 @@ function _repRenderList() {
     if (!body) return;
     if (!uni) { body.innerHTML = '<div class="adv-empty">טוען רשימת חברות…</div>'; return; }
 
+    _repSyncSupabaseReports(_repMarket); // pull the 24/7 reports-agent's fresh scores (once per market)
     const scores = _repScoreCache();
     // Hide Israeli (ת"א) names confirmed to have no report data — what we have nothing on
     // simply doesn't appear. US is left intact (near-full coverage).
@@ -291,6 +292,37 @@ function _repRenderList() {
         ${total ? `<div class="tech-foot">${total > CAP ? `מוצגות ${CAP} מתוך ${total} — חדד את החיפוש.` : `${total} חברות`}${sectorMap ? ' · מסודרות לפי סקטור' : ''} · הציונים נטענים אוטומטית ברקע</div>` : ''}`;
 
     _repPrefetchScores(); // fill the board's score chips in the background (free Yahoo source)
+}
+
+// ── Fresh scores from the 24/7 reports agent (Supabase `company_reports`) ──────────────
+// The agent sweeps every company continuously, so a just-released report's updated score/beat
+// lands here automatically — no need to open the company or wait for the per-ticker prefetch.
+// Authoritative + fresh: overwrites the local score cache, then the on-demand prefetch only has
+// to fill the few names the agent hasn't covered yet.
+let _repSbSyncedAt = {};
+async function _repSyncSupabaseReports(market) {
+    if (Date.now() - (_repSbSyncedAt[market] || 0) < 5 * 60 * 1000) return; // re-sync at most every 5 min
+    _repSbSyncedAt[market] = Date.now();
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _repSbSyncedAt[market] = 0; return; }
+    try {
+        const { data, error } = await supabaseClient
+            .from('company_reports')
+            .select('symbol,score,improved,as_of')
+            .eq('market', market);
+        if (error || !Array.isArray(data) || !data.length) { _repSbSyncedAt[market] = 0; return; }
+        const cache = _repScoreCache();
+        const now = Date.now();
+        for (const r of data) {
+            if (!r || !r.symbol) continue;
+            cache[r.symbol] = { score: (r.score != null ? r.score : null), improved: !!r.improved, asOf: r.as_of || null, ts: now, src: 'agent' };
+            if (r.score == null) cache[r.symbol].noData = true;
+        }
+        try { localStorage.setItem(_REP_SCORES_LS, JSON.stringify(cache)); } catch (e) { }
+        // Live-update chips if we're still on this market's list.
+        if (_repMarket === market && _repView === 'list') {
+            for (const r of data) if (r.score != null) _repUpdateCardChip(r.symbol, r.score, !!r.improved);
+        }
+    } catch (e) { _repSbSyncedAt[market] = 0; }
 }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the

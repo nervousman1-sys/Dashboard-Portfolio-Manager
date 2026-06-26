@@ -36,5 +36,13 @@ module.exports = {
             out_file: './logs/crisis-out.log',
             error_file: './logs/crisis-err.log',
         },
+        {
+            ...common,
+            name: 'finextium-reports-agent',     // 24/7 sweep of every company's latest earnings report → company_reports
+            script: 'reports-agent.js',
+            max_memory_restart: '400M',          // holds the universe + report JSON in memory mid-sweep
+            out_file: './logs/reports-out.log',
+            error_file: './logs/reports-err.log',
+        },
     ],
 };
