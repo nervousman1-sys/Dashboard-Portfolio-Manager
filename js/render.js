@@ -724,6 +724,24 @@ let _portfolioView = (() => { try { return localStorage.getItem('portfolio_view'
 // CALCULATED from performanceHistory (when available): stdDev, maxDD, sharpe, sortino, VaR.
 // NOTE: Correlation is NOT shown — we do not have benchmark (S&P 500) time series to compute it.
 //       Dividend yield is NOT shown — the price API does not return annual dividend data.
+
+// Daily-move baseline for a holding: yesterday's close normally, but a position OPENED TODAY is
+// measured from its own buy price (avg cost) — it wasn't held through the rest of today's session, so
+// its daily P/L must be vs the price it was bought at, not vs a close it never owned through. This
+// stops a just-bought, unmoved asset from showing a phantom intraday gain/loss. Shared by the modal
+// holdings tables and the list/card daily-P&L sums so every portfolio is consistent.
+function _holdingDayBaseline(h) {
+    if (!h) return 0;
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        if (h.buyDate && String(h.buyDate).slice(0, 10) === today && h.shares > 0 && h.costBasis > 0) {
+            return h.costBasis / h.shares; // avg purchase price = this position's effective open today
+        }
+    } catch (e) { /* fall through to previousClose */ }
+    return (h.previousClose && h.previousClose > 0) ? h.previousClose : 0;
+}
+if (typeof window !== 'undefined') window._holdingDayBaseline = _holdingDayBaseline;
+
 function _calcListMetrics(client) {
     // FX-aware: respect the תשואה מתואמת מט"ח toggle so the list table's תשואה % and
     // רווח/הפסד match the cards and the modal (USD holdings revalued by the FX move).
@@ -751,11 +769,14 @@ function _calcListMetrics(client) {
     // ── Cumulative P&L (real: current value - cost basis) ──
     const cumulativePnl = pr.profit;
 
-    // ── Daily P&L (real: sum of (price - previousClose) * shares per holding) ──
+    // ── Daily P&L (real: sum of (price - daily baseline) * shares per holding) ──
+    // Baseline = yesterday's close, except a position opened TODAY (measured from its buy price) so a
+    // just-bought, unmoved asset contributes ~0 — not a phantom intraday gain/loss. See _holdingDayBaseline.
     let dailyPnl = 0;
     client.holdings.forEach(h => {
-        if (h.previousClose && h.previousClose > 0 && h.price > 0) {
-            dailyPnl += (h.price - h.previousClose) * (h.shares || 0) * fx(h.currency);
+        const base = _holdingDayBaseline(h);
+        if (base > 0 && h.price > 0) {
+            dailyPnl += (h.price - base) * (h.shares || 0) * fx(h.currency);
         }
     });
 
@@ -1315,7 +1336,8 @@ function renderClientCards() {
         let assetsHTML = '';
         if (showStocks) {
             stockHoldings.slice(0, 3).forEach(h => {
-                const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
+                const _cardBase = _holdingDayBaseline(h); // bought-today → from buy price, not yesterday's close
+                const change = _cardBase > 0 ? ((h.price - _cardBase) / _cardBase * 100) : 0;
                 const changeClass = change >= 0 ? 'positive' : 'negative';
                 const changeSign = change >= 0 ? '+' : '';
                 const heName = (typeof getHebrewName === 'function') ? getHebrewName(h) : '';

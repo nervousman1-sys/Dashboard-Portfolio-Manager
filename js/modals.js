@@ -137,7 +137,11 @@ function _buildHoldingsTable(client) {
         // "ממתין" only when we truly have no price yet. A position opened now at the
         // market price already has a price (= cost), so its return is a real 0 — show it.
         const isStale = h.type === 'stock' && !h._livePriceResolved && !(h.price > 0);
-        const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
+        // Daily baseline = yesterday's close, EXCEPT a position opened TODAY — its daily move is
+        // measured from its own buy price (it wasn't held during the rest of today's session), so a
+        // just-bought asset that hasn't moved shows ~0 daily P/L, not a phantom intraday gain/loss.
+        const _dayBase = _holdingDayBaseline(h);
+        const change = _dayBase > 0 ? ((h.price - _dayBase) / _dayBase * 100) : 0;
         const changeClass = change >= 0 ? 'positive' : 'negative';
         const changeSign = change >= 0 ? '+' : '';
         const holdingProfit = h.value - h.costBasis;
@@ -180,7 +184,7 @@ function _buildHoldingsTable(client) {
         const _hFx = _fxR(h.currency);
         totalHoldingsValue += h.value * _hFx;
         totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
-        const dailyProfit = (h.previousClose > 0 && h.shares > 0) ? (h.price - h.previousClose) * h.shares : 0;
+        const dailyProfit = (_dayBase > 0 && h.shares > 0) ? (h.price - _dayBase) * h.shares : 0;
         totalDailyPnL += isStale ? 0 : dailyProfit * _hFx;
         const dailyProfitClass = dailyProfit >= 0 ? 'positive' : 'negative';
         const dailyProfitSign = dailyProfit >= 0 ? '+' : '';
@@ -307,7 +311,10 @@ async function openModal(clientId) {
         // "ממתין" only when we truly have no price yet. A position opened now at the
         // market price already has a price (= cost), so its return is a real 0 — show it.
         const isStale = h.type === 'stock' && !h._livePriceResolved && !(h.price > 0);
-        const change = h.previousClose > 0 ? ((h.price - h.previousClose) / h.previousClose * 100) : 0;
+        // Daily baseline = yesterday's close, except a position opened TODAY (measured from its buy
+        // price) — so a just-bought, unmoved asset shows ~0 daily P/L, not a phantom intraday move.
+        const _dayBase = _holdingDayBaseline(h);
+        const change = _dayBase > 0 ? ((h.price - _dayBase) / _dayBase * 100) : 0;
         const changeClass = change >= 0 ? 'positive' : 'negative';
         const changeSign = change >= 0 ? '+' : '';
         const holdingProfit = h.value - h.costBasis;
@@ -353,7 +360,7 @@ async function openModal(clientId) {
         totalHoldingsValue += h.value * _hFx;
         totalHoldingsPnL += isStale ? 0 : holdingProfit * _hFx;
         // Daily profit per asset (in the holding's currency) + accumulate the USD total
-        const dailyProfit = (h.previousClose > 0 && h.shares > 0) ? (h.price - h.previousClose) * h.shares : 0;
+        const dailyProfit = (_dayBase > 0 && h.shares > 0) ? (h.price - _dayBase) * h.shares : 0;
         totalDailyPnL += isStale ? 0 : dailyProfit * _hFx;
         const dailyProfitClass = dailyProfit >= 0 ? 'positive' : 'negative';
         const dailyProfitSign = dailyProfit >= 0 ? '+' : '';
