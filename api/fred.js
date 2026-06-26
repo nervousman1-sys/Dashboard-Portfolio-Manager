@@ -59,20 +59,26 @@ module.exports = async (req, res) => {
                 { id: 9, key: 'RETAIL', he: 'מכירות קמעונאיות', imp: 'med' },
             ];
             const today = new Date().toISOString().slice(0, 10);
+            const past = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);  // ~last month back
             const end = new Date(Date.now() + 95 * 86400000).toISOString().slice(0, 10);
             const all = await Promise.all(RELEASES.map(async (rel) => {
                 try {
+                    // Window the realtime period back 45 days so we also get the PAST month's release dates.
                     const url = `https://api.stlouisfed.org/fred/release/dates?release_id=${rel.id}` +
                         `&api_key=${FRED_KEY}&file_type=json&include_release_dates_with_no_data=true` +
-                        `&sort_order=asc&realtime_start=${today}&realtime_end=${end}`;
+                        `&sort_order=asc&realtime_start=${past}&realtime_end=${end}`;
                     const r = await fetch(url, { headers: { Accept: 'application/json' } });
                     if (!r.ok) return [];
                     const j = await r.json();
-                    return (j.release_dates || []).filter(d => d.date >= today)
+                    const seen = new Set();
+                    return (j.release_dates || [])
+                        .filter(d => d.date >= past && d.date <= end && !seen.has(d.date) && seen.add(d.date))
                         .map(d => ({ date: d.date, key: rel.key, he: rel.he, imp: rel.imp, country: 'US' }));
                 } catch (e) { return []; }
             }));
-            const events = all.flat().sort((a, b) => a.date.localeCompare(b.date));
+            const allEvents = all.flat();
+            const events = allEvents.filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+            const pastRaw = allEvents.filter(e => e.date < today).sort((a, b) => b.date.localeCompare(a.date)); // newest first
 
             // Latest RELEASED values per key indicator (actual + previous) → result analysis.
             // betterLower=true for inflation gauges (lower reading is the "good" outcome).
@@ -111,8 +117,20 @@ module.exports = async (req, res) => {
             const results = perSeries.map(pts => pts[0]).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
             const history = perSeries.flatMap(pts => pts.slice(1)).sort((a, b) => b.date.localeCompare(a.date));
 
+            // PAST month's release events, each carrying the actual figure it published (the most recent
+            // indicator reading on/before that release date) → "what came out" for every recent report.
+            const byKey = {};
+            for (const pts of perSeries) if (pts && pts.length) byKey[pts[0].key] = pts;
+            const pastEvents = pastRaw.map(e => {
+                const pts = byKey[e.key];
+                const hit = pts ? pts.find(p => p.date <= e.date) : null;
+                return hit
+                    ? { ...e, value: hit.value, previous: hit.previous, dir: hit.dir, sentiment: hit.sentiment, unit: hit.unit, kind: hit.kind, refDate: hit.date }
+                    : { ...e };
+            });
+
             res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
-            res.status(200).json({ events, results, history });
+            res.status(200).json({ events, results, history, pastEvents });
             return;
         }
 

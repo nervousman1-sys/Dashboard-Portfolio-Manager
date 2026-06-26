@@ -10146,7 +10146,9 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .ec-hist-month { font-size: 11.5px; font-weight: 900; color: #ffffff; margin-top: 6px; padding: 4px 2px;
     background: linear-gradient(90deg, rgba(0,229,255,0.05), transparent); }
 .ec-hist-row { margin-top: 0; }
-.ec-hist-row .ec-rr-label { font-size: 12.5px; font-weight: 700; color: #e4e4ee; flex: 1; min-width: 130px; }
+.ec-hist-row .ec-rr-label { font-size: 12.5px; font-weight: 700; color: #e4e4ee; flex: 1; min-width: 110px; }
+.ec-past-date { flex: 0 0 auto; font-size: 12px; font-weight: 900; color: #67e8f9; min-width: 38px;
+    background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.22); border-radius: 7px; padding: 2px 7px; text-align: center; }
 
 /* ════════════════════════ SCANNER AGENT — Early-Alpha intelligence feed ════════════════════════ */
 .sa-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(10px);

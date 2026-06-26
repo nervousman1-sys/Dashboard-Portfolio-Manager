@@ -1047,15 +1047,15 @@ let _ecTab = 'US';          // active calendar tab: 'US' | 'IL'
 let _ecCollapsed = false;    // section folded?
 let _ecData = null;          // { US:[…], IL:[…] }
 let _ecSig = '';             // last-rendered signature (skip needless refresh re-renders)
-let _ecHistCollapsed = true; // historical archive folded by default (opt-in)
-try { _ecHistCollapsed = localStorage.getItem('ec_hist_collapsed') !== '0'; } catch (e) { }
+let _ecHistCollapsed = false; // "past releases + results" section OPEN by default (user wants to see history)
+try { _ecHistCollapsed = localStorage.getItem('ec_past_collapsed') === '1'; } catch (e) { }
 
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
     if (!el) return;
-    const CACHE_KEY = 'econ_cal_v4'; // v4: + history (collapsible archive of past prints)
+    const CACHE_KEY = 'econ_cal_v5'; // v5: + pastEvents (last month's releases WITH their results)
     let cached = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
-    let us = cached ? cached.events : null, results = cached ? cached.results : [], history = cached ? cached.history : [];
+    let us = cached ? cached.events : null, results = cached ? cached.results : [], history = cached ? cached.history : [], pastEvents = cached ? cached.pastEvents : [];
     if (!us) {
         if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
             <div class="macro-loading" style="padding:16px">טוען יומן…</div>`;
@@ -1065,10 +1065,11 @@ async function _loadEconCalendar(forceRefresh) {
             us = (j && Array.isArray(j.events)) ? j.events : [];
             results = (j && Array.isArray(j.results)) ? j.results : [];
             history = (j && Array.isArray(j.history)) ? j.history : [];
-            if (us.length) _cacheSet(CACHE_KEY, { events: us, results, history });
-        } catch (e) { us = []; results = []; history = []; }
+            pastEvents = (j && Array.isArray(j.pastEvents)) ? j.pastEvents : [];
+            if (us.length || pastEvents.length) _cacheSet(CACHE_KEY, { events: us, results, history, pastEvents });
+        } catch (e) { us = []; results = []; history = []; pastEvents = []; }
     }
-    _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents(), results: results || [], history: history || [] };
+    _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents(), results: results || [], history: history || [], past: pastEvents || [] };
     // Avoid needless re-render on the hourly auto-refresh (prevents page jumps); tab/collapse below
     // always call _ecRender directly.
     const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he])) + '|' + JSON.stringify((_ecData.results || []).map(r => [r.he, r.value])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
@@ -1081,7 +1082,7 @@ function toggleEcCollapse() { _ecCollapsed = !_ecCollapsed; _ecRender(); }
 // Fold/unfold the historical archive in place (no full re-render → keeps scroll position).
 function _ecToggleHist() {
     _ecHistCollapsed = !_ecHistCollapsed;
-    try { localStorage.setItem('ec_hist_collapsed', _ecHistCollapsed ? '1' : '0'); } catch (e) { }
+    try { localStorage.setItem('ec_past_collapsed', _ecHistCollapsed ? '1' : '0'); } catch (e) { }
     const body = document.getElementById('ecHistBody');
     const caret = document.querySelector('.ec-hist .ec-collapse');
     if (body) body.style.display = _ecHistCollapsed ? 'none' : ''; // inline → CSS-independent
@@ -1163,38 +1164,42 @@ function _ecRender() {
         </div>`;
 }
 
-// Collapsible historical archive — the prints that already came out (older than the latest of
-// each indicator), grouped by reference month, newest first. Folded by default. US tab only
-// (Israel has no released-value series here). Each row reuses the inline-result styling + analysis.
+// Past month's release CALENDAR — every report that already came out (newest first), each with the
+// actual figure it published + the up/down vs the prior reading + a short analysis. Open by default,
+// US tab only (Israel has no released-value series here). This is the calendar's "history + results".
 function _ecHistHTML() {
-    const hist = (_ecData && Array.isArray(_ecData.history)) ? _ecData.history : [];
-    if (_ecTab !== 'US' || !hist.length) return '';
-    const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+    const past = (_ecData && Array.isArray(_ecData.past)) ? _ecData.past : [];
+    if (_ecTab !== 'US' || !past.length) return '';
     const sentLabel = { good: 'חיובי', bad: 'שלילי', neutral: 'ניטרלי' };
     const arrow = (d) => d === 'up' ? '▲' : d === 'down' ? '▼' : '▬';
-    const groups = {};
-    for (const r of hist) { if (!r || !r.date) continue; const k = String(r.date).slice(0, 7); (groups[k] = groups[k] || []).push(r); }
     let aid = 0, inner = '';
-    for (const k of Object.keys(groups).sort().reverse()) {
-        const [y, m] = k.split('-');
-        inner += `<div class="ec-hist-month">${HE_MONTHS[parseInt(m, 10) - 1]} ${y}</div>`;
-        for (const r of groups[k]) {
-            const anId = 'ecHistAn_' + (aid++);
-            inner += `<div class="ec-row-result ec-res-${r.sentiment} ec-hist-row">
-                <span class="ec-rr-label">${_macroEscape(r.he)}</span>
-                <b class="ec-rr-val">${_ecResVal(r.value, r.unit, r.kind)}</b>
-                <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span>
-                <span class="ec-rr-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span>
-                <span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span>
+    for (const e of past) {
+        if (!e || !e.date) continue;
+        const d = new Date(e.date); const dd = d.getDate(), mo = d.getMonth() + 1;
+        const hasRes = e.value != null && !isNaN(e.value);
+        const sent = e.sentiment || 'neutral';
+        let res;
+        if (hasRes) {
+            const anId = 'ecPastAn_' + (aid++);
+            res = `<b class="ec-rr-val">${_ecResVal(e.value, e.unit, e.kind)}</b>
+                <span class="ec-res-arrow ec-res-${sent}">${arrow(e.dir)}</span>
+                <span class="ec-rr-prev">קודם ${_ecResVal(e.previous, e.unit, e.kind)}</span>
+                <span class="ec-res-badge ec-res-${sent}">${sentLabel[sent] || ''}</span>
                 <button class="ec-res-inline-btn" onclick="_ecToggleRowAnalysis('${anId}')">ניתוח קצר ›</button>
-                <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
-            </div>`;
+                <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(e))}</div>`;
+        } else {
+            res = `<span class="ec-rr-prev">התוצאה טרם זמינה</span>`;
         }
+        inner += `<div class="ec-row-result ec-res-${sent} ec-hist-row">
+            <span class="ec-past-date">${dd}.${mo}</span>
+            <span class="ec-rr-label">${_macroEscape(e.he)}</span>
+            ${res}
+        </div>`;
     }
     return `<div class="ec-hist">
         <div class="ec-hist-head">
             <button class="ec-collapse" onclick="_ecToggleHist()" title="קפל / פתח">${_ecHistCollapsed ? '▸' : '▾'}</button>
-            <span class="ec-hist-title">🗂️ נתונים היסטוריים — פרסומים שכבר התפרסמו</span>
+            <span class="ec-hist-title">📅 פרסומים אחרונים — תוצאות (עד חודש אחורה)</span>
         </div>
         <div class="ec-hist-body" id="ecHistBody" style="${_ecHistCollapsed ? 'display:none' : ''}">${inner}</div>
     </div>`;
