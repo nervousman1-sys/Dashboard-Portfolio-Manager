@@ -145,16 +145,25 @@ window.addEventListener('DOMContentLoaded', _syncThemeButton);
 // ========== SERVICE WORKER REGISTRATION ==========
 
 if ('serviceWorker' in navigator) {
-    // NOTE: we deliberately do NOT auto-reload on `controllerchange`. Doing so made the
-    // open page jump to the top every time a new version deployed (jarring "refresh"
-    // jumps). The new SW still installs silently in the background (updateViaCache:'none'
-    // + reg.update()), so the update applies on the user's next natural refresh — with
-    // no surprise scroll-to-top mid-session.
+    // Auto-apply a newly deployed Service Worker. When a new SW takes control (the new SW uses
+    // skipWaiting + clients.claim), reload ONCE so the fresh bundle is used immediately instead of
+    // getting stuck behind an old cached SW. Guarded so it fires at most once, and only on an
+    // UPDATE (a controller already existed) — never on the first-ever install — so there is no
+    // surprise reload for new visitors.
+    const _hadController = !!navigator.serviceWorker.controller;
+    let _swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_swReloaded || !_hadController) return;
+        _swReloaded = true;
+        location.reload();
+    });
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' })
             .then((reg) => {
                 console.log('Service Worker registered, scope:', reg.scope);
                 reg.update().catch(() => {});
+                // Keep checking for new versions while the tab stays open.
+                setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
             })
             .catch((err) => {
                 console.warn('Service Worker registration failed:', err);
