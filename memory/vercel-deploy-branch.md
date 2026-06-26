@@ -5,15 +5,15 @@ metadata:
   type: project
 ---
 
-**CRITICAL: there are TWO Vercel projects under team_ZrM8Y9cMIOyQwxVoOgnZjdJW, and the public domain is on the one the repo is NOT linked to.**
+**There are TWO Vercel projects under team_ZrM8Y9cMIOyQwxVoOgnZjdJW. The public domain finextium.com is on `dashboard-portfolio-manager`.**
 
-1. `finextium-dashboard` (prj_U8pyMsPUobZrUA8K77ypsGttcJkt) — the repo's `.vercel/project.json` links here. Domains: `*.vercel.app` only (finextium-dashboard.vercel.app). Auto-deploys from branch `design-update-google`. **The user does NOT visit this one.**
-2. `dashboard-portfolio-manager` (prj_mmW5dTSRKrI8Nk0hk60lCCX32vL3) — owns the **real public domain `finextium.com` + `www.finextium.com`** (apex 308-redirects to www). Git-integration deploys from `main`, which is ~334 commits stale (last 2026-04-09) → so finextium.com lagged far behind all real work on `design-update-google`.
+1. `finextium-dashboard` (prj_U8pyMsPUobZrUA8K77ypsGttcJkt) — domains: `*.vercel.app` only. Auto-deploys from branch `design-update-google`. **The user does NOT visit this one** (it's effectively staging).
+2. `dashboard-portfolio-manager` (prj_mmW5dTSRKrI8Nk0hk60lCCX32vL3) — owns the **real public domain `finextium.com` + `www.finextium.com`** (apex 308-redirects to www). Git-integration deploys from `main` (stale) — IGNORE that; deploy via CLI.
 
-**Why:** All dev happens on `design-update-google`, but that branch only auto-deploys the `*.vercel.app` project. The customer-facing finextium.com is wired to `main` on the OTHER project, so features never appeared live even though they were "deployed."
+**FIXED 2026-06-26:** `.vercel/project.json` (gitignored, local) was repointed to `dashboard-portfolio-manager`, so a plain **`npx vercel --prod --yes` from the repo now deploys straight to finextium.com** and auto-aliases www.finextium.com. No env-var prefix needed anymore. This is the standard deploy command for shipping to the live site.
 
-**How to apply:** When a feature "doesn't show up on finextium.com", deploy the current working tree straight to the dashboard-portfolio-manager project's production (overrides its stale-main git deploy):
-`VERCEL_ORG_ID=team_ZrM8Y9cMIOyQwxVoOgnZjdJW VERCEL_PROJECT_ID=prj_mmW5dTSRKrI8Nk0hk60lCCX32vL3 npx vercel deploy --prod --yes`
-This aliases the new deployment to www.finextium.com immediately. (CLI authed as nervousman1-5652.) The 06-16 reports feature (ניתוח דוחות) was invisible for exactly this reason — fixed by deploying to the correct project. **Long-term fix to suggest: either repoint dashboard-portfolio-manager's git branch to `design-update-google`, or move the finextium.com domain onto the finextium-dashboard project, so one push deploys the live site.**
+**Cache:** `vercel.json` sets `no-store` (+ `Vercel-CDN-Cache-Control: no-store`) on `/`, `/index.html`, `/service-worker.js` so the CDN never serves a stale shell; changed JS/CSS get a `?v=NNN` bump in index.html. After deploy, a single hard refresh is enough.
+
+**Still TODO (needs Vercel dashboard, not CLI):** for true git-push-to-live, either move the finextium.com domain onto `finextium-dashboard`, or set `dashboard-portfolio-manager`'s production branch to `design-update-google`. Until then, ship via the CLI deploy above.
 
 Vercel Hobby caps serverless functions at 12 — `api/` currently holds exactly 12 files, so adding a new `api/*.js` breaks the build. Merge new endpoints into existing functions via `?mode=` params instead (see [[reports-data-sources]]).
