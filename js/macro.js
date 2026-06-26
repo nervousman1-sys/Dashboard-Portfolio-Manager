@@ -1156,11 +1156,12 @@ function _ecRender() {
         <div class="ec-body ${_ecCollapsed ? 'ec-hidden' : ''}" id="ecBody">
             <div class="ec-tabs">${tab('US', 'ארה״ב')}${tab('IL', 'ישראל')}</div>
             ${ilNote}
+            ${_ecHistHTML()}
+            <div class="ec-upcoming-title">📆 פרסומים קרובים</div>
             <table class="ec-table">
                 <thead><tr><th class="ec-th-date">תאריך</th><th>אירוע</th><th class="ec-th-imp">השפעה</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
-            ${_ecHistHTML()}
         </div>`;
 }
 

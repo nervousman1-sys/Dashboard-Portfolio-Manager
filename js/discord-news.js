@@ -10,6 +10,18 @@ let _dnActiveChannel = 'all';
 let _dnLastData = null;
 let _dnLastSig = null; // signature of the last rendered feed — skips no-op re-renders
 let _dnInsiderQuery = ''; // ticker filter for the insider-buys tab
+let _dnFeedCollapsed = false; // whole news feed folded? (persisted)
+try { _dnFeedCollapsed = localStorage.getItem('dn_feed_collapsed') === '1'; } catch (e) { }
+// Fold/unfold the entire news feed from the header button (inline display → CSS-independent).
+function dnToggleFeed() {
+    _dnFeedCollapsed = !_dnFeedCollapsed;
+    try { localStorage.setItem('dn_feed_collapsed', _dnFeedCollapsed ? '1' : '0'); } catch (e) { }
+    const feed = document.getElementById('dnFeed');
+    const btn = document.getElementById('dnCollapseBtn');
+    if (feed) feed.style.display = _dnFeedCollapsed ? 'none' : '';
+    if (btn) btn.textContent = _dnFeedCollapsed ? '▸ הצג חדשות' : '▾ קפל חדשות';
+}
+if (typeof window !== 'undefined') window.dnToggleFeed = dnToggleFeed;
 
 // ── Insider-buys persistent history ──────────────────────────────────────────
 // The feed API only returns recent messages; we accumulate insider posts locally
@@ -83,12 +95,13 @@ function openDiscordNews() {
             <h1 class="macro-main-title">חדשות כלכלה ושוק ההון</h1>
             <div style="display:flex;gap:8px;align-items:center">
                 <span class="dn-live" id="dnLive"><span class="dn-live-dot"></span> עדכון חי</span>
+                <button class="macro-back-btn" id="dnCollapseBtn" onclick="dnToggleFeed()" title="קפל / פתח את כל החדשות">${_dnFeedCollapsed ? '▸ הצג חדשות' : '▾ קפל חדשות'}</button>
                 <button class="macro-back-btn" onclick="closeDiscordNews()">חזור לדשבורד</button>
             </div>
         </div>
         <div class="macro-content">
             <div class="dn-tabs" id="dnTabs"></div>
-            <div id="dnFeed"><div class="adv-empty">טוען עדכונים מהדיסקורד…</div></div>
+            <div id="dnFeed" style="${_dnFeedCollapsed ? 'display:none' : ''}"><div class="adv-empty">טוען עדכונים מהדיסקורד…</div></div>
         </div>
     </div>`;
     window.scrollTo(0, 0);
@@ -983,6 +996,7 @@ function _dnRender() {
     feedEl.querySelectorAll('details.dn-day[data-dkey]').forEach(d => prevState.set(d.dataset.dkey, d.open));
 
     feedEl.innerHTML = html;
+    feedEl.style.display = _dnFeedCollapsed ? 'none' : ''; // keep the user's fold state across re-renders
     if (document.getElementById('dnMarketFlows') && typeof _dnRenderMarketFlows === 'function') _dnRenderMarketFlows();
 
     if (prevState.size) {

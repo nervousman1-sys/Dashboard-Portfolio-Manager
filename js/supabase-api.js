@@ -62,6 +62,7 @@ function mapHolding(h) {
         assetClass: h.asset_class || _inferAssetClass(h.type),
         bondType: h.bond_type || null,
         buyDate: h.buy_date || null,   // real purchase date ('YYYY-MM-DD') when known
+        createdAt: h.created_at ? String(h.created_at).slice(0, 10) : null, // when the row was added (daily-P/L fallback)
         _livePriceResolved: (h.type !== 'stock') || !priceMatchesPurchase
     };
 }

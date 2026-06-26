@@ -734,7 +734,11 @@ function _holdingDayBaseline(h) {
     if (!h) return 0;
     try {
         const today = new Date().toISOString().slice(0, 10);
-        if (h.buyDate && String(h.buyDate).slice(0, 10) === today && h.shares > 0 && h.costBasis > 0) {
+        // "Opened today" = real buy date is today, OR (no buy date recorded) the row was created today.
+        // created_at is the fallback because manual adds don't always carry a buy_date — without it a
+        // position bought today at market showed a phantom daily move vs a close it never owned through.
+        const openDate = (h.buyDate ? String(h.buyDate).slice(0, 10) : '') || (h.createdAt ? String(h.createdAt).slice(0, 10) : '');
+        if (openDate === today && h.shares > 0 && h.costBasis > 0) {
             return h.costBasis / h.shares; // avg purchase price = this position's effective open today
         }
     } catch (e) { /* fall through to previousClose */ }
