@@ -1260,8 +1260,9 @@ function renderClientCards() {
         grid.innerHTML = confirmedEmpty
             ? `<div class="empty-state glass-card">
                    <div class="empty-state-icon">📊</div>
-                   <h3>אין תיקים להצגה</h3>
-                   <p>לחץ על <strong style="color:var(--accent-blue)">"+ הוסף תיק"</strong> כדי להתחיל</p>
+                   <h3>בוא נבנה את התיק הראשון שלך</h3>
+                   <p style="max-width:440px;margin:0 auto 18px;color:var(--text-muted);line-height:1.7">הוסף תיק ידנית, או <strong style="color:var(--accent-blue)">ייבא קובץ Excel/PDF מכל ברוקר</strong> — הפלטפורמה תקרא אוטומטית את ההחזקות, המחירים והתשואות תוך 30 שניות.</p>
+                   <button class="onboard-cta" onclick="openMgmtModal('addClient')">+ הוסף / ייבא תיק</button>
                </div>`
             : `<div class="empty-state glass-card">
                    <div class="rep-spinner" style="margin:0 auto 14px"></div>

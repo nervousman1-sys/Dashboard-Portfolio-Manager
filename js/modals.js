@@ -207,7 +207,7 @@ function _buildHoldingsTable(client) {
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
-                    <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
+                    ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}
                     ${subName}
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                         <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>
@@ -374,7 +374,7 @@ async function openModal(clientId) {
         holdingsRows += `<tr>
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
-                    <span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>
+                    ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}
                     ${subName}
                     <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                         <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>

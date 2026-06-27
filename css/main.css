@@ -9592,6 +9592,15 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 .rep-earn-chip:hover { border-color: rgba(245,158,11,0.7); background: rgba(245,158,11,0.08); }
 .rep-earn-date { font-size: 11px; font-weight: 800; color: #fcd34d; background: rgba(245,158,11,0.14);
     border-radius: 999px; padding: 2px 8px; }
+/* Clickable holding name → opens its financial report */
+.hold-name-link { font-weight: 600; color: var(--accent-blue, #00e5ff); cursor: pointer;
+    border-bottom: 1px dotted rgba(0,229,255,0.4); width: fit-content; }
+.hold-name-link:hover { color: #67e8f9; border-bottom-color: #67e8f9; }
+/* Empty-portfolio onboarding CTA */
+.onboard-cta { font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; color: #04121a;
+    background: linear-gradient(135deg, #22d3ee, #0ea5e9); border: none; border-radius: 12px; padding: 12px 22px;
+    box-shadow: 0 8px 24px rgba(14,165,233,0.3); transition: transform .12s, box-shadow .12s; }
+.onboard-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(14,165,233,0.42); }
 
 .rep-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
