@@ -21,7 +21,7 @@ const { createClient } = require('@supabase/supabase-js');
 try { if (!globalThis.WebSocket) globalThis.WebSocket = require('ws'); } catch (e) { }
 
 // Reuse the EXACT same report builder + scorer the website uses (no logic drift).
-const { fetchReport } = require(path.join(__dirname, '..', 'lib', 'reports-data.js'));
+const { fetchReport, fetchYahooStats } = require(path.join(__dirname, '..', 'lib', 'reports-data.js'));
 const ReportsEngine = require(path.join(__dirname, '..', 'js', 'reports-engine.js'));
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -60,7 +60,7 @@ async function loadUniverse() {
 }
 
 // ── Refresh one company → upsert its latest report + score ────────────────────
-async function refreshOne(item, lastSeen) {
+async function refreshOne(item, lastSeen, nextEarn) {
     const { symbol, market } = item;
     let report;
     try {
@@ -74,13 +74,24 @@ async function refreshOne(item, lastSeen) {
     const improved = !!(model.beat && model.beat.improved);
     const asOf = report.asOf || (report.quarters[0] && report.quarters[0].date) || null;
 
+    // Next earnings date — the fast (Yahoo-only) report path doesn't carry it for US, so fetch the
+    // stat ONCE and reuse the stored future date on later sweeps (no extra Yahoo call until it passes).
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let nextEarnings = report.nextEarningsDate || null;
+    if (!nextEarnings || nextEarnings < todayStr) {
+        const cached = nextEarn && nextEarn[symbol];
+        if (cached && cached >= todayStr) nextEarnings = cached;
+        else { try { const st = await fetchYahooStats(symbol); if (st && st.nextEarningsDate) nextEarnings = st.nextEarningsDate; } catch (e) { /* skip */ } }
+    }
+    if (nextEarn && nextEarnings) nextEarn[symbol] = nextEarnings;
+
     const payload = {
         symbol, market,
         company_name: report.companyName || symbol,
         sector: item.sector || report.sector || null,
         as_of: asOf,
         score, improved,
-        next_earnings: report.nextEarningsDate || null,
+        next_earnings: nextEarnings || null,
         report,
     };
     const { error } = await supabase.rpc('upsert_company_report', { p_secret: AGENT_WRITE_SECRET, p_item: payload });
@@ -100,13 +111,13 @@ async function heartbeat(nextRunMs, result) {
 }
 
 // ── One full sweep over the whole universe ────────────────────────────────────
-async function sweep(universe, lastSeen) {
+async function sweep(universe, lastSeen, nextEarn) {
     let ok = 0, fresh = 0, done = 0;
     const freshNames = [];
     // Process in small concurrent waves with a gentle gap so we don't hammer Yahoo.
     for (let i = 0; i < universe.length; i += BATCH) {
         const wave = universe.slice(i, i + BATCH);
-        const results = await Promise.all(wave.map(it => refreshOne(it, lastSeen)));
+        const results = await Promise.all(wave.map(it => refreshOne(it, lastSeen, nextEarn)));
         for (const r of results) {
             done++;
             if (r.ok) ok++;
@@ -124,11 +135,12 @@ async function sweep(universe, lastSeen) {
 async function runForever() {
     log(`Finextium Reports-Agent online · site=${SITE} · batch=${BATCH} · gap=${GAP_MS}ms · rest=${REST_MIN}min`);
     const lastSeen = Object.create(null); // symbol → last stored asOf (for fresh-report detection)
-    // Seed lastSeen from what's already in the table so we only flag genuinely NEW reports.
+    const nextEarn = Object.create(null); // symbol → stored next-earnings date (skip re-fetch while future)
+    // Seed from what's already in the table so we only flag genuinely NEW reports + skip known dates.
     try {
-        const { data } = await supabase.from('company_reports').select('symbol,as_of');
-        for (const r of (data || [])) if (r.as_of) lastSeen[r.symbol] = r.as_of;
-        log(`Seeded ${Object.keys(lastSeen).length} known report dates.`);
+        const { data } = await supabase.from('company_reports').select('symbol,as_of,next_earnings');
+        for (const r of (data || [])) { if (r.as_of) lastSeen[r.symbol] = r.as_of; if (r.next_earnings) nextEarn[r.symbol] = r.next_earnings; }
+        log(`Seeded ${Object.keys(lastSeen).length} report dates, ${Object.keys(nextEarn).length} earnings dates.`);
     } catch (e) { log('seed warn:', e.message); }
 
     let cycle = 0;
@@ -139,7 +151,7 @@ async function runForever() {
         if (!universe.length) { log('Empty universe — retrying in 60s.'); await sleep(60000); continue; }
         log(`Sweep #${cycle} starting · ${universe.length} companies.`);
         const t0 = Date.now();
-        const res = await sweep(universe, lastSeen);
+        const res = await sweep(universe, lastSeen, nextEarn);
         const mins = ((Date.now() - t0) / 60000).toFixed(1);
         const summary = `סריקת דוחות הושלמה · ${res.ok}/${res.total} עודכנו · ${res.fresh} דוחות חדשים${res.fresh ? ` (${res.freshNames.join(', ')})` : ''} · ${mins} דק׳`;
         log(`✓ ${summary}`);
