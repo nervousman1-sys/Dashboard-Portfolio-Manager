@@ -36,3 +36,49 @@ keys.forEach(key => {
     console.log(`  ${key} = ${display}`);
 });
 console.log('Generated js/env-config.js');
+
+// ── Cache-busting: version EVERY local js/css asset automatically ──────────────────────────────
+// This replaces the error-prone manual `?v=NNN` bumping (a dropped </script> while hand-editing
+// those tags is exactly what once broke navigation). One build version is stamped onto every
+// asset URL + the service-worker cache name, so a deploy always ships a fully-consistent bundle.
+const crypto = require('crypto');
+function buildVersion() {
+    const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+    if (sha) return sha.slice(0, 10);
+    try {
+        const h = crypto.createHash('sha1');
+        for (const dir of ['js', 'css']) {
+            const d = path.join(__dirname, dir);
+            for (const f of fs.readdirSync(d).sort()) h.update(f + ':' + fs.readFileSync(path.join(d, f)));
+        }
+        return h.digest('hex').slice(0, 10);
+    } catch (e) { return Date.now().toString(36); }
+}
+const VER = buildVersion();
+
+const idxPath = path.join(__dirname, 'index.html');
+let html = fs.readFileSync(idxPath, 'utf-8');
+
+// VALIDATE FIRST — an unclosed <script src> silently swallows the NEXT script tag (e.g. it once
+// ate sidebar.js → dead navigation). Balanced <script>/</script> counts catch that class of bug.
+const opens = (html.match(/<script\b/g) || []).length;
+const closes = (html.match(/<\/script>/g) || []).length;
+if (opens !== closes) {
+    console.error(`\nBUILD FAILED: index.html has ${opens} "<script" but ${closes} "</script>" — a script tag is unclosed.`);
+    process.exit(1);
+}
+
+// Re-stamp the version onto each local asset's URL (touches only the attribute value, never the tag).
+html = html.replace(/(src="js\/[a-zA-Z0-9_.-]+\.js)(\?v=[^"]*)?"/g, `$1?v=${VER}"`);
+html = html.replace(/(href="css\/[a-zA-Z0-9_.-]+\.css)(\?v=[^"]*)?"/g, `$1?v=${VER}"`);
+fs.writeFileSync(idxPath, html, 'utf-8');
+
+// Keep the service-worker cache name in lockstep so its cache busts every deploy too.
+try {
+    const swPath = path.join(__dirname, 'service-worker.js');
+    let sw = fs.readFileSync(swPath, 'utf-8');
+    sw = sw.replace(/const CACHE_NAME = '[^']*';/, `const CACHE_NAME = 'portfolio-dashboard-${VER}';`);
+    fs.writeFileSync(swPath, sw, 'utf-8');
+} catch (e) { /* service-worker is optional */ }
+
+console.log(`Versioned all js/css assets + SW cache → ${VER}`);
