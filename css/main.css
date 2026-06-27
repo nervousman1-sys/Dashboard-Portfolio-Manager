@@ -9587,6 +9587,11 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
     font-family: inherit; transition: border-color .12s, background .12s; }
 .rep-new-chip:hover { border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.06); }
 .rep-new-tk { font-size: 12.5px; font-weight: 800; color: var(--text-primary); }
+.rep-earn-strip .rep-new-lbl { color: #fcd34d; }
+.rep-earn-chip { border-color: rgba(245,158,11,0.35); }
+.rep-earn-chip:hover { border-color: rgba(245,158,11,0.7); background: rgba(245,158,11,0.08); }
+.rep-earn-date { font-size: 11px; font-weight: 800; color: #fcd34d; background: rgba(245,158,11,0.14);
+    border-radius: 999px; padding: 2px 8px; }
 
 .rep-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));

@@ -341,10 +341,15 @@ async function _repLoadIntel() {
     const el = document.getElementById('repIntel');
     if (!el || typeof supabaseClient === 'undefined' || !supabaseClient) return;
     const market = _repMarket;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    // Tickers the user actually holds (across all portfolios) → their upcoming earnings.
+    const held = new Set();
+    try { (typeof clients !== 'undefined' ? clients : []).forEach(c => (c.holdings || []).forEach(h => { if (h.type === 'stock' && h.ticker) held.add(String(h.ticker).toUpperCase()); })); } catch (e) { }
     try {
-        const [statusRes, recentRes] = await Promise.all([
+        const [statusRes, recentRes, earnRes] = await Promise.all([
             supabaseClient.from('agent_status').select('last_run,last_result').eq('agent', 'reports').maybeSingle(),
             supabaseClient.from('company_reports').select('symbol,score,improved,as_of,company_name').eq('market', market).order('as_of', { ascending: false }).limit(16),
+            held.size ? supabaseClient.from('company_reports').select('symbol,company_name,next_earnings').in('symbol', [...held]).gte('next_earnings', todayStr).order('next_earnings', { ascending: true }).limit(12) : Promise.resolve({ data: [] }),
         ]);
         if (document.getElementById('repIntel') !== el || _repMarket !== market || _repView !== 'list') return;
         const st = statusRes && statusRes.data;
@@ -363,7 +368,17 @@ async function _repLoadIntel() {
                 <span class="rep-new-tk">${disp}</span><span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>
             </button>`;
         }).join('');
-        el.innerHTML = statusHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
+        // 📅 Upcoming earnings of the user's own holdings (the most actionable strip for a manager).
+        const earn = (earnRes && Array.isArray(earnRes.data)) ? earnRes.data.filter(e => e && e.next_earnings) : [];
+        const earnChips = earn.map(e => {
+            const disp = String(e.symbol).replace(/\.TA$/, '');
+            const co = String(e.company_name || '').replace(/"/g, '');
+            return `<button class="rep-new-chip rep-earn-chip" onclick="openReportForTicker('${e.symbol}')" title="${co} · מועד דוח ${_repHeDate(e.next_earnings)}">
+                <span class="rep-new-tk">${disp}</span><span class="rep-earn-date">${_repHeDate(e.next_earnings)}</span>
+            </button>`;
+        }).join('');
+        const earnHtml = earnChips ? `<div class="rep-new-strip rep-earn-strip"><span class="rep-new-lbl">📅 דוחות קרובים שלך</span><div class="rep-new-chips">${earnChips}</div></div>` : '';
+        el.innerHTML = statusHtml + earnHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
     } catch (e) { /* non-fatal */ }
 }
 
