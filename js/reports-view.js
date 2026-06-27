@@ -117,6 +117,7 @@ function openReportsPage() {
     if (search) search.placeholder = _REP_MKT[_repMarket].search;
     window.scrollTo(0, 0);
     _repLoadUniverse();
+    _repLoadIntel(); // 24/7 reports-agent freshness + "reported recently" strip
     if (urlSym) openReportDetail(urlSym); // _repRenderList is a no-op while in detail view
 }
 
@@ -159,6 +160,7 @@ function _repRenderShell() {
                            placeholder="${_REP_MKT.us.search}"
                            oninput="_repSearch=this.value.toUpperCase().trim(); _repRenderList()" />
                 </div>
+                <div id="repIntel" class="rep-intel"></div>
                 <div id="repBody"><div class="adv-empty">טוען רשימת חברות…</div></div>
                 <div class="tech-foot">דו"ח נמשך בלחיצה על חברה · היסטוריה של עד 8 רבעונים · נתונים מתעדכנים אוטומטית מהדוח האחרון שהוגש · ציון 0–100 משוקלל מרווחיות, צמיחה, איתנות, תזרים ומומנטום</div>
             </div>
@@ -177,6 +179,7 @@ function setRepMarket(mkt) {
     if (search) { search.placeholder = _REP_MKT[mkt].search; }
     document.querySelectorAll('#repMkt .tech-mkt-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-mkt') === mkt));
     _repLoadUniverse();
+    _repLoadIntel();
 }
 
 // ── Universe = ticker directory from the existing technicals endpoint (no FMP cost) ──
@@ -323,6 +326,45 @@ async function _repSyncSupabaseReports(market) {
             for (const r of data) if (r.score != null) _repUpdateCardChip(r.symbol, r.score, !!r.improved);
         }
     } catch (e) { _repSbSyncedAt[market] = 0; }
+}
+
+// ── Reports-page intel strip: 24/7 agent freshness + companies that reported most recently ──────
+function _repAgo(ts) {
+    if (!ts) return '';
+    let s = Math.round((Date.now() - new Date(ts).getTime()) / 1000); if (s < 0) s = 0;
+    if (s < 90) return 'ממש עכשיו';
+    const m = Math.round(s / 60); if (m < 60) return `לפני ${m} דק׳`;
+    const h = Math.round(m / 60); if (h < 24) return `לפני ${h} שע׳`;
+    return `לפני ${Math.round(h / 24)} ימים`;
+}
+async function _repLoadIntel() {
+    const el = document.getElementById('repIntel');
+    if (!el || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    const market = _repMarket;
+    try {
+        const [statusRes, recentRes] = await Promise.all([
+            supabaseClient.from('agent_status').select('last_run,last_result').eq('agent', 'reports').maybeSingle(),
+            supabaseClient.from('company_reports').select('symbol,score,improved,as_of,company_name').eq('market', market).order('as_of', { ascending: false }).limit(16),
+        ]);
+        if (document.getElementById('repIntel') !== el || _repMarket !== market || _repView !== 'list') return;
+        const st = statusRes && statusRes.data;
+        const live = !!(st && st.last_run && (Date.now() - new Date(st.last_run).getTime() < 6 * 3600 * 1000));
+        const cnt = (st && st.last_result && (st.last_result.match(/(\d+)\s*\/\s*\d+/) || [])[1]) || '';
+        const statusHtml = `<div class="rep-intel-status">
+            <span class="rep-live ${live ? 'on' : ''}"></span>
+            <b>${live ? 'מנוע הדוחות פעיל 24/7' : 'מנוע הדוחות — בודק'}</b>
+            <span class="rep-intel-sub">${cnt ? cnt + ' חברות מנותחות · ' : ''}${st && st.last_run ? 'עודכן ' + _repAgo(st.last_run) : ''}</span>
+        </div>`;
+        const recent = (recentRes && Array.isArray(recentRes.data)) ? recentRes.data : [];
+        const chips = recent.filter(r => r && r.score != null).slice(0, 14).map(r => {
+            const disp = market === 'il' ? String(r.symbol).replace(/\.TA$/, '') : r.symbol;
+            const co = String(r.company_name || '').replace(/"/g, '');
+            return `<button class="rep-new-chip" onclick="openReportDetail('${r.symbol}')" title="${co} · דוח ${_repHeDate(r.as_of)}">
+                <span class="rep-new-tk">${disp}</span><span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>
+            </button>`;
+        }).join('');
+        el.innerHTML = statusHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
+    } catch (e) { /* non-fatal */ }
 }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the
