@@ -118,6 +118,7 @@ function openReportsPage() {
     window.scrollTo(0, 0);
     _repLoadUniverse();
     _repLoadIntel(); // 24/7 reports-agent freshness + "reported recently" strip
+    _repLoadWatch(); // per-user watchlist bar + card stars
     if (urlSym) openReportDetail(urlSym); // _repRenderList is a no-op while in detail view
 }
 
@@ -160,6 +161,7 @@ function _repRenderShell() {
                            placeholder="${_REP_MKT.us.search}"
                            oninput="_repSearch=this.value.toUpperCase().trim(); _repRenderList()" />
                 </div>
+                <div id="repWatchBar" class="rep-intel"></div>
                 <div id="repIntel" class="rep-intel"></div>
                 <div id="repBody"><div class="adv-empty">טוען רשימת חברות…</div></div>
                 <div class="tech-foot">דו"ח נמשך בלחיצה על חברה · היסטוריה של עד 8 רבעונים · נתונים מתעדכנים אוטומטית מהדוח האחרון שהוגש · ציון 0–100 משוקלל מרווחיות, צמיחה, איתנות, תזרים ומומנטום</div>
@@ -180,6 +182,7 @@ function setRepMarket(mkt) {
     document.querySelectorAll('#repMkt .tech-mkt-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-mkt') === mkt));
     _repLoadUniverse();
     _repLoadIntel();
+    _repLoadWatch();
 }
 
 // ── Universe = ticker directory from the existing technicals endpoint (no FMP cost) ──
@@ -264,6 +267,7 @@ function _repRenderList() {
             : `<span class="rep-card-score rep-card-score-empty" data-rep-score="${t}">—</span>`;
         const beat = (s && s.improved) ? '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>' : '';
         return `<button class="rep-card" onclick="openReportDetail('${t}')">
+            <span class="rep-star ${_repWatch.has(t) ? 'on' : ''}" data-rep-star="${t}" onclick="event.stopPropagation(); _repToggleWatch('${t}')" title="הוסף / הסר ממעקב">★</span>
             <span class="rep-card-ticker">${disp}<span class="rep-card-beat-slot" data-rep-beat="${t}">${beat}</span></span>
             ${chip}
         </button>`;
@@ -381,6 +385,72 @@ async function _repLoadIntel() {
         el.innerHTML = statusHtml + earnHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
     } catch (e) { /* non-fatal */ }
 }
+
+// ── Watchlist (per-user, Supabase `watchlist` with RLS) ─────────────────────────────────────────
+let _repWatch = new Set();        // watched symbols (UPPER)
+let _repWatchMkt = {};            // symbol → market
+function _repIsWatched(sym) { return _repWatch.has(String(sym).toUpperCase()); }
+
+async function _repLoadWatch() {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    try {
+        const { data, error } = await supabaseClient.from('watchlist').select('symbol,market').order('created_at', { ascending: true });
+        if (error) return;
+        _repWatch = new Set((data || []).map(r => String(r.symbol).toUpperCase()));
+        _repWatchMkt = {}; (data || []).forEach(r => { _repWatchMkt[String(r.symbol).toUpperCase()] = r.market || 'us'; });
+        _repRenderWatchBar();
+        _repRefreshStars();
+    } catch (e) { /* not logged in / offline — fine */ }
+}
+
+async function _repRenderWatchBar() {
+    const el = document.getElementById('repWatchBar');
+    if (!el) return;
+    const syms = [..._repWatch];
+    if (!syms.length) { el.innerHTML = ''; return; }
+    let info = {};
+    try {
+        const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms);
+        (data || []).forEach(r => { info[String(r.symbol).toUpperCase()] = r; });
+    } catch (e) { /* show without scores */ }
+    if (document.getElementById('repWatchBar') !== el) return;
+    const chips = syms.map(s => {
+        const r = info[s] || {};
+        const disp = String(s).replace(/\.TA$/, '');
+        const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
+        return `<span class="rep-watch-chip" onclick="openReportForTicker('${s}')" title="${String(r.company_name || '').replace(/"/g, '')}">
+            <span class="rep-new-tk">${disp}</span>${sc}
+            <span class="rep-watch-x" onclick="event.stopPropagation(); _repToggleWatch('${s}')" title="הסר ממעקב">✕</span>
+        </span>`;
+    }).join('');
+    el.innerHTML = `<div class="rep-new-strip rep-watch-strip"><span class="rep-new-lbl">⭐ המעקב שלי</span><div class="rep-new-chips">${chips}</div></div>`;
+}
+
+async function _repToggleWatch(symbol) {
+    symbol = String(symbol || '').toUpperCase();
+    if (!symbol || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    const have = _repWatch.has(symbol);
+    try {
+        if (have) {
+            const { error } = await supabaseClient.from('watchlist').delete().eq('symbol', symbol);
+            if (error) throw error;
+            _repWatch.delete(symbol);
+        } else {
+            const mkt = _repWatchMkt[symbol] || (/\.TA$/.test(symbol) ? 'il' : (_repMarket || 'us'));
+            const { error } = await supabaseClient.from('watchlist').insert({ symbol, market: mkt });
+            if (error) throw error;
+            _repWatch.add(symbol); _repWatchMkt[symbol] = mkt;
+        }
+    } catch (e) { if (typeof showToast === 'function') showToast('פעולת מעקב נכשלה — ודא שאתה מחובר', 'error'); return; }
+    _repRenderWatchBar();
+    _repRefreshStars();
+    const db = document.getElementById('repWatchDetailBtn');
+    if (db) { const on = _repWatch.has(symbol); db.classList.toggle('on', on); db.innerHTML = on ? '★ במעקב' : '☆ הוסף למעקב'; }
+}
+function _repRefreshStars() {
+    document.querySelectorAll('[data-rep-star]').forEach(el => el.classList.toggle('on', _repWatch.has(el.getAttribute('data-rep-star'))));
+}
+if (typeof window !== 'undefined') { window._repToggleWatch = _repToggleWatch; window._repLoadWatch = _repLoadWatch; }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the
 // board shows scores without the user opening each one. Uses the free Yahoo path
@@ -651,6 +721,7 @@ function _repRenderDetail(m) {
     <div class="rep-detail" dir="rtl">
         <div class="rep-detail-top">
             <button class="macro-back-btn" onclick="backToReportsList()">→ חזרה לרשימה</button>
+            <button class="rep-watch-btn ${_repIsWatched(m.symbol) ? 'on' : ''}" id="repWatchDetailBtn" onclick="_repToggleWatch('${m.symbol}')">${_repIsWatched(m.symbol) ? '★ במעקב' : '☆ הוסף למעקב'}</button>
             <button class="rep-tech-link" onclick="openTechnicalForTicker('${m.symbol}')" title="פתח את ${(m.companyName || m.symbol).replace(/'/g, '')} בניתוח הטכני">📈 ניתוח טכני →</button>
         </div>
 

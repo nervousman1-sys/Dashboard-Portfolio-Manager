@@ -9601,6 +9601,23 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
     background: linear-gradient(135deg, #22d3ee, #0ea5e9); border: none; border-radius: 12px; padding: 12px 22px;
     box-shadow: 0 8px 24px rgba(14,165,233,0.3); transition: transform .12s, box-shadow .12s; }
 .onboard-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(14,165,233,0.42); }
+/* Watchlist: card star, watch chips, detail button */
+.rep-card { position: relative; }
+.rep-star { position: absolute; top: 2px; left: 5px; font-size: 12px; line-height: 1; cursor: pointer;
+    color: rgba(255,255,255,0.16); transition: color .12s, transform .12s; padding: 2px; z-index: 2; }
+.rep-star:hover { color: #fcd34d; transform: scale(1.25); }
+.rep-star.on { color: #fbbf24; text-shadow: 0 0 8px rgba(251,191,36,0.5); }
+.rep-watch-strip .rep-new-lbl { color: #fbbf24; }
+.rep-watch-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.3); border-radius: 999px; padding: 5px 8px 5px 10px; }
+.rep-watch-chip:hover { border-color: rgba(251,191,36,0.6); background: rgba(251,191,36,0.1); }
+.rep-watch-x { color: #9fb0c0; font-size: 11px; font-weight: 800; padding: 0 2px; }
+.rep-watch-x:hover { color: #f87171; }
+.rep-watch-btn { font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer; color: #e4e4ee;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(251,191,36,0.35); border-radius: 9px; padding: 7px 12px;
+    transition: background .12s, color .12s, border-color .12s; }
+.rep-watch-btn:hover { background: rgba(251,191,36,0.1); }
+.rep-watch-btn.on { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.12); }
 
 .rep-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
