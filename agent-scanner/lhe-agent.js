@@ -220,6 +220,52 @@ function macroFitFor(struct, macro) {
   return { verdict, score, label, reason, supports, opposes };
 }
 
+// ── UNIFIED thesis: blends the asset's macro favorability + the liquidity regime + the
+// recent price/structure into ONE clear directional call, with a full "why" explanation.
+// This resolves the macro-vs-price tension (e.g. 'macro supportive but price falling').
+function buildThesis(struct, macroFit, hpi, result) {
+  const clamp = (x) => Math.max(-1, Math.min(1, x));
+  const macroC = clamp(macroFit.score / 100);                       // asset-specific macro (-1..+1)
+  const mom = struct.momentum20d || 0;                              // 20-day price % change
+  const momC = clamp(mom / 14);
+  const ss = result.microstructure.structureShift || {};
+  const structC = ss.detected ? (ss.direction === 'bullish' ? (ss.type === 'MSS' ? 0.8 : 0.5) : (ss.type === 'MSS' ? -0.8 : -0.5)) : 0;
+
+  // Forward-looking blend: macro leads, recent price/momentum + structure confirm.
+  const net = 0.5 * macroC + 0.35 * momC + 0.15 * structC;
+  const direction = net > 0.12 ? 'bullish' : net < -0.12 ? 'bearish' : 'mixed';
+  const confidence = Math.round(Math.min(98, Math.abs(net) * 150 + 22));
+
+  const regHe = { flood: 'הצפת נזילות', expansion: 'התרחבות נזילות', neutral: 'נזילות מאוזנת', drain: 'ניקוז נזילות', drought: 'בצורת נזילות' }[hpi.regime] || hpi.regime;
+  const macroLine = macroFit.verdict === 'tailwind'
+    ? `מאקרו (רוח גבית): ${macroFit.reason}. הרקע הפונדמנטלי תומך בנכס.`
+    : macroFit.verdict === 'headwind'
+      ? `מאקרו (רוח נגדית): ${macroFit.reason}. הרקע הפונדמנטלי מעיק על הנכס.`
+      : `מאקרו (מעורב): ${macroFit.reason}.`;
+  const liqLine = `נזילות: המשטר ${regHe} (HPI ${Math.round(hpi.score)}/100), הלחץ ${hpi.delta >= 0 ? 'מתרחב' : 'מתכווץ'} — ${hpi.delta >= 0 ? 'רוח גבית כללית לנכסי סיכון' : 'ריסון כללי'}.`;
+  const momWord = mom > 3 ? 'עולה' : mom < -3 ? 'יורד' : 'מדשדש';
+  const structWord = ss.detected ? `${ss.type === 'MSS' ? 'היפוך מבנה (MSS)' : 'פריצת מבנה (BOS)'} ${ss.direction === 'bullish' ? 'כלפי מעלה' : 'כלפי מטה'}` : 'ללא היפוך מבנה מאשר';
+  const techLine = `מחיר ומבנה: מומנטום 20-יום ${momWord} (${mom >= 0 ? '+' : ''}${mom.toFixed(1)}%), ${structWord}.`;
+
+  let concl;
+  if (direction === 'bullish') {
+    const drivers = [macroFit.verdict === 'tailwind' ? 'הרוח הגבית המאקרו' : null, mom > 0 ? 'המומנטום החיובי' : null, ss.detected && ss.direction === 'bullish' ? 'היפוך המבנה כלפי מעלה' : null].filter(Boolean);
+    concl = `מסקנה — תרחיש עולה לטווח הקרוב: ${drivers.join(' + ') || 'הצירוף'} מצביעים מעלה. העלייה צפויה להימשך כל עוד התנאים הפיננסיים נשארים רופפים${macroFit.opposes[0] ? `; הסיכון העיקרי: החרפה ב${macroFit.opposes[0]}` : ''}.`;
+  } else if (direction === 'bearish') {
+    const drivers = [macroFit.verdict === 'headwind' ? `הרוח הנגדית המאקרו (${macroFit.opposes.join(', ')})` : null, mom < 0 ? 'המומנטום השלילי' : null, ss.detected && ss.direction === 'bearish' ? 'שבירת המבנה כלפי מטה' : null].filter(Boolean);
+    concl = `מסקנה — תרחיש יורד לטווח הקרוב: ${drivers.join(' + ') || 'הצירוף'} מצביעים מטה. הירידה צפויה להימשך כל עוד ${macroFit.opposes[0] || 'הלחץ הנוכחי'} נמשך; היפוך יחייב ${macroFit.supports[0] ? `שיפור ב${macroFit.supports[0]} + ` : ''}היפוך מבנה (MSS) כלפי מעלה.`;
+  } else {
+    const upSide = macroC > 0.05 ? `המאקרו תומך (${macroFit.supports.join(', ') || 'רקע חיובי'})` : momC > 0.05 ? 'המומנטום חיובי' : 'רקע ניטרלי';
+    const downSide = momC < -0.05 ? 'המחיר יורד לאחרונה' : macroC < -0.05 ? `המאקרו מעיק (${macroFit.opposes.join(', ')})` : 'אין דחיפה';
+    concl = `מסקנה — תמונה מעורבת, אין הכרעה חדה: מצד אחד ${upSide}, מצד שני ${downSide}. כדי שיעלה: ${macroC > 0 ? 'המשך תנאים רופפים + היפוך מבנה (MSS) כלפי מעלה שיאשר את התמיכה המאקרו' : 'שיפור ברקע המאקרו'}. כדי שירד: ${macroFit.opposes[0] ? `החרפה ב${macroFit.opposes[0]}` : 'המשך חולשת מחיר'} + שבירת תמיכה.`;
+  }
+  const body = [macroLine, liqLine, techLine, concl].join('\n');
+  const arrow = direction === 'bullish' ? '▲' : direction === 'bearish' ? '▼' : '◆';
+  const dirWord = direction === 'bullish' ? 'עולה' : direction === 'bearish' ? 'יורד' : 'מעורב';
+  const headline = `${arrow} תרחיש ${dirWord} לטווח הקרוב · שכנוע ${confidence}/100`;
+  return { direction, confidence, headline, body };
+}
+
 // ── Yahoo daily candles (v8 chart API — no crumb needed) ──────────────────────
 async function fetchCandles(yahooSym) {
   try {
@@ -322,30 +368,35 @@ async function cycle() {
 
   const ranking = rankConduits(enriched.map(e => e.struct), hpi, cfg);
 
-  let ok = 0, alerts = 0;
+  let ok = 0, strong = 0;
   for (const e of enriched) {
     let result;
     try { result = runLHE({ macro, asset: e.struct, candles: e.candles, config: cfg }); }
     catch (err) { log(`runLHE ${e.a.ticker} failed:`, err.message); continue; }
-    const alert = generateLHEAlert(result);
-    if (alert.severity === 'critical' || alert.severity === 'high') alerts++;
-    const aiBody = await geminiPolish(alert.body);
+    // ONE unified thesis: macro favorability + liquidity + price/structure → a single clear call.
+    const macroFit = macroFitFor(e.struct, macro);
+    const thesis = buildThesis(e.struct, macroFit, result.hpi, result);
+    if (thesis.direction !== 'mixed' && thesis.confidence >= 60) strong++;
+    const severity = thesis.confidence >= 65 ? 'high' : thesis.confidence >= 50 ? 'elevated' : 'info';
+    const gt = result.gravityTargets[0];
+    const target = gt ? { ticker: e.a.ticker, zone: [gt.fvg.bottom, gt.fvg.top], fillProbability: gt.fillProbability, expectedBarsToFill: gt.expectedBarsToFill } : null;
     const item = {
       ticker: e.a.ticker, kind: 'asset', name: e.a.name, as_of: result.asOf,
       hpi_score: result.hpi.score, hpi_delta: result.hpi.delta, regime: result.hpi.regime,
       net_liquidity_flow: result.hpi.netLiquidityFlow,
       liquidity_beta: result.conduit.liquidityBeta, attraction_score: result.conduit.attractionScore,
-      confluence_score: result.confluence.score, bias: result.confluence.bias, severity: alert.severity,
-      headline: alert.headline, body: aiBody || alert.body,
-      target: alert.target || null, flags: result.confluence.flags,
+      confluence_score: thesis.confidence, bias: thesis.direction, severity,
+      headline: thesis.headline, body: thesis.body,
+      target, flags: result.confluence.flags,
       payload: {
         drivers: result.conduit.drivers,
         gravityTargets: result.gravityTargets.slice(0, 3),
         structureShift: result.microstructure.structureShift,
         currentPrice: result.microstructure.currentPrice,
         fvgCount: result.microstructure.fvgs.length,
-        macroFit: macroFitFor(e.struct, macro),
-        aiPolished: !!aiBody,
+        macroFit,
+        thesis,
+        momentum20d: e.struct.momentum20d,
       },
     };
     if (await upsertSignal(item)) ok++;
@@ -368,7 +419,7 @@ async function cycle() {
     },
   });
 
-  const note = `מנוע נזילות עודכן · HPI ${Math.round(hpi.score)} (${hpi.regime}) · ${ok}/${enriched.length} נכסים · ${alerts} התלכדויות חזקות`;
+  const note = `מנוע נזילות עודכן · HPI ${Math.round(hpi.score)} (${hpi.regime}) · ${ok}/${enriched.length} נכסים · ${strong} תזות חזקות`;
   await heartbeat(note);
   log(`✓ ${note}`);
   return ok;

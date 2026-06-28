@@ -139,7 +139,7 @@ function _lheRegime(r) { return _LHE_REGIME[r] || { he: r || '—', cls: 'lhe-ne
 function _lheBiasMeta(bias) {
     if (bias === 'bullish') return { arrow: '▲', he: 'תרחיש עולה', cls: 'lhe-pos' };
     if (bias === 'bearish') return { arrow: '▼', he: 'תרחיש יורד', cls: 'lhe-neg' };
-    return { arrow: '◆', he: 'איזון', cls: 'lhe-neu' };
+    return { arrow: '◆', he: 'מעורב', cls: 'lhe-neu' };
 }
 function _lheSevCls(sev) { return sev === 'critical' ? 'lhe-sev-crit' : sev === 'high' ? 'lhe-sev-high' : sev === 'elevated' ? 'lhe-sev-elev' : 'lhe-sev-info'; }
 
@@ -356,6 +356,11 @@ function _lheCardHTML(c) {
             <span class="lhe-target-meta">מילוי ${Math.round((+t.fillProbability || 0) * 100)}% · ~${t.expectedBarsToFill} ברים</span>
         </div>` : '';
     const ssHTML = (ss && ss.detected) ? `<span class="lhe-flag lhe-flag-mss">${ss.type === 'MSS' ? 'היפוך מבנה' : 'פריצת מבנה'} ${ss.direction === 'bullish' ? '▲' : '▼'}</span>` : '';
+    // macro + momentum shown as clearly-labelled INPUTS feeding the one thesis (no contradiction).
+    const mom = (p.momentum20d != null) ? +p.momentum20d : null;
+    const momCls = mom > 1 ? 'lhe-pos' : mom < -1 ? 'lhe-neg' : '';
+    const macroWord = fit ? (fit.verdict === 'tailwind' ? 'תומך' : fit.verdict === 'headwind' ? 'מנוגד' : 'ניטרלי') : '—';
+    const macroCls = fit ? (fit.verdict === 'tailwind' ? 'lhe-pos' : fit.verdict === 'headwind' ? 'lhe-neg' : '') : '';
 
     return `
     <div class="lhe-card collapsed ${bias.cls}" id="lhe-card-${id}">
@@ -369,16 +374,15 @@ function _lheCardHTML(c) {
                 </div>
             </div>
             <div class="lhe-card-head-r">
-                ${fit ? `<span class="lhe-fit-chip ${fitMeta.cls}">${fitMeta.icon} ${fitMeta.short}</span>` : ''}
+                <span class="lhe-thesis-chip ${bias.cls}">${bias.arrow} ${bias.he}</span>
                 <span class="lhe-conf ${sevCls}">שכנוע ${conf}</span>
             </div>
         </div>
         <div class="lhe-card-body">
-            ${fit ? `<div class="lhe-fit ${fitMeta.cls}"><b>${fitMeta.icon} ${_lheEsc(fit.label)}</b> <small>${_lheEsc(fit.reason)}</small></div>` : ''}
             <div class="lhe-stats">
-                <div class="lhe-stat"><span class="lhe-stat-v">${beta}</span><span class="lhe-stat-l">Liquidity-β</span></div>
-                <div class="lhe-stat"><span class="lhe-stat-v">${attr}</span><span class="lhe-stat-l">משיכת הון</span></div>
-                <div class="lhe-stat"><span class="lhe-stat-v ${bias.cls}">${bias.he}</span><span class="lhe-stat-l">הטיה</span></div>
+                <div class="lhe-stat"><span class="lhe-stat-v">${beta}</span><span class="lhe-stat-l">רגישות (β)</span></div>
+                <div class="lhe-stat"><span class="lhe-stat-v ${momCls}">${mom != null ? (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%' : '—'}</span><span class="lhe-stat-l">מומנטום 20י׳</span></div>
+                <div class="lhe-stat"><span class="lhe-stat-v ${macroCls}">${macroWord}</span><span class="lhe-stat-l">מאקרו</span></div>
             </div>
             ${(flagChips || ssHTML) ? `<div class="lhe-flags">${ssHTML}${flagChips}</div>` : ''}
             ${c.body ? `<div class="lhe-card-narrative">${_lheEsc(c.body)}</div>` : ''}
