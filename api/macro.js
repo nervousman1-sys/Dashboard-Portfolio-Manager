@@ -91,10 +91,14 @@ module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
     try {
-        const [fed, cpi, coreCpi, ppi, unrate, nfp, gdp, realRate, boi, ilUnemp, ilBond, ilCpi] = await Promise.all([
+        const [fed, cpi, coreCpi, ppi, corePpi, unrate, nfp, gdp, realRate,
+               pce, corePce, retail, indProd, t10, sentiment,
+               boi, ilUnemp, ilBond, ilCpi] = await Promise.all([
             fredSeries('FEDFUNDS', 'lin'), fredSeries('CPIAUCSL', 'pc1'), fredSeries('CPILFESL', 'pc1'),
-            fredSeries('PPIFIS', 'pch'), fredSeries('UNRATE', 'lin'), fredSeries('PAYEMS', 'chg'),
+            fredSeries('PPIFIS', 'pch'), fredSeries('PPIFES', 'pch'), fredSeries('UNRATE', 'lin'), fredSeries('PAYEMS', 'chg'),
             fredSeries('A191RL1Q225SBEA', 'lin'), fredSeries('DFII10', 'lin'),
+            fredSeries('PCEPI', 'pc1'), fredSeries('PCEPILFE', 'pc1'), fredSeries('RSAFS', 'pch'),
+            fredSeries('INDPRO', 'pc1'), fredSeries('DGS10', 'lin'), fredSeries('UMCSENT', 'lin'),
             fredSeries('IRSTCI01ILM156N', 'lin'), fredSeries('LRHUTTTTILM156S', 'lin'), fredSeries('IRLTLT01ILM156N', 'lin'),
             israelCPI(),
         ]);
@@ -105,10 +109,17 @@ module.exports = async (req, res) => {
         add(us, 'cpi', entry(cpi, 'אינפלציה שנתית (CPI YoY)', '%'));
         add(us, 'core_cpi', entry(coreCpi, 'אינפלציה ליבה (Core CPI)', '%'));
         add(us, 'ppi', entry(ppi, 'מדד מחירי יצרן (PPI MoM)', '%'));
+        add(us, 'core_ppi', entry(corePpi, 'מדד יצרן ליבה (Core PPI)', '%'));
         add(us, 'unemployment', entry(unrate, 'שיעור אבטלה (Unemployment)', '%'));
         add(us, 'nfp', entry(nfp, 'משרות חדשות (NFP)', 'K'));
         add(us, 'gdp', entry(gdp, 'צמיחת תמ״ג (GDP)', '%'));
         add(us, 'real_rate', entry(realRate, 'ריבית ריאלית (Real Rate)', '%'));
+        add(us, 'pce', entry(pce, 'הוצאה אישית (PCE YoY)', '%'));
+        add(us, 'core_pce', entry(corePce, 'PCE ליבה (Core PCE)', '%'));
+        add(us, 'retail', entry(retail, 'מכירות קמעונאיות (Retail)', '%'));
+        add(us, 'ind_prod', entry(indProd, 'ייצור תעשייתי (Ind. Prod.)', '%'));
+        add(us, 'treasury10', entry(t10, 'אג״ח 10 שנים (10Y)', '%'));
+        add(us, 'sentiment', entry(sentiment, 'אמון הצרכן (Sentiment)', 'idx'));
 
         const il = {};
         add(il, 'boi_rate', entry(pickRecent(boi, IL_OVERRIDES.boi_rate), 'ריבית בנק ישראל (BOI Rate)', '%'));

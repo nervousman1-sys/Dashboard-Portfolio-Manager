@@ -64,8 +64,8 @@ function _sentimentColor(key, actual, previous) {
 
 // ── Cache Keys & TTLs ──
 const _MACRO_CACHE = {
-    US_HEAD: 'macro_us_headline_v5',
-    IL_HEAD: 'macro_il_headline_v5',
+    US_HEAD: 'macro_us_headline_v6',
+    IL_HEAD: 'macro_il_headline_v6',
     US_CAL:  'macro_us_calendar_v4',
     IL_CAL:  'macro_il_calendar_v4',
     LAST_TS: 'macro_lastSeenTimestamp'
@@ -1075,7 +1075,7 @@ async function _loadEconCalendar(forceRefresh) {
     let us = cached ? cached.events : null, results = cached ? cached.results : [], history = cached ? cached.history : [], pastEvents = cached ? cached.pastEvents : [];
     if (!us) {
         if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
-            <div class="macro-loading" style="padding:16px">טוען יומן…</div>`;
+            <div class="macro-loading" style="padding:16px;min-height:300px">טוען יומן…</div>`;
         try {
             const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
             const j = await r.json();
@@ -1284,7 +1284,7 @@ async function _loadGeoMacroNews(forceRefresh) {
     if (!el) return;
     if (!el.querySelector('.gm-list')) {
         el.innerHTML = `<div class="gm-head"><span class="gm-title">🌍 גיאופוליטיקה ומאקרו — עדכונים מהותיים</span></div>
-            <div class="macro-loading" style="padding:18px">טוען עדכונים…</div>`;
+            <div class="macro-loading" style="padding:18px;min-height:460px">טוען עדכונים…</div>`;
     }
     let items = null;
     // 1) Agent-curated feed (Supabase) — preferred.
