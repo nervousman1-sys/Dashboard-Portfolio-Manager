@@ -8,52 +8,70 @@ let _saLoaded = false;
 let _saTimer = null;
 let _saSig = '';
 
-function openScannerAgent() {
-    let overlay = document.getElementById('scannerAgentOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'scannerAgentOverlay';
-        overlay.className = 'sa-overlay';
-        overlay.setAttribute('onclick', 'closeScannerAgent(event)');
-        document.body.appendChild(overlay);
-    }
-    overlay.classList.add('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+// Open as a routed PAGE (not a popup) — same pattern as the reports/LHE pages.
+function openScannerAgentPage() {
+    const page = document.getElementById('scannerPage');
+    if (!page) return;
+    const header = document.querySelector('.header');
+    if (header) header.style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { if (el.id !== 'scannerPage') el.style.display = 'none'; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = 'none';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = 'none';
+
+    page.classList.add('active');
     if (typeof _setActiveNav === 'function') _setActiveNav('scanneragent');
-    try { history.pushState({ popup: 'scanneragent' }, '', location.href); } catch (e) { }
+    if (typeof updateURLState === 'function') updateURLState({ view: 'scanneragent' });
+
     _saRenderShell();
+    window.scrollTo(0, 0);
     _saLoad();
     // Continuous 24/7 refresh while the page is open (re-renders only when the data changes).
     if (_saTimer) clearInterval(_saTimer);
     _saTimer = setInterval(() => { if (document.getElementById('saBody')) _saLoad(); }, 120000);
 }
 
-function closeScannerAgent(event) {
-    if (event && event.target !== event.currentTarget) return;
-    const overlay = document.getElementById('scannerAgentOverlay');
-    if (overlay) overlay.classList.remove('active');
+function closeScannerAgentPage() {
+    const page = document.getElementById('scannerPage');
     if (_saTimer) { clearInterval(_saTimer); _saTimer = null; }
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    if (!page) return;
+    page.classList.remove('active');
+    page.innerHTML = '';
+    const header = document.querySelector('.header');
+    if (header) header.style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { el.style.display = ''; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = '';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = '';
+    if (typeof clearURLState === 'function') clearURLState();
     if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
 }
-if (typeof window !== 'undefined') { window.openScannerAgent = openScannerAgent; window.closeScannerAgent = closeScannerAgent; }
+// Back-compat aliases (sidebar / history / router all keep working).
+if (typeof window !== 'undefined') {
+    window.openScannerAgentPage = openScannerAgentPage; window.closeScannerAgentPage = closeScannerAgentPage;
+    window.openScannerAgent = openScannerAgentPage; window.closeScannerAgent = closeScannerAgentPage;
+}
 
 function _saRenderShell() {
-    const overlay = document.getElementById('scannerAgentOverlay');
-    if (!overlay) return;
-    overlay.innerHTML = `
-    <div class="sa-modal" dir="rtl" onclick="event.stopPropagation()">
-        <div class="sa-header">
-            <div>
-                <h2 class="sa-title">📡 Scanner Agent — מודיעין Early-Alpha</h2>
-                <p class="sa-subtitle">סקטורים ותתי-תעשיות בשלב המוקדם ביותר, לפני המדיה ופריצות המחיר — מבוסס הצלבת פטנטים/מדע, שרשרת אספקה, תנועת כוח-אדם והון סיכון שקט.</p>
-            </div>
-            <div class="sa-head-actions">
-                <button class="sa-refresh" onclick="_saLoad(true)" title="רענן">⟳</button>
-                <button class="sa-close" onclick="closeScannerAgent()">&times;</button>
-            </div>
+    const page = document.getElementById('scannerPage');
+    if (!page) return;
+    page.innerHTML = `
+    <div dir="rtl">
+        <div class="macro-page-header">
+            <h1 class="macro-main-title">📡 Scanner Agent — מודיעין Early-Alpha</h1>
+            <button class="macro-back-btn" onclick="closeScannerAgentPage()">חזור לדשבורד</button>
         </div>
-        <div class="sa-body" id="saBody"><div class="sa-loading">טוען מודיעין…</div></div>
+        <div class="macro-content">
+            <div class="sa-intro">
+                <p class="sa-subtitle">סקטורים ותתי-תעשיות בשלב המוקדם ביותר, לפני המדיה ופריצות המחיר — מבוסס הצלבת פטנטים/מדע, שרשרת אספקה, תנועת כוח-אדם והון סיכון שקט.</p>
+                <button class="sa-refresh" onclick="_saLoad(true)" title="רענן">⟳ רענן</button>
+            </div>
+            <div class="sa-body" id="saBody"><div class="sa-loading">טוען מודיעין…</div></div>
+        </div>
     </div>`;
 }
 

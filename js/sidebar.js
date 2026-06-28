@@ -63,8 +63,8 @@ function navigateTo(section) {
     _closeMobileSidebar();
     // Decision Core is an independent overlay (not in the switch below) — close it on any navigation.
     if (section !== 'decisioncore' && typeof closeDecisionCore === 'function') closeDecisionCore();
-    if (section !== 'scanneragent' && typeof closeScannerAgent === 'function') closeScannerAgent();
-    // LHE is a routed page (like reports) — close it when navigating to anything else.
+    // Scanner Agent + LHE are routed pages (like reports) — close when navigating elsewhere.
+    if (section !== 'scanneragent') { const _sp = document.getElementById('scannerPage'); if (_sp && _sp.classList.contains('active') && typeof closeScannerAgentPage === 'function') closeScannerAgentPage(); }
     if (section !== 'lhe') { const _lp = document.getElementById('lhePage'); if (_lp && _lp.classList.contains('active') && typeof closeLHEPage === 'function') closeLHEPage(); }
 
     // Determine if we need to close overlay pages first
@@ -215,6 +215,17 @@ function navigateTo(section) {
             closeTechIfOpen();
             closeRepIfOpen();
             if (typeof openLHEPage === 'function') openLHEPage();
+            break;
+
+        case 'scanneragent':
+            // Open the Scanner Agent intelligence page
+            if (macroIsActive && typeof closeMacroPage === 'function') closeMacroPage();
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            closeTechIfOpen();
+            closeRepIfOpen();
+            if (typeof openScannerAgentPage === 'function') openScannerAgentPage();
             break;
 
         default:

@@ -10225,14 +10225,16 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .sa-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px;
     border-bottom: 1px solid rgba(255,255,255,0.08); background: radial-gradient(120% 100% at 100% 0%, rgba(16,185,129,0.08), transparent 60%); }
 .sa-title { font-size: 19px; font-weight: 900; color: #fff; }
-.sa-subtitle { font-size: 12.5px; color: #e4e4ee; margin-top: 5px; line-height: 1.6; max-width: 760px; }
+.sa-subtitle { font-size: 13px; color: #e4e4ee; margin: 0; line-height: 1.6; max-width: 760px; }
 .sa-head-actions { display: flex; gap: 8px; align-items: center; }
+/* Scanner Agent is now a routed PAGE — intro row + a text refresh button. */
+.sa-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
 .sa-refresh { background: transparent; border: 1px solid rgba(255,255,255,0.18); color: #e4e4ee; cursor: pointer;
-    width: 32px; height: 32px; border-radius: 9px; font-size: 16px; transition: background .12s; }
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .12s; }
 .sa-refresh:hover { background: rgba(255,255,255,0.08); }
 .sa-close { background: transparent; border: none; color: #cfcfdb; font-size: 28px; line-height: 1; cursor: pointer; padding: 0 4px; }
 .sa-close:hover { color: #fff; }
-.sa-body { padding: 18px 24px 26px; display: grid; gap: 16px; }
+.sa-body { padding: 4px 0 20px; display: grid; gap: 16px; max-width: 1080px; }
 .sa-loading, .sa-empty { color: #e4e4ee; font-size: 14px; text-align: center; padding: 40px 16px; line-height: 1.7; }
 .sa-empty small { color: #b8b8c6; }
 .sa-meta-bar { font-size: 12px; font-weight: 700; color: #6ee7b7; padding: 10px 14px; margin-bottom: 6px;
