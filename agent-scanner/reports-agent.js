@@ -28,10 +28,12 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 const AGENT_WRITE_SECRET = process.env.AGENT_WRITE_SECRET;
 const SITE = (process.env.SITE_URL || 'https://finextium-dashboard.vercel.app').replace(/\/+$/, '');
-const BATCH = parseInt(process.env.REPORTS_BATCH || '5', 10);          // concurrent fetches per wave
-const GAP_MS = parseInt(process.env.REPORTS_GAP_MS || '1100', 10);     // pause between waves (gentle on Yahoo)
-const REST_MIN = parseFloat(process.env.REPORTS_REST_MIN || '8');      // rest between full sweeps
-const HEARTBEAT_EVERY = parseInt(process.env.REPORTS_HEARTBEAT_EVERY || '40', 10); // heartbeat every N companies
+// GENTLE defaults — the upserts share Supabase's 60-connection pool with the AUTH service. Too much
+// concurrency/frequency here once exhausted the pool and locked everyone out of login. Keep BATCH low.
+const BATCH = parseInt(process.env.REPORTS_BATCH || '2', 10);          // concurrent fetches per wave (low → few DB conns)
+const GAP_MS = parseInt(process.env.REPORTS_GAP_MS || '2500', 10);     // pause between waves (gentle on Yahoo + DB)
+const REST_MIN = parseFloat(process.env.REPORTS_REST_MIN || '30');     // rest between full sweeps
+const HEARTBEAT_EVERY = parseInt(process.env.REPORTS_HEARTBEAT_EVERY || '80', 10); // heartbeat every N companies
 const RUN_ONCE = process.argv.includes('--once');
 
 function log(...a) { console.log(`[${new Date().toISOString()}]`, ...a); }
