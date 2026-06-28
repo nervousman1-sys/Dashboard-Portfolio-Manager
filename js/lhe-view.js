@@ -281,7 +281,7 @@ function _lheMapHTML(m) {
         const p = t.ref;
         const arr = p.dir === 'up' ? '▲' : p.dir === 'down' ? '▼' : '';
         const scope = p.scope === 'global' ? '🌍' : '🇺🇸';
-        const tiny = t.w < 70 || t.h < 52;
+        const tiny = t.w < 76 || t.h < 70;
         const name = _lheEsc(p.short || p.label);
         return `<div class="lhe-tm-tile lhe-tm-${p.dir || 'flat'}${tiny ? ' lhe-tm-tiny' : ''}" style="${style}" title="${_lheEsc(p.label)} — $${+p.valueT}T (${p.scope === 'global' ? 'גלובלי' : 'ארה״ב'})">
             <span class="lhe-tm-scope">${scope}</span>

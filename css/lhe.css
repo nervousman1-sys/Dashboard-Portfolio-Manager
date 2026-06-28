@@ -71,7 +71,8 @@
 .lhe-tm-tile { position: absolute; box-sizing: border-box; border: 2px solid rgba(2, 2, 2, 0.55); border-radius: 4px; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; z-index: 2; transition: filter 0.12s; }
 .lhe-tm-tile:hover { filter: brightness(1.14); }
 .lhe-tm-scope { position: absolute; top: 4px; inset-inline-start: 6px; font-size: 0.72rem; line-height: 1; }
-.lhe-tm-name { font-size: 0.82rem; font-weight: 700; color: #fff; line-height: 1.2; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.lhe-tm-name { font-size: 0.8rem; font-weight: 700; color: #fff; line-height: 1.2; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; word-break: break-word; flex-shrink: 0; }
+.lhe-tm-val { flex-shrink: 0; }
 .lhe-tm-val { font-size: 0.98rem; font-weight: 800; color: #fff; line-height: 1.3; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
 .lhe-tm-tiny { padding: 2px 4px; }
 .lhe-tm-tiny .lhe-tm-name, .lhe-tm-tiny .lhe-tm-scope { display: none; }
