@@ -136,7 +136,7 @@ async function polishHebrew(card) {
         talent_layer: card.talent_layer || '',
         whys: (Array.isArray(card.stealth_targets) ? card.stealth_targets : []).map(t => t.why || ''),
     };
-    const sys = 'אתה עורך הלשון הראשי של מגזין כלכלי-טכנולוגי ישראלי מוביל, ומומחה לתרגום מדע וטכנולוגיה לעברית. שכתב את שדות הטקסט לעברית מצוינת, מדויקת ובהירה שכל קורא ישראלי יבין במלואה. עקרונות מחייבים: (1) כל מילה חייבת להיות מילה עברית תקנית הקיימת בפועל במילון ובשימוש — אסור בתכלית להמציא מילים, אסור תרגום מילולי מאולץ, ואסור להשתמש במילה עברית שאינה ברורה או אינה שגורה. (2) הקורא חייב להבין את הכותרת והטקסט במלואם וללא ידע מוקדם — נסח כך שהמשמעות חד-משמעית ושלמה. (3) מונח מדעי/טכני: השתמש במונח העברי המקובל והשגור בתעשייה; אם אין מונח עברי שגור, ברור ומדויק — השאר את המונח באנגלית (רצוי לצד תיאור עברי קצר או בסוגריים). מונח לועזי מובן עדיף תמיד על מילה עברית מומצאת או עמומה. (4) sector_name (הכותרת): עברית מלאה וברורה, עם המונח המקצועי הלועזי בסוגריים. (5) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). אל תשנה עובדות או משמעות — רק את הניסוח. (6) שמור על אורך דומה. דוגמאות לניסוח נכון: "Quantum Sensing" → "חיישנים קוונטיים" (לעולם לא "חישה"); "Organ-on-Chip" → "איבר על שבב (Organ-on-Chip)"; "Direct Air Capture" → "לכידת פחמן ישירות מהאוויר (DAC)"; "Prime Editing" → "עריכת גנים מדויקת (Prime Editing)"; "Ferroelectric Memory" → "זיכרון פֶרוֹאֶלֶקְטְרי (Ferroelectric)". החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
+    const sys = 'אתה עורך הלשון הראשי של מגזין כלכלי-טכנולוגי ישראלי מוביל, ומומחה לתרגום מדע וטכנולוגיה לעברית. שכתב את שדות הטקסט לעברית מצוינת, מדויקת ובהירה שכל קורא ישראלי יבין במלואה. כתוב עברית פשוטה, יומיומית וברורה — כמו כתבה בעיתון יומי, לא שפה ספרותית/אקדמית/מסורבלת. עקרונות מחייבים: (0) אסור ניקוד בכלל — בלי שום סימן ניקוד על האותיות, כתיב מלא רגיל בלבד. אל תשתמש לעולם במילה "חישה" — אם הכוונה ל-sensing כתוב "חיישנים" או "זיהוי" לפי ההקשר. מונח טכני בלי מילה עברית פשוטה ושגורה — השאר באנגלית. (1) כל מילה חייבת להיות מילה עברית תקנית הקיימת בפועל במילון ובשימוש — אסור בתכלית להמציא מילים, אסור תרגום מילולי מאולץ, ואסור להשתמש במילה עברית שאינה ברורה או אינה שגורה. (2) הקורא חייב להבין את הכותרת והטקסט במלואם וללא ידע מוקדם — נסח כך שהמשמעות חד-משמעית ושלמה. (3) מונח מדעי/טכני: השתמש במונח העברי המקובל והשגור בתעשייה; אם אין מונח עברי שגור, ברור ומדויק — השאר את המונח באנגלית (רצוי לצד תיאור עברי קצר או בסוגריים). מונח לועזי מובן עדיף תמיד על מילה עברית מומצאת או עמומה. (4) sector_name (הכותרת): עברית מלאה וברורה, עם המונח המקצועי הלועזי בסוגריים. (5) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). אל תשנה עובדות או משמעות — רק את הניסוח. (6) שמור על אורך דומה. דוגמאות לניסוח נכון: "Quantum Sensing" → "חיישנים קוונטיים" (לעולם לא "חישה"); "Organ-on-Chip" → "איבר על שבב (Organ-on-Chip)"; "Direct Air Capture" → "לכידת פחמן ישירות מהאוויר (DAC)"; "Prime Editing" → "עריכת גנים מדויקת (Prime Editing)"; "Ferroelectric Memory" → "זיכרון פֶרוֹאֶלֶקְטְרי (Ferroelectric)". החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
     const POLISH_MODEL = process.env.GEMINI_POLISH_MODEL || 'gemini-2.5-flash'; // flash + thinking = fast & good (set to pro for max quality)
     const body = {
         systemInstruction: { parts: [{ text: sys }] },
@@ -169,6 +169,15 @@ async function polishHebrew(card) {
         }
         log('Hebrew polish applied.');
     } catch (e) { log('Hebrew polish skipped:', e.message); }
+    // Deterministic guarantee (runs even if Gemini was skipped/failed): strip ALL nikud/cantillation
+    // marks (the user wants none) and replace the disliked word "חישה" → "זיהוי". Idempotent.
+    const clean = (s) => s == null ? s : String(s).replace(/[֑-ׇ]/g, '').replace(/חישה/g, 'זיהוי').replace(/[ \t]{2,}/g, ' ').trim();
+    card.sector_name = clean(card.sector_name);
+    card.thesis = clean(card.thesis);
+    card.tech_layer = clean(card.tech_layer);
+    card.supply_layer = clean(card.supply_layer);
+    card.talent_layer = clean(card.talent_layer);
+    if (Array.isArray(card.stealth_targets)) card.stealth_targets.forEach(t => { if (t && t.why) t.why = clean(t.why); });
     return card;
 }
 
