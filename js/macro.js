@@ -45,7 +45,7 @@ const MACRO_VERIFIED_BASELINE = {
 //   Unemployment: lower = bullish (green), higher = bearish (red)
 //   Rates: lower = bullish (green), higher = bearish (red)
 const _INVERSE_INDICATORS = new Set([
-    'cpi', 'core_cpi', 'ppi', 'core_ppi',
+    'cpi', 'core_cpi', 'ppi', 'core_ppi', 'pce', 'core_pce',
     'il_cpi', 'il_core_cpi', 'il_ppi',
     'unemployment', 'il_unemployment',
     'fed_rate', 'boi_rate', 'real_rate', 'il_real_rate',
@@ -194,6 +194,12 @@ const _FRED_SERIES = [
     { key: 'nfp',          id: 'PAYEMS',          units: 'chg', label: 'משרות חדשות (NFP)',          unit: 'K' },
     { key: 'gdp',          id: 'A191RL1Q225SBEA', units: 'lin', label: 'צמיחת תוצר (GDP)',          unit: '%' },
     { key: 'real_rate',    id: 'DFII10',          units: 'lin', label: 'ריבית ריאלית (Real Rate)',   unit: '%' },
+    { key: 'pce',          id: 'PCEPI',           units: 'pc1', label: 'הוצאה אישית (PCE YoY)',     unit: '%' },
+    { key: 'core_pce',     id: 'PCEPILFE',        units: 'pc1', label: 'PCE ליבה (Core PCE)',       unit: '%' },
+    { key: 'retail',       id: 'RSAFS',           units: 'pch', label: 'מכירות קמעונאיות (Retail)',  unit: '%' },
+    { key: 'ind_prod',     id: 'INDPRO',          units: 'pc1', label: 'ייצור תעשייתי (Ind. Prod.)', unit: '%' },
+    { key: 'treasury10',   id: 'DGS10',           units: 'lin', label: 'אג״ח 10 שנים (10Y)',        unit: '%' },
+    { key: 'sentiment',    id: 'UMCSENT',         units: 'lin', label: 'אמון הצרכן (Sentiment)',     unit: 'idx' },
 ];
 
 // Public CORS proxies — let the browser read FRED directly when the same-origin
@@ -958,9 +964,10 @@ function _renderApiStatus() {
 // ── Indicator → Category mapping (for card tags) ──
 const _INDICATOR_CATEGORY = {
     cpi: 'אינפלציה', core_cpi: 'אינפלציה', ppi: 'אינפלציה', core_ppi: 'אינפלציה',
-    fed_rate: 'מדיניות מוניטרית', boi_rate: 'מדיניות מוניטרית',
+    pce: 'אינפלציה', core_pce: 'אינפלציה',
+    fed_rate: 'מדיניות מוניטרית', boi_rate: 'מדיניות מוניטרית', treasury10: 'שווקים',
     unemployment: 'תעסוקה', nfp: 'תעסוקה',
-    gdp: 'צמיחה', real_rate: 'מדיניות מוניטרית',
+    gdp: 'צמיחה', real_rate: 'מדיניות מוניטרית', retail: 'צריכה', ind_prod: 'צמיחה', sentiment: 'סנטימנט',
     il_cpi: 'אינפלציה', il_core_cpi: 'אינפלציה', il_ppi: 'אינפלציה',
     il_unemployment: 'תעסוקה', il_gdp: 'צמיחה', il_real_rate: 'מדיניות מוניטרית',
     il_trade_bal: 'סחר', il_consumer_conf: 'סנטימנט',
@@ -969,6 +976,16 @@ const _INDICATOR_CATEGORY = {
 // ── Main Page Renderer ──
 function _renderMacroPage() {
     const mp = document.getElementById('macroPage');
+    if (!mp) return;
+    // In-place refresh: once the shell exists, only re-render the indicator grid. A full innerHTML
+    // rebuild wipes & reloads the async geo-macro + calendar sections — the cause of the page "jumps"
+    // on every background data refresh. Build the shell once; refresh indicators in place after that.
+    const _existingTab = document.getElementById('macroTabContent');
+    if (_existingTab) {
+        _existingTab.innerHTML = _renderIndicatorsTab();
+        setTimeout(() => { try { _renderYieldCurves(); } catch (e) { } }, 60);
+        return;
+    }
 
     mp.innerHTML = `
         <div class="macro-page-header">
@@ -1458,6 +1475,12 @@ function _renderIndicatorsTab() {
             ${_renderHeadlineWidget('fed_rate',     usHead.fed_rate,     'ריבית הפד (Fed Rate)',         '%')}
             ${_renderHeadlineWidget('gdp',          usHead.gdp,          'צמיחת תמ״ג (GDP QoQ)',        '%')}
             ${_renderHeadlineWidget('real_rate',    usHead.real_rate,    'ריבית ריאלית (Real Rate)',     '%')}
+            ${_renderHeadlineWidget('pce',          usHead.pce,          'הוצאה אישית (PCE YoY)',       '%')}
+            ${_renderHeadlineWidget('core_pce',     usHead.core_pce,     'PCE ליבה (Core PCE)',         '%')}
+            ${_renderHeadlineWidget('retail',       usHead.retail,       'מכירות קמעונאיות (Retail)',    '%')}
+            ${_renderHeadlineWidget('ind_prod',     usHead.ind_prod,     'ייצור תעשייתי (Ind. Prod.)',  '%')}
+            ${_renderHeadlineWidget('treasury10',   usHead.treasury10,   'אג״ח 10 שנים (10Y)',          '%')}
+            ${_renderHeadlineWidget('sentiment',    usHead.sentiment,    'אמון הצרכן (Sentiment)',       'idx')}
         </div>`;
 
     if (usCal.length > 0) {
