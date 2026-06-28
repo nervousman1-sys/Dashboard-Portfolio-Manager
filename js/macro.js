@@ -48,7 +48,7 @@ const _INVERSE_INDICATORS = new Set([
     'cpi', 'core_cpi', 'ppi', 'core_ppi', 'pce', 'core_pce',
     'il_cpi', 'il_core_cpi', 'il_ppi',
     'unemployment', 'il_unemployment',
-    'fed_rate', 'boi_rate', 'real_rate', 'il_real_rate',
+    'fed_rate', 'boi_rate', 'real_rate', 'il_real_rate', 'il_short_rate',
     'il_trade_bal', 'il_consumer_conf',
 ]);
 
@@ -64,8 +64,8 @@ function _sentimentColor(key, actual, previous) {
 
 // ── Cache Keys & TTLs ──
 const _MACRO_CACHE = {
-    US_HEAD: 'macro_us_headline_v6',
-    IL_HEAD: 'macro_il_headline_v6',
+    US_HEAD: 'macro_us_headline_v7',
+    IL_HEAD: 'macro_il_headline_v7',
     US_CAL:  'macro_us_calendar_v4',
     IL_CAL:  'macro_il_calendar_v4',
     LAST_TS: 'macro_lastSeenTimestamp'
@@ -971,6 +971,8 @@ const _INDICATOR_CATEGORY = {
     il_cpi: 'אינפלציה', il_core_cpi: 'אינפלציה', il_ppi: 'אינפלציה',
     il_unemployment: 'תעסוקה', il_gdp: 'צמיחה', il_real_rate: 'מדיניות מוניטרית',
     il_trade_bal: 'סחר', il_consumer_conf: 'סנטימנט',
+    il_short_rate: 'מדיניות מוניטרית', il_bond10y: 'שווקים', il_exports: 'סחר', il_imports: 'סחר',
+    il_reer: 'שווקים', il_stocks: 'שווקים',
 };
 
 // ── Main Page Renderer ──
@@ -1503,6 +1505,12 @@ function _renderIndicatorsTab() {
             ${_renderHeadlineWidget('il_real_rate',     ilHead.il_real_rate,     'ריבית ריאלית (Real Rate)',  '%')}
             ${_renderHeadlineWidget('il_trade_bal',     ilHead.il_trade_bal,     'מאזן סחר (Trade Balance)',  'B$')}
             ${_renderHeadlineWidget('il_consumer_conf', ilHead.il_consumer_conf, 'אמון צרכנים (CCI)',         '%')}
+            ${_renderHeadlineWidget('il_short_rate',    ilHead.il_short_rate,    'ריבית בין-בנקאית (3M)',     '%')}
+            ${_renderHeadlineWidget('il_bond10y',       ilHead.il_bond10y,       'אג״ח 10 שנים (10Y)',        '%')}
+            ${_renderHeadlineWidget('il_exports',       ilHead.il_exports,       'יצוא סחורות (Exports YoY)',  '%')}
+            ${_renderHeadlineWidget('il_imports',       ilHead.il_imports,       'יבוא סחורות (Imports YoY)',  '%')}
+            ${_renderHeadlineWidget('il_reer',          ilHead.il_reer,          'שער חליפין ריאלי (REER)',    'idx')}
+            ${_renderHeadlineWidget('il_stocks',        ilHead.il_stocks,        'מדד מניות ת״א (YoY)',       '%')}
         </div>`;
 
     if (ilCal.length > 0) {
