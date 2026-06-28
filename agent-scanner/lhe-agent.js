@@ -132,18 +132,23 @@ function buildLiquidityMap(d) {
   const tM = (s) => (s && s.value != null) ? +(s.value / 1e6).toFixed(2) : null; // $millions → $T
   const dir = (s) => (s && s.previous != null) ? (s.value > s.previous ? 'up' : s.value < s.previous ? 'down' : 'flat') : 'flat';
   const pools = [];
-  const push = (label, valueT, group, dirVal, live) => { if (valueT != null) pools.push({ label, valueT, group, dir: dirVal, live }); };
+  const push = (label, valueT, group, dirVal, live, scope) => { if (valueT != null) pools.push({ label, valueT, group, dir: dirVal, live, scope }); };
 
-  // Deployed in the market
-  push('מניות (שוק ארה"ב)', 58, 'market', 'up', false);            // order-of-magnitude estimate
-  push('אג"ח ממשלתי (Treasury)', tM(d.debt), 'bonds', dir(d.debt), true);
-  push('אג"ח קונצרני', 11, 'bonds', 'flat', false);                // estimate
-  // Cash on the sidelines (the "dry powder" — live, weekly)
-  push('קרנות כספיות (מזומן)', tM(d.mmf), 'cash', dir(d.mmf), true);
-  push('רזרבות בנקים', tM(d.reserves), 'cash', dir(d.reserves), true);
-  push('מזומן במחזור', tM(d.currency), 'cash', dir(d.currency), true);
-  push('חשבון האוצר (TGA)', tM(d.tga), 'cash', dir(d.tga), true);
-  push('ריפו הפוך (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', dir(d.rrp), true);
+  // Equities (deployed)
+  push('מניות ארה"ב', 58, 'market', 'up', false, 'us');               // order-of-magnitude estimate
+  push('מניות גלובליות (ex-US)', 45, 'market', 'up', false, 'global'); // estimate
+  // Bonds (deployed)
+  push('אג"ח ממשלתי ארה"ב', tM(d.debt), 'bonds', dir(d.debt), true, 'us');
+  push('אג"ח קונצרני ארה"ב', 11, 'bonds', 'flat', false, 'us');       // estimate
+  // Cash on the sidelines — US dollar plumbing (live, weekly)
+  push('קרנות כספיות (מזומן)', tM(d.mmf), 'cash', dir(d.mmf), true, 'us');
+  push('רזרבות בנקים (פד)', tM(d.reserves), 'cash', dir(d.reserves), true, 'us');
+  push('מזומן במחזור', tM(d.currency), 'cash', dir(d.currency), true, 'us');
+  push('חשבון האוצר (TGA)', tM(d.tga), 'cash', dir(d.tga), true, 'us');
+  push('ריפו הפוך (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', dir(d.rrp), true, 'us');
+  // Global stores of value
+  push('זהב (גלובלי)', 18, 'other', 'up', false, 'global');           // estimate
+  push('קריפטו (גלובלי)', 2.8, 'other', 'flat', false, 'global');     // estimate
 
   const cashT = pools.filter(p => p.group === 'cash').reduce((s, p) => s + p.valueT, 0);
   return { pools, cashSidelinesT: +cashT.toFixed(2) };

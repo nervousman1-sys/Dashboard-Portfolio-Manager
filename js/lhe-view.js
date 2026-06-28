@@ -218,27 +218,80 @@ function _lheConditionsHTML(c) {
     return items.length ? `<div class="lhe-cond-title">גורמי נזילות נוספים (כל מה שמזין את המודל)</div><div class="lhe-conds">${items.join('')}</div>` : '';
 }
 
-// Liquidity map — WHERE the money sits (cash pools vs deployed markets), sized by $T.
+// ── Squarified treemap (Bruls et al.) — keeps tiles close to square ────────────
+function _lheWorst(areas, len) {
+    let s = 0, mn = Infinity, mx = 0;
+    for (const a of areas) { s += a; if (a < mn) mn = a; if (a > mx) mx = a; }
+    if (s <= 0) return Infinity;
+    const l2 = len * len, s2 = s * s;
+    return Math.max(l2 * mx / s2, s2 / (l2 * mn));
+}
+function _lheSquarify(items, x, y, w, h) {
+    const total = items.reduce((s, i) => s + i.value, 0);
+    const out = [];
+    if (total <= 0 || w <= 0 || h <= 0) return out;
+    const scale = (w * h) / total;
+    const nodes = items.map(i => ({ ref: i.ref, area: Math.max(1e-9, i.value * scale) }));
+    let rx = x, ry = y, rw = w, rh = h, i = 0;
+    while (i < nodes.length) {
+        const shorter = Math.min(rw, rh);
+        let row = [nodes[i]], areas = [nodes[i].area], j = i + 1, cur = _lheWorst(areas, shorter);
+        while (j < nodes.length) {
+            const test = areas.concat(nodes[j].area);
+            const wst = _lheWorst(test, shorter);
+            if (wst <= cur) { row.push(nodes[j]); areas = test; cur = wst; j++; } else break;
+        }
+        const rowArea = areas.reduce((s, a) => s + a, 0), thick = rowArea / shorter;
+        if (rw >= rh) { let oy = ry; for (const n of row) { const nh = n.area / rowArea * rh; out.push({ ref: n.ref, x: rx, y: oy, w: thick, h: nh }); oy += nh; } rx += thick; rw -= thick; }
+        else { let ox = rx; for (const n of row) { const nw = n.area / rowArea * rw; out.push({ ref: n.ref, x: ox, y: ry, w: nw, h: thick }); ox += nw; } ry += thick; rh -= thick; }
+        i = j;
+    }
+    return out;
+}
+
+const _LHE_GROUPS = [
+    { key: 'market', he: 'מניות', cls: 'lhe-g-market' },
+    { key: 'bonds', he: 'אג"ח', cls: 'lhe-g-bonds' },
+    { key: 'cash', he: 'מזומן בצד', cls: 'lhe-g-cash' },
+    { key: 'other', he: 'נכסים גלובליים', cls: 'lhe-g-other' },
+];
+
+// Liquidity MAP — a Finviz-style TREEMAP: every money pool is a rectangle sized by its
+// $T, grouped by asset class, colored by group, flagged 🇺🇸 US vs 🌍 global.
 function _lheMapHTML(m) {
     const map = m && m.payload && m.payload.liquidityMap;
     if (!map || !Array.isArray(map.pools) || !map.pools.length) return '';
-    const pools = map.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0));
-    const max = Math.max(...pools.map(p => +p.valueT || 0), 1);
-    const gCls = { market: 'lhe-g-market', bonds: 'lhe-g-bonds', cash: 'lhe-g-cash' };
-    const rows = pools.map(p => {
-        const w = Math.max(3, Math.round((+p.valueT || 0) / max * 100));
+    const W = 1000, H = 440, HEADER = 22;
+    const groups = _LHE_GROUPS
+        .map(g => { const pools = map.pools.filter(p => p.group === g.key); return { he: g.he, cls: g.cls, pools, value: pools.reduce((s, p) => s + (+p.valueT || 0), 0) }; })
+        .filter(g => g.pools.length);
+    const gRects = _lheSquarify(groups.map(g => ({ ref: g, value: g.value })), 0, 0, W, H);
+    const tiles = [];
+    gRects.forEach(gr => {
+        const g = gr.ref;
+        tiles.push({ type: 'group', he: g.he, cls: g.cls, value: g.value, x: gr.x, y: gr.y, w: gr.w, h: Math.min(HEADER, gr.h) });
+        const innerY = gr.y + HEADER, innerH = Math.max(0, gr.h - HEADER);
+        const sorted = g.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0));
+        _lheSquarify(sorted.map(p => ({ ref: p, value: Math.max(0.02, +p.valueT || 0) })), gr.x, innerY, gr.w, innerH)
+            .forEach(r => tiles.push({ type: 'pool', ref: r.ref, cls: g.cls, x: r.x, y: r.y, w: r.w, h: r.h }));
+    });
+    const html = tiles.map(t => {
+        const style = `left:${(t.x / W * 100).toFixed(2)}%;top:${(t.y / H * 100).toFixed(2)}%;width:${(t.w / W * 100).toFixed(2)}%;height:${(t.h / H * 100).toFixed(2)}%`;
+        if (t.type === 'group') return `<div class="lhe-tm-group ${t.cls}" style="${style}"><span class="lhe-tm-ghead">${_lheEsc(t.he)} · $${t.value.toFixed(0)}T</span></div>`;
+        const p = t.ref;
         const arr = p.dir === 'up' ? '<span class="lhe-pos">▲</span>' : p.dir === 'down' ? '<span class="lhe-neg">▼</span>' : '';
-        const dot = p.live ? '<span class="lhe-map-live" title="נתון חי"></span>' : '<span class="lhe-map-est" title="אומדן סדר-גודל">~</span>';
-        return `<div class="lhe-map-row">
-            <span class="lhe-map-label">${dot}${_lheEsc(p.label)}</span>
-            <span class="lhe-map-track"><span class="lhe-map-fill ${gCls[p.group] || ''}" style="width:${w}%"></span></span>
-            <span class="lhe-map-val">$${(+p.valueT)}T ${arr}</span>
+        const scope = p.scope === 'global' ? '🌍' : '🇺🇸';
+        const tiny = t.w < 72 || t.h < 40;
+        return `<div class="lhe-tm-tile ${t.cls}${tiny ? ' lhe-tm-tiny' : ''}" style="${style}" title="${_lheEsc(p.label)} — $${+p.valueT}T (${p.scope === 'global' ? 'גלובלי' : 'ארה״ב'})">
+            <span class="lhe-tm-scope">${scope}</span>
+            <span class="lhe-tm-name">${_lheEsc(p.label)}</span>
+            <span class="lhe-tm-val">$${+p.valueT}T ${arr}</span>
         </div>`;
     }).join('');
     return `<div class="lhe-map">
-        <div class="lhe-map-title">🗺️ מפת נזילות — איפה נמצא הכסף</div>
-        <div class="lhe-map-sub">מזומן בצד (Dry Powder): <b>$${map.cashSidelinesT}T</b> &nbsp;·&nbsp; 🟢 נתון חי &nbsp;·&nbsp; ~ אומדן סדר-גודל</div>
-        ${rows}
+        <div class="lhe-map-title">🗺️ מפת נזילות — איפה נמצא הכסף (גודל המלבן = היקף)</div>
+        <div class="lhe-map-sub">מזומן בצד: <b>$${map.cashSidelinesT}T</b> &nbsp;·&nbsp; 🇺🇸 ארה"ב &nbsp; 🌍 גלובלי &nbsp;·&nbsp; ▲/▼ כיוון תנועה &nbsp;·&nbsp; 🟢 חי / ~ אומדן</div>
+        <div class="lhe-treemap">${html}</div>
     </div>`;
 }
 
