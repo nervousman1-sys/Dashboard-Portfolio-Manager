@@ -152,11 +152,11 @@ function buildLiquidityMap(d, dirs = {}) {
   push('אג"ח ממשלתי ארה"ב', 'אג״ח ממשלתי', tM(d.debt), 'bonds', dirs.TLT || fredDir(d.debt), true, 'us');
   push('אג"ח קונצרני ארה"ב (HY)', 'אג״ח קונצרני', 11, 'bonds', dirs.HYG || 'flat', false, 'us');
   // Cash on the sidelines — US dollar plumbing, colored by the live FRED weekly flow
-  push('קרנות כספיות (מזומן בצד)', 'קרנות כספיות', tM(d.mmf), 'cash', fredDir(d.mmf), true, 'us');
-  push('רזרבות בנקים (הפד)', 'רזרבות בנקים', tM(d.reserves), 'cash', fredDir(d.reserves), true, 'us');
-  push('מזומן במחזור', 'מזומן במחזור', tM(d.currency), 'cash', fredDir(d.currency), true, 'us');
-  push('חשבון האוצר (TGA)', 'אוצר (TGA)', tM(d.tga), 'cash', fredDir(d.tga), true, 'us');
-  push('ריפו הפוך (RRP)', 'ריפו (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', fredDir(d.rrp), true, 'us');
+  push('קרנות כספיות (מזומן בצד)', 'קרנות', tM(d.mmf), 'cash', fredDir(d.mmf), true, 'us');
+  push('רזרבות בנקים (הפד)', 'רזרבות', tM(d.reserves), 'cash', fredDir(d.reserves), true, 'us');
+  push('מזומן במחזור', 'מזומן', tM(d.currency), 'cash', fredDir(d.currency), true, 'us');
+  push('חשבון האוצר (TGA)', 'TGA', tM(d.tga), 'cash', fredDir(d.tga), true, 'us');
+  push('ריפו הפוך (RRP)', 'RRP', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', fredDir(d.rrp), true, 'us');
   // Global stores of value — colored by gold (GLD) / crypto (BTC) price direction
   push('זהב (גלובלי)', 'זהב', 18, 'other', dirs.GLD || 'flat', false, 'global');
   push('קריפטו (גלובלי)', 'קריפטו', 2.8, 'other', dirs.BTC || 'flat', false, 'global');
