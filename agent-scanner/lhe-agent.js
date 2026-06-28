@@ -49,15 +49,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // measuredLiquidityBeta = a sensible prior for each class's sensitivity to Net-Liquidity
 // (US growth > EM > credit > broad equity > bonds > gold). momentum/vol computed live.
 const ASSETS = [
-  { ticker: 'SPY', yahoo: 'SPY', name: 'S&P 500', assetClass: 'etf', measuredLiquidityBeta: 1.0 },
-  { ticker: 'QQQ', yahoo: 'QQQ', name: 'נאסד"ק 100 (QQQ)', assetClass: 'etf', measuredLiquidityBeta: 1.25 },
-  { ticker: 'GLD', yahoo: 'GLD', name: 'זהב (Gold)', assetClass: 'commodity', measuredLiquidityBeta: 0.55 },
-  { ticker: 'TLT', yahoo: 'TLT', name: 'אג"ח ממשלתי ארה"ב 20Y+ (TLT)', assetClass: 'etf', measuredLiquidityBeta: 0.8 },
-  { ticker: 'HYG', yahoo: 'HYG', name: 'אג"ח קונצרני High-Yield (HYG)', assetClass: 'etf', measuredLiquidityBeta: 1.1 },
-  { ticker: 'BTC', yahoo: 'BTC-USD', name: 'ביטקוין (Bitcoin)', assetClass: 'crypto',
+  { ticker: 'SPY', yahoo: 'SPY', name: 'S&P 500', assetClass: 'etf', measuredLiquidityBeta: 1.0, macroModel: 'equity_us' },
+  { ticker: 'QQQ', yahoo: 'QQQ', name: 'נאסד"ק 100 (QQQ)', assetClass: 'etf', measuredLiquidityBeta: 1.25, macroModel: 'equity_growth' },
+  { ticker: 'GLD', yahoo: 'GLD', name: 'זהב (Gold)', assetClass: 'commodity', measuredLiquidityBeta: 0.55, macroModel: 'gold' },
+  { ticker: 'TLT', yahoo: 'TLT', name: 'אג"ח ממשלתי ארה"ב 20Y+ (TLT)', assetClass: 'etf', measuredLiquidityBeta: 0.8, macroModel: 'bonds' },
+  { ticker: 'HYG', yahoo: 'HYG', name: 'אג"ח קונצרני High-Yield (HYG)', assetClass: 'etf', measuredLiquidityBeta: 1.1, macroModel: 'credit' },
+  { ticker: 'BTC', yahoo: 'BTC-USD', name: 'ביטקוין (Bitcoin)', assetClass: 'crypto', macroModel: 'crypto',
     onChain: { exchangeNetflow: 30000, illiquidSupplyPct: 0.74, whaleAccumulationScore: 0.3, exchangeReserveRatio: 0.11 } },
-  { ticker: 'EEM', yahoo: 'EEM', name: 'שווקים מתעוררים (EM)', assetClass: 'etf', measuredLiquidityBeta: 1.35 },
-  { ticker: 'EFA', yahoo: 'EFA', name: 'מניות מפותחות ex-US (אירופה/יפן)', assetClass: 'etf', measuredLiquidityBeta: 1.1 },
+  { ticker: 'EEM', yahoo: 'EEM', name: 'שווקים מתעוררים (EM)', assetClass: 'etf', measuredLiquidityBeta: 1.35, macroModel: 'em' },
+  { ticker: 'EFA', yahoo: 'EFA', name: 'מניות מפותחות ex-US (אירופה/יפן)', assetClass: 'etf', measuredLiquidityBeta: 1.1, macroModel: 'equity_intl' },
 ];
 
 // ── FRED: latest + previous observation (for deltas/momentum) ─────────────────
@@ -165,25 +165,59 @@ function buildLiquidityMap(d, dirs = {}) {
   return { pools, cashSidelinesT: +cashT.toFixed(2) };
 }
 
-// ── Does the macro/liquidity backdrop FAVOR this specific asset? ───────────────
-function macroFitFor(struct, conduit, hpi) {
-  const expanding = (hpi.score - 50) / 50 * 0.6 + hpi.delta / 100 * 0.4; // -1..+1 (liquidity direction)
-  const beta = conduit.liquidityBeta;
-  const defensive = struct.assetClass === 'commodity' || beta < 0.9; // gold, long bonds
-  // Risk assets like expansion; defensives are relatively favored when liquidity drains / risk-off.
-  const fit = defensive ? -expanding * 0.7 : expanding;
-  const regHe = { flood: 'הצפת נזילות', expansion: 'התרחבות נזילות', neutral: 'נזילות מאוזנת', drain: 'ניקוז נזילות', drought: 'בצורת נזילות' }[hpi.regime] || hpi.regime;
-  let verdict, label;
-  if (fit > 0.12) { verdict = 'tailwind'; label = 'המאקרו תומך בנכס'; }
-  else if (fit < -0.12) { verdict = 'headwind'; label = 'המאקרו מנוגד לנכס'; }
-  else { verdict = 'neutral'; label = 'המאקרו ניטרלי לנכס'; }
-  const role = defensive ? `נכס מגן (β=${beta.toFixed(2)})` : `נכס סיכון (β=${beta.toFixed(2)})`;
-  const because = verdict === 'tailwind'
-    ? (defensive ? `סביבת ${regHe} פועלת לטובתו` : `הרחבת נזילות = רוח גבית`)
-    : verdict === 'headwind'
-      ? (defensive ? `נזילות מתרחבת מעדיפה נכסי סיכון על פניו` : `${regHe} = רוח נגדית`)
-      : `הרקע מעורב`;
-  return { verdict, label, reason: `${role}: ${because}.` };
+// ── Per-asset-class exposure to each macro factor — economically grounded. ────
+// Factors (all oriented so a POSITIVE signal is supportive): easy real rates, weak dollar,
+// tight credit spreads, calm (low VIX), loose financial conditions, expanding liquidity,
+// falling long yields. A weight is how much that factor drives the asset (gold/bonds flip some).
+const MACRO_FACTORS = ['ריבית ריאלית', 'הדולר', 'מרווחי אשראי', 'תנודתיות (VIX)', 'תנאים פיננסיים', 'היצע הכסף/נזילות', 'כיוון התשואות'];
+const MACRO_MODEL = {
+  //               rates  dollar spreads  vix   fci    liq  yields
+  equity_us:     [0.60, 0.20, 0.70, 0.50, 0.80, 0.60, 0.20],
+  equity_growth: [1.00, 0.20, 0.60, 0.50, 0.80, 0.90, 0.50], // QQQ — rate & liquidity sensitive
+  equity_intl:   [0.50, 0.60, 0.60, 0.50, 0.70, 0.60, 0.20], // EFA — dollar matters more
+  em:            [0.50, 1.00, 0.70, 0.60, 0.60, 0.80, 0.20], // EEM — dollar-driven
+  credit:        [0.40, 0.20, 1.00, 0.60, 0.60, 0.40, 0.30], // HYG — spread-driven
+  gold:          [1.00, 0.90, 0.00, -0.40, 0.20, 0.30, 0.40], // GLD — real yields + dollar; likes fear
+  bonds:         [0.60, 0.10, -0.30, 0.10, 0.20, 0.20, 1.00], // TLT — long-yield driven
+  crypto:        [0.60, 0.60, 0.40, 0.50, 0.80, 1.00, 0.20], // BTC — liquidity + dollar
+};
+
+// Turn the live macro into the 7 normalized factor signals (-1..+1, + = supportive).
+function macroSignals(macro) {
+  const c = macro.conditions || {};
+  const y = macro.yields || {};
+  const clamp = (x) => Math.max(-1, Math.min(1, x));
+  const real10y = (y.real10y != null) ? y.real10y : ((y.ust10y || 0) - (y.breakeven10y || 0));
+  const d10 = (y.prev && y.ust10y != null) ? (y.ust10y - y.prev.ust10y) : 0;
+  return [
+    clamp(-(real10y - 1.0) / 2),                                   // easy real rates (low = +)
+    clamp(-(c.dollarChange || 0) / 1.5),                           // weak dollar
+    clamp((3.5 - (c.hyOAS != null ? c.hyOAS : 3.5)) / 1.5),        // tight credit spreads
+    clamp((18 - (c.vix != null ? c.vix : 18)) / 8),               // calm (low VIX)
+    clamp(-(c.nfci || 0) / 0.5),                                   // loose financial conditions
+    clamp((c.m2Growth || 0) / 8 + (c.reservesDelta || 0) / 300),  // expanding liquidity
+    clamp(-d10 / 0.3),                                            // falling long yields
+  ];
+}
+
+// Does the macro backdrop FAVOR this specific asset? Factor model → score (-100..+100) + reason.
+function macroFitFor(struct, macro) {
+  const w = MACRO_MODEL[struct.macroModel] || MACRO_MODEL.equity_us;
+  const sig = macroSignals(macro);
+  let num = 0, den = 0;
+  const contrib = [];
+  for (let i = 0; i < w.length; i++) { num += sig[i] * w[i]; den += Math.abs(w[i]); contrib.push({ name: MACRO_FACTORS[i], c: sig[i] * w[i] }); }
+  const score = den ? Math.round(num / den * 100) : 0;
+  const verdict = score >= 13 ? 'tailwind' : score <= -13 ? 'headwind' : 'neutral';
+  const label = verdict === 'tailwind' ? 'המאקרו תומך בנכס' : verdict === 'headwind' ? 'המאקרו מנוגד לנכס' : 'המאקרו ניטרלי לנכס';
+  const sorted = contrib.slice().sort((a, b) => b.c - a.c);
+  const supports = sorted.filter(x => x.c > 0.04).slice(0, 2).map(x => x.name);
+  const opposes = sorted.filter(x => x.c < -0.04).slice(-2).reverse().map(x => x.name);
+  let reason = '';
+  if (supports.length) reason += 'תומך: ' + supports.join(', ');
+  if (opposes.length) reason += (reason ? ' · ' : '') + 'מעיק: ' + opposes.join(', ');
+  if (!reason) reason = 'איזון בין הגורמים';
+  return { verdict, score, label, reason, supports, opposes };
 }
 
 // ── Yahoo daily candles (v8 chart API — no crumb needed) ──────────────────────
@@ -310,7 +344,7 @@ async function cycle() {
         structureShift: result.microstructure.structureShift,
         currentPrice: result.microstructure.currentPrice,
         fvgCount: result.microstructure.fvgs.length,
-        macroFit: macroFitFor(e.struct, result.conduit, result.hpi),
+        macroFit: macroFitFor(e.struct, macro),
         aiPolished: !!aiBody,
       },
     };

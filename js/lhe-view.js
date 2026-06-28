@@ -206,11 +206,12 @@ function _lheSensitivityHTML(assets) {
         const txtCls = v === 'tailwind' ? 'lhe-pos' : v === 'headwind' ? 'lhe-neg' : '';
         const fitTxt = v === 'tailwind' ? '✓ המאקרו תומך' : v === 'headwind' ? '✕ המאקרו מנוגד' : '◆ המאקרו ניטרלי';
         const sens = beta < 0.8 ? 'רגישות נמוכה · נכס מגן' : beta <= 1.3 ? 'רגישות בינונית' : 'רגישות גבוהה · אגרסיבי';
+        const reason = fit.reason ? _lheEsc(fit.reason) : '';
         return `<div class="lhe-sens-row">
             <span class="lhe-sens-tk">${_lheEsc(a.ticker)}</span>
             <div class="lhe-sens-main">
                 <span class="lhe-sens-track"><span class="lhe-sens-bar ${barCls}" style="width:${w}%"></span><span class="lhe-sens-beta">β ${beta.toFixed(1)}</span></span>
-                <span class="lhe-sens-meta">${sens} · <span class="${txtCls}">${fitTxt}</span></span>
+                <span class="lhe-sens-meta">${sens} · <span class="${txtCls}">${fitTxt}</span>${reason ? ` <span class="lhe-sens-reason">· ${reason}</span>` : ''}</span>
             </div>
         </div>`;
     }).join('');
