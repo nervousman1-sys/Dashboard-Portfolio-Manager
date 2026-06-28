@@ -9578,10 +9578,10 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
 .rep-live { width: 9px; height: 9px; border-radius: 50%; background: #64748b; flex: 0 0 auto; }
 .rep-live.on { background: #34d399; box-shadow: 0 0 8px rgba(52,211,153,0.7); animation: repPulse 2s infinite; }
 @keyframes repPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
-.rep-new-strip { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px;
-    border-top: 1px solid rgba(255,255,255,0.06); overflow-x: auto; }
-.rep-new-lbl { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: #b9b9c8; }
-.rep-new-chips { display: flex; gap: 7px; }
+.rep-new-strip { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
+.rep-new-lbl { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: #b9b9c8; padding-top: 5px; }
+.rep-new-chips { display: flex; gap: 7px; flex-wrap: wrap; flex: 1 1 auto; }
 .rep-new-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
     background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px 5px 10px;
     font-family: inherit; transition: border-color .12s, background .12s; }

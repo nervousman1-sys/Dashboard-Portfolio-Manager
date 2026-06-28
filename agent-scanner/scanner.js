@@ -136,13 +136,14 @@ async function polishHebrew(card) {
         talent_layer: card.talent_layer || '',
         whys: (Array.isArray(card.stealth_targets) ? card.stealth_targets : []).map(t => t.why || ''),
     };
-    const sys = 'אתה עורך לשון בכיר בעיתון כלכלי ישראלי מוביל (גלובס/כלכליסט). שכתב את שדות הטקסט הבאים לעברית מצוינת: רהוטה, ברורה, תקנית, מקצועית וקלה להבנה — לא תרגום מילולי. כללים: (1) נסח מחדש בעברית עיתונאית-כלכלית טבעית וזורמת, דקדוק תקין, תחביר נכון, התאמת מין/מספר, ללא שגיאות וללא מילים מומצאות. (2) sector_name (הכותרת) — חייב להיות בעברית מלאה וברורה. אם הכותרת באנגלית, תרגם אותה לעברית טבעית, ואפשר להוסיף את המונח הלועזי בסוגריים. (3) מונחים טכניים — השתמש במונח העברי המקובל והשגור. שים לב: "חישה" איננה מילה ברורה — quantum sensing הוא "חיישנים קוונטיים"/"חיישני קוונטים", לעולם לא "חישה". אם אין מקבילה עברית טבעית, השאר את המונח באנגלית בסוגריים. (4) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). (5) אל תשנה את המשמעות או העובדות — רק את הניסוח. (6) שמור על אורך דומה. החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
+    const sys = 'אתה עורך הלשון הראשי של מגזין כלכלי-טכנולוגי ישראלי מוביל, ומומחה לתרגום מדע וטכנולוגיה לעברית. שכתב את שדות הטקסט לעברית מצוינת, מדויקת ובהירה שכל קורא ישראלי יבין במלואה. עקרונות מחייבים: (1) כל מילה חייבת להיות מילה עברית תקנית הקיימת בפועל במילון ובשימוש — אסור בתכלית להמציא מילים, אסור תרגום מילולי מאולץ, ואסור להשתמש במילה עברית שאינה ברורה או אינה שגורה. (2) הקורא חייב להבין את הכותרת והטקסט במלואם וללא ידע מוקדם — נסח כך שהמשמעות חד-משמעית ושלמה. (3) מונח מדעי/טכני: השתמש במונח העברי המקובל והשגור בתעשייה; אם אין מונח עברי שגור, ברור ומדויק — השאר את המונח באנגלית (רצוי לצד תיאור עברי קצר או בסוגריים). מונח לועזי מובן עדיף תמיד על מילה עברית מומצאת או עמומה. (4) sector_name (הכותרת): עברית מלאה וברורה, עם המונח המקצועי הלועזי בסוגריים. (5) שמור בדיוק על כל המספרים, האחוזים, שמות החברות, הטיקרים ושמות האנשים (באנגלית במקור). אל תשנה עובדות או משמעות — רק את הניסוח. (6) שמור על אורך דומה. דוגמאות לניסוח נכון: "Quantum Sensing" → "חיישנים קוונטיים" (לעולם לא "חישה"); "Organ-on-Chip" → "איבר על שבב (Organ-on-Chip)"; "Direct Air Capture" → "לכידת פחמן ישירות מהאוויר (DAC)"; "Prime Editing" → "עריכת גנים מדויקת (Prime Editing)"; "Ferroelectric Memory" → "זיכרון פֶרוֹאֶלֶקְטְרי (Ferroelectric)". החזר אך ורק אובייקט JSON תקין עם אותם מפתחות בדיוק (sector_name, thesis, tech_layer, supply_layer, talent_layer, whys[]) ותו לא.';
+    const POLISH_MODEL = process.env.GEMINI_POLISH_MODEL || 'gemini-2.5-pro'; // stronger model = better Hebrew
     const body = {
         systemInstruction: { parts: [{ text: sys }] },
-        contents: [{ role: 'user', parts: [{ text: 'שכתב לעברית מצוינת את ה-JSON הבא (החזר JSON באותו מבנה):\n' + JSON.stringify(input) }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+        contents: [{ role: 'user', parts: [{ text: 'שכתב לעברית מצוינת, תקנית וברורה את ה-JSON הבא (החזר JSON באותו מבנה בדיוק):\n' + JSON.stringify(input) }] }],
+        generationConfig: { temperature: 0.25, maxOutputTokens: 8192 }, // thinking ON (no budget cap) → higher Hebrew quality
     };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${POLISH_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     try {
         let r;
