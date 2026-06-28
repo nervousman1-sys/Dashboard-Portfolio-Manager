@@ -166,17 +166,6 @@ function _lheMacroHTML(m) {
     const dArrow = delta > 1 ? '▲' : delta < -1 ? '▼' : '▬';
     const dCls = delta > 1 ? 'lhe-pos' : delta < -1 ? 'lhe-neg' : 'lhe-neu';
     const flow = +m.net_liquidity_flow || 0;
-    const ranking = (m.payload && Array.isArray(m.payload.ranking)) ? m.payload.ranking : [];
-    const maxAttr = ranking.reduce((mx, r) => Math.max(mx, +r.attraction || 0), 1);
-    const bars = ranking.map(r => {
-        const w = Math.max(4, Math.round((+r.attraction || 0) / maxAttr * 100));
-        return `<div class="lhe-rank-row">
-            <span class="lhe-rank-num">${r.rank}</span>
-            <span class="lhe-rank-tk">${_lheEsc(r.ticker)}</span>
-            <span class="lhe-rank-track"><span class="lhe-rank-fill" style="width:${w}%"></span></span>
-            <span class="lhe-rank-val">${Math.round(+r.attraction || 0)} <small>β${(+r.beta || 0).toFixed(1)}</small></span>
-        </div>`;
-    }).join('');
 
     return `<div class="lhe-macro">
         <div class="lhe-macro-top">
@@ -199,7 +188,39 @@ function _lheMacroHTML(m) {
         </div>
         ${m.body ? `<div class="lhe-macro-body">${_lheEsc(m.body)}</div>` : ''}
         ${_lheConditionsHTML(m.payload && m.payload.conditions)}
-        ${bars ? `<div class="lhe-rank-title">תעדוף תעלות הולכה — לאן ההון נשאב קודם</div><div class="lhe-rank">${bars}</div>` : ''}
+    </div>`;
+}
+
+// ── Asset sensitivity heatmap — the REDESIGNED "conduit ranking". Clear & explained:
+//    bar LENGTH = β (sensitivity to liquidity), bar COLOR = does the macro favor it now. ──
+function _lheSensitivityHTML(assets) {
+    if (!assets || !assets.length) return '';
+    const sorted = assets.slice().sort((a, b) => (+b.liquidity_beta || 0) - (+a.liquidity_beta || 0));
+    const maxBeta = Math.max(...sorted.map(a => +a.liquidity_beta || 0), 1);
+    const rows = sorted.map(a => {
+        const beta = +a.liquidity_beta || 0;
+        const w = Math.max(7, Math.round(beta / maxBeta * 100));
+        const fit = (a.payload && a.payload.macroFit) || {};
+        const v = fit.verdict;
+        const barCls = v === 'tailwind' ? 'lhe-bar-up' : v === 'headwind' ? 'lhe-bar-down' : 'lhe-bar-flat';
+        const txtCls = v === 'tailwind' ? 'lhe-pos' : v === 'headwind' ? 'lhe-neg' : '';
+        const fitTxt = v === 'tailwind' ? '✓ המאקרו תומך' : v === 'headwind' ? '✕ המאקרו מנוגד' : '◆ המאקרו ניטרלי';
+        const sens = beta < 0.8 ? 'רגישות נמוכה · נכס מגן' : beta <= 1.3 ? 'רגישות בינונית' : 'רגישות גבוהה · אגרסיבי';
+        return `<div class="lhe-sens-row">
+            <span class="lhe-sens-tk">${_lheEsc(a.ticker)}</span>
+            <div class="lhe-sens-main">
+                <span class="lhe-sens-track"><span class="lhe-sens-bar ${barCls}" style="width:${w}%"></span><span class="lhe-sens-beta">β ${beta.toFixed(1)}</span></span>
+                <span class="lhe-sens-meta">${sens} · <span class="${txtCls}">${fitTxt}</span></span>
+            </div>
+        </div>`;
+    }).join('');
+    return `<div class="lhe-sens">
+        <div class="lhe-sens-title">📊 רגישות הנכסים לנזילות — ומה המאקרו עושה לכל אחד</div>
+        <div class="lhe-sens-legend">
+            <div><b>אורך הפס = β (רגישות לנזילות):</b> כמה הנכס מגיב לכל שינוי בנזילות הגלובלית. <b>נמוך</b> = יציב/מגן (זהב, אג״ח); <b>גבוה</b> = אגרסיבי ומתנדנד (קריפטו, מניות).</div>
+            <div><b>צבע הפס = האם המאקרו תומך בנכס כרגע:</b> <span class="lhe-leg lhe-bar-up">תומך (רוח גבית)</span> <span class="lhe-leg lhe-bar-down">מנוגד (רוח נגדית)</span> <span class="lhe-leg lhe-bar-flat">ניטרלי</span>.</div>
+        </div>
+        <div class="lhe-sens-rows">${rows}</div>
     </div>`;
 }
 
@@ -386,5 +407,6 @@ function _lheBuildHTML(rows, status) {
     return _lheStatusHTML(status) +
         (macro ? _lheMacroHTML(macro) : '') +
         (macro ? _lheMapHTML(macro) : '') +
+        _lheSensitivityHTML(assets) +
         (assets.length ? `<div class="lhe-cards-title">סיגנלים לפי נכס — ${assets.length} נכסים</div><div class="lhe-cards">${assets.map(_lheCardHTML).join('')}</div>` : '');
 }
