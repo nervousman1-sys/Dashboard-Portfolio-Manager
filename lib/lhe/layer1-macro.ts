@@ -95,7 +95,23 @@ export function computeHPI(macro: MacroLiquidityInput, cfg: LHEConfig): HPIResul
     -(Math.max(0, macro.yields.breakeven10y - 2.0) * 0.5 + dBreakeven * 2) / 1.0,
   );
 
-  // ── 4. שקלול ל-pressure ∈ [-1, +1] ───────────────────────────────────
+  // ── 4. תנאים פיננסיים רחבים — "כל גורמי הנזילות" ─────────────────────
+  // NFCI (מצרף 100+ מדדים), מרווחי אשראי, VIX, דולר, M2, רזרבות בנקים.
+  // כל רכיב מנורמל כך ש"רופף/תומך" = חיובי. ממוצע רק על מה שסופק.
+  const cond = macro.conditions;
+  let conditionsImpulse = 0;
+  if (cond) {
+    const parts: number[] = [];
+    if (cond.nfci != null) parts.push(tanhSquash(-cond.nfci / 0.5)); // NFCI<0 רופף → +
+    if (cond.hyOAS != null) parts.push(tanhSquash((3.5 - cond.hyOAS) / 1.5)); // מרווח נמוך → +
+    if (cond.vix != null) parts.push(tanhSquash((18 - cond.vix) / 8)); // VIX נמוך → +
+    if (cond.dollarChange != null) parts.push(tanhSquash(-cond.dollarChange / 2)); // דולר חלש → +
+    if (cond.m2Growth != null) parts.push(tanhSquash(cond.m2Growth / 4)); // M2 צומח → +
+    if (cond.reservesDelta != null) parts.push(tanhSquash(cond.reservesDelta / 200)); // רזרבות עולות → +
+    if (parts.length) conditionsImpulse = clamp(parts.reduce((a, b) => a + b, 0) / parts.length, -1, 1);
+  }
+
+  // ── 5. שקלול ל-pressure ∈ [-1, +1] ───────────────────────────────────
   const pressure = clamp(
     weightedSum([
       { value: cCb, weight: w.centralBank },
@@ -103,6 +119,7 @@ export function computeHPI(macro: MacroLiquidityInput, cfg: LHEConfig): HPIResul
       { value: cRrp, weight: w.repo },
       { value: yieldImpulse, weight: w.yields },
       { value: inflationDrag, weight: w.inflation },
+      { value: conditionsImpulse, weight: w.conditions },
     ]),
     -1,
     1,
@@ -119,6 +136,7 @@ export function computeHPI(macro: MacroLiquidityInput, cfg: LHEConfig): HPIResul
       { value: cRrp, weight: w.repo },
       { value: yieldMomentum, weight: w.yields },
       { value: tanhSquash(-dBreakeven * 2), weight: w.inflation },
+      { value: conditionsImpulse, weight: w.conditions },
     ]),
     -1,
     1,
@@ -136,6 +154,7 @@ export function computeHPI(macro: MacroLiquidityInput, cfg: LHEConfig): HPIResul
       repoDrain: round(cRrp, 3),
       yieldImpulse: round(yieldImpulse, 3),
       inflationDrag: round(inflationDrag, 3),
+      conditionsImpulse: round(conditionsImpulse, 3),
     },
     asOf: macro.asOf,
   };

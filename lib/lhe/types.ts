@@ -55,6 +55,25 @@ export interface LiquidityReservoir {
   delta: number;
 }
 
+/**
+ * תנאים פיננסיים רחבים — "כל גורמי הנזילות" מעבר למאזני הבנקים והתשואות.
+ * כל שדה אופציונלי; ה-HPI משקלל רק את מה שסופק.
+ */
+export interface FinancialConditions {
+  /** מדד התנאים הפיננסיים של שיקגו פד (NFCI). <0 = רופף/תומך, >0 = מהודק. מצרף 100+ מדדים. */
+  nfci?: number;
+  /** מרווח אשראי High-Yield (OAS, %). נמוך = תאבון סיכון/אשראי זול = תומך. */
+  hyOAS?: number;
+  /** מדד הפחד (VIX). נמוך = שווקים רגועים = תומך. */
+  vix?: number;
+  /** שינוי מדד הדולר הרחב (% או נקודות). דולר מתחזק = נזילות גלובלית מהודקת. */
+  dollarChange?: number;
+  /** צמיחת M2 (% — שנתי או קצב). חיובי = הרחבת היצע הכסף = תומך. */
+  m2Growth?: number;
+  /** שינוי ברזרבות הבנקים (מיליארדי USD). חיובי = הזרמה לבנקים = תומך. */
+  reservesDelta?: number;
+}
+
 /** מתחם התשואות — מרווחים, אינפלציה גלומה וריבית ריאלית. */
 export interface YieldComplex {
   /** תשואת אג"ח ממשלתי אמריקאי לשנתיים (%). */
@@ -80,6 +99,8 @@ export interface MacroLiquidityInput {
   /** ריפו הפוך (Reverse Repo facility). */
   rrp: LiquidityReservoir;
   yields: YieldComplex;
+  /** תנאים פיננסיים רחבים — כל גורמי הנזילות הנוספים (אופציונלי). */
+  conditions?: FinancialConditions;
   /** שערי חליפין לנרמול ECB/BoI ל-USD. ברירות מחדל סבירות אם חסר. */
   fx?: { eurusd?: number; usdils?: number };
   /** חותמת זמן של צילום המאקרו (ISO). */
@@ -98,6 +119,8 @@ export interface HPIComponents {
   yieldImpulse: number;
   /** בלם אינפלציוני (אינפלציה גבוהה/עולה = שלילי). */
   inflationDrag: number;
+  /** תנאים פיננסיים רחבים (NFCI/אשראי/VIX/דולר/M2/רזרבות; רופף = חיובי). */
+  conditionsImpulse: number;
 }
 
 /** פלט שכבה 1 — מדד הלחץ ההידראולי. */
@@ -276,6 +299,7 @@ export interface LHEConfig {
     repo: number;
     yields: number;
     inflation: number;
+    conditions: number;
   };
   /** כמה מיליארדי USD של זרימת-נטו שווים "יחידת לחץ" מלאה (לנרמול tanh). */
   netLiquidityScaleBn: number;

@@ -74,33 +74,100 @@ async function fred(id, units = 'lin') {
   } catch (e) { return null; }
 }
 
-// ── Build the macro input (live) ──────────────────────────────────────────────
-async function buildMacro() {
-  const [walcl, tga, rrp, ecb, dgs2, dgs10, t10yie, dfii10] = await Promise.all([
-    fred('WALCL'), fred('WTREGEN'), fred('RRPONTSYD'), fred('ECBASSETSW'),
-    fred('DGS2'), fred('DGS10'), fred('T10YIE'), fred('DFII10'),
+// ── Fetch EVERY FRED series we use, once (parallel) ───────────────────────────
+async function fetchAll() {
+  const ids = {
+    walcl: 'WALCL', tga: 'WTREGEN', rrp: 'RRPONTSYD', ecb: 'ECBASSETSW',
+    dgs2: 'DGS2', dgs10: 'DGS10', t10yie: 'T10YIE', dfii10: 'DFII10',
+    nfci: 'NFCI', hyoas: 'BAMLH0A0HYM2', vix: 'VIXCLS', usd: 'DTWEXBGS', reserves: 'WRESBAL',
+    mmf: 'MMMFFAQ027S', currency: 'WCURCIR', debt: 'GFDEBTN', fedbs: 'WALCL',
+  };
+  const keys = Object.keys(ids);
+  const [arr, m2growth] = await Promise.all([
+    Promise.all(keys.map(k => fred(ids[k]))),
+    fred('M2SL', 'pc1'), // M2 % YoY directly
   ]);
+  const out = {};
+  keys.forEach((k, i) => { out[k] = arr[i]; });
+  out.m2growth = m2growth;
+  return out;
+}
+
+// ── Build the macro input (live) — now incl. ALL broad liquidity factors ──────
+function buildMacro(d) {
   const dlt = (s, div = 1) => (s && s.previous != null) ? (s.value - s.previous) / div : 0;
   return {
     asOf: new Date().toISOString().slice(0, 10),
-    fed: { totalAssets: walcl ? walcl.value / 1000 : 0, delta: dlt(walcl, 1000) },  // $M → $bn
-    ecb: { totalAssets: ecb ? ecb.value / 1000 : 0, delta: dlt(ecb, 1000) },        // €M → €bn
-    boi: { totalAssets: 0, delta: 0 },                                              // FRED lacks a timely BoI sheet
-    tga: { level: tga ? tga.value / 1000 : 0, delta: dlt(tga, 1000) },              // WTREGEN is $M → $bn
-    rrp: { level: rrp ? rrp.value : 0, delta: dlt(rrp, 1) },                        // RRPONTSYD already $bn
+    fed: { totalAssets: d.walcl ? d.walcl.value / 1000 : 0, delta: dlt(d.walcl, 1000) },  // $M → $bn
+    ecb: { totalAssets: d.ecb ? d.ecb.value / 1000 : 0, delta: dlt(d.ecb, 1000) },        // €M → €bn
+    boi: { totalAssets: 0, delta: 0 },                                                    // FRED lacks a timely BoI sheet
+    tga: { level: d.tga ? d.tga.value / 1000 : 0, delta: dlt(d.tga, 1000) },              // WTREGEN $M → $bn
+    rrp: { level: d.rrp ? d.rrp.value : 0, delta: dlt(d.rrp, 1) },                        // RRPONTSYD already $bn
     yields: {
-      ust2y: dgs2 ? dgs2.value : 0,
-      ust10y: dgs10 ? dgs10.value : 0,
-      breakeven10y: t10yie ? t10yie.value : 2.3,
-      real10y: dfii10 ? dfii10.value : undefined,
+      ust2y: d.dgs2 ? d.dgs2.value : 0,
+      ust10y: d.dgs10 ? d.dgs10.value : 0,
+      breakeven10y: d.t10yie ? d.t10yie.value : 2.3,
+      real10y: d.dfii10 ? d.dfii10.value : undefined,
       prev: {
-        ust2y: dgs2 && dgs2.previous != null ? dgs2.previous : (dgs2 ? dgs2.value : 0),
-        ust10y: dgs10 && dgs10.previous != null ? dgs10.previous : (dgs10 ? dgs10.value : 0),
-        breakeven10y: t10yie && t10yie.previous != null ? t10yie.previous : (t10yie ? t10yie.value : 2.3),
+        ust2y: d.dgs2 && d.dgs2.previous != null ? d.dgs2.previous : (d.dgs2 ? d.dgs2.value : 0),
+        ust10y: d.dgs10 && d.dgs10.previous != null ? d.dgs10.previous : (d.dgs10 ? d.dgs10.value : 0),
+        breakeven10y: d.t10yie && d.t10yie.previous != null ? d.t10yie.previous : (d.t10yie ? d.t10yie.value : 2.3),
       },
+    },
+    // ── ALL broad liquidity factors ──
+    conditions: {
+      nfci: d.nfci ? d.nfci.value : undefined,         // Chicago Fed financial conditions (100+ indicators)
+      hyOAS: d.hyoas ? d.hyoas.value : undefined,      // high-yield credit spread %
+      vix: d.vix ? d.vix.value : undefined,            // volatility
+      dollarChange: dlt(d.usd, 1),                     // broad USD change (stronger = tighter)
+      m2Growth: d.m2growth ? d.m2growth.value : undefined, // M2 % YoY
+      reservesDelta: dlt(d.reserves, 1000),            // bank reserves change $M → $bn
     },
     fx: { eurusd: 1.08, usdils: 3.7 },
   };
+}
+
+// ── Liquidity map: WHERE the money sits (cash pools vs deployed markets) ───────
+function buildLiquidityMap(d) {
+  const tM = (s) => (s && s.value != null) ? +(s.value / 1e6).toFixed(2) : null; // $millions → $T
+  const dir = (s) => (s && s.previous != null) ? (s.value > s.previous ? 'up' : s.value < s.previous ? 'down' : 'flat') : 'flat';
+  const pools = [];
+  const push = (label, valueT, group, dirVal, live) => { if (valueT != null) pools.push({ label, valueT, group, dir: dirVal, live }); };
+
+  // Deployed in the market
+  push('מניות (שוק ארה"ב)', 58, 'market', 'up', false);            // order-of-magnitude estimate
+  push('אג"ח ממשלתי (Treasury)', tM(d.debt), 'bonds', dir(d.debt), true);
+  push('אג"ח קונצרני', 11, 'bonds', 'flat', false);                // estimate
+  // Cash on the sidelines (the "dry powder" — live, weekly)
+  push('קרנות כספיות (מזומן)', tM(d.mmf), 'cash', dir(d.mmf), true);
+  push('רזרבות בנקים', tM(d.reserves), 'cash', dir(d.reserves), true);
+  push('מזומן במחזור', tM(d.currency), 'cash', dir(d.currency), true);
+  push('חשבון האוצר (TGA)', tM(d.tga), 'cash', dir(d.tga), true);
+  push('ריפו הפוך (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', dir(d.rrp), true);
+
+  const cashT = pools.filter(p => p.group === 'cash').reduce((s, p) => s + p.valueT, 0);
+  return { pools, cashSidelinesT: +cashT.toFixed(2) };
+}
+
+// ── Does the macro/liquidity backdrop FAVOR this specific asset? ───────────────
+function macroFitFor(struct, conduit, hpi) {
+  const expanding = (hpi.score - 50) / 50 * 0.6 + hpi.delta / 100 * 0.4; // -1..+1 (liquidity direction)
+  const beta = conduit.liquidityBeta;
+  const defensive = struct.assetClass === 'commodity' || beta < 0.9; // gold, long bonds
+  // Risk assets like expansion; defensives are relatively favored when liquidity drains / risk-off.
+  const fit = defensive ? -expanding * 0.7 : expanding;
+  const regHe = { flood: 'הצפת נזילות', expansion: 'התרחבות נזילות', neutral: 'נזילות מאוזנת', drain: 'ניקוז נזילות', drought: 'בצורת נזילות' }[hpi.regime] || hpi.regime;
+  let verdict, label;
+  if (fit > 0.12) { verdict = 'tailwind'; label = 'המאקרו תומך בנכס'; }
+  else if (fit < -0.12) { verdict = 'headwind'; label = 'המאקרו מנוגד לנכס'; }
+  else { verdict = 'neutral'; label = 'המאקרו ניטרלי לנכס'; }
+  const role = defensive ? `נכס מגן (β=${beta.toFixed(2)})` : `נכס סיכון (β=${beta.toFixed(2)})`;
+  const because = verdict === 'tailwind'
+    ? (defensive ? `סביבת ${regHe} פועלת לטובתו` : `הרחבת נזילות = רוח גבית`)
+    : verdict === 'headwind'
+      ? (defensive ? `נזילות מתרחבת מעדיפה נכסי סיכון על פניו` : `${regHe} = רוח נגדית`)
+      : `הרקע מעורב`;
+  return { verdict, label, reason: `${role}: ${because}.` };
 }
 
 // ── Yahoo daily candles (v8 chart API — no crumb needed) ──────────────────────
@@ -153,12 +220,19 @@ async function geminiPolish(body) {
   } catch (e) { return null; }
 }
 
-function macroBody(hpi) {
+function macroBody(hpi, macro) {
   const flow = hpi.netLiquidityFlow >= 0 ? 'הזרמה' : 'משיכה';
   const dir = hpi.delta >= 0 ? 'מתרחב' : 'מתכווץ';
+  const c = (macro && macro.conditions) || {};
+  const bits = [];
+  if (c.nfci != null) bits.push(`תנאים פיננסיים ${c.nfci < 0 ? 'רופפים' : 'מהודקים'} (NFCI ${c.nfci.toFixed(2)})`);
+  if (c.hyOAS != null) bits.push(`מרווחי אשראי ${c.hyOAS.toFixed(2)}%`);
+  if (c.vix != null) bits.push(`VIX ${c.vix.toFixed(1)}`);
+  if (c.m2Growth != null) bits.push(`M2 ${c.m2Growth >= 0 ? '+' : ''}${c.m2Growth.toFixed(1)}% שנתי`);
   return `מצב הנזילות הגלובלי: ${hpi.regime} (HPI ${Math.round(hpi.score)}/100, מומנטום ${hpi.delta >= 0 ? '+' : ''}${hpi.delta}). ` +
-    `זרימת נזילות-נטו של ${flow} ~$${Math.abs(hpi.netLiquidityFlow).toFixed(0)} מיליארד — מאזני בנקים מרכזיים מול ניקוז TGA/RRP. ` +
-    `הלחץ ${dir}. תעלות ההון בעלות הרגישות הגבוהה ביותר נשאבות ראשונות.`;
+    `זרימת נזילות-נטו של ${flow} ~$${Math.abs(hpi.netLiquidityFlow).toFixed(0)} מיליארד. ` +
+    (bits.length ? `גורמי נזילות: ${bits.join(' · ')}. ` : '') +
+    `הלחץ ${dir}; תעלות ההון בעלות הרגישות הגבוהה ביותר נשאבות ראשונות.`;
 }
 
 async function upsertSignal(item) {
@@ -177,9 +251,11 @@ async function heartbeat(note) {
 // ── One full cycle ────────────────────────────────────────────────────────────
 async function cycle() {
   const cfg = resolveConfig();
-  const macro = await buildMacro();
+  const d = await fetchAll();
+  const macro = buildMacro(d);
+  const liquidityMap = buildLiquidityMap(d);
   const hpi = computeHPI(macro, cfg);
-  log(`HPI ${hpi.score} (${hpi.regime}, Δ${hpi.delta}) · net-liq $${hpi.netLiquidityFlow}bn`);
+  log(`HPI ${hpi.score} (${hpi.regime}, Δ${hpi.delta}) · net-liq $${hpi.netLiquidityFlow}bn · NFCI ${macro.conditions.nfci} · sidelines $${liquidityMap.cashSidelinesT}T`);
 
   // Fetch + enrich candles (sequential, gentle).
   const enriched = [];
@@ -214,6 +290,7 @@ async function cycle() {
         structureShift: result.microstructure.structureShift,
         currentPrice: result.microstructure.currentPrice,
         fvgCount: result.microstructure.fvgs.length,
+        macroFit: macroFitFor(e.struct, result.conduit, result.hpi),
         aiPolished: !!aiBody,
       },
     };
@@ -228,9 +305,11 @@ async function cycle() {
     confluence_score: null, bias: null,
     severity: (hpi.regime === 'flood' || hpi.regime === 'drought') ? 'high' : 'info',
     headline: `HPI ${Math.round(hpi.score)} · ${hpi.regime} (${hpi.delta >= 0 ? '+' : ''}${hpi.delta})`,
-    body: macroBody(hpi), flags: [],
+    body: macroBody(hpi, macro), flags: [],
     payload: {
       components: hpi.components,
+      conditions: macro.conditions,
+      liquidityMap,
       ranking: ranking.map(r => ({ ticker: r.ticker, rank: r.rank, attraction: r.attractionScore, beta: r.liquidityBeta })),
     },
   });

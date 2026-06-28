@@ -198,8 +198,55 @@ function _lheMacroHTML(m) {
             </div>
         </div>
         ${m.body ? `<div class="lhe-macro-body">${_lheEsc(m.body)}</div>` : ''}
+        ${_lheConditionsHTML(m.payload && m.payload.conditions)}
         ${bars ? `<div class="lhe-rank-title">תעדוף תעלות הולכה — לאן ההון נשאב קודם</div><div class="lhe-rank">${bars}</div>` : ''}
     </div>`;
+}
+
+// Broad liquidity factors — every input feeding the HPI (white text + colored direction arrow).
+function _lheConditionsHTML(c) {
+    if (!c) return '';
+    const arrow = (good) => good === true ? '<span class="lhe-cond-arrow lhe-pos">▲</span>' : good === false ? '<span class="lhe-cond-arrow lhe-neg">▼</span>' : '';
+    const chip = (label, val, good) => `<span class="lhe-cond">${label}: <b>${val}</b>${arrow(good)}</span>`;
+    const items = [];
+    if (c.nfci != null) items.push(chip('תנאים פיננסיים (NFCI)', (+c.nfci).toFixed(2), c.nfci < 0));
+    if (c.hyOAS != null) items.push(chip('מרווח אשראי HY', (+c.hyOAS).toFixed(2) + '%', c.hyOAS < 3.5));
+    if (c.vix != null) items.push(chip('VIX', (+c.vix).toFixed(1), c.vix < 18));
+    if (c.m2Growth != null) items.push(chip('M2 שנתי', (c.m2Growth >= 0 ? '+' : '') + (+c.m2Growth).toFixed(1) + '%', c.m2Growth > 0));
+    if (c.dollarChange != null) items.push(chip('שינוי דולר רחב', (c.dollarChange >= 0 ? '+' : '') + (+c.dollarChange).toFixed(2), c.dollarChange < 0));
+    if (c.reservesDelta != null) items.push(chip('Δ רזרבות בנקים', (c.reservesDelta >= 0 ? '+' : '') + Math.round(c.reservesDelta) + 'B$', c.reservesDelta > 0));
+    return items.length ? `<div class="lhe-cond-title">גורמי נזילות נוספים (כל מה שמזין את המודל)</div><div class="lhe-conds">${items.join('')}</div>` : '';
+}
+
+// Liquidity map — WHERE the money sits (cash pools vs deployed markets), sized by $T.
+function _lheMapHTML(m) {
+    const map = m && m.payload && m.payload.liquidityMap;
+    if (!map || !Array.isArray(map.pools) || !map.pools.length) return '';
+    const pools = map.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0));
+    const max = Math.max(...pools.map(p => +p.valueT || 0), 1);
+    const gCls = { market: 'lhe-g-market', bonds: 'lhe-g-bonds', cash: 'lhe-g-cash' };
+    const rows = pools.map(p => {
+        const w = Math.max(3, Math.round((+p.valueT || 0) / max * 100));
+        const arr = p.dir === 'up' ? '<span class="lhe-pos">▲</span>' : p.dir === 'down' ? '<span class="lhe-neg">▼</span>' : '';
+        const dot = p.live ? '<span class="lhe-map-live" title="נתון חי"></span>' : '<span class="lhe-map-est" title="אומדן סדר-גודל">~</span>';
+        return `<div class="lhe-map-row">
+            <span class="lhe-map-label">${dot}${_lheEsc(p.label)}</span>
+            <span class="lhe-map-track"><span class="lhe-map-fill ${gCls[p.group] || ''}" style="width:${w}%"></span></span>
+            <span class="lhe-map-val">$${(+p.valueT)}T ${arr}</span>
+        </div>`;
+    }).join('');
+    return `<div class="lhe-map">
+        <div class="lhe-map-title">🗺️ מפת נזילות — איפה נמצא הכסף</div>
+        <div class="lhe-map-sub">מזומן בצד (Dry Powder): <b>$${map.cashSidelinesT}T</b> &nbsp;·&nbsp; 🟢 נתון חי &nbsp;·&nbsp; ~ אומדן סדר-גודל</div>
+        ${rows}
+    </div>`;
+}
+
+function _lheFitMeta(fit) {
+    const v = fit && fit.verdict;
+    if (v === 'tailwind') return { cls: 'lhe-fit-tailwind', icon: '✓', short: 'מאקרו תומך' };
+    if (v === 'headwind') return { cls: 'lhe-fit-headwind', icon: '✕', short: 'מאקרו מנוגד' };
+    return { cls: 'lhe-fit-neutral', icon: '◆', short: 'מאקרו ניטרלי' };
 }
 
 function _lheToggle(id) {
@@ -219,6 +266,8 @@ function _lheCardHTML(c) {
     const t = c.target;
     const p = c.payload || {};
     const ss = p.structureShift;
+    const fit = p.macroFit;
+    const fitMeta = _lheFitMeta(fit);
 
     const flagChips = flags.map(f => `<span class="lhe-flag">${_lheEsc(_lheFlagHe(f))}</span>`).join('');
     const targetHTML = (t && t.zone) ? `
@@ -241,10 +290,12 @@ function _lheCardHTML(c) {
                 </div>
             </div>
             <div class="lhe-card-head-r">
+                ${fit ? `<span class="lhe-fit-chip ${fitMeta.cls}">${fitMeta.icon} ${fitMeta.short}</span>` : ''}
                 <span class="lhe-conf ${sevCls}">שכנוע ${conf}</span>
             </div>
         </div>
         <div class="lhe-card-body">
+            ${fit ? `<div class="lhe-fit ${fitMeta.cls}"><b>${fitMeta.icon} ${_lheEsc(fit.label)}</b> <small>${_lheEsc(fit.reason)}</small></div>` : ''}
             <div class="lhe-stats">
                 <div class="lhe-stat"><span class="lhe-stat-v">${beta}</span><span class="lhe-stat-l">Liquidity-β</span></div>
                 <div class="lhe-stat"><span class="lhe-stat-v">${attr}</span><span class="lhe-stat-l">משיכת הון</span></div>
@@ -277,5 +328,6 @@ function _lheBuildHTML(rows, status) {
         .sort((a, b) => (+b.confluence_score || 0) - (+a.confluence_score || 0));
     return _lheStatusHTML(status) +
         (macro ? _lheMacroHTML(macro) : '') +
+        (macro ? _lheMapHTML(macro) : '') +
         (assets.length ? `<div class="lhe-cards-title">סיגנלים לפי נכס — ${assets.length} נכסים</div><div class="lhe-cards">${assets.map(_lheCardHTML).join('')}</div>` : '');
 }
