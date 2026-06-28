@@ -1,60 +1,78 @@
-// ========== LHE VIEW — Liquidity Hydrodynamic Engine ==========
-// Displays the lhe_signals produced by the 24/7 LHE Agent (Supabase). Read-only here:
-// the client reads with the anon key (RLS allows SELECT); only the agent writes (via its RPC).
-// Full-screen Cyber-Noir overlay, RTL Hebrew. Shows: the global liquidity state (HPI),
-// the asset-conduit ranking (where capital flows first), and per-asset confluence cards
-// (FVG gravity + alert narrative). Auto-refreshes 24/7 while open.
+// ========== LHE PAGE — Liquidity Hydrodynamic Engine ==========
+// A full routed PAGE (not a popup) — mirrors the reports/technical pages: it takes over the
+// dashboard content area (#lhePage.active) instead of floating as an overlay. Displays the
+// lhe_signals produced by the 24/7 LHE Agent (Supabase, read-only here — RLS allows SELECT;
+// only the agent writes). Shows the global liquidity state (HPI), the asset-conduit ranking,
+// and per-asset confluence cards. Auto-refreshes 24/7 while the page is open.
 
 let _lheTimer = null;
 let _lheSig = '';
 let _lheLoaded = false;
 const LHE_CACHE = 'lhe_signals_v1';
 
-function openLHE() {
-    let overlay = document.getElementById('lheOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'lheOverlay';
-        overlay.className = 'lhe-overlay';
-        overlay.setAttribute('onclick', 'closeLHE(event)');
-        document.body.appendChild(overlay);
-    }
-    overlay.classList.add('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+// ── Open as a page: hide the dashboard chrome, show #lhePage (same pattern as openReportsPage) ──
+function openLHEPage() {
+    const page = document.getElementById('lhePage');
+    if (!page) return;
+    const header = document.querySelector('.header');
+    if (header) header.style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { if (el.id !== 'lhePage') el.style.display = 'none'; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = 'none';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = 'none';
+
+    page.classList.add('active');
     if (typeof _setActiveNav === 'function') _setActiveNav('lhe');
-    try { history.pushState({ popup: 'lhe' }, '', location.href); } catch (e) { }
+    if (typeof updateURLState === 'function') updateURLState({ view: 'lhe' });
+
     _lheRenderShell();
+    window.scrollTo(0, 0);
     _lheLoad();
     if (_lheTimer) clearInterval(_lheTimer);
     _lheTimer = setInterval(() => { if (document.getElementById('lheBody')) _lheLoad(); }, 120000);
 }
 
-function closeLHE(event) {
-    if (event && event.target !== event.currentTarget) return;
-    const overlay = document.getElementById('lheOverlay');
-    if (overlay) overlay.classList.remove('active');
+function closeLHEPage() {
+    const page = document.getElementById('lhePage');
     if (_lheTimer) { clearInterval(_lheTimer); _lheTimer = null; }
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    if (!page) return;
+    page.classList.remove('active');
+    page.innerHTML = '';
+    const header = document.querySelector('.header');
+    if (header) header.style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { el.style.display = ''; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = '';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = '';
+    if (typeof clearURLState === 'function') clearURLState();
     if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
 }
-if (typeof window !== 'undefined') { window.openLHE = openLHE; window.closeLHE = closeLHE; }
+// Back-compat aliases (older callers / history popstate).
+if (typeof window !== 'undefined') {
+    window.openLHEPage = openLHEPage; window.closeLHEPage = closeLHEPage;
+    window.openLHE = openLHEPage; window.closeLHE = closeLHEPage;
+}
 
 function _lheRenderShell() {
-    const overlay = document.getElementById('lheOverlay');
-    if (!overlay) return;
-    overlay.innerHTML = `
-    <div class="lhe-modal" dir="rtl" onclick="event.stopPropagation()">
-        <div class="lhe-header">
-            <div>
-                <h2 class="lhe-title">🌊 מנוע הנזילות ההידרודינמי (LHE)</h2>
-                <p class="lhe-subtitle">מודל תלת-שכבתי: לחץ נזילות מאקרו (HPI) → תעלות הולכה לנכסים (רגישות) → כבידת אזורי חוסר-יעילות בגרף (FVG). מתעדכן אוטומטית 24/7.</p>
-            </div>
-            <div class="lhe-head-actions">
-                <button class="lhe-refresh" onclick="_lheLoad(true)" title="רענן">⟳</button>
-                <button class="lhe-close" onclick="closeLHE()">&times;</button>
-            </div>
+    const page = document.getElementById('lhePage');
+    if (!page) return;
+    page.innerHTML = `
+    <div dir="rtl">
+        <div class="macro-page-header">
+            <h1 class="macro-main-title">🌊 מנוע הנזילות ההידרודינמי</h1>
+            <button class="macro-back-btn" onclick="closeLHEPage()">חזור לדשבורד</button>
         </div>
-        <div class="lhe-body" id="lheBody"><div class="lhe-loading">טוען מנוע נזילות…</div></div>
+        <div class="macro-content">
+            <div class="lhe-intro">
+                <p class="lhe-subtitle">מודל תלת-שכבתי: לחץ נזילות מאקרו (HPI) → תעלות הולכה לנכסים (רגישות) → כבידת אזורי חוסר-יעילות בגרף (FVG). הנכסים הגלובליים המרכזיים, מתעדכן אוטומטית 24/7.</p>
+                <button class="lhe-refresh" onclick="_lheLoad(true)" title="רענן">⟳ רענן</button>
+            </div>
+            <div class="lhe-body" id="lheBody"><div class="lhe-loading">טוען מנוע נזילות…</div></div>
+        </div>
     </div>`;
 }
 

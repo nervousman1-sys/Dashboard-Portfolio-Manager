@@ -45,17 +45,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // ── Curated universe: assets where the liquidity→price transmission is strongest.
 // The structural amplifiers (leverage / on-chain) are slowly-changing priors — update
 // occasionally; momentum & vol are computed LIVE from candles each cycle.
+// Core GLOBAL macro asset classes — the canonical map of where global liquidity flows.
+// measuredLiquidityBeta = a sensible prior for each class's sensitivity to Net-Liquidity
+// (US growth > EM > credit > broad equity > bonds > gold). momentum/vol computed live.
 const ASSETS = [
-  { ticker: 'MSTR', yahoo: 'MSTR', name: 'Strategy (MicroStrategy)', assetClass: 'levered_equity',
-    leverage: { debtToEquity: 0.7, convertiblePctOfCap: 0.30, navPremium: 1.55, baseAssetBeta: 1.5 } },
-  { ticker: 'BTC', yahoo: 'BTC-USD', name: 'Bitcoin', assetClass: 'crypto',
+  { ticker: 'SPY', yahoo: 'SPY', name: 'S&P 500', assetClass: 'etf', measuredLiquidityBeta: 1.0 },
+  { ticker: 'QQQ', yahoo: 'QQQ', name: 'נאסד"ק 100 (QQQ)', assetClass: 'etf', measuredLiquidityBeta: 1.25 },
+  { ticker: 'GLD', yahoo: 'GLD', name: 'זהב (Gold)', assetClass: 'commodity', measuredLiquidityBeta: 0.55 },
+  { ticker: 'TLT', yahoo: 'TLT', name: 'אג"ח ממשלתי ארה"ב 20Y+ (TLT)', assetClass: 'etf', measuredLiquidityBeta: 0.8 },
+  { ticker: 'HYG', yahoo: 'HYG', name: 'אג"ח קונצרני High-Yield (HYG)', assetClass: 'etf', measuredLiquidityBeta: 1.1 },
+  { ticker: 'BTC', yahoo: 'BTC-USD', name: 'ביטקוין (Bitcoin)', assetClass: 'crypto',
     onChain: { exchangeNetflow: 30000, illiquidSupplyPct: 0.74, whaleAccumulationScore: 0.3, exchangeReserveRatio: 0.11 } },
-  { ticker: 'COIN', yahoo: 'COIN', name: 'Coinbase', assetClass: 'levered_equity',
-    leverage: { debtToEquity: 0.4, convertiblePctOfCap: 0.20, navPremium: 1.2, baseAssetBeta: 1.3 } },
-  { ticker: 'MARA', yahoo: 'MARA', name: 'MARA Holdings', assetClass: 'levered_equity',
-    leverage: { debtToEquity: 0.5, convertiblePctOfCap: 0.35, navPremium: 1.25, baseAssetBeta: 1.6 } },
-  { ticker: 'IBIT', yahoo: 'IBIT', name: 'iShares Bitcoin Trust', assetClass: 'etf', measuredLiquidityBeta: 1.5 },
-  { ticker: 'NVDA', yahoo: 'NVDA', name: 'NVIDIA', assetClass: 'equity', measuredLiquidityBeta: 1.3 },
+  { ticker: 'EEM', yahoo: 'EEM', name: 'שווקים מתעוררים (EM)', assetClass: 'etf', measuredLiquidityBeta: 1.35 },
+  { ticker: 'EFA', yahoo: 'EFA', name: 'מניות מפותחות ex-US (אירופה/יפן)', assetClass: 'etf', measuredLiquidityBeta: 1.1 },
 ];
 
 // ── FRED: latest + previous observation (for deltas/momentum) ─────────────────

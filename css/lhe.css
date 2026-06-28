@@ -2,37 +2,18 @@
 /* Self-contained: only .lhe-* classes. Uses the theme variables so it adapts to
    both dark and light modes. Does not touch any existing selector. */
 
-.lhe-overlay {
-    position: fixed; inset: 0; z-index: 1200;
-    background: rgba(2, 2, 2, 0.82); backdrop-filter: blur(6px);
-    display: none; align-items: flex-start; justify-content: center;
-    overflow-y: auto; padding: 24px 16px;
-}
-.lhe-overlay.active { display: flex; }
-
-.lhe-modal {
-    width: 100%; max-width: 1080px; margin: 8px auto 40px;
-    background: linear-gradient(180deg, rgba(0, 229, 255, 0.04), var(--bg-secondary) 120px);
-    border: 1px solid var(--border); border-radius: var(--radius-lg);
-    box-shadow: var(--shadow), 0 0 40px rgba(0, 229, 255, 0.08);
-}
-
-.lhe-header {
-    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
-    padding: 22px 26px 18px; border-bottom: 1px solid var(--border);
-}
-.lhe-title { margin: 0; font-size: 1.35rem; font-weight: 800; color: var(--text-primary); }
-.lhe-subtitle { margin: 6px 0 0; font-size: 0.82rem; line-height: 1.5; color: var(--text-secondary); max-width: 720px; }
-.lhe-head-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.lhe-refresh, .lhe-close {
+/* The LHE is a routed PAGE: it renders inside #lhePage.riskmodel-page (.active toggles it)
+   and reuses .macro-page-header / .macro-content for the title bar + layout. */
+.lhe-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.lhe-subtitle { margin: 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-secondary); max-width: 760px; }
+.lhe-refresh {
     background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
-    width: 38px; height: 38px; border-radius: 50%; cursor: pointer; font-size: 1.1rem;
-    transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem;
+    white-space: nowrap; transition: all 0.15s;
 }
-.lhe-refresh:hover, .lhe-close:hover { color: var(--accent-blue); border-color: var(--accent-blue); background: var(--bg-card-hover); }
-.lhe-close { font-size: 1.5rem; }
+.lhe-refresh:hover { color: var(--accent-blue); border-color: var(--accent-blue); background: var(--bg-card-hover); }
 
-.lhe-body { padding: 20px 26px 28px; }
+.lhe-body { max-width: 1080px; }
 .lhe-loading, .lhe-empty { text-align: center; color: var(--text-secondary); padding: 60px 20px; font-size: 0.95rem; line-height: 1.7; }
 
 /* ── Heartbeat status bar ── */
