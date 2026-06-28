@@ -64,6 +64,7 @@ function navigateTo(section) {
     // Decision Core is an independent overlay (not in the switch below) — close it on any navigation.
     if (section !== 'decisioncore' && typeof closeDecisionCore === 'function') closeDecisionCore();
     if (section !== 'scanneragent' && typeof closeScannerAgent === 'function') closeScannerAgent();
+    if (section !== 'lhe' && typeof closeLHE === 'function') closeLHE();
 
     // Determine if we need to close overlay pages first
     const macroPage = document.getElementById('macroPage');

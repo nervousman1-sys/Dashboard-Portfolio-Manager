@@ -26,6 +26,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="css/main.css?v=136.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
+    <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <!-- Apply the saved theme BEFORE first paint (no flash) -->
     <script>
         try { if (localStorage.getItem('ui_theme') === 'day') document.documentElement.classList.add('day-mode'); } catch (e) { }
@@ -191,6 +192,18 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">Scanner Agent</span>
+                </a>
+
+                <a class="sidebar-item" data-nav="lhe" onclick="_closeMobileSidebar && _closeMobileSidebar(); openLHE()">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 7c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+                            <path d="M3 12c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+                            <path d="M3 17c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">מנוע נזילות</span>
                 </a>
             </nav>
 
@@ -655,6 +668,7 @@
     <script src="js/reports-view.js?v=482"></script>
     <script src="js/decision-core.js?v=482"></script>
     <script src="js/scanner-agent.js?v=482"></script>
+    <script src="js/lhe-view.js?v=482"></script>
     <script src="js/sidebar.js?v=482"></script>
     <script src="js/auth.js?v=482"></script>
     <script src="js/init.js?v=483"></script>
