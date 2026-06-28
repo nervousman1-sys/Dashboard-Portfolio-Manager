@@ -74,9 +74,11 @@
 .lhe-tm-name { font-size: 0.8rem; font-weight: 700; color: #fff; line-height: 1.2; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; word-break: break-word; flex-shrink: 0; }
 .lhe-tm-val { flex-shrink: 0; }
 .lhe-tm-val { font-size: 0.98rem; font-weight: 800; color: #fff; line-height: 1.3; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
-.lhe-tm-tiny { padding: 2px 4px; }
-.lhe-tm-tiny .lhe-tm-name, .lhe-tm-tiny .lhe-tm-scope { display: none; }
-.lhe-tm-tiny .lhe-tm-val { font-size: 0.7rem; }
+/* Short tiles: name + value on ONE compact line so the label is always shown (קריפטו / TGA / מזומן) */
+.lhe-tm-low { flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 5px; padding: 2px 5px; }
+.lhe-tm-low .lhe-tm-scope { display: none; }
+.lhe-tm-low .lhe-tm-name { font-size: 0.72rem; -webkit-line-clamp: 1; }
+.lhe-tm-low .lhe-tm-val { font-size: 0.74rem; }
 /* Finviz-style direction coloring: green = rising/inflow, red = falling/outflow, slate = flat/estimate */
 .lhe-tm-up { background: linear-gradient(135deg, #15803d, #22c55e); }
 .lhe-tm-down { background: linear-gradient(135deg, #b91c1c, #ef4444); }
