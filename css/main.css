@@ -6812,11 +6812,18 @@ body.filter-modal-open::after {
     min-height: 44px;
 }
 
-/* Collapsed: center icon */
+/* Collapsed: center icon EXACTLY. The 0-width label still participates in the flex row and
+   pushed the icon ~7px off; hide it. A transparent border-left balances the 4px active border-right
+   so the icon sits dead-center over the hamburger above it. */
 .sidebar:not(.expanded) .sidebar-item {
     justify-content: center;
     padding: 12px 0;
+    gap: 0;
     border-right: 4px solid transparent;
+    border-left: 4px solid transparent;
+}
+.sidebar:not(.expanded) .sidebar-label {
+    display: none;
 }
 
 .sidebar-item:hover {
