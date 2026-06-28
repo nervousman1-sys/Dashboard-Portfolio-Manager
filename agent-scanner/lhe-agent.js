@@ -127,28 +127,39 @@ function buildMacro(d) {
   };
 }
 
-// ── Liquidity map: WHERE the money sits (cash pools vs deployed markets) ───────
-function buildLiquidityMap(d) {
-  const tM = (s) => (s && s.value != null) ? +(s.value / 1e6).toFixed(2) : null; // $millions → $T
-  const dir = (s) => (s && s.previous != null) ? (s.value > s.previous ? 'up' : s.value < s.previous ? 'down' : 'flat') : 'flat';
-  const pools = [];
-  const push = (label, valueT, group, dirVal, live, scope) => { if (valueT != null) pools.push({ label, valueT, group, dir: dirVal, live, scope }); };
+// Recent price direction of a candle series (for Finviz-style green/red coloring).
+function candleDir(candles, lookback = 5) {
+  if (!candles || candles.length < lookback + 1) return 'flat';
+  const a = candles[candles.length - 1].close, b = candles[candles.length - 1 - lookback].close;
+  if (!b) return 'flat';
+  const pct = (a - b) / b * 100;
+  return pct > 0.3 ? 'up' : pct < -0.3 ? 'down' : 'flat';
+}
 
-  // Equities (deployed)
-  push('מניות ארה"ב', 58, 'market', 'up', false, 'us');               // order-of-magnitude estimate
-  push('מניות גלובליות (ex-US)', 45, 'market', 'up', false, 'global'); // estimate
-  // Bonds (deployed)
-  push('אג"ח ממשלתי ארה"ב', tM(d.debt), 'bonds', dir(d.debt), true, 'us');
-  push('אג"ח קונצרני ארה"ב', 11, 'bonds', 'flat', false, 'us');       // estimate
-  // Cash on the sidelines — US dollar plumbing (live, weekly)
-  push('קרנות כספיות (מזומן)', tM(d.mmf), 'cash', dir(d.mmf), true, 'us');
-  push('רזרבות בנקים (פד)', tM(d.reserves), 'cash', dir(d.reserves), true, 'us');
-  push('מזומן במחזור', tM(d.currency), 'cash', dir(d.currency), true, 'us');
-  push('חשבון האוצר (TGA)', tM(d.tga), 'cash', dir(d.tga), true, 'us');
-  push('ריפו הפוך (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', dir(d.rrp), true, 'us');
-  // Global stores of value
-  push('זהב (גלובלי)', 18, 'other', 'up', false, 'global');           // estimate
-  push('קריפטו (גלובלי)', 2.8, 'other', 'flat', false, 'global');     // estimate
+// ── Liquidity map: WHERE the money sits. `dirs` = live price direction per asset
+// (so each tile is colored green/red by real movement, Finviz-style). ──────────
+function buildLiquidityMap(d, dirs = {}) {
+  const tM = (s) => (s && s.value != null) ? +(s.value / 1e6).toFixed(2) : null; // $millions → $T
+  const fredDir = (s) => (s && s.previous != null) ? (s.value > s.previous ? 'up' : s.value < s.previous ? 'down' : 'flat') : 'flat';
+  const pools = [];
+  // label = full (tooltip), short = clean tile label (never mid-name clipped).
+  const push = (label, short, valueT, group, dir, live, scope) => { if (valueT != null) pools.push({ label, short, valueT, group, dir, live, scope }); };
+
+  // Equities (deployed) — colored by the live index price direction
+  push('מניות ארה"ב (S&P 500)', 'מניות ארה״ב', 58, 'market', dirs.SPY || 'flat', false, 'us');
+  push('מניות גלובליות (ex-US)', 'מניות גלובליות', 45, 'market', dirs.EFA || dirs.EEM || 'flat', false, 'global');
+  // Bonds (deployed) — colored by the long-bond (TLT) / credit (HYG) price direction
+  push('אג"ח ממשלתי ארה"ב', 'אג״ח ממשלתי', tM(d.debt), 'bonds', dirs.TLT || fredDir(d.debt), true, 'us');
+  push('אג"ח קונצרני ארה"ב (HY)', 'אג״ח קונצרני', 11, 'bonds', dirs.HYG || 'flat', false, 'us');
+  // Cash on the sidelines — US dollar plumbing, colored by the live FRED weekly flow
+  push('קרנות כספיות (מזומן בצד)', 'קרנות כספיות', tM(d.mmf), 'cash', fredDir(d.mmf), true, 'us');
+  push('רזרבות בנקים (הפד)', 'רזרבות בנקים', tM(d.reserves), 'cash', fredDir(d.reserves), true, 'us');
+  push('מזומן במחזור', 'מזומן במחזור', tM(d.currency), 'cash', fredDir(d.currency), true, 'us');
+  push('חשבון האוצר (TGA)', 'אוצר (TGA)', tM(d.tga), 'cash', fredDir(d.tga), true, 'us');
+  push('ריפו הפוך (RRP)', 'ריפו (RRP)', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', fredDir(d.rrp), true, 'us');
+  // Global stores of value — colored by gold (GLD) / crypto (BTC) price direction
+  push('זהב (גלובלי)', 'זהב', 18, 'other', dirs.GLD || 'flat', false, 'global');
+  push('קריפטו (גלובלי)', 'קריפטו', 2.8, 'other', dirs.BTC || 'flat', false, 'global');
 
   const cashT = pools.filter(p => p.group === 'cash').reduce((s, p) => s + p.valueT, 0);
   return { pools, cashSidelinesT: +cashT.toFixed(2) };
@@ -258,9 +269,8 @@ async function cycle() {
   const cfg = resolveConfig();
   const d = await fetchAll();
   const macro = buildMacro(d);
-  const liquidityMap = buildLiquidityMap(d);
   const hpi = computeHPI(macro, cfg);
-  log(`HPI ${hpi.score} (${hpi.regime}, Δ${hpi.delta}) · net-liq $${hpi.netLiquidityFlow}bn · NFCI ${macro.conditions.nfci} · sidelines $${liquidityMap.cashSidelinesT}T`);
+  log(`HPI ${hpi.score} (${hpi.regime}, Δ${hpi.delta}) · net-liq $${hpi.netLiquidityFlow}bn · NFCI ${macro.conditions.nfci}`);
 
   // Fetch + enrich candles (sequential, gentle).
   const enriched = [];
@@ -270,6 +280,11 @@ async function cycle() {
     enriched.push({ a, candles, struct: enrich(a, candles) });
     await sleep(700);
   }
+
+  // Live price direction per asset → colors the liquidity-map tiles green/red.
+  const dirs = {};
+  for (const e of enriched) dirs[e.a.ticker] = candleDir(e.candles, 5);
+  const liquidityMap = buildLiquidityMap(d, dirs);
 
   const ranking = rankConduits(enriched.map(e => e.struct), hpi, cfg);
 
