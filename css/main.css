@@ -6684,9 +6684,15 @@ body.filter-modal-open::after {
     gap: 12px;
 }
 
-/* Collapsed: center the toggle */
+/* Collapsed: center the toggle EXACTLY over the nav icons (drop the brand + gap so the
+   0-width brand and the 12px gap don't push the hamburger off-center). */
 .sidebar:not(.expanded) .sidebar-header {
     justify-content: center;
+    gap: 0;
+    padding: 16px 8px;
+}
+.sidebar:not(.expanded) .sidebar-brand {
+    display: none;
 }
 
 /* Expanded: space between brand and toggle */
