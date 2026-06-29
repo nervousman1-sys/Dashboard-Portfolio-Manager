@@ -366,8 +366,17 @@ function _dcPortfolioPickerHTML(list, client) {
 }
 function _dcShowReduceRisk() {
     const panel = document.getElementById('dcReducePanel');
+    const btn = document.getElementById('dcReduceBtn');
+    if (!panel) return;
+    // Collapsible — clicking again folds it back up.
+    if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        panel.innerHTML = '';
+        if (btn) { btn.querySelector('.dc-reduce-label').textContent = '🛡️ דרכים להקטנת סיכון'; const c = btn.querySelector('.dc-reduce-caret'); if (c) c.textContent = '▾'; }
+        return;
+    }
     const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === _dcClientId) : null;
-    if (!panel || !client) return;
+    if (!client) return;
     const sim = _dcSimulate(client, _dcScenario);
     if (!sim) return;
     const recs = _dcReduceRisk(client, _dcScenario, sim);
@@ -387,6 +396,7 @@ function _dcShowReduceRisk() {
             <div class="dc-rec-txt"><div class="dc-rec-title">${r.title}</div><div class="dc-rec-body">${r.body}</div></div>
         </div>`).join('')}</div>${defHTML}`;
     panel.classList.add('open');
+    if (btn) { const l = btn.querySelector('.dc-reduce-label'); if (l) l.textContent = '🛡️ הסתר דרכים להקטנת סיכון'; const c = btn.querySelector('.dc-reduce-caret'); if (c) c.textContent = '▴'; }
 }
 
 function _dcMoney(usd, cur) {
@@ -481,7 +491,7 @@ function _dcRender() {
                 <div class="dc-sub">${sc.desc}</div>
                 <div class="dc-cls-title">פירוק ההשפעה לפי סוג נכס</div>
                 <div class="dc-cls-list">${rows}</div>
-                <button class="dc-reduce-btn" onclick="_dcShowReduceRisk()">🛡️ דרכים להקטנת סיכון</button>
+                <button class="dc-reduce-btn" id="dcReduceBtn" onclick="_dcShowReduceRisk()"><span class="dc-reduce-label">🛡️ דרכים להקטנת סיכון</span><span class="dc-reduce-caret">▾</span></button>
                 <div class="dc-reduce-panel" id="dcReducePanel"></div>`;
         }
     }

@@ -10064,6 +10064,8 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     border: 1px solid rgba(16,185,129,0.45); color: #6ee7b7; font-size: 15px; font-weight: 900;
     padding: 13px; border-radius: 12px; cursor: pointer; transition: box-shadow .15s, transform .05s; }
 .dc-reduce-btn:hover { box-shadow: 0 0 22px rgba(16,185,129,0.3); }
+.dc-reduce-btn { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.dc-reduce-caret { font-size: 0.85em; opacity: 0.85; }
 .dc-reduce-btn:active { transform: translateY(1px); }
 .dc-reduce-panel { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
 .dc-reduce-panel.open { max-height: 1600px; margin-top: 14px; }
