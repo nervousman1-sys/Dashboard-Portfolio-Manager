@@ -91,6 +91,11 @@ function switchModalTab(tabName) {
         }
     }
 
+    // Mount the live press-releases (SEC EDGAR) feed for THIS portfolio on demand.
+    if (tabName === 'pressreleases') {
+        if (typeof _prMount === 'function') _prMount(client.id);
+    }
+
     // Fresh-fetch transactions from Supabase every time the tab is opened
     if (tabName === 'transactions') {
         const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
@@ -468,6 +473,7 @@ async function openModal(clientId) {
             <button class="modal-tab" data-tab="cmlsml" onclick="switchModalTab('cmlsml')">CML / SML</button>
             <button class="modal-tab" data-tab="holdings" onclick="switchModalTab('holdings')">נכסים</button>
             <button class="modal-tab" data-tab="sectors" onclick="switchModalTab('sectors')">נתוני תיק</button>
+            <button class="modal-tab" data-tab="pressreleases" onclick="switchModalTab('pressreleases')">הוצאות לעיתונות</button>
             <button class="modal-tab" data-tab="transactions" onclick="switchModalTab('transactions')">היסטוריית פעולות</button>
         </div>
         <div class="modal-body">
@@ -719,6 +725,17 @@ async function openModal(clientId) {
                     </div>
                 </div>
             </div>
+            <!-- Tab: Press Releases (SEC EDGAR 8-K filings for this portfolio's holdings) -->
+            <div class="modal-tab-content" id="tab-pressreleases">
+                <div class="pr-head">
+                    <div class="pa-live">
+                        <span class="pa-live-dot"><span class="pa-live-ping"></span></span>
+                        <span class="pa-live-label">LIVE</span>
+                        <span class="pa-live-sub">הוצאות לעיתונות רשמיות שחברות התיק הגישו לרשות ניירות ערך האמריקאית (SEC · טופס 8-K) — מתעדכן 24/7</span>
+                    </div>
+                </div>
+                <div class="pa-feed" id="prFeed"><div class="pa-empty">טוען הוצאות לעיתונות…</div></div>
+            </div>
             <!-- Tab: Transactions -->
             <div class="modal-tab-content" id="tab-transactions">
                 <div class="holdings-table-wrapper">
@@ -879,6 +896,7 @@ function closeModal(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('modalOverlay').classList.remove('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    if (typeof _prCleanup === 'function') _prCleanup();   // tear down the press-releases realtime channel
     currentModalClientId = null;
     // Clear URL state
     if (typeof clearURLState === 'function') clearURLState();

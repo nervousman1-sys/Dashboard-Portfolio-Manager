@@ -52,6 +52,10 @@
 .pa-sim-toggle.on .pa-sim-pulse { animation: pa-pulse 1.2s ease-in-out infinite; opacity: 1; }
 @keyframes pa-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
 
+/* ── Press-releases tab header (inside the portfolio modal) ── */
+.pr-head { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md, 12px); background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); }
+#tab-pressreleases .pa-live { flex-wrap: wrap; }
+
 /* ── Feed ── */
 .pa-feed { display: flex; flex-direction: column; gap: 12px; }
 .pa-empty {

@@ -66,7 +66,6 @@ function navigateTo(section) {
     // Scanner Agent + LHE are routed pages (like reports) — close when navigating elsewhere.
     if (section !== 'scanneragent') { const _sp = document.getElementById('scannerPage'); if (_sp && _sp.classList.contains('active') && typeof closeScannerAgentPage === 'function') closeScannerAgentPage(); }
     if (section !== 'lhe') { const _lp = document.getElementById('lhePage'); if (_lp && _lp.classList.contains('active') && typeof closeLHEPage === 'function') closeLHEPage(); }
-    if (section !== 'pressalerts') { const _pa = document.getElementById('pressAlertsPage'); if (_pa && _pa.classList.contains('active') && typeof closePressAlertsPage === 'function') closePressAlertsPage(); }
 
     // Determine if we need to close overlay pages first
     const macroPage = document.getElementById('macroPage');
@@ -238,17 +237,6 @@ function navigateTo(section) {
             closeTechIfOpen();
             closeRepIfOpen();
             if (typeof openDecisionCorePage === 'function') openDecisionCorePage();
-            break;
-
-        case 'pressalerts':
-            // Open the live Material Press-Release feed page
-            if (macroIsActive && typeof closeMacroPage === 'function') closeMacroPage();
-            if (riskIsActive && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
-            closeBulkIfOpen();
-            closeDnIfOpen();
-            closeTechIfOpen();
-            closeRepIfOpen();
-            if (typeof openPressAlertsPage === 'function') openPressAlertsPage();
             break;
 
         default:

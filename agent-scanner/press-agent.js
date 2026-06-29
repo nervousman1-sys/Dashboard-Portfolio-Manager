@@ -1,24 +1,21 @@
 // ============================================================================
-// Finextium — Live MATERIAL Press-Release / Material-News Agent (24/7)
+// Finextium — SEC Press-Release / Material-Filing Agent (24/7)
 // ----------------------------------------------------------------------------
-// 1. Pulls the set of tickers users actually hold (held_tickers RPC, secret-gated).
-// 2. Fetches each ticker's latest company news / press releases (Finnhub free API).
-// 3. AI MATERIALITY FILTER: asks the LLM, per item — is this MATERIAL? which category?
-//    sentiment (-100..100)? one-line Hebrew TL;DR + a short Hebrew fundamental analysis.
-//    Only MATERIAL items pass (buyback, CEO change, guidance change, lawsuit, M&A, …).
-// 4. ROUTING: route_portfolio_alert() fans each material alert out to every portfolio that
-//    holds the ticker, writing one row to public.portfolio_alerts (Realtime-enabled) per
-//    portfolio. The UI receives those INSERTs live, with no page refresh.
+// Source of truth = the U.S. Securities and Exchange Commission (SEC EDGAR), NOT news sites.
+// Companies are legally required to file a Form 8-K ("current report") for MATERIAL events —
+// CEO/officer changes (5.02), material agreements (1.01), results (2.02), impairments (2.06),
+// delisting notices (3.01), restatements (4.02), unregistered equity sales (3.02), etc. — and the
+// actual press release is usually attached as Exhibit 99.x. We pull those 8-Ks directly from EDGAR.
+//
+// Flow:
+//   held_tickers() → ticker→CIK (company_tickers.json) → data.sec.gov/submissions (recent 8-K/6-K)
+//   → classify by 8-K item code → pull the EX-99 press-release text → Gemini HE summary/analysis
+//   (deterministic fallback) → route_portfolio_alert() fans it to every portfolio holding the ticker.
+//   portfolio_alerts is Realtime-enabled → the portfolio's "הוצאות לעיתונות" tab updates live.
 //
 // Run:  node press-agent.js [--once] [--mock]
-//   --once : single cycle then exit (for testing / cron)
-//   --mock : skip Finnhub+LLM and emit a few canned material alerts (smoke-test the pipeline)
-//
-// Deploy (VPS, like the other agents — see the vps-agent-deploy memory):
-//   scp press-agent.js root@<vps>:/opt/finextium/agent-scanner/
-//   pm2 start press-agent.js --name finextium-press-agent --node-args=... && pm2 save
-//   NOTE: this agent calls Gemini; the shared free Gemini quota is already strained
-//   (see gemini-quota-scanner) — give it a low frequency or its own key.
+// Deploy: PM2 `finextium-press-agent` on the VPS (see vps-agent-deploy memory).
+// SEC asks for a descriptive User-Agent with contact info (set SEC_USER_AGENT in .env).
 // ============================================================================
 
 require('dotenv').config();
@@ -30,10 +27,11 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_
 const AGENT_WRITE_SECRET = process.env.AGENT_WRITE_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || '';
+const SEC_UA = process.env.SEC_USER_AGENT || 'Finextium Research finextium.alerts@gmail.com';
 const INTERVAL_MIN = parseFloat(process.env.PRESS_INTERVAL_MIN || '15');
-const NEWS_LOOKBACK_HRS = parseFloat(process.env.PRESS_LOOKBACK_HRS || '6');
-const MAX_TICKERS = parseInt(process.env.PRESS_MAX_TICKERS || '40', 10);
+const LOOKBACK_HRS = parseFloat(process.env.PRESS_LOOKBACK_HRS || '36');
+const MAX_TICKERS = parseInt(process.env.PRESS_MAX_TICKERS || '60', 10);
+const MAX_FILINGS_PER = parseInt(process.env.PRESS_MAX_FILINGS || '4', 10);
 const RUN_ONCE = process.argv.includes('--once');
 const MOCK = process.argv.includes('--mock');
 
@@ -45,9 +43,67 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persist
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const clampSent = (n) => Math.max(-100, Math.min(100, Math.round(Number(n) || 0)));
-
-// Valid categories the UI knows how to render.
 const CATEGORIES = ['buyback', 'ceo_change', 'guidance_up', 'guidance_down', 'lawsuit', 'ma', 'dividend', 'offering', 'other'];
+
+// ── 8-K item code → {category, baseline sentiment, EN title, HE title} ────────
+const SEC_ITEMS = {
+    '1.01': { cat: 'ma',            sent:  22, en: 'Entry into a Material Definitive Agreement',                 he: 'כניסה להסכם מהותי' },
+    '1.02': { cat: 'other',         sent: -12, en: 'Termination of a Material Definitive Agreement',              he: 'סיום הסכם מהותי' },
+    '1.03': { cat: 'lawsuit',       sent: -55, en: 'Bankruptcy or Receivership',                                  he: 'פשיטת רגל / כינוס נכסים' },
+    '2.01': { cat: 'ma',            sent:  30, en: 'Completion of Acquisition or Disposition of Assets',          he: 'השלמת רכישה / מכירת נכסים' },
+    '2.02': { cat: 'guidance_up',   sent:  10, en: 'Results of Operations and Financial Condition',               he: 'פרסום תוצאות כספיות' },
+    '2.03': { cat: 'offering',      sent: -18, en: 'Creation of a Direct Financial Obligation',                   he: 'יצירת התחייבות פיננסית (חוב)' },
+    '2.04': { cat: 'offering',      sent: -32, en: 'Triggering Events That Accelerate a Financial Obligation',    he: 'אירוע שמאיץ התחייבות פיננסית' },
+    '2.05': { cat: 'guidance_down', sent: -22, en: 'Costs Associated with Exit or Disposal Activities',          he: 'עלויות צמצום / סגירת פעילות' },
+    '2.06': { cat: 'guidance_down', sent: -28, en: 'Material Impairments',                                        he: 'ירידת ערך נכסים מהותית (Impairment)' },
+    '3.01': { cat: 'lawsuit',       sent: -42, en: 'Notice of Delisting or Failure to Satisfy a Listing Rule',   he: 'אזהרת מחיקה מהמסחר (Delisting)' },
+    '3.02': { cat: 'offering',      sent: -26, en: 'Unregistered Sales of Equity Securities',                     he: 'מכירת מניות לא רשומה (דילול)' },
+    '3.03': { cat: 'other',         sent: -10, en: 'Material Modification to Rights of Security Holders',         he: 'שינוי בזכויות מחזיקי ניירות' },
+    '4.01': { cat: 'other',         sent: -20, en: "Changes in Registrant's Certifying Accountant",              he: 'החלפת רואה החשבון המבקר' },
+    '4.02': { cat: 'lawsuit',       sent: -50, en: 'Non-Reliance on Previously Issued Financial Statements',      he: 'אי-הסתמכות על דוחות קודמים (Restatement)' },
+    '5.01': { cat: 'ceo_change',    sent:   0, en: 'Changes in Control of Registrant',                            he: 'שינוי שליטה בחברה' },
+    '5.02': { cat: 'ceo_change',    sent: -12, en: 'Departure / Appointment of Directors or Principal Officers',  he: 'שינוי בדירקטוריון / הנהלה בכירה' },
+    '5.03': { cat: 'other',         sent:   0, en: 'Amendments to Articles of Incorporation or Bylaws',          he: 'תיקון תקנון החברה' },
+    '5.07': { cat: 'other',         sent:   0, en: 'Submission of Matters to a Vote of Security Holders',         he: 'תוצאות הצבעת בעלי המניות' },
+    '7.01': { cat: 'other',         sent:   6, en: 'Regulation FD Disclosure',                                    he: 'גילוי Reg FD (הודעה לעיתונות)' },
+    '8.01': { cat: 'other',         sent:   5, en: 'Other Events',                                                he: 'אירוע מהותי אחר' },
+    '9.01': { cat: 'other',         sent:   0, en: 'Financial Statements and Exhibits',                           he: 'דוחות כספיים ונספחים' },
+};
+
+// Pick the single most impactful item the 8-K reports (largest |sentiment|).
+function secEventFor(itemsStr) {
+    const codes = String(itemsStr || '').split(/[,;]/).map(s => s.trim()).filter(Boolean);
+    let best = null;
+    for (const c of codes) {
+        const m = c.match(/\d\.\d{2}/);
+        const e = m && SEC_ITEMS[m[0]];
+        if (e && (!best || Math.abs(e.sent) > Math.abs(best.sent))) best = e;
+    }
+    return best || { cat: 'other', sent: 5, en: 'Material Event (Form 8-K)', he: 'אירוע מהותי (8-K)' };
+}
+
+// ── SEC HTTP (descriptive UA required; small timeout so a slow file never stalls) ──
+async function secGetText(url) {
+    const ctrl = new AbortController();
+    const tm = setTimeout(() => ctrl.abort(), 9000);
+    try {
+        const r = await fetch(url, { headers: { 'User-Agent': SEC_UA, 'Accept': 'application/json, text/html, */*' }, signal: ctrl.signal });
+        if (!r.ok) return null;
+        return await r.text();
+    } catch (e) { return null; } finally { clearTimeout(tm); }
+}
+async function secGetJSON(url) { const t = await secGetText(url); if (!t) return null; try { return JSON.parse(t); } catch (e) { return null; } }
+
+// ── ticker → CIK map (cached 24h) ────────────────────────────────────────────
+let _cikCache = null, _cikAt = 0;
+async function loadCikMap() {
+    if (_cikCache && Date.now() - _cikAt < 24 * 3600 * 1000) return _cikCache;
+    const j = await secGetJSON('https://www.sec.gov/files/company_tickers.json');
+    const map = {};
+    if (j) for (const k in j) { const e = j[k]; if (e && e.ticker) map[String(e.ticker).toUpperCase()] = e.cik_str; }
+    if (Object.keys(map).length) { _cikCache = map; _cikAt = Date.now(); }
+    return _cikCache || map;
+}
 
 // ── 1. Which tickers do users hold? (secret-gated RPC, bypasses RLS) ──────────
 async function heldTickers() {
@@ -56,182 +112,149 @@ async function heldTickers() {
     return (data || []).map(r => String(r.ticker || '').toUpperCase()).filter(Boolean).slice(0, MAX_TICKERS);
 }
 
-// ── 2. Source: latest company news per ticker (Finnhub free `company-news`) ───
-async function fetchNews(ticker) {
-    if (!FINNHUB_API_KEY) return [];
-    const to = new Date();
-    const from = new Date(to.getTime() - NEWS_LOOKBACK_HRS * 3600 * 1000);
-    const fmt = (d) => d.toISOString().slice(0, 10);
-    const url = `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(ticker)}&from=${fmt(from)}&to=${fmt(to)}&token=${FINNHUB_API_KEY}`;
-    try {
-        const r = await fetch(url);
-        if (!r.ok) return [];
-        const arr = await r.json();
-        if (!Array.isArray(arr)) return [];
-        // newest first, keep a few headlines per ticker
-        return arr
-            .filter(n => n && n.headline)
-            .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
-            .slice(0, 4)
-            .map(n => ({
-                ticker,
-                headline_en: String(n.headline).trim(),
-                body_en: String(n.summary || n.headline).trim(),
-                source: n.source || 'Finnhub',
-                source_url: n.url || null,
-                published_at: n.datetime ? new Date(n.datetime * 1000).toISOString() : new Date().toISOString(),
-            }));
-    } catch (e) { return []; }
+// ── 2. Recent 8-K / 6-K filings for a CIK, within the lookback window ─────────
+async function fetchSecFilings(ticker, cik) {
+    const cik10 = String(cik).padStart(10, '0');
+    const sub = await secGetJSON(`https://data.sec.gov/submissions/CIK${cik10}.json`);
+    if (!sub || !sub.filings || !sub.filings.recent || !Array.isArray(sub.filings.recent.form)) return [];
+    const r = sub.filings.recent;
+    const company = sub.name || ticker;
+    const cutoff = Date.now() - LOOKBACK_HRS * 3600 * 1000;
+    const cikInt = parseInt(cik10, 10);
+    const out = [];
+    for (let i = 0; i < r.form.length && out.length < MAX_FILINGS_PER; i++) {
+        if (!/^(8-K|6-K)/.test(r.form[i])) continue;
+        const when = new Date(r.acceptanceDateTime?.[i] || r.filingDate[i]).getTime();
+        if (!(when >= cutoff)) continue;
+        const accNoDashes = String(r.accessionNumber[i] || '').replace(/-/g, '');
+        out.push({
+            ticker, company, form: r.form[i], items: r.items?.[i] || '',
+            event: secEventFor(r.items?.[i] || ''), cikInt, accNoDashes,
+            filingDate: r.filingDate[i],
+            published_at: new Date(when).toISOString(),
+            source_url: `https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/`,
+        });
+    }
+    return out;
 }
 
-// ── 3. AI MATERIALITY FILTER (Gemini): material? category? sentiment? HE TL;DR + analysis ──
+// ── 3. Pull the actual press-release text (Exhibit 99.x) from the filing ──────
+async function fetchPressReleaseText(cikInt, accNoDashes) {
+    const idx = await secGetJSON(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/index.json`);
+    const items = idx && idx.directory && Array.isArray(idx.directory.item) ? idx.directory.item : [];
+    if (!items.length) return null;
+    const ex = items.find(f => /ex.?99/i.test(f.name || '')) || items.find(f => /(press|release|99)/i.test((f.name || '') + ' ' + (f.type || '')));
+    if (!ex) return null;
+    const html = await secGetText(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/${ex.name}`);
+    if (!html) return null;
+    const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+        .replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+    return text ? text.slice(0, 1400) : null;
+}
+
+// ── 4. Build the alert; enrich the Hebrew with Gemini when available ──────────
 async function geminiJSON(prompt) {
     if (!GEMINI_API_KEY) throw new Error('no GEMINI_API_KEY');
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const body = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-    };
+    const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error(`Gemini HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    if (!r.ok) throw new Error(`Gemini HTTP ${r.status}: ${(await r.text()).slice(0, 160)}`);
     const j = await r.json();
-    const txt = j?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return JSON.parse(txt);
+    return JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text || 'null');
 }
 
-// Deterministic material-event keyword screen. Doubles as (a) a pre-filter so ONLY material-looking
-// news is sent to Gemini (saves quota), and (b) a robust fallback so REAL alerts still land when
-// Gemini is unavailable (429/no key). Each rule → category + a baseline sentiment + a HE one-liner.
-const MATERIAL_RULES = [
-    { re: /\b(buyback|repurchase|repurchases|repurchasing|repurchase program)\b/i,                 category: 'buyback',       sentiment: 62,  he: 'הכריזה על תוכנית רכישה עצמית של מניות.' },
-    { re: /\b(raises?|raised|lifts?|boosts?|hikes?|increases?)\b.*\b(guidance|outlook|forecast|target|estimates?)\b/i, category: 'guidance_up',   sentiment: 58,  he: 'העלתה את התחזית הכספית.' },
-    { re: /\b(cuts?|lowers?|lowered|slashes?|reduces?|warns?|warning)\b.*\b(guidance|outlook|forecast|profit|estimates?)\b/i, category: 'guidance_down', sentiment: -58, he: 'הורידה תחזית / מסרה אזהרת רווח.' },
-    { re: /\b(ceo|cfo|chief executive|chief financial officer)\b.*\b(steps? down|resigns?|resigned|departs?|to leave|stepping down|ousted)\b/i, category: 'ceo_change', sentiment: -30, he: 'שינוי בהנהלה הבכירה (מנכ״ל/CFO).' },
-    { re: /\b(appoints?|names?|hires?)\b.*\b(ceo|cfo|chief executive|chief financial officer|president)\b/i, category: 'ceo_change', sentiment: 8, he: 'מינוי חדש להנהלה הבכירה.' },
-    { re: /\b(lawsuit|sues?|sued|antitrust|investigation|probe|fined|settlement|charged|subpoena|recall|sec charges)\b/i, category: 'lawsuit', sentiment: -42, he: 'הליך משפטי / רגולטורי מהותי.' },
-    { re: /\b(to acquire|acquires?|acquisition|merger|to buy|takeover|buyout|to combine with)\b/i,  category: 'ma',            sentiment: 36,  he: 'עסקת מיזוג / רכישה.' },
-    { re: /\b(dividend|special distribution|raises? dividend|initiates? dividend)\b/i,               category: 'dividend',      sentiment: 34,  he: 'הכרזה / שינוי בדיבידנד.' },
-    { re: /\b(convertible notes?|secondary offering|stock offering|share offering|public offering|priced.*offering|equity raise|dilution)\b/i, category: 'offering', sentiment: -26, he: 'הנפקת מניות / אג״ח (דילול אפשרי).' },
-    // Broader-but-still-material events (regulatory scrutiny, notable-investor stakes, index changes,
-    // product/data incidents, splits) — these are genuinely material to a holder and surface real news.
-    { re: /\b(draws scrutiny|under scrutiny|regulatory scrutiny|data (leak|breach)|security flaw|product recall|export ban|sanction)\b/i, category: 'lawsuit', sentiment: -32, he: 'סוגיה רגולטורית / חשיפת מידע מהותית.' },
-    { re: /\b(michael burry|warren buffett|berkshire|activist investor|elliott management|starboard|pershing square)\b.{0,40}\b(stake|bet|bets|position|shares)\b|\b(takes?|builds?|raises?|discloses?|adds? to)\b.{0,20}\bstake\b/i, category: 'other', sentiment: 16, he: 'משקיע מוסדי/אקטיביסט בולט נכנס לפוזיציה.' },
-    { re: /\b(joins the dow|added to the (dow|s&p ?500|nasdaq[- ]?100)|index inclusion|to join the (dow|nasdaq|s&p))\b/i, category: 'other', sentiment: 24, he: 'הצטרפות / שינוי במדד מרכזי.' },
-    { re: /\b(stock split|forward split|reverse split|\d+-for-\d+ split)\b/i, category: 'other', sentiment: 12, he: 'פיצול מניה (Stock Split).' },
-    { re: /\b(partnership with|strategic partnership|to supply|multi-?year (deal|agreement)|lands? .{0,20}contract|wins? .{0,20}contract)\b/i, category: 'ma', sentiment: 28, he: 'שותפות אסטרטגית / חוזה מהותי.' },
-];
-
-function prescreen(item) {
-    const hay = `${item.headline_en} ${item.body_en}`;
-    for (const r of MATERIAL_RULES) {
-        if (r.re.test(hay)) {
-            const catHe = { buyback: 'רכישה עצמית', ceo_change: 'החלפת מנכ״ל', guidance_up: 'העלאת תחזית', guidance_down: 'הורדת תחזית', lawsuit: 'תביעה/רגולציה', ma: 'מיזוג/רכישה', dividend: 'דיבידנד', offering: 'הנפקה' }[r.category] || 'דיווח מהותי';
-            return {
-                ticker: item.ticker, company: item.ticker, category: r.category, sentiment: r.sentiment, materiality: true,
-                summary_he: `${item.ticker} — ${r.he}`,
-                headline_en: item.headline_en, body_en: item.body_en,
-                analysis_he: `אירוע מסוג "${catHe}" מסווג כמהותי: הוא משפיע ישירות על שווי החברה ועל ציפיות המשקיעים, ולכן נדחף לפיד עבור המחזיקים בנכס.`,
-                source: item.source, source_url: item.source_url, published_at: item.published_at,
-            };
-        }
-    }
-    return null;   // no material keyword → not material (skipped, no Gemini call)
-}
-
-async function classifyMateriality(item) {
-    const base = prescreen(item);
-    if (!base) return null;                 // not material → skip (and never spend a Gemini call)
-    if (!GEMINI_API_KEY) return base;       // no LLM → ship the deterministic alert
-
+async function buildAlert(f) {
+    const ev = f.event;
+    const prText = await fetchPressReleaseText(f.cikInt, f.accNoDashes);
+    const headline = `${f.company} — Form ${f.form}: ${ev.en}`;
+    const body = prText || `${f.company} filed a Form ${f.form} with the SEC (Item ${f.items || '—'}: ${ev.en}) on ${f.filingDate}.`;
+    const base = {
+        ticker: f.ticker, company: f.company, category: ev.cat, sentiment: clampSent(ev.sent), materiality: true,
+        summary_he: `${f.ticker} — ${ev.he} · דיווח 8-K שהוגש לרשות ניירות ערך (SEC).`,
+        headline_en: headline, body_en: body,
+        analysis_he: `החברה הגישה דיווח מיידי (Form ${f.form}) לרשות ניירות ערך האמריקאית בנושא "${ev.he}". דיווחי 8-K מוגשים על-פי חוק רק על אירועים מהותיים, ולכן רלוונטיים ישירות למחזיקים בנכס.`,
+        source: 'SEC EDGAR · 8-K', source_url: f.source_url, published_at: f.published_at,
+    };
+    if (!GEMINI_API_KEY) return base;
     const prompt = [
-        'אתה אנליסט אירועים בכיר. נתח את הדיווח הבא של חברה נסחרת והחזר JSON בלבד.',
-        `טיקר: ${item.ticker}`,
-        `כותרת (אנגלית): ${item.headline_en}`,
-        `תקציר (אנגלית): ${item.body_en}`,
+        'אתה אנליסט אירועים בכיר. לפניך דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC). החזר JSON בלבד.',
+        `טיקר: ${f.ticker} | חברה: ${f.company}`,
+        `סעיף ה-8-K: ${f.items} (${ev.en})`,
+        `טקסט ההודעה לעיתונות (אנגלית, ייתכן חלקי): ${String(body).slice(0, 1200)}`,
         '',
-        'החזר אובייקט JSON עם השדות:',
+        'החזר אובייקט JSON:',
         '{',
-        '  "material": boolean,           // האם זה אירוע מהותי באמת (לא רעש/חזרות אנליסטים)',
         `  "category": one of ${JSON.stringify(CATEGORIES)},`,
-        '  "company": "שם החברה המלא באנגלית",',
-        '  "sentiment": number,           // -100 (שלילי מאוד) עד +100 (חיובי מאוד) להשפעה על המניה',
-        '  "summary_he": "תקציר שורה אחת בעברית פשוטה (TL;DR), כולל המספרים המהותיים",',
-        '  "analysis_he": "2-3 משפטים של ניתוח פונדמנטלי בעברית: מדוע זה מהותי וההשלכה הצפויה"',
+        '  "sentiment": number,        // -100 (שלילי מאוד) עד +100 (חיובי מאוד) — ההשפעה הצפויה על המניה',
+        '  "summary_he": "תקציר שורה אחת בעברית פשוטה (TL;DR), כולל המספרים המהותיים אם יש",',
+        '  "analysis_he": "2-3 משפטים של ניתוח פונדמנטלי בעברית: מה קרה ומדוע זה מהותי למשקיע"',
         '}',
     ].join('\n');
-
     try {
         const out = await geminiJSON(prompt);
-        if (out && out.material === false) return null;     // LLM overrules: not actually material
         if (!out || typeof out !== 'object') return base;
         return {
             ...base,
-            company: out.company || base.company,
             category: CATEGORIES.includes(out.category) ? out.category : base.category,
             sentiment: (out.sentiment != null) ? clampSent(out.sentiment) : base.sentiment,
             summary_he: String(out.summary_he || base.summary_he).trim(),
             analysis_he: String(out.analysis_he || base.analysis_he).trim(),
         };
     } catch (e) {
-        if (/HTTP 429/.test(e.message)) log(`Gemini 429 on ${item.ticker} — using deterministic classification`);
-        else log(`Gemini error on ${item.ticker} (${e.message}) — using deterministic classification`);
-        return base;   // ROBUST: a real material alert still ships even when Gemini is down
+        if (/HTTP 429/.test(e.message)) log(`Gemini 429 on ${f.ticker} — using deterministic SEC classification`);
+        else log(`Gemini error on ${f.ticker} (${e.message}) — deterministic`);
+        return base;
     }
 }
 
-// ── 4. ROUTING: fan the alert out to every portfolio that holds the ticker ────
+// ── 5. ROUTING: fan the alert out to every portfolio that holds the ticker ────
 async function routeAlert(alert) {
     const { data, error } = await supabase.rpc('route_portfolio_alert', { p_secret: AGENT_WRITE_SECRET, p_alert: alert });
     if (error) { log('route error', alert.ticker, error.message); return 0; }
     return Number(data) || 0;
 }
 
-// ── Mock material alerts (for --mock smoke tests, no Finnhub/Gemini needed) ────
+// ── --mock smoke test (no SEC/Gemini) ────────────────────────────────────────
 const MOCK_ALERTS = [
-    { ticker: 'AAPL', company: 'Apple Inc.', category: 'buyback', sentiment: 74, summary_he: 'אפל אישרה רכישה עצמית שיא של 110 מיליארד דולר.', headline_en: 'Apple authorizes record $110B share buyback', body_en: 'Apple’s board authorized an additional $110B for repurchases.', analysis_he: 'אות לעודף מזומנים ואמון הנהלה; מצמצם מניות ותומך ב-EPS.', source: 'PR Newswire' },
-    { ticker: 'NVDA', company: 'NVIDIA Corp.', category: 'guidance_up', sentiment: 80, summary_he: 'אנבידיה העלתה תחזית הכנסות לרבעון על רקע ביקושי-שיא ל-GPU.', headline_en: 'NVIDIA raises Q3 revenue guidance on record data-center demand', body_en: 'NVIDIA raised Q3 revenue outlook well above prior guidance.', analysis_he: 'העלאת תחזית מקדימה את הקונצנזוס; ביקוש שמקדים היצע — חיובי חזק.', source: 'NVIDIA IR' },
-    { ticker: 'TSLA', company: 'Tesla Inc.', category: 'ceo_change', sentiment: -34, summary_he: 'סמנכ"ל הכספים של טסלה פורש; מונה ממלא-מקום.', headline_en: 'Tesla CFO to step down; interim successor named', body_en: 'Tesla’s CFO will step down at quarter-end.', analysis_he: 'אי-ודאות ניהולית בחברה עתירת-הון; לחץ סנטימנט בטווח הקצר.', source: 'CNBC' },
+    { ticker: 'AAPL', company: 'Apple Inc.', category: 'ceo_change', sentiment: -14, summary_he: 'AAPL — שינוי בדירקטוריון / הנהלה בכירה · דיווח 8-K לרשות.', headline_en: 'Apple Inc. — Form 8-K: Departure/Appointment of Directors or Principal Officers', body_en: 'Apple filed a Form 8-K (Item 5.02) reporting an officer transition.', analysis_he: 'דיווח 8-K על שינוי הנהלה — אירוע מהותי המדווח לרשות.', source: 'SEC EDGAR · 8-K' },
+    { ticker: 'NVDA', company: 'NVIDIA Corp.', category: 'guidance_up', sentiment: 18, summary_he: 'NVDA — פרסום תוצאות כספיות · דיווח 8-K לרשות.', headline_en: 'NVIDIA Corp. — Form 8-K: Results of Operations and Financial Condition', body_en: 'NVIDIA filed a Form 8-K (Item 2.02) with quarterly results.', analysis_he: 'דיווח תוצאות (8-K, סעיף 2.02) — מהותי למשקיעים.', source: 'SEC EDGAR · 8-K' },
 ];
 
 async function runCycle() {
-    log(`Press-agent cycle starting…${MOCK ? ' (MOCK)' : ''}`);
-    let materialAlerts = [];
-
+    log(`SEC press-agent cycle starting…${MOCK ? ' (MOCK)' : ''}`);
     if (MOCK) {
-        materialAlerts = MOCK_ALERTS.map(a => Object.assign({}, a, { materiality: true, published_at: new Date().toISOString() }));
-    } else {
-        const tickers = await heldTickers();
-        if (!tickers.length) { log('No held tickers to scan.'); return; }
-        log(`Scanning ${tickers.length} held tickers for material news…`);
-        for (const tk of tickers) {
-            const news = await fetchNews(tk);
-            for (const item of news) {
-                try {
-                    const alert = await classifyMateriality(item);
-                    if (alert && alert.summary_he) materialAlerts.push(alert);
-                } catch (e) {
-                    log(`classify ${tk} soft-fail:`, e.message);
-                    if (/HTTP 429/.test(e.message)) { await sleep(8000); }   // back off on quota
-                }
-                await sleep(400);
-            }
-            await sleep(300);
+        for (const a of MOCK_ALERTS) { const n = await routeAlert(Object.assign({}, a, { published_at: new Date().toISOString() })); if (n > 0) log(`✓ ${a.ticker} → ${n} portfolios`); }
+        log('MOCK cycle done.'); return;
+    }
+    const tickers = await heldTickers();
+    if (!tickers.length) { log('No held tickers to scan.'); return; }
+    const cikMap = await loadCikMap();
+    log(`Scanning SEC EDGAR for ${tickers.length} held tickers (lookback ${LOOKBACK_HRS}h)…`);
+    let scanned = 0, fired = 0, routed = 0;
+    for (const tk of tickers) {
+        const cik = cikMap[tk];
+        if (!cik) continue;                 // not a US SEC filer (Israeli / many ETFs) → skip
+        scanned++;
+        const filings = await fetchSecFilings(tk, cik);
+        for (const f of filings) {
+            try {
+                const alert = await buildAlert(f);
+                const n = await routeAlert(alert);
+                if (n > 0) { fired++; routed += n; log(`✓ ${tk} 8-K [${alert.category}] → ${n} portfolios · ${alert.summary_he}`); }
+            } catch (e) { log(`build ${tk} soft-fail:`, e.message); }
+            await sleep(350);
         }
+        await sleep(250);                   // stay well under SEC's 10 req/s
     }
-
-    let routed = 0, fired = 0;
-    for (const alert of materialAlerts) {
-        const n = await routeAlert(alert);
-        if (n > 0) { fired++; routed += n; log(`✓ ${alert.ticker} [${alert.category}] → ${n} portfolios · ${alert.summary_he}`); }
-        await sleep(200);
-    }
-    log(`Cycle done · ${materialAlerts.length} material · ${fired} new · ${routed} portfolio rows written.`);
+    log(`Cycle done · scanned ${scanned} SEC filers · ${fired} new filings · ${routed} portfolio rows written.`);
 }
 
 async function safeCycle() { try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); } }
 
 (async () => {
-    log(`Finextium Press-Agent online · interval=${INTERVAL_MIN}min · finnhub=${FINNHUB_API_KEY ? 'on' : 'off'} · gemini=${GEMINI_API_KEY ? 'on' : 'off'}${MOCK ? ' · MOCK' : ''}`);
+    log(`Finextium SEC Press-Agent online · interval=${INTERVAL_MIN}min · lookback=${LOOKBACK_HRS}h · gemini=${GEMINI_API_KEY ? 'on' : 'off'}${MOCK ? ' · MOCK' : ''}`);
     await safeCycle();
     if (RUN_ONCE) { log('--once: done.'); process.exit(0); }
     setInterval(safeCycle, Math.max(5, INTERVAL_MIN) * 60 * 1000);
