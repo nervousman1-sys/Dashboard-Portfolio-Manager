@@ -318,11 +318,13 @@ function _lheMapHTML(m) {
         const p = t.ref;
         const arr = p.dir === 'up' ? '▲' : p.dir === 'down' ? '▼' : '';
         const scope = p.scope === 'global' ? '🌍' : '🇺🇸';
-        const ultra = t.w < 28 || t.h < 16;        // sliver (e.g. RRP) → color + tooltip only
-        const low = !ultra && t.h < 64;            // short tile → name + value on one line (compact)
+        const ultra = t.w < 16 || t.h < 14;        // true sliver (e.g. RRP) → color + tooltip only
+        const vert = !ultra && t.w < 72 && t.h > 90; // narrow + tall (e.g. crypto) → rotated label fits
+        const low = !ultra && !vert && t.h < 64;   // short tile → name + value on one compact line
         const name = _lheEsc(p.short || p.label);
         const title = `${_lheEsc(p.label)} — $${+p.valueT}T (${p.scope === 'global' ? 'גלובלי' : 'ארה״ב'})`;
         if (ultra) return `<div class="lhe-tm-tile lhe-tm-${p.dir || 'flat'} lhe-tm-ultra" style="${style}" title="${title}"></div>`;
+        if (vert) return `<div class="lhe-tm-tile lhe-tm-${p.dir || 'flat'} lhe-tm-vert" style="${style}" title="${title}"><span class="lhe-tm-vlabel">${name} · $${+p.valueT}T ${arr}</span></div>`;
         return `<div class="lhe-tm-tile lhe-tm-${p.dir || 'flat'}${low ? ' lhe-tm-low' : ''}" style="${style}" title="${title}">
             <span class="lhe-tm-scope">${scope}</span>
             <span class="lhe-tm-name">${name}</span>

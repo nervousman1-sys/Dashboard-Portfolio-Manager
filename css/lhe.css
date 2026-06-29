@@ -79,6 +79,11 @@
 .lhe-tm-low .lhe-tm-scope { display: none; }
 .lhe-tm-low .lhe-tm-name { font-size: 0.72rem; -webkit-line-clamp: 1; }
 .lhe-tm-low .lhe-tm-val { font-size: 0.74rem; }
+/* ultra-sliver (e.g. RRP): no padding/border so a 2px-wide tile can't overflow its group */
+.lhe-tm-ultra { padding: 0; border-width: 0; }
+/* narrow-but-tall tile (e.g. crypto): rotate the label so name + value fit vertically */
+.lhe-tm-vert { align-items: center; justify-content: center; padding: 4px 0; }
+.lhe-tm-vlabel { transform: rotate(-90deg); white-space: nowrap; font-size: 0.74rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Finviz-style direction coloring: green = rising/inflow, red = falling/outflow, slate = flat/estimate */
 .lhe-tm-up { background: linear-gradient(135deg, #15803d, #22c55e); }
 .lhe-tm-down { background: linear-gradient(135deg, #b91c1c, #ef4444); }
