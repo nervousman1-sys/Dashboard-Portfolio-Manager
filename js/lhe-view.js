@@ -232,6 +232,7 @@ function _lheConditionsHTML(c) {
     const chip = (label, val, good) => `<span class="lhe-cond">${label}: <b>${val}</b>${arrow(good)}</span>`;
     const items = [];
     if (c.nfci != null) items.push(chip('תנאים פיננסיים (NFCI)', (+c.nfci).toFixed(2), c.nfci < 0));
+    if (c.cpi != null) items.push(chip('אינפלציה (CPI שנתי)', (+c.cpi).toFixed(1) + '%', c.cpi < 2.5));
     if (c.hyOAS != null) items.push(chip('מרווח אשראי HY', (+c.hyOAS).toFixed(2) + '%', c.hyOAS < 3.5));
     if (c.vix != null) items.push(chip('VIX', (+c.vix).toFixed(1), c.vix < 18));
     if (c.m2Growth != null) items.push(chip('M2 שנתי', (c.m2Growth >= 0 ? '+' : '') + (+c.m2Growth).toFixed(1) + '%', c.m2Growth > 0));

@@ -83,13 +83,15 @@ async function fetchAll() {
     mmf: 'MMMFFAQ027S', currency: 'WCURCIR', debt: 'GFDEBTN', fedbs: 'WALCL',
   };
   const keys = Object.keys(ids);
-  const [arr, m2growth] = await Promise.all([
+  const [arr, m2growth, cpi] = await Promise.all([
     Promise.all(keys.map(k => fred(ids[k]))),
-    fred('M2SL', 'pc1'), // M2 % YoY directly
+    fred('M2SL', 'pc1'),     // M2 % YoY directly
+    fred('CPIAUCSL', 'pc1'), // headline CPI % YoY (inflation)
   ]);
   const out = {};
   keys.forEach((k, i) => { out[k] = arr[i]; });
   out.m2growth = m2growth;
+  out.cpi = cpi;
   return out;
 }
 
@@ -122,6 +124,7 @@ function buildMacro(d) {
       dollarChange: dlt(d.usd, 1),                     // broad USD change (stronger = tighter)
       m2Growth: d.m2growth ? d.m2growth.value : undefined, // M2 % YoY
       reservesDelta: dlt(d.reserves, 1000),            // bank reserves change $M → $bn
+      cpi: d.cpi ? d.cpi.value : undefined,            // headline CPI % YoY (inflation)
     },
     fx: { eurusd: 1.08, usdils: 3.7 },
   };
@@ -158,8 +161,8 @@ function buildLiquidityMap(d, dirs = {}) {
   push('חשבון האוצר (TGA)', 'TGA', tM(d.tga), 'cash', fredDir(d.tga), true, 'us');
   push('ריפו הפוך (RRP)', 'RRP', d.rrp ? +(d.rrp.value / 1000).toFixed(3) : null, 'cash', fredDir(d.rrp), true, 'us');
   // Global stores of value — colored by gold (GLD) / crypto (BTC) price direction
-  push('זהב (גלובלי)', 'זהב', 18, 'other', dirs.GLD || 'flat', false, 'global');
-  push('קריפטו (גלובלי)', 'קריפטו', 2.8, 'other', dirs.BTC || 'flat', false, 'global');
+  push('זהב (גלובלי)', 'זהב', 30, 'other', dirs.GLD || 'flat', false, 'global');
+  push('קריפטו (גלובלי)', 'קריפטו', 2.0, 'other', dirs.BTC || 'flat', false, 'global');
 
   const cashT = pools.filter(p => p.group === 'cash').reduce((s, p) => s + p.valueT, 0);
   return { pools, cashSidelinesT: +cashT.toFixed(2) };
@@ -169,17 +172,17 @@ function buildLiquidityMap(d, dirs = {}) {
 // Factors (all oriented so a POSITIVE signal is supportive): easy real rates, weak dollar,
 // tight credit spreads, calm (low VIX), loose financial conditions, expanding liquidity,
 // falling long yields. A weight is how much that factor drives the asset (gold/bonds flip some).
-const MACRO_FACTORS = ['ריבית ריאלית', 'הדולר', 'מרווחי אשראי', 'תנודתיות (VIX)', 'תנאים פיננסיים', 'היצע הכסף/נזילות', 'כיוון התשואות'];
+const MACRO_FACTORS = ['ריבית ריאלית', 'הדולר', 'מרווחי אשראי', 'תנודתיות (VIX)', 'תנאים פיננסיים', 'היצע הכסף/נזילות', 'כיוון התשואות', 'אינפלציה'];
 const MACRO_MODEL = {
-  //               rates  dollar spreads  vix   fci    liq  yields
-  equity_us:     [0.60, 0.20, 0.70, 0.50, 0.80, 0.60, 0.20],
-  equity_growth: [1.00, 0.20, 0.60, 0.50, 0.80, 0.90, 0.50], // QQQ — rate & liquidity sensitive
-  equity_intl:   [0.50, 0.60, 0.60, 0.50, 0.70, 0.60, 0.20], // EFA — dollar matters more
-  em:            [0.50, 1.00, 0.70, 0.60, 0.60, 0.80, 0.20], // EEM — dollar-driven
-  credit:        [0.40, 0.20, 1.00, 0.60, 0.60, 0.40, 0.30], // HYG — spread-driven
-  gold:          [1.00, 0.90, 0.00, -0.40, 0.20, 0.30, 0.40], // GLD — real yields + dollar; likes fear
-  bonds:         [0.60, 0.10, -0.30, 0.10, 0.20, 0.20, 1.00], // TLT — long-yield driven
-  crypto:        [0.60, 0.60, 0.40, 0.50, 0.80, 1.00, 0.20], // BTC — liquidity + dollar
+  //               rates  dollar spreads  vix   fci    liq  yields  infl
+  equity_us:     [0.60, 0.20, 0.70, 0.50, 0.80, 0.60, 0.20, -0.20],
+  equity_growth: [1.00, 0.20, 0.60, 0.50, 0.80, 0.90, 0.50, -0.30], // QQQ — rate, liquidity & inflation sensitive
+  equity_intl:   [0.50, 0.60, 0.60, 0.50, 0.70, 0.60, 0.20, -0.20], // EFA — dollar matters more
+  em:            [0.50, 1.00, 0.70, 0.60, 0.60, 0.80, 0.20, -0.10], // EEM — dollar-driven
+  credit:        [0.40, 0.20, 1.00, 0.60, 0.60, 0.40, 0.30, -0.20], // HYG — spread-driven
+  gold:          [1.00, 0.90, 0.00, -0.40, 0.20, 0.30, 0.40, 0.70], // GLD — real yields + dollar; INFLATION/fear hedge
+  bonds:         [0.60, 0.10, -0.30, 0.10, 0.20, 0.20, 1.00, -0.80], // TLT — long-yield driven; inflation kills it
+  crypto:        [0.60, 0.60, 0.40, 0.50, 0.80, 1.00, 0.20, 0.30], // BTC — liquidity + dollar + 'digital gold'
 };
 
 // Turn the live macro into the 7 normalized factor signals (-1..+1, + = supportive).
@@ -197,6 +200,7 @@ function macroSignals(macro) {
     clamp(-(c.nfci || 0) / 0.5),                                   // loose financial conditions
     clamp((c.m2Growth || 0) / 8 + (c.reservesDelta || 0) / 300),  // expanding liquidity
     clamp(-d10 / 0.3),                                            // falling long yields
+    clamp(((c.cpi != null ? c.cpi : 2.5) - 2.5) / 2),            // inflation (high CPI = hedge demand)
   ];
 }
 
@@ -322,6 +326,7 @@ function macroBody(hpi, macro) {
   const c = (macro && macro.conditions) || {};
   const bits = [];
   if (c.nfci != null) bits.push(`תנאים פיננסיים ${c.nfci < 0 ? 'רופפים' : 'מהודקים'} (NFCI ${c.nfci.toFixed(2)})`);
+  if (c.cpi != null) bits.push(`אינפלציה ${c.cpi.toFixed(1)}%`);
   if (c.hyOAS != null) bits.push(`מרווחי אשראי ${c.hyOAS.toFixed(2)}%`);
   if (c.vix != null) bits.push(`VIX ${c.vix.toFixed(1)}`);
   if (c.m2Growth != null) bits.push(`M2 ${c.m2Growth >= 0 ? '+' : ''}${c.m2Growth.toFixed(1)}% שנתי`);
