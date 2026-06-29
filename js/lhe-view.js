@@ -106,15 +106,23 @@ async function _lheLoad(force) {
         _lheSig = '';
         return;
     }
-    const sig = rows.map(r => `${r.ticker}:${r.updated_at}`).join('|');
+    // Signature on the DISPLAYED values (not updated_at) — so the body re-renders ONLY when the
+    // shown data actually changes, never just because the agent re-stamped updated_at. Prevents the
+    // periodic full re-render that made the page "jump".
+    const sig = rows.map(r => {
+        const mf = (r.payload && r.payload.macroFit) ? r.payload.macroFit.verdict : '';
+        return `${r.ticker}:${r.bias}:${Math.round(+r.confluence_score || 0)}:${r.hpi_score}:${r.regime}:${r.net_liquidity_flow}:${mf}`;
+    }).join('|');
     if (!force && sig === _lheSig) {
         const sEl = document.getElementById('lheStatus');
-        if (sEl) sEl.outerHTML = _lheStatusHTML(status);
+        if (sEl) sEl.outerHTML = _lheStatusHTML(status); // tiny, height-stable status refresh only
         return;
     }
     _lheSig = sig;
     _lheLoaded = true;
+    const _scrollY = window.scrollY;                     // preserve scroll across the rebuild
     body.innerHTML = _lheBuildHTML(rows, status);
+    if (window.scrollY !== _scrollY) window.scrollTo(0, _scrollY);
     try { localStorage.setItem(LHE_CACHE, JSON.stringify({ rows, status })); } catch (e) { /* quota */ }
 }
 
@@ -284,7 +292,7 @@ const _LHE_GROUPS = [
 function _lheMapHTML(m) {
     const map = m && m.payload && m.payload.liquidityMap;
     if (!map || !Array.isArray(map.pools) || !map.pools.length) return '';
-    const W = 1000, H = 440, HEADER = 22;
+    const W = 1000, H = 600, HEADER = 24;
     const groups = _LHE_GROUPS
         .map(g => { const pools = map.pools.filter(p => p.group === g.key); return { he: g.he, cls: g.cls, pools, value: pools.reduce((s, p) => s + (+p.valueT || 0), 0) }; })
         .filter(g => g.pools.length);
@@ -296,7 +304,13 @@ function _lheMapHTML(m) {
         const innerY = gr.y + HEADER, innerH = Math.max(0, gr.h - HEADER);
         const sorted = g.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0));
         _lheSquarify(sorted.map(p => ({ ref: p, value: Math.max(0.02, +p.valueT || 0) })), gr.x, innerY, gr.w, innerH)
-            .forEach(r => tiles.push({ type: 'pool', ref: r.ref, cls: g.cls, x: r.x, y: r.y, w: r.w, h: r.h }));
+            // Clamp every pool tile strictly inside its group's inner box so a tiny tile (e.g. RRP)
+            // can never spill over a neighbouring group's header.
+            .forEach(r => {
+                const x = Math.max(gr.x, r.x), y = Math.max(innerY, r.y);
+                const w = Math.max(0, Math.min(r.w, gr.x + gr.w - x)), h = Math.max(0, Math.min(r.h, innerY + innerH - y));
+                tiles.push({ type: 'pool', ref: r.ref, cls: g.cls, x, y, w, h });
+            });
     });
     const html = tiles.map(t => {
         const style = `left:${(t.x / W * 100).toFixed(2)}%;top:${(t.y / H * 100).toFixed(2)}%;width:${(t.w / W * 100).toFixed(2)}%;height:${(t.h / H * 100).toFixed(2)}%`;
