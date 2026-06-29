@@ -278,36 +278,52 @@ function _dcReduceRisk(client, scenarioKey, sim) {
 }
 
 // ====================== RENDER ======================
-function openDecisionCore() {
-    let overlay = document.getElementById('decisionCoreOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'decisionCoreOverlay';
-        overlay.className = 'dc-overlay';
-        overlay.setAttribute('onclick', 'closeDecisionCore(event)');
-        document.body.appendChild(overlay);
-    }
+// Open as a routed PAGE (not a popup) — same pattern as the reports/LHE/scanner pages.
+function openDecisionCorePage() {
+    const page = document.getElementById('decisionCorePage');
+    if (!page) return;
     // Default to the first portfolio if none selected
     if (typeof clients !== 'undefined' && clients.length) {
         if (!_dcClientId || !clients.find(c => c.id === _dcClientId)) _dcClientId = clients[0].id;
     }
-    overlay.classList.add('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    const header = document.querySelector('.header');
+    if (header) header.style.display = 'none';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { if (el.id !== 'decisionCorePage') el.style.display = 'none'; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = 'none';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = 'none';
+
+    page.classList.add('active');
     if (typeof _setActiveNav === 'function') _setActiveNav('decisioncore');
-    try { history.pushState({ popup: 'decisioncore' }, '', location.href); } catch (e) { }
+    if (typeof updateURLState === 'function') updateURLState({ view: 'decisioncore' });
+    window.scrollTo(0, 0);
     _dcRender();
     // Proximity is async — compute then refresh that card.
     _dcComputeProximity().then(p => { _dcProximity = p; const el = document.getElementById('dcProximityCard'); if (el) el.innerHTML = _dcProximityHTML(); }).catch(() => { });
 }
 
-function closeDecisionCore(event) {
-    if (event && event.target !== event.currentTarget) return;
-    const overlay = document.getElementById('decisionCoreOverlay');
-    if (overlay) overlay.classList.remove('active');
-    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+function closeDecisionCorePage() {
+    const page = document.getElementById('decisionCorePage');
+    if (!page) return;
+    page.classList.remove('active');
+    page.innerHTML = '';
+    const header = document.querySelector('.header');
+    if (header) header.style.display = '';
+    const heroFold = document.querySelector('.hero-above-fold');
+    if (heroFold) Array.from(heroFold.children).forEach(el => { el.style.display = ''; });
+    const grid = document.getElementById('clientsGrid');
+    if (grid) grid.style.display = '';
+    const psh = document.querySelector('.portfolio-section-header');
+    if (psh) psh.style.display = '';
+    if (typeof clearURLState === 'function') clearURLState();
     if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
 }
-if (typeof window !== 'undefined') { window.openDecisionCore = openDecisionCore; window.closeDecisionCore = closeDecisionCore; }
+if (typeof window !== 'undefined') {
+    window.openDecisionCorePage = openDecisionCorePage; window.closeDecisionCorePage = closeDecisionCorePage;
+    window.openDecisionCore = openDecisionCorePage; window.closeDecisionCore = closeDecisionCorePage;
+}
 
 function setDcScenario(key) { _dcScenario = key; _dcRender(); }
 function setDcClient(id) { _dcClientId = Number(id); _dcRender(); }
@@ -419,8 +435,8 @@ function _dcProximityHTML() {
 }
 
 function _dcRender() {
-    const overlay = document.getElementById('decisionCoreOverlay');
-    if (!overlay) return;
+    const page = document.getElementById('decisionCorePage');
+    if (!page) return;
     const list = (typeof clients !== 'undefined') ? clients : [];
     const client = list.find(c => c.id === _dcClientId) || list[0];
 
@@ -470,25 +486,25 @@ function _dcRender() {
         }
     }
 
-    overlay.innerHTML = `
-    <div class="dc-modal" dir="rtl" onclick="event.stopPropagation()">
-        <div class="dc-header">
-            <div>
-                <h2 class="dc-title">🧠 Decision Core — מנוע מבחני קיצון</h2>
-                <p class="dc-subtitle">סימולציית עמידות התיק במשברים היסטוריים + אינדיקטור לזיהוי משברים בזמן אמת (מבוסס סוכן)</p>
-            </div>
-            <button class="dc-close" onclick="closeDecisionCore()">&times;</button>
+    page.innerHTML = `
+    <div dir="rtl">
+        <div class="macro-page-header">
+            <h1 class="macro-main-title">Decision Core — מנוע מבחני קיצון</h1>
+            <button class="macro-back-btn" onclick="closeDecisionCorePage()">חזור לדשבורד</button>
         </div>
-        <div class="dc-body">
-            <div class="dc-card glass-card" id="dcProximityCard">${_dcProximityHTML()}</div>
+        <div class="macro-content">
+            <p class="dc-subtitle">סימולציית עמידות התיק במשברים היסטוריים + אינדיקטור לזיהוי משברים בזמן אמת (מבוסס סוכן)</p>
+            <div class="dc-body">
+                <div class="dc-card glass-card" id="dcProximityCard">${_dcProximityHTML()}</div>
 
-            <div class="dc-card glass-card">
-                <div class="dc-card-title">סימולציית קריסה</div>
-                <div class="dc-controls">
-                    ${_dcPortfolioPickerHTML(list, client)}
-                    <div class="dc-scenarios">${scenarioCards}</div>
+                <div class="dc-card glass-card">
+                    <div class="dc-card-title">סימולציית קריסה</div>
+                    <div class="dc-controls">
+                        ${_dcPortfolioPickerHTML(list, client)}
+                        <div class="dc-scenarios">${scenarioCards}</div>
+                    </div>
+                    ${simHTML}
                 </div>
-                ${simHTML}
             </div>
         </div>
     </div>`;

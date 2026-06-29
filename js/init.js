@@ -817,6 +817,7 @@ const _VIEW_PAGES = [
     { view: 'reports', id: 'reportsPage', open: () => typeof openReportsPage === 'function' && openReportsPage(), close: () => typeof closeReportsPage === 'function' && closeReportsPage() },
     { view: 'lhe', id: 'lhePage', open: () => typeof openLHEPage === 'function' && openLHEPage(), close: () => typeof closeLHEPage === 'function' && closeLHEPage() },
     { view: 'scanneragent', id: 'scannerPage', open: () => typeof openScannerAgentPage === 'function' && openScannerAgentPage(), close: () => typeof closeScannerAgentPage === 'function' && closeScannerAgentPage() },
+    { view: 'decisioncore', id: 'decisionCorePage', open: () => typeof openDecisionCorePage === 'function' && openDecisionCorePage(), close: () => typeof closeDecisionCorePage === 'function' && closeDecisionCorePage() },
 ];
 const _isPageOpen = (id) => !!document.getElementById(id)?.classList.contains('active');
 

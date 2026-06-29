@@ -61,8 +61,8 @@ function _closeMobileSidebar() {
 function navigateTo(section) {
     // Close mobile sidebar first (if open)
     _closeMobileSidebar();
-    // Decision Core is an independent overlay (not in the switch below) — close it on any navigation.
-    if (section !== 'decisioncore' && typeof closeDecisionCore === 'function') closeDecisionCore();
+    // Decision Core is a routed page — close it when navigating elsewhere.
+    if (section !== 'decisioncore') { const _dc = document.getElementById('decisionCorePage'); if (_dc && _dc.classList.contains('active') && typeof closeDecisionCorePage === 'function') closeDecisionCorePage(); }
     // Scanner Agent + LHE are routed pages (like reports) — close when navigating elsewhere.
     if (section !== 'scanneragent') { const _sp = document.getElementById('scannerPage'); if (_sp && _sp.classList.contains('active') && typeof closeScannerAgentPage === 'function') closeScannerAgentPage(); }
     if (section !== 'lhe') { const _lp = document.getElementById('lhePage'); if (_lp && _lp.classList.contains('active') && typeof closeLHEPage === 'function') closeLHEPage(); }
@@ -226,6 +226,17 @@ function navigateTo(section) {
             closeTechIfOpen();
             closeRepIfOpen();
             if (typeof openScannerAgentPage === 'function') openScannerAgentPage();
+            break;
+
+        case 'decisioncore':
+            // Open the Decision Core stress-test page
+            if (macroIsActive && typeof closeMacroPage === 'function') closeMacroPage();
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            closeTechIfOpen();
+            closeRepIfOpen();
+            if (typeof openDecisionCorePage === 'function') openDecisionCorePage();
             break;
 
         default:
