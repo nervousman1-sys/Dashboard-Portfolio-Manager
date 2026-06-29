@@ -154,8 +154,20 @@ if ('serviceWorker' in navigator) {
     let _swReloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (_swReloaded || !_hadController) return;
-        _swReloaded = true;
-        location.reload();
+        // NEVER yank the user out mid-read. Defer the reload while a modal / report popup / routed
+        // page is open (or the tab is visible-and-busy); reload only once they're at a safe state.
+        const _reloadWhenIdle = () => {
+            if (_swReloaded) return;
+            const busy = document.getElementById('modalOverlay')?.classList.contains('active')
+                || document.getElementById('prModalOverlay')?.classList.contains('open')
+                || document.getElementById('paModalOverlay')?.classList.contains('open')
+                || document.querySelector('.riskmodel-page.active')
+                || document.querySelector('.full-list-page');
+            if (busy) { setTimeout(_reloadWhenIdle, 5000); return; }   // re-check until the user is idle
+            _swReloaded = true;
+            location.reload();
+        };
+        _reloadWhenIdle();
     });
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' })

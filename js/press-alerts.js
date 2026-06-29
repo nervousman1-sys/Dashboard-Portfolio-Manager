@@ -172,7 +172,10 @@ function _prOpenModal(id) {
     const modal = document.getElementById('prModal');
     const overlay = document.getElementById('prModalOverlay');
     if (!modal || !overlay) return;
-    const an = a._analysis;
+    // Prefer the analysis the agent already computed + stored on the row (instant, reliable);
+    // fall back to an on-demand fetch only for older rows that have none.
+    const stored = (a.analysis && (Array.isArray(a.analysis.points_he) && a.analysis.points_he.length || a.analysis.implications_he)) ? a.analysis : null;
+    const an = a._analysis || stored;
     const loading = `<div class="pa-an-loading"><span class="pa-an-spin"></span> מנתח את הדיווח…</div>`;
     modal.innerHTML = `
         <div class="pa-modal-head">
@@ -215,20 +218,20 @@ function _prPointsHTML(an, a) {
 // On-demand deep analysis (material points + implications) via the Gemini-backed serverless fn.
 // Result is cached on the alert object so re-opening is instant.
 async function _prFetchAnalysis(a) {
-    try {
+    const tryOnce = async () => {
         const r = await fetch('/api/vision?mode=filing', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticker: a.ticker, company: a.company, category: a.category, headline: a.headline_en, body: a.body_en }),
         });
         const j = r.ok ? await r.json() : null;
-        if (j && (Array.isArray(j.points_he) && j.points_he.length || j.implications_he)) {
-            a._analysis = j;
-        } else {
-            a._analysis = { points_he: [], implications_he: a.analysis_he || '', summary_he: a.summary_he || '' };
-        }
-    } catch (e) {
-        a._analysis = { points_he: [], implications_he: a.analysis_he || '', summary_he: a.summary_he || '' };
+        return (j && (Array.isArray(j.points_he) && j.points_he.length || j.implications_he)) ? j : null;
+    };
+    let res = null;
+    for (let i = 0; i < 2 && !res; i++) {
+        try { res = await tryOnce(); } catch (e) { /* retry */ }
+        if (!res && i === 0) await new Promise(r => setTimeout(r, 3500));   // brief backoff (quota is per-minute)
     }
+    a._analysis = res || { points_he: [], implications_he: a.analysis_he || '', summary_he: a.summary_he || '' };
     // Render into the open modal (if it's still showing this alert).
     const pEl = document.getElementById('prPoints');
     const iEl = document.getElementById('prImpl');

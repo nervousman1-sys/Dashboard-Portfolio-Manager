@@ -182,14 +182,22 @@ async function fetchPressReleaseText(cikInt, accNoDashes, primaryDoc) {
 }
 
 // ── 4. Build the alert; enrich the Hebrew with Gemini when available ──────────
+// Try several models in turn — when one 429s on quota, the next (separate quota) usually answers.
+const GEMINI_MODELS = [GEMINI_MODEL, 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].filter((v, i, a) => v && a.indexOf(v) === i);
 async function geminiJSON(prompt) {
     if (!GEMINI_API_KEY) throw new Error('no GEMINI_API_KEY');
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error(`Gemini HTTP ${r.status}: ${(await r.text()).slice(0, 160)}`);
-    const j = await r.json();
-    return JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text || 'null');
+    const reqBody = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 1200, thinkingConfig: { thinkingBudget: 0 } } });
+    let lastErr = '';
+    for (const model of GEMINI_MODELS) {
+        try {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: reqBody });
+            if (!r.ok) { lastErr = `Gemini(${model}) HTTP ${r.status}`; continue; }   // quota/transient → next model
+            const j = await r.json();
+            const out = JSON.parse(j?.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || 'null');
+            if (out && typeof out === 'object') return out;
+        } catch (e) { lastErr = e.message; }
+    }
+    throw new Error(lastErr || 'no model returned');
 }
 
 async function buildAlert(f) {
@@ -206,31 +214,38 @@ async function buildAlert(f) {
     };
     if (!GEMINI_API_KEY) return base;
     const prompt = [
-        'אתה אנליסט אירועים בכיר. לפניך דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC). החזר JSON בלבד.',
+        'אתה אנליסט אקוויטי בכיר. לפניך דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC).',
+        'קרא את הטקסט בעיון והחזר JSON בלבד, בעברית מקצועית וברורה, מבוסס אך ורק על מה שכתוב בדיווח.',
         `טיקר: ${f.ticker} | חברה: ${f.company}`,
         `סעיף ה-8-K: ${f.items} (${ev.en})`,
-        `טקסט ההודעה לעיתונות (אנגלית, ייתכן חלקי): ${String(body).slice(0, 1200)}`,
+        `טקסט הדיווח (אנגלית): ${String(body).slice(0, 3500)}`,
         '',
         'החזר אובייקט JSON:',
         '{',
         `  "category": one of ${JSON.stringify(CATEGORIES)},`,
         '  "sentiment": number,        // -100 (שלילי מאוד) עד +100 (חיובי מאוד) — ההשפעה הצפויה על המניה',
-        '  "summary_he": "תקציר שורה אחת בעברית פשוטה (TL;DR), כולל המספרים המהותיים אם יש",',
-        '  "analysis_he": "2-3 משפטים של ניתוח פונדמנטלי בעברית: מה קרה ומדוע זה מהותי למשקיע"',
+        '  "summary_he": "תקציר שורה אחת בעברית (TL;DR) — מה קרה, כולל המספר/הנתון המרכזי",',
+        '  "points_he": ["3-5 נקודות מהותיות קצרות וקונקרטיות מתוך הדיווח — כולל מספרים, שמות, אחוזים ותאריכים שמופיעים בו"],',
+        '  "implications_he": "2-4 משפטים: מה ההשלכות של הדיווח על החברה ועל המניה — חיובי/שלילי, טווח קצר מול ארוך, וסיכון/הזדמנות עיקריים"',
         '}',
     ].join('\n');
     try {
         const out = await geminiJSON(prompt);
         if (!out || typeof out !== 'object') return base;
+        const points = Array.isArray(out.points_he) ? out.points_he.map(s => String(s).trim()).filter(Boolean).slice(0, 6) : [];
+        const summary = String(out.summary_he || base.summary_he).trim();
+        const implications = String(out.implications_he || out.analysis_he || base.analysis_he).trim();
         return {
             ...base,
             category: CATEGORIES.includes(out.category) ? out.category : base.category,
             sentiment: (out.sentiment != null) ? clampSent(out.sentiment) : base.sentiment,
-            summary_he: String(out.summary_he || base.summary_he).trim(),
-            analysis_he: String(out.analysis_he || base.analysis_he).trim(),
+            summary_he: summary,
+            analysis_he: implications,
+            // Pre-computed rich analysis stored ON the row → the modal shows it instantly, no live LLM call.
+            analysis: { summary_he: summary, points_he: points, implications_he: implications },
         };
     } catch (e) {
-        if (/HTTP 429/.test(e.message)) log(`Gemini 429 on ${f.ticker} — using deterministic SEC classification`);
+        if (/429/.test(e.message)) log(`Gemini 429 on ${f.ticker} — using deterministic SEC classification`);
         else log(`Gemini error on ${f.ticker} (${e.message}) — deterministic`);
         return base;
     }
@@ -241,7 +256,15 @@ async function routeAlert(alert) {
     // Sanitize every string field — SEC press-release text can carry NUL/control bytes that
     // Postgres JSONB rejects ("unsupported Unicode escape sequence"). Numbers/booleans pass through.
     const safe = {};
-    for (const k in alert) safe[k] = (typeof alert[k] === 'string') ? clean(alert[k]) : alert[k];
+    for (const k in alert) {
+        if (typeof alert[k] === 'string') safe[k] = clean(alert[k]);
+        else if (k === 'analysis' && alert[k] && typeof alert[k] === 'object') {
+            safe[k] = {
+                summary_he: clean(alert[k].summary_he), implications_he: clean(alert[k].implications_he),
+                points_he: Array.isArray(alert[k].points_he) ? alert[k].points_he.map(clean).filter(Boolean) : [],
+            };
+        } else safe[k] = alert[k];
+    }
     const { data, error } = await supabase.rpc('route_portfolio_alert', { p_secret: AGENT_WRITE_SECRET, p_alert: safe });
     if (error) { log('route error', alert.ticker, error.message); return 0; }
     return Number(data) || 0;
