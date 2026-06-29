@@ -128,7 +128,8 @@ let _paAlerts = [];                 // current feed (newest first)
 let _paChannel = null;              // supabase realtime channel
 let _paSimTimer = null;             // demo injector interval
 let _paClockTimer = null;           // relative-timestamp refresh interval
-let _paSimOn = true;                // demo simulator default ON (so the live effect is visible)
+let _paSimOn = false;               // demo simulator default OFF — the live agent now feeds real alerts
+                                    // (toggle it on to preview the live entry animation on demand)
 let _paFilter = 'all';              // portfolio filter: 'all' | <portfolio id>
 let _paSeen = new Set();            // de-dup guard across DB + realtime + simulator
 const PA_MAX = 60;                  // cap the feed length in the DOM
