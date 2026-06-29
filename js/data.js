@@ -214,7 +214,7 @@ const SECTOR_COLORS = {
     'Consumer Staples': '#84cc16', 'Healthcare': '#ec4899', 'Financials': '#eab308',
     'Energy': '#ef4444', 'Industrials': '#8b5cf6', 'Utilities': '#14b8a6',
     'Real Estate': '#f43f5e', 'Materials': '#10b981', 'Crypto': '#f7931a', 'Bonds': '#a855f7', 'Other': '#64748b',
-    'תעודות סל עוקבות מדד': '#22d3ee', 'סחורות': '#d4af37'
+    'תעודות סל עוקבות מדד': '#22d3ee', 'תעודות סל': '#0ea5e9', 'סחורות': '#d4af37'
 };
 
 const COLORS = { profit: '#22c55e', loss: '#ef4444', neutral: '#3b82f6', bonds: '#a855f7' };
