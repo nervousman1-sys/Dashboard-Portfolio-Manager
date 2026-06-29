@@ -99,7 +99,43 @@ async function geminiJSON(prompt) {
     return JSON.parse(txt);
 }
 
+// Deterministic material-event keyword screen. Doubles as (a) a pre-filter so ONLY material-looking
+// news is sent to Gemini (saves quota), and (b) a robust fallback so REAL alerts still land when
+// Gemini is unavailable (429/no key). Each rule → category + a baseline sentiment + a HE one-liner.
+const MATERIAL_RULES = [
+    { re: /\b(buyback|repurchase|repurchases|repurchasing|repurchase program)\b/i,                 category: 'buyback',       sentiment: 62,  he: 'הכריזה על תוכנית רכישה עצמית של מניות.' },
+    { re: /\b(raises?|raised|lifts?|boosts?|hikes?|increases?)\b.*\b(guidance|outlook|forecast|target|estimates?)\b/i, category: 'guidance_up',   sentiment: 58,  he: 'העלתה את התחזית הכספית.' },
+    { re: /\b(cuts?|lowers?|lowered|slashes?|reduces?|warns?|warning)\b.*\b(guidance|outlook|forecast|profit|estimates?)\b/i, category: 'guidance_down', sentiment: -58, he: 'הורידה תחזית / מסרה אזהרת רווח.' },
+    { re: /\b(ceo|cfo|chief executive|chief financial officer)\b.*\b(steps? down|resigns?|resigned|departs?|to leave|stepping down|ousted)\b/i, category: 'ceo_change', sentiment: -30, he: 'שינוי בהנהלה הבכירה (מנכ״ל/CFO).' },
+    { re: /\b(appoints?|names?|hires?)\b.*\b(ceo|cfo|chief executive|chief financial officer|president)\b/i, category: 'ceo_change', sentiment: 8, he: 'מינוי חדש להנהלה הבכירה.' },
+    { re: /\b(lawsuit|sues?|sued|antitrust|investigation|probe|fined|settlement|charged|subpoena|recall|sec charges)\b/i, category: 'lawsuit', sentiment: -42, he: 'הליך משפטי / רגולטורי מהותי.' },
+    { re: /\b(to acquire|acquires?|acquisition|merger|to buy|takeover|buyout|to combine with)\b/i,  category: 'ma',            sentiment: 36,  he: 'עסקת מיזוג / רכישה.' },
+    { re: /\b(dividend|special distribution|raises? dividend|initiates? dividend)\b/i,               category: 'dividend',      sentiment: 34,  he: 'הכרזה / שינוי בדיבידנד.' },
+    { re: /\b(convertible notes?|secondary offering|stock offering|share offering|public offering|priced.*offering|equity raise|dilution)\b/i, category: 'offering', sentiment: -26, he: 'הנפקת מניות / אג״ח (דילול אפשרי).' },
+];
+
+function prescreen(item) {
+    const hay = `${item.headline_en} ${item.body_en}`;
+    for (const r of MATERIAL_RULES) {
+        if (r.re.test(hay)) {
+            const catHe = { buyback: 'רכישה עצמית', ceo_change: 'החלפת מנכ״ל', guidance_up: 'העלאת תחזית', guidance_down: 'הורדת תחזית', lawsuit: 'תביעה/רגולציה', ma: 'מיזוג/רכישה', dividend: 'דיבידנד', offering: 'הנפקה' }[r.category] || 'דיווח מהותי';
+            return {
+                ticker: item.ticker, company: item.ticker, category: r.category, sentiment: r.sentiment, materiality: true,
+                summary_he: `${item.ticker} — ${r.he}`,
+                headline_en: item.headline_en, body_en: item.body_en,
+                analysis_he: `אירוע מסוג "${catHe}" מסווג כמהותי: הוא משפיע ישירות על שווי החברה ועל ציפיות המשקיעים, ולכן נדחף לפיד עבור המחזיקים בנכס.`,
+                source: item.source, source_url: item.source_url, published_at: item.published_at,
+            };
+        }
+    }
+    return null;   // no material keyword → not material (skipped, no Gemini call)
+}
+
 async function classifyMateriality(item) {
+    const base = prescreen(item);
+    if (!base) return null;                 // not material → skip (and never spend a Gemini call)
+    if (!GEMINI_API_KEY) return base;       // no LLM → ship the deterministic alert
+
     const prompt = [
         'אתה אנליסט אירועים בכיר. נתח את הדיווח הבא של חברה נסחרת והחזר JSON בלבד.',
         `טיקר: ${item.ticker}`,
@@ -112,29 +148,28 @@ async function classifyMateriality(item) {
         `  "category": one of ${JSON.stringify(CATEGORIES)},`,
         '  "company": "שם החברה המלא באנגלית",',
         '  "sentiment": number,           // -100 (שלילי מאוד) עד +100 (חיובי מאוד) להשפעה על המניה',
-        '  "summary_he": "תקציר שורה אחת בעברית פשוטה (TL;DR)",',
+        '  "summary_he": "תקציר שורה אחת בעברית פשוטה (TL;DR), כולל המספרים המהותיים",',
         '  "analysis_he": "2-3 משפטים של ניתוח פונדמנטלי בעברית: מדוע זה מהותי וההשלכה הצפויה"',
         '}',
-        'דרישות: רק הודעות מהותיות (Buyback, החלפת מנכ"ל/CFO, שינוי תחזית, תביעת ענק, מיזוג/רכישה, דיבידנד, הנפקה). אם לא מהותי — material=false.',
     ].join('\n');
-    const out = await geminiJSON(prompt);
-    if (!out || typeof out !== 'object') return null;
-    if (!out.material) return null;
-    const category = CATEGORIES.includes(out.category) ? out.category : 'other';
-    return {
-        ticker: item.ticker,
-        company: out.company || item.ticker,
-        category,
-        sentiment: clampSent(out.sentiment),
-        materiality: true,
-        summary_he: String(out.summary_he || '').trim(),
-        headline_en: item.headline_en,
-        body_en: item.body_en,
-        analysis_he: String(out.analysis_he || '').trim(),
-        source: item.source,
-        source_url: item.source_url,
-        published_at: item.published_at,
-    };
+
+    try {
+        const out = await geminiJSON(prompt);
+        if (out && out.material === false) return null;     // LLM overrules: not actually material
+        if (!out || typeof out !== 'object') return base;
+        return {
+            ...base,
+            company: out.company || base.company,
+            category: CATEGORIES.includes(out.category) ? out.category : base.category,
+            sentiment: (out.sentiment != null) ? clampSent(out.sentiment) : base.sentiment,
+            summary_he: String(out.summary_he || base.summary_he).trim(),
+            analysis_he: String(out.analysis_he || base.analysis_he).trim(),
+        };
+    } catch (e) {
+        if (/HTTP 429/.test(e.message)) log(`Gemini 429 on ${item.ticker} — using deterministic classification`);
+        else log(`Gemini error on ${item.ticker} (${e.message}) — using deterministic classification`);
+        return base;   // ROBUST: a real material alert still ships even when Gemini is down
+    }
 }
 
 // ── 4. ROUTING: fan the alert out to every portfolio that holds the ticker ────
