@@ -406,6 +406,18 @@ function _lheCardHTML(c) {
     const fit = p.macroFit;
     const fitMeta = _lheFitMeta(fit);
 
+    // ציון נזילות+מאקרו (0-100): עד כמה רקע הנזילות והמאקרו (ביחד) תומך בנכס. 50=ניטרלי, >50 תומך, <50 נגד.
+    // ממוזג מהרגישות-למאקרו הספציפית לנכס (כולל גורמי נזילות) + גאות/שפל הנזילות הכללית (HPI). מחיר אינו נכלל כאן.
+    const _macroSc = (fit && typeof fit.score === 'number') ? fit.score : 0;
+    const _hpiSc = (+c.hpi_score) || 50;
+    const _liqC = Math.max(-1, Math.min(1, (_hpiSc - 50) / 50));
+    const _macroC = Math.max(-1, Math.min(1, _macroSc / 100));
+    const support = (p.thesis && typeof p.thesis.support === 'number')
+        ? p.thesis.support
+        : Math.round(Math.max(0, Math.min(100, 50 + (0.55 * _macroC + 0.45 * _liqC) * 55)));
+    const supportVerdict = (p.thesis && p.thesis.supportVerdict) || (support >= 56 ? 'תומך' : support <= 44 ? 'נגד' : 'ניטרלי');
+    const supportCls = support >= 56 ? 'lhe-score-good' : support <= 44 ? 'lhe-score-bad' : 'lhe-score-neu';
+
     const flagChips = flags.map(f => `<span class="lhe-flag">${_lheEsc(_lheFlagHe(f))}</span>`).join('');
     const targetHTML = (t && t.zone) ? `
         <div class="lhe-target">
@@ -433,7 +445,7 @@ function _lheCardHTML(c) {
             </div>
             <div class="lhe-card-head-r">
                 <span class="lhe-thesis-chip ${bias.cls}">${bias.arrow} ${bias.he}</span>
-                <span class="lhe-conf ${sevCls}">שכנוע ${conf}</span>
+                <span class="lhe-score ${supportCls}" title="ציון נזילות+מאקרו — עד כמה רקע הנזילות והמאקרו תומך בנכס: 0=נגד · 50=ניטרלי · 100=תומך מלא">ציון ${support} · ${supportVerdict}</span>
             </div>
         </div>
         <div class="lhe-card-body">

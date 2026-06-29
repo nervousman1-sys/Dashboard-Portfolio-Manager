@@ -240,6 +240,14 @@ function buildThesis(struct, macroFit, hpi, result) {
   const direction = net > 0.12 ? 'bullish' : net < -0.12 ? 'bearish' : 'mixed';
   const confidence = Math.round(Math.min(98, Math.abs(net) * 150 + 22));
 
+  // ציון נזילות+מאקרו (0-100): does the LIQUIDITY + MACRO backdrop (together) support this asset?
+  // Blends the asset's macro favorability (incl. its liquidity factors) with the overall liquidity
+  // tide (HPI). Price is intentionally NOT included — this is the backdrop only. 50=neutral.
+  const liqC = clamp((hpi.score - 50) / 50);
+  const supportNet = 0.55 * macroC + 0.45 * liqC;
+  const support = Math.round(Math.max(0, Math.min(100, 50 + supportNet * 55)));
+  const supportVerdict = support >= 56 ? 'תומך' : support <= 44 ? 'נגד' : 'ניטרלי';
+
   const regHe = { flood: 'הצפת נזילות', expansion: 'התרחבות נזילות', neutral: 'נזילות מאוזנת', drain: 'ניקוז נזילות', drought: 'בצורת נזילות' }[hpi.regime] || hpi.regime;
   const macroLine = macroFit.verdict === 'tailwind'
     ? `מאקרו (רוח גבית): ${macroFit.reason}. הרקע הפונדמנטלי תומך בנכס.`
@@ -266,8 +274,8 @@ function buildThesis(struct, macroFit, hpi, result) {
   const body = [macroLine, liqLine, techLine, concl].join('\n');
   const arrow = direction === 'bullish' ? '▲' : direction === 'bearish' ? '▼' : '◆';
   const dirWord = direction === 'bullish' ? 'עולה' : direction === 'bearish' ? 'יורד' : 'מעורב';
-  const headline = `${arrow} תרחיש ${dirWord} לטווח הקרוב · שכנוע ${confidence}/100`;
-  return { direction, confidence, headline, body };
+  const headline = `${arrow} תרחיש ${dirWord} לטווח הקרוב · ציון נזילות+מאקרו ${support}/100 (${supportVerdict})`;
+  return { direction, confidence, support, supportVerdict, headline, body };
 }
 
 // ── Yahoo daily candles (v8 chart API — no crumb needed) ──────────────────────
@@ -390,7 +398,7 @@ async function cycle() {
       hpi_score: result.hpi.score, hpi_delta: result.hpi.delta, regime: result.hpi.regime,
       net_liquidity_flow: result.hpi.netLiquidityFlow,
       liquidity_beta: result.conduit.liquidityBeta, attraction_score: result.conduit.attractionScore,
-      confluence_score: thesis.confidence, bias: thesis.direction, severity,
+      confluence_score: thesis.support, bias: thesis.direction, severity,
       headline: thesis.headline, body: thesis.body,
       target, flags: result.confluence.flags,
       payload: {
