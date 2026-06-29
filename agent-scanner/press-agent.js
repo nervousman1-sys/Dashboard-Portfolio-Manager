@@ -200,6 +200,38 @@ async function geminiJSON(prompt) {
     throw new Error(lastErr || 'no model returned');
 }
 
+// Reusable rich-analysis call (used on insert AND for the re-analysis sweep). Throws on total LLM
+// failure (so the caller keeps the deterministic base + retries next cycle). Returns null on bad JSON.
+async function geminiAnalyze(d) {
+    if (!GEMINI_API_KEY) return null;
+    const prompt = [
+        'אתה אנליסט אקוויטי בכיר. לפניך דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC).',
+        'קרא את הטקסט בעיון והחזר JSON בלבד, בעברית מקצועית וברורה, מבוסס אך ורק על מה שכתוב בדיווח.',
+        `טיקר: ${d.ticker} | חברה: ${d.company || d.ticker}`,
+        d.evEn ? `סעיף ה-8-K: ${d.items || ''} (${d.evEn})` : '',
+        `טקסט הדיווח (אנגלית): ${String(d.body || '').slice(0, 3500)}`,
+        '',
+        'החזר אובייקט JSON:',
+        '{',
+        `  "category": one of ${JSON.stringify(CATEGORIES)},`,
+        '  "sentiment": number,        // -100 (שלילי מאוד) עד +100 (חיובי מאוד) — ההשפעה הצפויה על המניה',
+        '  "summary_he": "תקציר שורה אחת בעברית (TL;DR) — מה קרה, כולל המספר/הנתון המרכזי",',
+        '  "points_he": ["3-5 נקודות מהותיות קצרות וקונקרטיות מתוך הדיווח — כולל מספרים, שמות, אחוזים ותאריכים שמופיעים בו"],',
+        '  "implications_he": "2-4 משפטים: מה ההשלכות של הדיווח על החברה ועל המניה — חיובי/שלילי, טווח קצר מול ארוך, וסיכון/הזדמנות עיקריים"',
+        '}',
+    ].filter(Boolean).join('\n');
+    const out = await geminiJSON(prompt);
+    if (!out || typeof out !== 'object') return null;
+    const points = Array.isArray(out.points_he) ? out.points_he.map(s => String(s).trim()).filter(Boolean).slice(0, 6) : [];
+    return {
+        category: CATEGORIES.includes(out.category) ? out.category : null,
+        sentiment: (out.sentiment != null) ? clampSent(out.sentiment) : null,
+        summary_he: String(out.summary_he || '').trim(),
+        points_he: points,
+        implications_he: String(out.implications_he || out.analysis_he || '').trim(),
+    };
+}
+
 async function buildAlert(f) {
     const ev = f.event;
     const prText = await fetchPressReleaseText(f.cikInt, f.accNoDashes, f.primaryDoc);
@@ -212,43 +244,54 @@ async function buildAlert(f) {
         analysis_he: `החברה הגישה דיווח מיידי (Form ${f.form}) לרשות ניירות ערך האמריקאית בנושא "${ev.he}". דיווחי 8-K מוגשים על-פי חוק רק על אירועים מהותיים, ולכן רלוונטיים ישירות למחזיקים בנכס.`,
         source: 'SEC EDGAR · 8-K', source_url: f.source_url, published_at: f.published_at,
     };
-    if (!GEMINI_API_KEY) return base;
-    const prompt = [
-        'אתה אנליסט אקוויטי בכיר. לפניך דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC).',
-        'קרא את הטקסט בעיון והחזר JSON בלבד, בעברית מקצועית וברורה, מבוסס אך ורק על מה שכתוב בדיווח.',
-        `טיקר: ${f.ticker} | חברה: ${f.company}`,
-        `סעיף ה-8-K: ${f.items} (${ev.en})`,
-        `טקסט הדיווח (אנגלית): ${String(body).slice(0, 3500)}`,
-        '',
-        'החזר אובייקט JSON:',
-        '{',
-        `  "category": one of ${JSON.stringify(CATEGORIES)},`,
-        '  "sentiment": number,        // -100 (שלילי מאוד) עד +100 (חיובי מאוד) — ההשפעה הצפויה על המניה',
-        '  "summary_he": "תקציר שורה אחת בעברית (TL;DR) — מה קרה, כולל המספר/הנתון המרכזי",',
-        '  "points_he": ["3-5 נקודות מהותיות קצרות וקונקרטיות מתוך הדיווח — כולל מספרים, שמות, אחוזים ותאריכים שמופיעים בו"],',
-        '  "implications_he": "2-4 משפטים: מה ההשלכות של הדיווח על החברה ועל המניה — חיובי/שלילי, טווח קצר מול ארוך, וסיכון/הזדמנות עיקריים"',
-        '}',
-    ].join('\n');
     try {
-        const out = await geminiJSON(prompt);
-        if (!out || typeof out !== 'object') return base;
-        const points = Array.isArray(out.points_he) ? out.points_he.map(s => String(s).trim()).filter(Boolean).slice(0, 6) : [];
-        const summary = String(out.summary_he || base.summary_he).trim();
-        const implications = String(out.implications_he || out.analysis_he || base.analysis_he).trim();
-        return {
-            ...base,
-            category: CATEGORIES.includes(out.category) ? out.category : base.category,
-            sentiment: (out.sentiment != null) ? clampSent(out.sentiment) : base.sentiment,
-            summary_he: summary,
-            analysis_he: implications,
-            // Pre-computed rich analysis stored ON the row → the modal shows it instantly, no live LLM call.
-            analysis: { summary_he: summary, points_he: points, implications_he: implications },
-        };
+        const a = await geminiAnalyze({ ticker: f.ticker, company: f.company, items: f.items, evEn: ev.en, body });
+        if (a && (a.points_he.length || a.implications_he)) {
+            const summary = a.summary_he || base.summary_he;
+            const implications = a.implications_he || base.analysis_he;
+            return {
+                ...base,
+                category: a.category || base.category,
+                sentiment: a.sentiment != null ? a.sentiment : base.sentiment,
+                summary_he: summary, analysis_he: implications,
+                analysis: { summary_he: summary, points_he: a.points_he, implications_he: implications },
+            };
+        }
     } catch (e) {
-        if (/429/.test(e.message)) log(`Gemini 429 on ${f.ticker} — using deterministic SEC classification`);
+        if (/429|503/.test(e.message)) log(`Gemini ${e.message} on ${f.ticker} — deterministic for now (re-analyzed next cycle)`);
         else log(`Gemini error on ${f.ticker} (${e.message}) — deterministic`);
-        return base;
     }
+    return base;   // stored without rich analysis → the re-analysis sweep will fill it in once Gemini answers
+}
+
+// Persisting reliability: each cycle, re-try the rich analysis for rows that still lack one, and stamp
+// it onto every portfolio copy. Spread over cycles so the strained Gemini free quota eventually covers all.
+async function reanalyzePending() {
+    if (!GEMINI_API_KEY) return;
+    let rows;
+    try {
+        const { data, error } = await supabase.rpc('pending_analyses', { p_secret: AGENT_WRITE_SECRET, p_limit: 8 });
+        if (error || !Array.isArray(data) || !data.length) return;
+        rows = data;
+    } catch (e) { return; }
+    log(`Re-analyzing ${rows.length} pending filings…`);
+    let done = 0;
+    for (const row of rows) {
+        try {
+            const a = await geminiAnalyze({ ticker: row.ticker, company: row.company, body: row.body_en });
+            if (a && (a.points_he.length || a.implications_he)) {
+                const summary = clean(a.summary_he), implications = clean(a.implications_he);
+                const item = {
+                    analysis: { summary_he: summary, points_he: a.points_he.map(clean).filter(Boolean), implications_he: implications },
+                    summary_he: summary, analysis_he: implications, sentiment: a.sentiment, category: a.category,
+                };
+                const { data: n, error } = await supabase.rpc('update_alert_analysis', { p_secret: AGENT_WRITE_SECRET, p_headline: row.headline_en, p_item: item });
+                if (!error && Number(n) > 0) { done++; log(`✓ analyzed ${row.ticker} → ${n} rows · ${summary.slice(0, 42)}`); }
+            }
+        } catch (e) { /* Gemini busy — try this row again next cycle */ }
+        await sleep(700);
+    }
+    if (done) log(`Re-analysis sweep: ${done}/${rows.length} filings enriched.`);
 }
 
 // ── 5. ROUTING: fan the alert out to every portfolio that holds the ticker ────
@@ -303,6 +346,7 @@ async function runCycle() {
         await sleep(250);                   // stay well under SEC's 10 req/s
     }
     log(`Cycle done · scanned ${scanned} SEC filers · ${fired} new filings · ${routed} portfolio rows written.`);
+    await reanalyzePending();   // fill in rich analysis for any rows still missing it (persists across cycles)
 }
 
 async function safeCycle() { try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); } }
