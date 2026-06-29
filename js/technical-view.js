@@ -40,6 +40,11 @@ function openTechnicalForTicker(ticker) {
     }
     if (typeof closeReportsPage === 'function' && document.getElementById('reportsPage')?.classList.contains('active')) closeReportsPage();
     if (typeof closeDiscordNews === 'function' && document.getElementById('discordNewsPage')?.classList.contains('active')) closeDiscordNews();
+    // Close the OTHER routed pages too (scanner / LHE / decision-core) so exactly one page is active —
+    // otherwise the left-open page corrupts Back navigation (lands on a blank page until refresh).
+    if (typeof closeScannerAgentPage === 'function' && document.getElementById('scannerPage')?.classList.contains('active')) closeScannerAgentPage();
+    if (typeof closeLHEPage === 'function' && document.getElementById('lhePage')?.classList.contains('active')) closeLHEPage();
+    if (typeof closeDecisionCorePage === 'function' && document.getElementById('decisionCorePage')?.classList.contains('active')) closeDecisionCorePage();
     openTechnicalPage();
     if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
     if (typeof updateURLState === 'function') updateURLState({ view: 'technical' });
