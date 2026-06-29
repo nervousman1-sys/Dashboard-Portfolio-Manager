@@ -1254,6 +1254,46 @@ async function _enrichILFunds(client) {
     if (typeof renderClientCards === 'function') renderClientCards();
 }
 
+// Resolve Israeli numeric-id funds for ALL portfolios at once, on the dashboard (not only inside the
+// holdings modal). This makes the dashboard cards show the fund's real NAME instead of its number
+// (task: "show the asset's name, not its number"), and lets the sector breakdown bucket those funds
+// as תעודות סל / מדד instead of dumping them into "אחר" (Other). Batched + cached → cheap & idempotent.
+async function _enrichAllILFunds() {
+    window._ilFundInfo = window._ilFundInfo || {};
+    if (typeof clients === 'undefined' || !Array.isArray(clients) || !clients.length) return;
+    const ids = new Set();
+    for (const c of clients) {
+        if (!Array.isArray(c.holdings)) continue;
+        for (const h of c.holdings) {
+            const t = (h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+            if (/^\d{4,9}$/.test(t) && !window._ilFundInfo[t]) ids.add(t);
+        }
+    }
+    if (!ids.size) return;
+    let changed = false;
+    await Promise.all([...ids].map(async (id) => {
+        try {
+            const r = await fetch(`/api/ilfund?id=${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } });
+            if (!r.ok) return;                       // 404/522 (delisted/blocked id) → leave as number
+            const j = await r.json();
+            if (j && (j.name || j.type)) { window._ilFundInfo[id] = { name: j.name || null, type: j.type || 'קרן סל' }; changed = true; }
+        } catch (e) { /* leave as-is */ }
+    }));
+    if (!changed) return;
+    // Stamp the resolved name/type onto every matching holding across all portfolios.
+    for (const c of clients) {
+        if (!Array.isArray(c.holdings)) continue;
+        for (const h of c.holdings) {
+            const t = (h.ticker || '').replace(/\.TA$/i, '').toUpperCase();
+            const info = window._ilFundInfo[t];
+            if (info) { h.typeLabel = info.type; if (info.name) h.name = info.name; }
+        }
+    }
+    if (typeof renderClientCards === 'function') renderClientCards();          // names (task 4)
+    if (typeof renderExposureSection === 'function') renderExposureSection();  // sectors (task 3)
+}
+if (typeof window !== 'undefined') window._enrichAllILFunds = _enrichAllILFunds;
+
 async function _enrichHoldings52w(client) {
     if (!client || !Array.isArray(client.holdings)) return;
     const proxyOf = (h) => (typeof _proxySymbolFor === 'function') ? _proxySymbolFor(h.ticker) : null;

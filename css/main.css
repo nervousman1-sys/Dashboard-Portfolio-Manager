@@ -6983,8 +6983,16 @@ body.filter-modal-open::after {
     overflow: hidden;
 }
 
-.sidebar:not(.expanded) .sidebar-logout {
+/* Collapsed footer buttons (logout + theme): center the icon EXACTLY over the nav icons above.
+   Hiding the 0-width label removes the lone extra flex child, so the 12px gap can't push the icon
+   ~6px off-centre (same root cause + fix as the nav-item / hamburger alignment). */
+.sidebar:not(.expanded) .sidebar-logout,
+.sidebar:not(.expanded) .sidebar-theme-btn {
     justify-content: center;
+    gap: 0;
+}
+.sidebar:not(.expanded) .sidebar-logout-text {
+    display: none;
 }
 
 .sidebar-logout:hover {

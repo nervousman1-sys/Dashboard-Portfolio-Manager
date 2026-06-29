@@ -25,9 +25,17 @@ const UA = {
 
 async function fetchHtml(url, viaProxy) {
     const target = viaProxy ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
-    const r = await fetch(target, { headers: UA });
-    if (!r.ok) throw new Error(`http ${r.status}`);
-    return await r.text();
+    // Per-source timeout so a hanging/blocked source (e.g. a Cloudflare 522) fails fast instead of
+    // stalling the whole resolution — the next ATTEMPT (or the next id in the batch) proceeds quickly.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    try {
+        const r = await fetch(target, { headers: UA, signal: ctrl.signal });
+        if (!r.ok) throw new Error(`http ${r.status}`);
+        return await r.text();
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 // Classify the Israeli security type (Hebrew) from its name + the source page kind.

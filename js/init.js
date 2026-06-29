@@ -344,6 +344,9 @@ async function init() {
     // rather than a spinner, and a populated result shows the cards.
     if (typeof window !== 'undefined') window._clientsLoading = false;
     if (typeof renderClientCards === 'function') renderClientCards();
+    // Resolve Israeli numeric-id funds across ALL portfolios → real names on the cards + proper
+    // sector buckets in the breakdown (instead of the raw number / "אחר"). Non-blocking.
+    if (typeof _enrichAllILFunds === 'function') _enrichAllILFunds();
 
     // ── Phase 1.1: Probe transactions table (BLOCKING — must complete before any sell/buy) ──
     // Ensures _supaTransactionsAvailable is set correctly before any user action.
