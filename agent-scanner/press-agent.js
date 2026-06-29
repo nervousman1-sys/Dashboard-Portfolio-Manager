@@ -145,15 +145,22 @@ async function fetchPressReleaseText(cikInt, accNoDashes) {
     const idx = await secGetJSON(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/index.json`);
     const items = idx && idx.directory && Array.isArray(idx.directory.item) ? idx.directory.item : [];
     if (!items.length) return null;
-    const ex = items.find(f => /ex.?99/i.test(f.name || '')) || items.find(f => /(press|release|99)/i.test((f.name || '') + ' ' + (f.type || '')));
+    // ONLY real HTML exhibit documents (never the .txt full-submission, .xml, or binary/zip parts).
+    const htmls = items.filter(f => /\.html?$/i.test(f.name || '') && !/^0+\.txt$/i.test(f.name || ''));
+    const ex = htmls.find(f => /ex.?99/i.test(f.name || ''))
+        || htmls.find(f => /(press|release)/i.test((f.name || '') + ' ' + (f.type || '') + ' ' + (f.description || '')));
     if (!ex) return null;
     const html = await secGetText(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/${ex.name}`);
-    if (!html) return null;
+    if (!html || html.slice(0, 2) === 'PK' || /[�]/.test(html.slice(0, 300))) return null;  // binary/zip guard
     const text = html
         .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
         .replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
-    return text ? text.slice(0, 1400) : null;
+    if (!text || text.length < 50) return null;
+    // Sanity: a real press release is overwhelmingly printable ASCII. Reject decoded binary garbage.
+    const printable = (text.match(/[\x20-\x7E]/g) || []).length / text.length;
+    if (printable < 0.9) return null;
+    return text.slice(0, 1400);
 }
 
 // ── 4. Build the alert; enrich the Hebrew with Gemini when available ──────────
