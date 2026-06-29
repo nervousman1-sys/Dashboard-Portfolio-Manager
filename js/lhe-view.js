@@ -8,6 +8,7 @@
 let _lheTimer = null;
 let _lheSig = '';
 let _lheLoaded = false;
+let _lheLastStatus = null;
 const LHE_CACHE = 'lhe_signals_v1';
 
 // ── Open as a page: hide the dashboard chrome, show #lhePage (same pattern as openReportsPage) ──
@@ -30,8 +31,10 @@ function openLHEPage() {
     _lheRenderShell();
     window.scrollTo(0, 0);
     _lheLoad();
+    // 24/7 heartbeat WITHOUT rebuilding the body — only the status line refreshes in place, so the
+    // page never jumps and open cards stay open. Fresh data loads on open / manual ⟳.
     if (_lheTimer) clearInterval(_lheTimer);
-    _lheTimer = setInterval(() => { if (document.getElementById('lheBody')) _lheLoad(); }, 120000);
+    _lheTimer = setInterval(() => { if (document.getElementById('lheStatus')) _lheTick(); }, 60000);
 }
 
 function closeLHEPage() {
@@ -97,6 +100,7 @@ async function _lheLoad(force) {
         if (sigRes.error) throw sigRes.error;
         rows = sigRes.data || [];
         status = stRes && stRes.data ? stRes.data : null;
+        _lheLastStatus = status;
     } catch (e) {
         if (!_lheLoaded) body.innerHTML = `<div class="lhe-empty">שגיאה בטעינת מנוע הנזילות. נסה לרענן בעוד רגע.<br><small>${(e && e.message) || ''}</small></div>`;
         return;
@@ -120,10 +124,43 @@ async function _lheLoad(force) {
     }
     _lheSig = sig;
     _lheLoaded = true;
-    const _scrollY = window.scrollY;                     // preserve scroll across the rebuild
+    // Preserve the user's open cards + the real scroll position (the page scrolls inside an inner
+    // container, not window) across the rebuild — so a refresh never collapses cards or jumps.
+    const _open = new Set([...body.querySelectorAll('.lhe-card:not(.collapsed)')].map(c => c.id));
+    const _sc = _lheScrollEl();
+    const _top = _sc ? _sc.scrollTop : 0;
     body.innerHTML = _lheBuildHTML(rows, status);
-    if (window.scrollY !== _scrollY) window.scrollTo(0, _scrollY);
+    if (_open.size) _open.forEach(id => { const c = document.getElementById(id); if (c) c.classList.remove('collapsed'); });
+    if (_sc && _sc.scrollTop !== _top) _sc.scrollTop = _top;
     try { localStorage.setItem(LHE_CACHE, JSON.stringify({ rows, status })); } catch (e) { /* quota */ }
+}
+
+// The element that actually scrolls (the LHE page lives inside the app's scrolling content area,
+// not the window). Walk up from #lheBody to the nearest vertically-scrollable ancestor.
+function _lheScrollEl() {
+    let el = document.getElementById('lheBody');
+    while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+        el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+}
+
+// 24/7 heartbeat: refresh ONLY the status line in place (no body rebuild → no jump, open cards stay).
+function _lheTick() {
+    const sEl = document.getElementById('lheStatus');
+    if (!sEl) return;
+    const apply = (st) => { const cur = document.getElementById('lheStatus'); if (cur) cur.outerHTML = _lheStatusHTML(st); };
+    // re-stamp the relative time from the cached status immediately…
+    if (_lheLastStatus) apply(_lheLastStatus);
+    // …then quietly pull a fresh heartbeat (small query) and update again — body untouched.
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            supabaseClient.from('agent_status').select('*').eq('agent', 'lhe').maybeSingle()
+                .then(st => { if (st && st.data) { _lheLastStatus = st.data; apply(st.data); } }).catch(() => { });
+        }
+    } catch (e) { /* keep cached */ }
 }
 
 function _lheEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
