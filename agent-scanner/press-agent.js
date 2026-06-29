@@ -112,6 +112,13 @@ const MATERIAL_RULES = [
     { re: /\b(to acquire|acquires?|acquisition|merger|to buy|takeover|buyout|to combine with)\b/i,  category: 'ma',            sentiment: 36,  he: 'עסקת מיזוג / רכישה.' },
     { re: /\b(dividend|special distribution|raises? dividend|initiates? dividend)\b/i,               category: 'dividend',      sentiment: 34,  he: 'הכרזה / שינוי בדיבידנד.' },
     { re: /\b(convertible notes?|secondary offering|stock offering|share offering|public offering|priced.*offering|equity raise|dilution)\b/i, category: 'offering', sentiment: -26, he: 'הנפקת מניות / אג״ח (דילול אפשרי).' },
+    // Broader-but-still-material events (regulatory scrutiny, notable-investor stakes, index changes,
+    // product/data incidents, splits) — these are genuinely material to a holder and surface real news.
+    { re: /\b(draws scrutiny|under scrutiny|regulatory scrutiny|data (leak|breach)|security flaw|product recall|export ban|sanction)\b/i, category: 'lawsuit', sentiment: -32, he: 'סוגיה רגולטורית / חשיפת מידע מהותית.' },
+    { re: /\b(michael burry|warren buffett|berkshire|activist investor|elliott management|starboard|pershing square)\b.{0,40}\b(stake|bet|bets|position|shares)\b|\b(takes?|builds?|raises?|discloses?|adds? to)\b.{0,20}\bstake\b/i, category: 'other', sentiment: 16, he: 'משקיע מוסדי/אקטיביסט בולט נכנס לפוזיציה.' },
+    { re: /\b(joins the dow|added to the (dow|s&p ?500|nasdaq[- ]?100)|index inclusion|to join the (dow|nasdaq|s&p))\b/i, category: 'other', sentiment: 24, he: 'הצטרפות / שינוי במדד מרכזי.' },
+    { re: /\b(stock split|forward split|reverse split|\d+-for-\d+ split)\b/i, category: 'other', sentiment: 12, he: 'פיצול מניה (Stock Split).' },
+    { re: /\b(partnership with|strategic partnership|to supply|multi-?year (deal|agreement)|lands? .{0,20}contract|wins? .{0,20}contract)\b/i, category: 'ma', sentiment: 28, he: 'שותפות אסטרטגית / חוזה מהותי.' },
 ];
 
 function prescreen(item) {
