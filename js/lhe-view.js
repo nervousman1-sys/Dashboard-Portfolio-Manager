@@ -303,7 +303,10 @@ function _lheMapHTML(m) {
         tiles.push({ type: 'group', he: g.he, cls: g.cls, value: g.value, x: gr.x, y: gr.y, w: gr.w, h: Math.min(HEADER, gr.h) });
         const innerY = gr.y + HEADER, innerH = Math.max(0, gr.h - HEADER);
         const sorted = g.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0));
-        _lheSquarify(sorted.map(p => ({ ref: p, value: Math.max(0.02, +p.valueT || 0) })), gr.x, innerY, gr.w, innerH)
+        // Minimum DISPLAY size per pool (≥9% of the group) so even a near-zero pool (RRP) and a small
+        // one (TGA) get a readable tile — the $ value shown stays exact. Only the visual size is floored.
+        const minPool = (g.value || 1) * 0.09;
+        _lheSquarify(sorted.map(p => ({ ref: p, value: Math.max(minPool, +p.valueT || 0) })), gr.x, innerY, gr.w, innerH)
             // Clamp every pool tile strictly inside its group's inner box so a tiny tile (e.g. RRP)
             // can never spill over a neighbouring group's header.
             .forEach(r => {
