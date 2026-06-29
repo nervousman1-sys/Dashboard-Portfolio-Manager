@@ -115,7 +115,7 @@ module.exports = async (req, res) => {
             const body = String(d.body || '').slice(0, 4500);
             if (!ticker || !body) { res.status(400).json({ error: 'ticker_and_body_required' }); return; }
 
-            const memoKey = `filing:${ticker}:${String(d.headline || '').slice(0, 70)}`;
+            const memoKey = `filing:${ticker}:${String(d.headline || '').slice(0, 70)}:${body.length}`;
             if (_memo.has(memoKey)) {
                 res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
                 res.status(200).json({ ..._memo.get(memoKey), cached: true });

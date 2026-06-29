@@ -132,6 +132,7 @@ async function fetchSecFilings(ticker, cik) {
         out.push({
             ticker, company, form: r.form[i], items: r.items?.[i] || '',
             event: secEventFor(r.items?.[i] || ''), cikInt, accNoDashes,
+            primaryDoc: r.primaryDocument?.[i] || '',
             filingDate: r.filingDate[i],
             published_at: new Date(when).toISOString(),
             source_url: `https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/`,
@@ -140,27 +141,44 @@ async function fetchSecFilings(ticker, cik) {
     return out;
 }
 
-// ── 3. Pull the actual press-release text (Exhibit 99.x) from the filing ──────
-async function fetchPressReleaseText(cikInt, accNoDashes) {
-    const idx = await secGetJSON(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/index.json`);
-    const items = idx && idx.directory && Array.isArray(idx.directory.item) ? idx.directory.item : [];
-    if (!items.length) return null;
-    // ONLY real HTML exhibit documents (never the .txt full-submission, .xml, or binary/zip parts).
-    const htmls = items.filter(f => /\.html?$/i.test(f.name || '') && !/^0+\.txt$/i.test(f.name || ''));
-    const ex = htmls.find(f => /ex.?99/i.test(f.name || ''))
-        || htmls.find(f => /(press|release)/i.test((f.name || '') + ' ' + (f.type || '') + ' ' + (f.description || '')));
-    if (!ex) return null;
-    const html = await secGetText(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/${ex.name}`);
-    if (!html || html.slice(0, 2) === 'PK' || /[�]/.test(html.slice(0, 300))) return null;  // binary/zip guard
-    const text = html
+// Fetch one SEC document, strip to readable text. For the main inline-XBRL 8-K, skip the XBRL tag
+// soup + the standard cover page by starting at the first "Item X.XX" (the actual disclosure).
+async function fetchSecDocText(cikInt, accNoDashes, name, isMain) {
+    const html = await secGetText(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/${name}`);
+    if (!html || html.slice(0, 2) === 'PK') return null;                       // binary/zip guard
+    if (Array.from(html.slice(0, 300)).some(ch => ch.charCodeAt(0) === 0xFFFD)) return null;
+    let text = html
         .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
         .replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (isMain) {
+        const at = text.search(/Item\s+\d\.\d{2}/);
+        if (at > 0) text = text.slice(at);                                     // drop XBRL header + cover
+    }
     if (!text || text.length < 50) return null;
-    // Sanity: a real press release is overwhelmingly printable ASCII. Reject decoded binary garbage.
     const printable = (text.match(/[\x20-\x7E]/g) || []).length / text.length;
-    if (printable < 0.9) return null;
-    return text.slice(0, 1400);
+    if (printable < 0.9) return null;                                          // reject binary garbage
+    return text.slice(0, 4500);
+}
+
+// ── 3. Pull the actual disclosure text: EX-99 press release if present, else the main 8-K body ──
+async function fetchPressReleaseText(cikInt, accNoDashes, primaryDoc) {
+    const idx = await secGetJSON(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${accNoDashes}/index.json`);
+    const items = idx && idx.directory && Array.isArray(idx.directory.item) ? idx.directory.item : [];
+    const htmls = items.filter(f => /\.html?$/i.test(f.name || ''));
+    const ex = htmls.find(f => /ex.?99/i.test(f.name || ''))
+        || htmls.find(f => /(press|release)/i.test((f.name || '') + ' ' + (f.type || '') + ' ' + (f.description || '')));
+    // 1) the EX-99 press release (richest). 2) fall back to the main 8-K body (e.g. MicroStrategy's
+    // Reg FD filings, where the material announcement is in the 8-K itself with no exhibit).
+    if (ex) {
+        const t = await fetchSecDocText(cikInt, accNoDashes, ex.name, false);
+        if (t && t.length > 120) return t;
+    }
+    if (primaryDoc) {
+        const t = await fetchSecDocText(cikInt, accNoDashes, primaryDoc, true);
+        if (t) return t;
+    }
+    return null;
 }
 
 // ── 4. Build the alert; enrich the Hebrew with Gemini when available ──────────
@@ -176,7 +194,7 @@ async function geminiJSON(prompt) {
 
 async function buildAlert(f) {
     const ev = f.event;
-    const prText = await fetchPressReleaseText(f.cikInt, f.accNoDashes);
+    const prText = await fetchPressReleaseText(f.cikInt, f.accNoDashes, f.primaryDoc);
     const headline = `${f.company} — Form ${f.form}: ${ev.en}`;
     const body = prText || `${f.company} filed a Form ${f.form} with the SEC (Item ${f.items || '—'}: ${ev.en}) on ${f.filingDate}.`;
     const base = {
