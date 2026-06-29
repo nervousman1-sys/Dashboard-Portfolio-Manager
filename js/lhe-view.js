@@ -415,7 +415,9 @@ function _lheCardHTML(c) {
     const support = (p.thesis && typeof p.thesis.support === 'number')
         ? p.thesis.support
         : Math.round(Math.max(0, Math.min(100, 50 + (0.55 * _macroC + 0.45 * _liqC) * 55)));
-    const supportVerdict = (p.thesis && p.thesis.supportVerdict) || (support >= 54 ? 'תומך' : support <= 46 ? 'נגד' : 'ניטרלי');
+    // Verdict + colour are ALWAYS derived from the displayed number here, so the same score always
+    // shows the same word/colour (independent of any older verdict the agent may have stored).
+    const supportVerdict = support >= 54 ? 'תומך' : support <= 46 ? 'נגד' : 'ניטרלי';
     const supportCls = supportVerdict === 'תומך' ? 'lhe-score-good' : supportVerdict === 'נגד' ? 'lhe-score-bad' : 'lhe-score-neu';
 
     const flagChips = flags.map(f => `<span class="lhe-flag">${_lheEsc(_lheFlagHe(f))}</span>`).join('');
