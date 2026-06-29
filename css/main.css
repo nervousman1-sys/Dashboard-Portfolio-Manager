@@ -2831,13 +2831,15 @@ body.filter-modal-open::after {
     padding-bottom: 8px;
 }
 
-/* Holdings / Transactions: allow scrolling inside the table area */
+/* Holdings / Transactions / Press-releases: allow scrolling inside the tab so nothing is cut off */
 #tab-holdings,
 #tab-transactions,
-#tab-sectors {
+#tab-sectors,
+#tab-pressreleases {
     overflow-y: auto;
     overflow-x: hidden;
 }
+#tab-pressreleases { padding-bottom: 12px; }
 
 .benchmark-legend {
     display: flex;
