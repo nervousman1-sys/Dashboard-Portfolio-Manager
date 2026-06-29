@@ -82,7 +82,11 @@ function _lheRenderShell() {
 async function _lheLoad(force) {
     const body = document.getElementById('lheBody');
     if (!body) return;
-    if (force) { body.innerHTML = '<div class="lhe-loading">מרענן…</div>'; _lheSig = ''; }
+    // Capture the user's open cards + scroll BEFORE any wipe, so a manual ⟳ keeps their view.
+    const _openIds = new Set([...body.querySelectorAll('.lhe-card:not(.collapsed)')].map(c => c.id));
+    const _scEl = _lheScrollEl(); const _scTop = _scEl ? _scEl.scrollTop : 0;
+    if (force && !_openIds.size) { body.innerHTML = '<div class="lhe-loading">מרענן…</div>'; }
+    if (force) _lheSig = '';
     // Instant paint from cache while the fresh fetch is in flight.
     if (!force && body.querySelector('.lhe-loading')) {
         try {
@@ -124,14 +128,11 @@ async function _lheLoad(force) {
     }
     _lheSig = sig;
     _lheLoaded = true;
-    // Preserve the user's open cards + the real scroll position (the page scrolls inside an inner
-    // container, not window) across the rebuild — so a refresh never collapses cards or jumps.
-    const _open = new Set([...body.querySelectorAll('.lhe-card:not(.collapsed)')].map(c => c.id));
-    const _sc = _lheScrollEl();
-    const _top = _sc ? _sc.scrollTop : 0;
     body.innerHTML = _lheBuildHTML(rows, status);
-    if (_open.size) _open.forEach(id => { const c = document.getElementById(id); if (c) c.classList.remove('collapsed'); });
-    if (_sc && _sc.scrollTop !== _top) _sc.scrollTop = _top;
+    // Restore the user's open cards + the real scroll position (captured before the wipe) so a
+    // refresh never collapses cards or jumps. The page scrolls inside an inner container, not window.
+    if (_openIds.size) _openIds.forEach(id => { const c = document.getElementById(id); if (c) c.classList.remove('collapsed'); });
+    if (_scEl && _scEl.scrollTop !== _scTop) _scEl.scrollTop = _scTop;
     try { localStorage.setItem(LHE_CACHE, JSON.stringify({ rows, status })); } catch (e) { /* quota */ }
 }
 
