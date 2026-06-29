@@ -43,6 +43,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persist
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const clampSent = (n) => Math.max(-100, Math.min(100, Math.round(Number(n) || 0)));
+// Strip control chars (incl. NUL) — Postgres JSONB rejects them ("unsupported Unicode escape").
+const clean = (s) => Array.from(String(s == null ? '' : s)).filter(ch => { const c = ch.charCodeAt(0); return c === 9 || c === 10 || c >= 32; }).join('').replace(/\s+/g, ' ').trim();
 const CATEGORIES = ['buyback', 'ceo_change', 'guidance_up', 'guidance_down', 'lawsuit', 'ma', 'dividend', 'offering', 'other'];
 
 // ── 8-K item code → {category, baseline sentiment, EN title, HE title} ────────
@@ -211,7 +213,11 @@ async function buildAlert(f) {
 
 // ── 5. ROUTING: fan the alert out to every portfolio that holds the ticker ────
 async function routeAlert(alert) {
-    const { data, error } = await supabase.rpc('route_portfolio_alert', { p_secret: AGENT_WRITE_SECRET, p_alert: alert });
+    // Sanitize every string field — SEC press-release text can carry NUL/control bytes that
+    // Postgres JSONB rejects ("unsupported Unicode escape sequence"). Numbers/booleans pass through.
+    const safe = {};
+    for (const k in alert) safe[k] = (typeof alert[k] === 'string') ? clean(alert[k]) : alert[k];
+    const { data, error } = await supabase.rpc('route_portfolio_alert', { p_secret: AGENT_WRITE_SECRET, p_alert: safe });
     if (error) { log('route error', alert.ticker, error.message); return 0; }
     return Number(data) || 0;
 }
