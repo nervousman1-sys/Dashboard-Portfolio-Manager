@@ -172,6 +172,8 @@ function _prOpenModal(id) {
     const modal = document.getElementById('prModal');
     const overlay = document.getElementById('prModalOverlay');
     if (!modal || !overlay) return;
+    const an = a._analysis;
+    const loading = `<div class="pa-an-loading"><span class="pa-an-spin"></span> מנתח את הדיווח…</div>`;
     modal.innerHTML = `
         <div class="pa-modal-head">
             <div class="pa-modal-title">
@@ -183,8 +185,12 @@ function _prOpenModal(id) {
         </div>
         <div class="pa-modal-company">${_paEsc(a.company || '')} · ${_paTimeAgo(a.created_at || a.published_at)} · ${_paEsc(a.source || 'SEC EDGAR')}</div>
         <div class="pa-modal-section">
-            <div class="pa-modal-h">ניתוח פונדמנטלי של הסוכן</div>
-            <p class="pa-modal-analysis" dir="rtl">${_paEsc(a.analysis_he || a.summary_he || '')}</p>
+            <div class="pa-modal-h">תקציר הנקודות המהותיות</div>
+            <div id="prPoints" dir="rtl">${an ? _prPointsHTML(an, a) : loading}</div>
+        </div>
+        <div class="pa-modal-section">
+            <div class="pa-modal-h">השלכות הדיווח</div>
+            <div id="prImpl" class="pa-modal-analysis" dir="rtl">${an ? _paEsc(an.implications_he || a.analysis_he || '') : loading}</div>
         </div>
         <div class="pa-modal-section">
             <div class="pa-modal-h">הדיווח המקורי (מתוך הגשת ה-SEC)</div>
@@ -195,7 +201,41 @@ function _prOpenModal(id) {
             </div>
         </div>`;
     overlay.classList.add('open');
+    if (!an) _prFetchAnalysis(a);
 }
+
+// Build the "material points" block: AI bullet points (+ the one-line summary if present).
+function _prPointsHTML(an, a) {
+    const pts = (an && Array.isArray(an.points_he) && an.points_he.length) ? an.points_he : null;
+    const head = (an && an.summary_he) ? `<p class="pa-an-tldr">${_paEsc(an.summary_he)}</p>` : '';
+    if (pts) return head + '<ul class="pa-an-points">' + pts.map(p => `<li>${_paEsc(p)}</li>`).join('') + '</ul>';
+    return head + `<p class="pa-modal-analysis">${_paEsc((a && (a.summary_he || a.analysis_he)) || '')}</p>`;
+}
+
+// On-demand deep analysis (material points + implications) via the Gemini-backed serverless fn.
+// Result is cached on the alert object so re-opening is instant.
+async function _prFetchAnalysis(a) {
+    try {
+        const r = await fetch('/api/vision?mode=filing', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker: a.ticker, company: a.company, category: a.category, headline: a.headline_en, body: a.body_en }),
+        });
+        const j = r.ok ? await r.json() : null;
+        if (j && (Array.isArray(j.points_he) && j.points_he.length || j.implications_he)) {
+            a._analysis = j;
+        } else {
+            a._analysis = { points_he: [], implications_he: a.analysis_he || '', summary_he: a.summary_he || '' };
+        }
+    } catch (e) {
+        a._analysis = { points_he: [], implications_he: a.analysis_he || '', summary_he: a.summary_he || '' };
+    }
+    // Render into the open modal (if it's still showing this alert).
+    const pEl = document.getElementById('prPoints');
+    const iEl = document.getElementById('prImpl');
+    if (pEl) pEl.innerHTML = _prPointsHTML(a._analysis, a);
+    if (iEl) iEl.innerHTML = _paEsc(a._analysis.implications_he || a.analysis_he || '');
+}
+if (typeof window !== 'undefined') window._prFetchAnalysis = _prFetchAnalysis;
 function _prCloseModal() { const o = document.getElementById('prModalOverlay'); if (o) o.classList.remove('open'); }
 if (typeof window !== 'undefined') { window._prOpenModal = _prOpenModal; window._prCloseModal = _prCloseModal; }
 

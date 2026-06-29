@@ -140,6 +140,12 @@
 .pa-modal-section { margin-bottom: 18px; }
 .pa-modal-h { font-size: 0.82rem; font-weight: 800; color: var(--accent-blue, #00e5ff); margin-bottom: 8px; text-transform: none; }
 .pa-modal-analysis { font-size: 0.95rem; line-height: 1.6; color: var(--text-primary, #f5f5f5); margin: 0; }
+.pa-an-loading { display: flex; align-items: center; gap: 8px; color: var(--text-secondary, #9aa3b2); font-size: 0.88rem; padding: 4px 0; }
+.pa-an-spin { width: 14px; height: 14px; border: 2px solid rgba(0,229,255,0.25); border-top-color: var(--accent-blue, #00e5ff); border-radius: 50%; animation: pa-spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes pa-spin { to { transform: rotate(360deg); } }
+.pa-an-tldr { font-size: 0.96rem; font-weight: 800; color: var(--text-primary, #f5f5f5); margin: 0 0 9px; line-height: 1.5; }
+.pa-an-points { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 7px; }
+.pa-an-points li { font-size: 0.92rem; line-height: 1.55; color: var(--text-primary, #f5f5f5); }
 .pa-modal-en { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .pa-modal-en-head { font-size: 0.95rem; font-weight: 800; color: var(--text-primary, #f5f5f5); margin-bottom: 8px; line-height: 1.4; }
 .pa-modal-en-body { font-size: 0.88rem; line-height: 1.6; color: var(--text-secondary, #c3c9d4); margin: 0 0 10px; }

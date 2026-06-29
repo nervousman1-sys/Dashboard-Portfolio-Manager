@@ -103,6 +103,73 @@ module.exports = async (req, res) => {
         return;
     }
 
+    // mode=filing — deep Hebrew analysis of a SEC 8-K press release: the material points + the
+    // implications for the investor. POST body { ticker, company, category, headline, body }.
+    // Multi-model fallback dodges single-model 429s. Memoized per (ticker + headline).
+    if (req.query.mode === 'filing') {
+        try {
+            let d = {};
+            if (req.method === 'POST') d = (typeof req.body === 'object' && req.body) ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch (e) { return {}; } })();
+            else { d = { ticker: req.query.ticker, company: req.query.company, category: req.query.category, headline: req.query.headline, body: req.query.body }; }
+            const ticker = String(d.ticker || '').trim().toUpperCase();
+            const body = String(d.body || '').slice(0, 4500);
+            if (!ticker || !body) { res.status(400).json({ error: 'ticker_and_body_required' }); return; }
+
+            const memoKey = `filing:${ticker}:${String(d.headline || '').slice(0, 70)}`;
+            if (_memo.has(memoKey)) {
+                res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+                res.status(200).json({ ..._memo.get(memoKey), cached: true });
+                return;
+            }
+
+            const prompt = [
+                'אתה אנליסט אקוויטי בכיר. לפניך הודעה לעיתונות / דיווח 8-K שחברה נסחרת הגישה לרשות ניירות ערך האמריקאית (SEC).',
+                'קרא אותו והחזר JSON בלבד, בעברית מקצועית וברורה, ללא הקדמות.',
+                `חברה: ${String(d.company || ticker)} (${ticker}) | קטגוריה: ${String(d.category || '')}`,
+                `כותרת: ${String(d.headline || '')}`,
+                `טקסט הדיווח: ${body}`,
+                '',
+                'מבנה ה-JSON:',
+                '{',
+                '  "summary_he": "משפט אחד שמסכם מה קרה (TL;DR)",',
+                '  "points_he": ["3-5 נקודות מהותיות קצרות וקונקרטיות מתוך הדיווח — כולל מספרים/שמות/תאריכים אם קיימים"],',
+                '  "implications_he": "2-4 משפטים: מה ההשלכות של הדיווח על החברה ועל המניה — חיובי/שלילי, טווח קצר מול ארוך, וסיכונים/הזדמנויות עיקריים"',
+                '}',
+            ].join('\n');
+
+            const payload = JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 1200, thinkingConfig: { thinkingBudget: 0 } },
+            });
+
+            let out = null, lastErr = '';
+            for (const model of MODELS) {
+                const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
+                });
+                if (!gr.ok) { lastErr = `gemini(${model}) ${gr.status}`; continue; }
+                const gj = await gr.json();
+                const txt = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('').trim() || '';
+                try { out = JSON.parse(txt); } catch (e) { out = null; }
+                if (out) break;
+            }
+            if (!out || typeof out !== 'object') throw new Error(lastErr || 'no_model_returned');
+
+            const result = {
+                summary_he: String(out.summary_he || '').trim(),
+                points_he: Array.isArray(out.points_he) ? out.points_he.map(s => String(s).trim()).filter(Boolean).slice(0, 6) : [],
+                implications_he: String(out.implications_he || '').trim(),
+            };
+            _memo.set(memoKey, result);
+            res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+            res.status(200).json(result);
+        } catch (e) {
+            res.setHeader('Cache-Control', 's-maxage=60');
+            res.status(502).json({ error: 'ai_failed', message: e.message });
+        }
+        return;
+    }
+
     try {
         const img = String(req.query.img || '');
         const mode = PROMPTS[req.query.mode] ? req.query.mode : 'transcribe';

@@ -453,6 +453,7 @@ function renderExposureSection() {
                     }]
                 },
                 options: {
+                    animation: false,   // no re-animation on re-render → no jumpiness
                     responsive: true, maintainAspectRatio: false,
                     cutout: '70%',
                     plugins: {
@@ -567,6 +568,7 @@ async function _renderCardSparkline(client, renderKey) {
             }]
         },
         options: {
+            animation: false,   // no re-animation on re-render → no jumpiness
             responsive: true,
             maintainAspectRatio: false,
             layout: { padding: { top: 6, bottom: 6 } },
@@ -1228,8 +1230,24 @@ function setPortfolioView(mode, btn) {
     renderClientCards();
 }
 
+// The element that actually scrolls the dashboard (window or an inner content wrapper).
+function _dashScrollEl() {
+    let el = document.getElementById('clientsGrid');
+    while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 4) return el;
+        el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+}
+
 function renderClientCards() {
     _cardRenderKey++;
+    // Preserve scroll across the full rebuild so a background price refresh / enrichment never makes
+    // the dashboard jump under the user.
+    const _sc = _dashScrollEl();
+    const _scTop = _sc ? _sc.scrollTop : 0;
+    const _restoreScroll = () => { if (_sc && _scTop && Math.abs(_sc.scrollTop - _scTop) > 1) _sc.scrollTop = _scTop; };
     const grid = document.getElementById('clientsGrid');
     grid.innerHTML = '';
     // Restore view mode after innerHTML wipe — and sync the toggle button + subtitle to the
@@ -1601,6 +1619,7 @@ function renderClientCards() {
                     }]
                 },
                 options: {
+                    animation: false,   // no grow-animation on every re-render → no dashboard "jumps"
                     responsive: true,
                     maintainAspectRatio: true,
                     cutout: '55%',
@@ -1622,6 +1641,8 @@ function renderClientCards() {
             _renderCardSparkline(client, renderKey);
         }, 50);
     });
+    _restoreScroll();
+    requestAnimationFrame(_restoreScroll);
 }
 
 // ========== REFRESH DASHBOARD ==========
