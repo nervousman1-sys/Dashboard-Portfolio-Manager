@@ -323,7 +323,7 @@ function _lheMapHTML(m) {
         const scope = p.scope === 'global' ? '🌍' : '🇺🇸';
         const ultra = t.w < 16 || t.h < 14;        // true sliver (e.g. RRP) → color + tooltip only
         const vert = !ultra && t.w < 72 && t.h > 90; // narrow + tall (e.g. crypto) → rotated label fits
-        const low = !ultra && !vert && t.h < 64;   // short tile → name + value on one compact line
+        const low = !ultra && !vert && (t.h < 64 || t.w < 96); // short OR narrow (e.g. TGA/RRP) → compact small text
         const name = _lheEsc(p.short || p.label);
         const title = `${_lheEsc(p.label)} — $${+p.valueT}T (${p.scope === 'global' ? 'גלובלי' : 'ארה״ב'})`;
         if (ultra) return `<div class="lhe-tm-tile lhe-tm-${p.dir || 'flat'} lhe-tm-ultra" style="${style}" title="${title}"></div>`;

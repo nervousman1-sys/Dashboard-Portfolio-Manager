@@ -75,10 +75,10 @@
 .lhe-tm-val { flex-shrink: 0; }
 .lhe-tm-val { font-size: 0.98rem; font-weight: 800; color: #fff; line-height: 1.3; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
 /* Short tiles: name + value on ONE compact line so the label is always shown (קריפטו / TGA / מזומן) */
-.lhe-tm-low { flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 5px; padding: 2px 5px; }
+.lhe-tm-low { flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 1px 4px; padding: 2px 3px; }
 .lhe-tm-low .lhe-tm-scope { display: none; }
-.lhe-tm-low .lhe-tm-name { font-size: 0.72rem; -webkit-line-clamp: 1; }
-.lhe-tm-low .lhe-tm-val { font-size: 0.74rem; }
+.lhe-tm-low .lhe-tm-name { font-size: 0.68rem; -webkit-line-clamp: 1; }
+.lhe-tm-low .lhe-tm-val { font-size: 0.7rem; }
 /* ultra-sliver (e.g. RRP): no padding/border so a 2px-wide tile can't overflow its group */
 .lhe-tm-ultra { padding: 0; border-width: 0; }
 /* narrow-but-tall tile (e.g. crypto): rotate the label so name + value fit vertically */
