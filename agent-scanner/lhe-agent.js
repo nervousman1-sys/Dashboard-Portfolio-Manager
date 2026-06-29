@@ -246,7 +246,7 @@ function buildThesis(struct, macroFit, hpi, result) {
   const liqC = clamp((hpi.score - 50) / 50);
   const supportNet = 0.55 * macroC + 0.45 * liqC;
   const support = Math.round(Math.max(0, Math.min(100, 50 + supportNet * 55)));
-  const supportVerdict = support >= 56 ? 'תומך' : support <= 44 ? 'נגד' : 'ניטרלי';
+  const supportVerdict = support >= 54 ? 'תומך' : support <= 46 ? 'נגד' : 'ניטרלי';
 
   const regHe = { flood: 'הצפת נזילות', expansion: 'התרחבות נזילות', neutral: 'נזילות מאוזנת', drain: 'ניקוז נזילות', drought: 'בצורת נזילות' }[hpi.regime] || hpi.regime;
   const macroLine = macroFit.verdict === 'tailwind'
