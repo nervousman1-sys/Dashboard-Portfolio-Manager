@@ -48,7 +48,6 @@ function openTechnicalForTicker(ticker) {
     // otherwise the left-open page corrupts Back navigation (lands on a blank page until refresh).
     if (typeof closeScannerAgentPage === 'function' && document.getElementById('scannerPage')?.classList.contains('active')) closeScannerAgentPage();
     if (typeof closeLHEPage === 'function' && document.getElementById('lhePage')?.classList.contains('active')) closeLHEPage();
-    if (typeof closeDecisionCorePage === 'function' && document.getElementById('decisionCorePage')?.classList.contains('active')) closeDecisionCorePage();
     openTechnicalPage();
     if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
     if (typeof updateURLState === 'function') updateURLState({ view: 'technical' });

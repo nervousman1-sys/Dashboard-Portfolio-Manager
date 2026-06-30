@@ -108,6 +108,20 @@ const ST_SCENARIOS = [
         risk_he: 'אינפלציה מקומית ופיחות השקל פוגעים בכוח הקנייה ובמניות הצרכניות המקומיות, אך מיטיבים עם יצואניות ועם חשיפה דולרית. בנקים מקומיים עשויים ליהנות מסביבת ריבית גבוהה. חשיפה גבוהה למניות ישראליות שקליות מגדילה את הרגישות.',
         hedge: { asset: 'חשיפה דולרית / מדדי חו״ל (S&P 500)', reason_he: 'פיחות השקל מגדיל את הערך השקלי של נכסים דולריים — קיזוז ישיר לסיכון המקומי.' },
     },
+    {
+        id: 'market_crash_2008', title: 'קריסת שוק כללית (סגנון 2008/2020)', icon: '📉',
+        desc: 'קריסה דפלציונית חדה — בריחה לנכסי מקלט, אג״ח וזהב מזנקים.',
+        deltas: { rate: -1.0, infl: -1.0, usd: 5, vix: 35, tech: -32, ils: 6 },
+        risk_he: 'קריסת שוק רחבה (כמו 2008 או מרץ 2020) — זינוק חד ב-VIX ובריחה מנכסי סיכון. מניות, ובמיוחד טכנולוגיה ובטא גבוהה, נופלות בחדות; הון בורח לנכסי מקלט — אג״ח ממשלתי ארוך, זהב והדולר מזנקים. ככל שהתיק מרוכז יותר במניות צמיחה — הפגיעה עמוקה יותר.',
+        hedge: { asset: 'אג״ח ממשלתי ארוך + זהב (TLT, GLD)', reason_he: 'בקריסות דפלציוניות אג״ח ארוך וזהב מציגים קורלציה הפוכה חזקה למניות ומשמשים מקלט קלאסי.' },
+    },
+    {
+        id: 'inflation_crash_2022', title: 'קריסה אינפלציונית (סגנון 2022)', icon: '🔥',
+        desc: 'אינפלציה + הידוק אגרסיבי — גם מניות וגם אג״ח נופלים יחד.',
+        deltas: { rate: 2.0, infl: 3.0, usd: 4, vix: 20, tech: -24, ils: 3 },
+        risk_he: 'קריסה אינפלציונית (כמו 2022) שונה מהותית: אינפלציה גבוהה מאלצת הידוק מוניטרי אגרסיבי, וגם מניות וגם אג״ח ארוך נופלים בו-זמנית — "אין לאן לברוח". התיק הקלאסי 60/40 נכשל בתרחיש זה. רק אג״ח קצר־מח״מ, זהב, אנרגיה וסחורות שרדו היסטורית.',
+        hedge: { asset: 'אג״ח קצר / זהב / אנרגיה (SGOV, GLD, XLE)', reason_he: 'בניגוד לקריסה דפלציונית — כאן אג״ח ארוך הוא מלכודת; ההגנה היא מח״מ קצר, זהב וסחורות שעולות עם האינפלציה.' },
+    },
 ];
 
 // ── THE CORE LOGIC: project the scenario onto the portfolio. Pure function, no side effects. ──
@@ -207,6 +221,7 @@ let _stScenarioId = 'fed_hike';
 let _stCustom = { rate: 0.5, infl: 1.0, usd: -2, vix: 6 };   // custom-slider state
 let _stBaseline = null;                                       // live macro baseline (real)
 let _stResult = null;
+let _stProximity = null;   // crisis-detection indicator (migrated from the old Decision-Core page)
 
 // ── Open / close as a routed page (mirrors the LHE / Decision-Core pages) ─────
 function openStressTestPage() {
@@ -233,6 +248,8 @@ function openStressTestPage() {
     _stRenderShell();
     window.scrollTo(0, 0);
     _stLoadBaseline();
+    // Crisis-detection indicator (24/7 agent data) — fill in async.
+    _stComputeProximity().then(p => { _stProximity = p; const el = document.getElementById('stProxCard'); if (el) el.innerHTML = _stProximityHTML(); }).catch(() => { });
 }
 
 function closeStressTestPage() {
@@ -305,6 +322,94 @@ function _stActiveDeltas() {
 
 function _stEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
+// ── Crisis-detection indicator (migrated here from the old Decision-Core page) ────────────────
+// PRIMARY: the 24/7 crisis-agent's latest reading from Supabase. FALLBACK: live client-side compute.
+async function _stComputeProximity() {
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('crisis_indicator').select('score,label,parts,assessment_he,created_at')
+                .eq('status', 'active').order('created_at', { ascending: false }).limit(1);
+            if (!error && data && data.length && data[0].score != null && Array.isArray(data[0].parts) && data[0].parts.length) {
+                const r = data[0];
+                return { score: r.score, parts: r.parts, partial: false, assessment: r.assessment_he || '', asOf: r.created_at };
+            }
+        }
+    } catch (e) { /* fall through to live computation */ }
+
+    const parts = []; let missing = 0;
+    const num = (x) => (x && typeof x === 'object') ? (x.value ?? x.actual ?? null) : x;
+    let fg = null;
+    try { const r = await fetch('/api/feargreed', { headers: { Accept: 'application/json' } }); if (r.ok) { const j = await r.json(); fg = (j && (j.score ?? j.value)); } } catch (e) { }
+    if (fg != null && isFinite(fg)) parts.push({ key: 'הערכות יתר ושאננות', score: Math.round(fg), w: 0.25, note: `מדד פחד/חמדנות: ${Math.round(fg)}` });
+    else { missing++; parts.push({ key: 'הערכות יתר ושאננות', score: 50, w: 0.25, note: 'נתון חלקי' }); }
+
+    let macro = (typeof window !== 'undefined' && window._macroHeadUS) ? window._macroHeadUS : null;
+    if (!macro || macro.cpi == null) {
+        try { const r = await fetch(`/api/macro?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } }); if (r.ok) { const j = await r.json(); macro = (j && (j.us || j.US)) || macro; } } catch (e) { }
+    }
+    const cpi = macro ? num(macro.cpi) : null;
+    if (cpi != null && isFinite(cpi)) parts.push({ key: 'לחצי אינפלציה', score: Math.round(Math.max(0, Math.min(100, (cpi - 1.5) / 4 * 100))), w: 0.2, note: `CPI ${cpi}%` });
+    else { missing++; parts.push({ key: 'לחצי אינפלציה', score: 50, w: 0.2, note: 'נתון חלקי' }); }
+    const rate = macro ? (num(macro.fed_rate) ?? num(macro.rate) ?? num(macro.fedRate) ?? num(macro.interestRate)) : null;
+    if (rate != null && isFinite(rate)) parts.push({ key: 'מדיניות מוניטרית מהדקת', score: Math.round(Math.max(0, Math.min(100, rate / 6 * 100))), w: 0.2, note: `ריבית ${rate}%` });
+    else { missing++; parts.push({ key: 'מדיניות מוניטרית מהדקת', score: 50, w: 0.2, note: 'נתון חלקי' }); }
+    let spread = null;
+    try {
+        const r = await fetch('/api/yields', { headers: { Accept: 'application/json' } });
+        if (r.ok) { const j = await r.json(); const us = (j && (j.us || j.US)) || j; let y10 = null, y2 = null;
+            if (Array.isArray(us)) { const find = (l) => { const e = us.find(x => x && x.label === l); return e ? Number(e.value) : null; }; y10 = find('10Y'); y2 = find('2Y'); }
+            else { y10 = num(us && (us.y10 || us['10Y'] || us.tenYear)); y2 = num(us && (us.y2 || us['2Y'] || us.twoYear)); }
+            if (y10 != null && y2 != null && isFinite(y10) && isFinite(y2)) spread = y10 - y2;
+        }
+    } catch (e) { }
+    if (spread != null && isFinite(spread)) parts.push({ key: 'היפוך עקום התשואות', score: Math.round(Math.max(0, Math.min(100, (0.8 - spread) / 2 * 100))), w: 0.2, note: `מרווח 10ש'−2ש' ${spread.toFixed(2)}%` });
+    else { missing++; parts.push({ key: 'היפוך עקום התשואות', score: 50, w: 0.2, note: 'נתון חלקי' }); }
+    let vix = null;
+    try { const r = await fetch('/api/quote?symbols=%5EVIX', { headers: { Accept: 'application/json' } }); if (r.ok) { const j = await r.json(); const v = j && (j['^VIX'] || j.VIX); vix = v && (v.price ?? v.regularMarketPrice ?? v.value); } } catch (e) { }
+    if (vix != null && isFinite(vix)) parts.push({ key: 'תנודתיות שוק (VIX)', score: Math.round(Math.max(0, Math.min(100, (vix - 12) / 33 * 100))), w: 0.15, note: `VIX ${Number(vix).toFixed(1)}` });
+    else { missing++; parts.push({ key: 'תנודתיות שוק (VIX)', score: 40, w: 0.15, note: 'נתון חלקי' }); }
+
+    const wsum = parts.reduce((s, p) => s + p.w, 0);
+    const score = Math.round(parts.reduce((s, p) => s + p.score * p.w, 0) / (wsum || 1));
+    return { score, parts, partial: missing >= 3 };
+}
+
+function _stAgo(ts) {
+    if (!ts) return '';
+    const d = new Date(ts); if (isNaN(d)) return '';
+    let s = Math.round((Date.now() - d.getTime()) / 1000); if (s < 0) s = 0;
+    if (s < 90) return 'ממש עכשיו';
+    const m = Math.round(s / 60); if (m < 60) return `לפני ${m} דק׳`;
+    const h = Math.round(m / 60); if (h < 24) return `לפני ${h} שע׳`;
+    return `לפני ${Math.round(h / 24)} ימים`;
+}
+
+// Renders the crisis indicator (reuses the existing dc-* styles in main.css).
+function _stProximityHTML() {
+    const p = _stProximity;
+    if (!p) return `<div class="dc-card-title">אינדיקטור לזיהוי משברים</div><div class="dc-loading">מחשב מנתוני מאקרו חיים…</div>`;
+    const score = p.score;
+    const col = score >= 70 ? '#ef4444' : score >= 45 ? '#f59e0b' : '#10b981';
+    const label = score >= 70 ? 'סיכון גבוה' : score >= 45 ? 'סיכון בינוני' : 'יציב';
+    const liveTag = p.asOf ? `<span class="dc-live-tag"><span class="dc-live-dot"></span>סוכן 24/7 · עודכן ${_stAgo(p.asOf)}</span>` : '';
+    return `<div class="dc-card-title">אינדיקטור לזיהוי משברים${p.partial ? ' <span class="dc-partial">(נתונים חלקיים)</span>' : ''}${liveTag}</div>
+        <div class="dc-gauge">
+            <div class="dc-gauge-num" style="color:${col}">${score}<span class="dc-gauge-max">/100</span></div>
+            <div class="dc-gauge-label" style="color:${col}">${label}</div>
+        </div>
+        <div class="dc-gauge-bar"><div class="dc-gauge-fill" style="width:${score}%;background:linear-gradient(90deg,#10b981,#f59e0b,#ef4444)"></div><div class="dc-gauge-marker" style="inset-inline-start:${score}%"></div></div>
+        <div class="dc-prox-parts">
+            ${p.parts.map(part => {
+        const c = part.score >= 70 ? '#ef4444' : part.score >= 45 ? '#f59e0b' : '#10b981';
+        return `<div class="dc-prox-row"><span class="dc-prox-key">${_stEsc(part.key)}</span>
+                    <div class="dc-prox-track"><span class="dc-prox-fill" style="width:${part.score}%;background:${c}"></span></div>
+                    <span class="dc-prox-val" style="color:${c}">${part.score} <small>${_stEsc(part.note)}</small></span></div>`;
+    }).join('')}
+        </div>
+        <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק — נתוני אמת. סוכן ייעודי סורק את השוק ומעדכן את האינדיקטור 24/7.</div>`;
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
 function _stRenderShell() {
     const page = document.getElementById('stressTestPage');
@@ -322,6 +427,9 @@ function _stRenderShell() {
                 <p class="st-subtitle">בחר תרחיש מאקרו / גיאופוליטי / קריסה סקטוריאלית — וראה כיצד הוא ישפיע על התיק שלך בזמן אמת: ציון פגיעוּת, צפי רווח/הפסד, הנכסים החשופים ביותר, והמלצות גידור מבוססות נתונים.</p>
                 <div class="st-baseline" id="stBaseline">${_stBaselineHTML()}</div>
             </div>
+
+            <div class="st-section-title">מצב השוק — אינדיקטור לזיהוי משברים</div>
+            <div class="dc-card glass-card st-prox-card" id="stProxCard">${_stProximityHTML()}</div>
 
             ${hasPortfolios ? `
             <div class="st-portfolio-row">
