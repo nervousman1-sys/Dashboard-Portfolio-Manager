@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
+    <link rel="stylesheet" href="css/stress-test.css?v=1.0">
     <!-- Apply the saved theme BEFORE first paint (no flash) -->
     <script>
         try { if (localStorage.getItem('ui_theme') === 'day') document.documentElement.classList.add('day-mode'); } catch (e) { }
@@ -181,6 +182,18 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">מבחני קיצון</span>
+                </a>
+
+                <a class="sidebar-item" data-nav="stresstest" onclick="navigateTo('stresstest')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 3h6v4l4 11a2 2 0 0 1-2 3H7a2 2 0 0 1-2-3L9 7z" />
+                            <line x1="9" y1="3" x2="15" y2="3" />
+                            <line x1="7.5" y1="13" x2="16.5" y2="13" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">סימולטור תרחישים</span>
                 </a>
 
                 <a class="sidebar-item" data-nav="scanneragent" onclick="navigateTo('scanneragent')">
@@ -412,6 +425,7 @@
             <div class="riskmodel-page" id="lhePage"></div>
             <div class="riskmodel-page" id="scannerPage"></div>
             <div class="riskmodel-page" id="decisionCorePage"></div>
+            <div class="riskmodel-page" id="stressTestPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -674,6 +688,7 @@
     <script src="js/scanner-agent.js?v=482"></script>
     <script src="js/lhe-view.js?v=482"></script>
     <script src="js/press-alerts.js?v=482"></script>
+    <script src="js/stress-test.js?v=482"></script>
     <script src="js/sidebar.js?v=482"></script>
     <script src="js/auth.js?v=482"></script>
     <script src="js/init.js?v=483"></script>

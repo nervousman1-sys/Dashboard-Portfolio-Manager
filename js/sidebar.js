@@ -66,6 +66,7 @@ function navigateTo(section) {
     // Scanner Agent + LHE are routed pages (like reports) — close when navigating elsewhere.
     if (section !== 'scanneragent') { const _sp = document.getElementById('scannerPage'); if (_sp && _sp.classList.contains('active') && typeof closeScannerAgentPage === 'function') closeScannerAgentPage(); }
     if (section !== 'lhe') { const _lp = document.getElementById('lhePage'); if (_lp && _lp.classList.contains('active') && typeof closeLHEPage === 'function') closeLHEPage(); }
+    if (section !== 'stresstest') { const _st = document.getElementById('stressTestPage'); if (_st && _st.classList.contains('active') && typeof closeStressTestPage === 'function') closeStressTestPage(); }
 
     // Determine if we need to close overlay pages first
     const macroPage = document.getElementById('macroPage');
@@ -237,6 +238,17 @@ function navigateTo(section) {
             closeTechIfOpen();
             closeRepIfOpen();
             if (typeof openDecisionCorePage === 'function') openDecisionCorePage();
+            break;
+
+        case 'stresstest':
+            // Open the Scenario Simulator (stress-testing) page
+            if (macroIsActive && typeof closeMacroPage === 'function') closeMacroPage();
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            closeTechIfOpen();
+            closeRepIfOpen();
+            if (typeof openStressTestPage === 'function') openStressTestPage();
             break;
 
         default:
