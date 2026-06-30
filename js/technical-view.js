@@ -25,8 +25,12 @@ let _techLoading = { us: false, il: false };
 // Open the in-app technical-analysis page focused on a SPECIFIC ticker (from the
 // recommendation cards). Closes other overlays, opens the scanner, switches market
 // for .TA symbols, and pre-fills the search so the page lands on that stock.
+// Crypto tickers must use the Yahoo "<COIN>-USD" symbol — plain "BTC" matches an unrelated penny
+// stock. Maps the LHE/global-asset symbols to the real coin series.
+const _TECH_CRYPTO = { BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', XRP: 'XRP-USD', DOGE: 'DOGE-USD', ADA: 'ADA-USD', BNB: 'BNB-USD' };
 function openTechnicalForTicker(ticker) {
-    const sym = String(ticker || '').trim().toUpperCase();
+    let sym = String(ticker || '').trim().toUpperCase();
+    if (_TECH_CRYPTO[sym]) sym = _TECH_CRYPTO[sym];
     if (!sym) return;
     // Suppress intermediate history writes → one clean entry, so Back returns to where
     // the user came from (insider feed, recommendations, etc.).
@@ -369,8 +373,9 @@ function _techRender() {
     const isIL = _techMarket === 'il';
     const curSym = _TECH_MKT[_techMarket].cur;
     const body = rows.slice(0, 250).map(([t, v]) => {
-        const disp = isIL ? t.replace(/\.TA$/, '') : t;
-        const tvSym = isIL ? `TASE:${disp}` : t;
+        const isCrypto = /-USD$/.test(t);
+        const disp = isIL ? t.replace(/\.TA$/, '') : (isCrypto ? t.replace(/-USD$/, '') : t);
+        const tvSym = isIL ? `TASE:${disp}` : (isCrypto ? `CRYPTO:${t.replace('-USD', 'USD')}` : t);
         return `
         <tr>
             <td class="risk-td-name">

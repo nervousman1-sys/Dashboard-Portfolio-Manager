@@ -459,10 +459,9 @@ function _lheCardHTML(c) {
             ${(flagChips || ssHTML) ? `<div class="lhe-flags">${ssHTML}${flagChips}</div>` : ''}
             ${c.body ? `<div class="lhe-card-narrative">${_lheEsc(c.body)}</div>` : ''}
             ${targetHTML}
-            ${(typeof openTechnicalForTicker === 'function' || typeof openReportForTicker === 'function') ? `
+            ${typeof openTechnicalForTicker === 'function' ? `
             <div class="lhe-card-actions">
-                ${typeof openTechnicalForTicker === 'function' ? `<button class="lhe-act" onclick="openTechnicalForTicker('${_lheEsc(c.ticker)}')">📈 ניתוח טכני</button>` : ''}
-                ${typeof openReportForTicker === 'function' ? `<button class="lhe-act" onclick="openReportForTicker('${_lheEsc(c.ticker)}')">📄 דוחות</button>` : ''}
+                <button class="lhe-act" onclick="openTechnicalForTicker('${_lheEsc(c.ticker)}')">📈 ניתוח טכני</button>
             </div>` : ''}
         </div>
     </div>`;

@@ -1159,12 +1159,34 @@ function _repStrategyHtml(st) {
 function openReportForTicker(ticker) {
     const sym = String(ticker || '').trim().toUpperCase();
     if (!sym) return;
-    if (typeof closeScannerAgent === 'function') closeScannerAgent();
-    if (typeof closeDecisionCore === 'function') closeDecisionCore();
-    const mo = document.getElementById('modalOverlay');
-    if (mo && mo.classList.contains('active')) { mo.classList.remove('active'); if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
-    if (typeof openReportsPage === 'function') openReportsPage();
-    setTimeout(() => { _repMarket = sym.endsWith('.TA') ? 'il' : 'us'; if (typeof openReportDetail === 'function') openReportDetail(sym); }, 70);
+    // Suppress intermediate history writes → ONE clean entry, so Back returns to where the user came from.
+    if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(true);
+    try {
+        if (typeof closeStockRecommendations === 'function') closeStockRecommendations();
+        // Close every OTHER routed page so EXACTLY ONE is active. Leaving the source page (LHE/scanner/…)
+        // active behind the reports page is what produced the broken "dashboard over the reports" state
+        // after the browser Back button.
+        if (typeof _VIEW_PAGES !== 'undefined' && Array.isArray(_VIEW_PAGES)) {
+            _VIEW_PAGES.forEach(pg => {
+                if (pg.view !== 'reports' && document.getElementById(pg.id)?.classList.contains('active')) {
+                    try { pg.close(); } catch (e) { /* best effort */ }
+                }
+            });
+        }
+        if (typeof closeFullPortfolioList === 'function' && document.querySelector('.full-list-page')) closeFullPortfolioList();
+        const mo = document.getElementById('modalOverlay');
+        if (mo && mo.classList.contains('active')) {
+            mo.classList.remove('active');
+            if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+            try { currentModalClientId = null; } catch (e) { }
+        }
+        if (typeof openReportsPage === 'function') openReportsPage();
+        _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
+        if (typeof openReportDetail === 'function') openReportDetail(sym);
+    } finally {
+        if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
+    }
+    if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym });
 }
 
 if (typeof window !== 'undefined') {
