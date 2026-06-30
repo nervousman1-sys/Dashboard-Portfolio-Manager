@@ -410,6 +410,50 @@ function _stProximityHTML() {
         <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק — נתוני אמת. סוכן ייעודי סורק את השוק ומעדכן את האינדיקטור 24/7.</div>`;
 }
 
+// ── Methodology / transparency (how every number is computed) ─────────────────
+function _stToggleMethod() {
+    const body = document.getElementById('stMethodBody');
+    const caret = document.querySelector('.st-method-caret');
+    if (!body) return;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if (caret) caret.textContent = open ? '▾' : '▴';
+}
+if (typeof window !== 'undefined') window._stToggleMethod = _stToggleMethod;
+
+function _stMethodologyHTML() {
+    const factors = [['rate', 'ריבית (לכל +1%)'], ['infl', 'אינפלציה (לכל +1%)'], ['usd', 'דולר (לכל +1%)'], ['vix', 'VIX (לכל +1 נק׳)'], ['tech', 'שוק הטק (לכל +1%)'], ['ils', 'פיחות שקל (לכל +1%)']];
+    const order = ['semis', 'tech', 'equity', 'consumer', 'energy', 'bond_long', 'bond_short', 'gold', 'il_bank', 'il_stock', 'il_index', 'cash'];
+    const head = '<tr><th>סוג נכס</th>' + factors.map(f => `<th>${f[1]}</th>`).join('') + '</tr>';
+    const rows = order.map(cls => {
+        const s = ST_SENS[cls]; if (!s) return '';
+        const cells = factors.map(f => { const v = s[f[0]]; const c = v < 0 ? 'st-neg' : v > 0 ? 'st-pos' : ''; return `<td class="${c}">${v > 0 ? '+' : ''}${v}</td>`; }).join('');
+        return `<tr><td class="st-m-cls">${_stEsc(ST_CLASS_HE[cls] || cls)}</td>${cells}</tr>`;
+    }).join('');
+    return `
+    <div class="st-m-block">
+        <div class="st-m-h">1 · מאיפה מגיעים הנתונים</div>
+        <ul class="st-m-list">
+            <li><b>התיק שלך</b> — ההחזקות, השווי והמשקלים האמיתיים שלך מתוך המערכת (Supabase).</li>
+            <li><b>מצב המאקרו הנוכחי</b> — ריבית הפד, CPI ו-VIX נמשכים <b>חיים</b> מה-feeds של המערכת (FRED, שוק) — אותם מקורות שהסוכנים אוספים 24/7.</li>
+            <li><b>אינדיקטור המשברים</b> — נקרא ישירות מטבלת <code>crisis_indicator</code> שהסוכן הייעודי מחשב 24/7 מנתוני אמת (10 גורמים: פחד/חמדנות, CPI, ריבית, עקום תשואות, VIX, מינוף NFCI, מרווחי אשראי, ריבית ריאלית, תנאים פיננסיים, כלל Sahm).</li>
+            <li><b>בטא</b> — אם מודל הסיכון (CML/SML) חישב בטא אמיתית לנכס, היא משמשת להטיית התוצאה.</li>
+        </ul>
+        <div class="st-m-h">2 · הנוסחה לכל נכס</div>
+        <p class="st-m-text">לכל נכס מחושבת הפגיעה הצפויה כסכום מכפלות של <b>רגישות הנכס לכל גורם</b> × <b>עוצמת הזעזוע בתרחיש</b>:</p>
+        <div class="st-m-formula">פגיעה% = Σ ( רגישות[גורם] × Δתרחיש[גורם] ) × הטיית-בטא &nbsp;|&nbsp; מוגבל ל-[−65% .. +25%]</div>
+        <p class="st-m-text">דוגמה, בתרחיש "תיקון טק" (VIX +12, שוק-טק −15%): סמיקונדקטור כמו NVDA סופג ‎(−0.85×12)‎ מ-VIX ‎+ (1.45×−15)‎ מהטק ‎≈ −32%‎, מוכפל בהטיית הבטא הגבוהה שלו ‎→ ≈ −40%‎.</p>
+        <div class="st-m-h">3 · טבלת הרגישויות — המודל המלא (מכויל היסטורית)</div>
+        <div class="st-m-table-wrap"><table class="st-m-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
+        <p class="st-m-note">המקדמים מכוילים להתנהגות ההיסטורית המתועדת של כל סוג נכס: מח״מ ארוך לאג״ח (TLT ≈ 17 → רגיש מאוד לריבית), כיווץ-מכפילים למניות צמיחה, זהב כמגן אינפלציה/משבר (עולה כש-VIX והאינפלציה עולים), ובנקים שמרוויחים מריבית גבוהה (מקדם חיובי).</p>
+        <div class="st-m-h">4 · ציון הפגיעוּת וה-P&L</div>
+        <p class="st-m-text">פגיעת התיק = ממוצע משוקלל לפי משקל כל נכס. <b>ציון פגיעוּת (1–100)</b> = גודל ההפסד המשוקלל × 4.2 + קנס ריכוזיות (מדד הרפינדל על פיזור סוגי הנכסים). <b>P&L</b> = שווי התיק × (1 + הפגיעה%).</p>
+        <div class="st-m-h">5 · מנוע הגידור</div>
+        <p class="st-m-text">המערכת מזהה את <b>הגורם הדומיננטי</b> שתורם הכי הרבה להפסד, בוחרת נכס-מגן עם קורלציה הפוכה אליו, ומחשבת איזו הקצאה (%) תוריד את ציון הפגיעוּת לכ-45.</p>
+        <div class="st-m-foot">⚖️ שקיפות מלאה: זהו <b>מודל-גורמים (factor stress-test)</b> כמו שמשמש בחדרי-סיכון מוסדיים — הנתונים (תיק, מאקרו, אינדיקטור) אמיתיים וחיים, והמקדמים מכוילים לנתונים היסטוריים. זו הערכה שמרנית ושקופה, לא רגרסיה חיה על מחירים היסטוריים, ואינה ייעוץ השקעות.</div>
+    </div>`;
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
 function _stRenderShell() {
     const page = document.getElementById('stressTestPage');
@@ -425,11 +469,11 @@ function _stRenderShell() {
         <div class="macro-content">
             <div class="st-intro">
                 <p class="st-subtitle">בחר תרחיש מאקרו / גיאופוליטי / קריסה סקטוריאלית — וראה כיצד הוא ישפיע על התיק שלך בזמן אמת: ציון פגיעוּת, צפי רווח/הפסד, הנכסים החשופים ביותר, והמלצות גידור מבוססות נתונים.</p>
-                <div class="st-baseline" id="stBaseline">${_stBaselineHTML()}</div>
             </div>
 
             <div class="st-section-title">מצב השוק — אינדיקטור לזיהוי משברים</div>
             <div class="dc-card glass-card st-prox-card" id="stProxCard">${_stProximityHTML()}</div>
+            <div class="st-baseline" id="stBaseline">${_stBaselineHTML()}</div>
 
             ${hasPortfolios ? `
             <div class="st-portfolio-row">
@@ -456,6 +500,11 @@ function _stRenderShell() {
 
             <div class="st-results" id="stResults">${_stResult ? _stResultsHTML(_stResult, _stActiveDeltas()) : ''}</div>
             ` : ''}
+
+            <div class="st-method">
+                <button class="st-method-toggle" onclick="_stToggleMethod()"><span>🔬 איך מחושב הניתוח? — שקיפות מלאה על הנתונים והנוסחאות</span><span class="st-method-caret">▾</span></button>
+                <div class="st-method-body" id="stMethodBody" style="display:none">${_stMethodologyHTML()}</div>
+            </div>
         </div>
     </div>`;
 }
