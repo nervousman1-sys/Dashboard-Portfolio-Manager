@@ -319,6 +319,14 @@ const MOCK_ALERTS = [
     { ticker: 'NVDA', company: 'NVIDIA Corp.', category: 'guidance_up', sentiment: 18, summary_he: 'NVDA — פרסום תוצאות כספיות · דיווח 8-K לרשות.', headline_en: 'NVIDIA Corp. — Form 8-K: Results of Operations and Financial Condition', body_en: 'NVIDIA filed a Form 8-K (Item 2.02) with quarterly results.', analysis_he: 'דיווח תוצאות (8-K, סעיף 2.02) — מהותי למשקיעים.', source: 'SEC EDGAR · 8-K' },
 ];
 
+// 24/7 heartbeat → agent_status (so the UI can show "סרק לפני X דק׳" and prove the agent is live).
+async function heartbeat(note) {
+    try {
+        const next = new Date(Date.now() + Math.max(5, INTERVAL_MIN) * 60 * 1000).toISOString();
+        await supabase.rpc('upsert_agent_status', { p_secret: AGENT_WRITE_SECRET, p_agent: 'press', p_next_run: next, p_result: note });
+    } catch (e) { log('heartbeat warn:', e.message); }
+}
+
 async function runCycle() {
     log(`SEC press-agent cycle starting…${MOCK ? ' (MOCK)' : ''}`);
     if (MOCK) {
@@ -326,7 +334,7 @@ async function runCycle() {
         log('MOCK cycle done.'); return;
     }
     const tickers = await heldTickers();
-    if (!tickers.length) { log('No held tickers to scan.'); return; }
+    if (!tickers.length) { log('No held tickers to scan.'); await heartbeat('אין טיקרים לסריקה'); return; }
     const cikMap = await loadCikMap();
     log(`Scanning SEC EDGAR for ${tickers.length} held tickers (lookback ${LOOKBACK_HRS}h)…`);
     let scanned = 0, fired = 0, routed = 0;
@@ -346,6 +354,7 @@ async function runCycle() {
         await sleep(250);                   // stay well under SEC's 10 req/s
     }
     log(`Cycle done · scanned ${scanned} SEC filers · ${fired} new filings · ${routed} portfolio rows written.`);
+    await heartbeat(`סריקת SEC הושלמה · ${scanned} חברות נסרקו · ${fired} דיווחים חדשים · ${routed} עדכונים לתיקים`);
     await reanalyzePending();   // fill in rich analysis for any rows still missing it (persists across cycles)
 }
 

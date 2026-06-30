@@ -46,10 +46,26 @@ function _prMount(clientId) {
     if (feed) feed.innerHTML = '<div class="pa-empty" id="prEmpty">טוען הוצאות לעיתונות שהוגשו לרשות ניירות ערך (SEC)…</div>';
     _prLoad(clientId);
     _prSubscribe(clientId);
+    _prLoadStatus();   // show the 24/7 agent heartbeat in the header
     if (_prClockTimer) clearInterval(_prClockTimer);
-    _prClockTimer = setInterval(_prRefreshClocks, 15000);
+    _prClockTimer = setInterval(() => { _prRefreshClocks(); _prLoadStatus(); }, 20000);
 }
 if (typeof window !== 'undefined') window._prMount = _prMount;
+
+// Heartbeat of the 24/7 SEC press-agent → header line "נסרק לפני X דק׳ · …" so the user can SEE it's live.
+async function _prLoadStatus() {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    try {
+        const { data } = await supabaseClient.from('agent_status').select('*').eq('agent', 'press').maybeSingle();
+        const sub = document.querySelector('#tab-pressreleases .pa-live-sub');
+        if (!sub || !data) return;
+        const mins = data.last_run ? Math.max(0, Math.round((Date.now() - new Date(data.last_run).getTime()) / 60000)) : null;
+        const when = mins === null ? '' : mins < 1 ? 'הרגע' : (mins < 60 ? `לפני ${mins} דק׳` : `לפני ${Math.round(mins / 60)} שע׳`);
+        sub.innerHTML = `סורק דיווחי SEC (8-K) של חברות התיק 24/7${when ? ` · <b>נסרק ${when}</b>` : ''}${data.last_result ? ` · ${_paEsc(data.last_result)}` : ''}`;
+        const dot = document.querySelector('#tab-pressreleases .pa-live-dot');
+        if (dot) dot.classList.toggle('pa-live-off', mins != null && mins > 45);   // stale → dim the dot
+    } catch (e) { /* keep the default header text */ }
+}
 
 function _prCleanup() {
     if (_prChannel) { try { supabaseClient.removeChannel(_prChannel); } catch (e) { } _prChannel = null; }
