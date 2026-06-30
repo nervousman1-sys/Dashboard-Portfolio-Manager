@@ -126,71 +126,194 @@ const ST_SCENARIOS = [
 
 // ── THE CORE LOGIC: project the scenario onto the portfolio. Pure function, no side effects. ──
 // Returns per-holding drops, the portfolio P&L, the fragility score (1-100) and the dominant risk factor.
+// ════════════════════════════════════════════════════════════════════════════
+// REAL-DATA ENGINE — regress each asset's ~2y weekly returns on REAL macro factors
+// (10Y yield ^TNX, dollar UUP, VIX, semis SOXX, commodities DBC) → genuine factor betas.
+// Falls back to the calibrated ST_SENS model only for assets with no usable price history.
+// ════════════════════════════════════════════════════════════════════════════
+const ST_FACTORS = [
+    { key: 'rate', sym: '^TNX', level: true },    // 10Y Treasury yield — weekly Δ in points
+    { key: 'usd', sym: 'UUP', level: false },     // US dollar (Invesco UUP) — weekly % return
+    { key: 'vix', sym: '^VIX', level: true },     // volatility — weekly Δ in points
+    { key: 'tech', sym: 'SOXX', level: false },   // semiconductors/tech — weekly % return
+    { key: 'cmdty', sym: 'DBC', level: false },   // broad commodities (inflation proxy) — weekly % return
+];
+let _stHist = {};            // yahoo sym -> [{date, close}] | null
+let _stFactorLevels = null;  // { dates:[], levels:{factor:[...]} }
+let _stBetaCache = {};       // yahoo sym -> { rate, usd, vix, tech, cmdty } | null
+
+async function _stFetchHistory(symbols) {
+    const need = [...new Set(symbols.filter(s => s && _stHist[s] === undefined))];
+    if (need.length) {
+        try {
+            const r = await fetch(`/api/history?symbols=${encodeURIComponent(need.join(','))}&range=2y&interval=1wk`, { headers: { Accept: 'application/json' } });
+            if (r.ok) { const j = await r.json(); for (const s of need) _stHist[s] = Array.isArray(j[s]) ? j[s] : null; }
+            else for (const s of need) _stHist[s] = null;
+        } catch (e) { for (const s of need) _stHist[s] = null; }
+    }
+    return symbols.map(s => _stHist[s] || null);
+}
+
+async function _stBuildFactors() {
+    if (_stFactorLevels !== null) return _stFactorLevels;
+    const series = await _stFetchHistory(ST_FACTORS.map(f => f.sym));
+    if (series.some(s => !s || s.length < 40)) { _stFactorLevels = false; return null; }
+    const maps = series.map(s => { const m = {}; s.forEach(p => m[p.date] = p.close); return m; });
+    let dates = Object.keys(maps[0]);
+    for (let i = 1; i < maps.length; i++) dates = dates.filter(d => maps[i][d] != null && maps[i][d] > 0);
+    dates.sort();
+    if (dates.length < 40) { _stFactorLevels = false; return null; }
+    const levels = {}; ST_FACTORS.forEach((f, fi) => levels[f.key] = dates.map(d => maps[fi][d]));
+    _stFactorLevels = { dates, levels };
+    return _stFactorLevels;
+}
+
+// Solve A·x = b (Gauss-Jordan, partial pivot).
+function _stSolve(A, b) {
+    const n = b.length;
+    const M = A.map((row, i) => row.concat(b[i]));
+    for (let c = 0; c < n; c++) {
+        let piv = c;
+        for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+        if (Math.abs(M[piv][c]) < 1e-10) return null;
+        const tmp = M[c]; M[c] = M[piv]; M[piv] = tmp;
+        const pv = M[c][c];
+        for (let j = c; j <= n; j++) M[c][j] /= pv;
+        for (let r = 0; r < n; r++) { if (r === c) continue; const f = M[r][c]; for (let j = c; j <= n; j++) M[r][j] -= f * M[c][j]; }
+    }
+    return M.map(row => row[n]);
+}
+
+// Ridge regression β = (X'X + λI)⁻¹ X'y with an (unpenalised) intercept.
+function _stRidge(X, y, lambda) {
+    const n = X.length, k = X[0].length, p = k + 1;
+    const A = Array.from({ length: p }, () => new Array(p).fill(0));
+    const bv = new Array(p).fill(0);
+    for (let i = 0; i < n; i++) {
+        const xi = [1, ...X[i]];
+        for (let a = 0; a < p; a++) { bv[a] += xi[a] * y[i]; for (let b = 0; b < p; b++) A[a][b] += xi[a] * xi[b]; }
+    }
+    for (let a = 1; a < p; a++) A[a][a] += lambda;
+    return _stSolve(A, bv);
+}
+
+// Real factor betas for a Yahoo symbol (cached). null if not enough history.
+async function _stAssetBetas(sym) {
+    if (_stBetaCache[sym] !== undefined) return _stBetaCache[sym];
+    const F = await _stBuildFactors();
+    if (!F) { _stBetaCache[sym] = null; return null; }
+    const [aser] = await _stFetchHistory([sym]);
+    if (!aser || aser.length < 40) { _stBetaCache[sym] = null; return null; }
+    const am = {}; aser.forEach(p => am[p.date] = p.close);
+    const y = [], X = [];
+    for (let i = 1; i < F.dates.length; i++) {
+        const ac = am[F.dates[i]], ap = am[F.dates[i - 1]];
+        if (ac == null || ap == null || ap <= 0) continue;
+        y.push((ac / ap - 1) * 100);
+        X.push(ST_FACTORS.map(f => { const cur = F.levels[f.key][i], prev = F.levels[f.key][i - 1]; return f.level ? (cur - prev) : ((cur / prev - 1) * 100); }));
+    }
+    if (y.length < 35) { _stBetaCache[sym] = null; return null; }
+    const b = _stRidge(X, y, 4.0);
+    if (!b || b.some(v => !isFinite(v))) { _stBetaCache[sym] = null; return null; }
+    const out = {}; ST_FACTORS.forEach((f, i) => out[f.key] = b[i + 1]);
+    _stBetaCache[sym] = out;
+    return out;
+}
+
+// Ticker → Yahoo symbol for the history fetch (crypto / Israeli aware).
+function _stResolveSym(h) {
+    const raw = String(h.ticker || '').toUpperCase();
+    const base = raw.replace(/\.TA$/, '').replace(/-USD$/, '');
+    if (typeof _TECH_CRYPTO !== 'undefined' && _TECH_CRYPTO[base]) return _TECH_CRYPTO[base];
+    const isIL = h.currency === 'ILS' || /\.TA$/.test(raw) || /^\d{4,9}$/.test(base);
+    if (isIL) {
+        if (/^\d{4,9}$/.test(base)) return null;   // numeric IL fund — no Yahoo series → fallback model
+        if (typeof _resolveYahooSymbol === 'function') { try { return _resolveYahooSymbol(base, true); } catch (e) { } }
+        return base + '.TA';
+    }
+    return raw;
+}
+
+// Translate the scenario deltas into shocks on the real factor space.
+function _stScenarioToFactorShocks(d) {
+    const s = Object.assign({ rate: 0, infl: 0, usd: 0, vix: 0, tech: 0, ils: 0 }, d || {});
+    return {
+        rate: s.rate * 0.85 + s.infl * 0.30,   // Fed move → 10Y yield; inflation also pushes yields up
+        usd: s.usd,
+        vix: s.vix,
+        tech: s.tech,
+        cmdty: s.infl * 2.2 - s.tech * 0.1,    // inflation → commodities up
+    };
+}
+
+// Best-effort: attach REAL regression betas to each holding (parallel). Sets h.realBetas + h._real.
+async function _stAttachRealBetas(holdings) {
+    try { const F = await _stBuildFactors(); if (!F) return; } catch (e) { return; }
+    await Promise.all(holdings.map(async h => {
+        const sym = _stResolveSym(h);
+        if (!sym) { h._real = false; return; }
+        try { const b = await _stAssetBetas(sym); if (b) { h.realBetas = b; h._real = true; } else h._real = false; } catch (e) { h._real = false; }
+    }));
+}
+
+// ── THE CORE LOGIC: project the scenario onto the portfolio. Uses each holding's REAL regression
+// betas (h.realBetas) when present, else the calibrated ST_SENS fallback. Pure function. ──
 function calculateScenarioImpact(holdings, deltas) {
     const d = Object.assign({ rate: 0, infl: 0, usd: 0, vix: 0, tech: 0, ils: 0 }, deltas || {});
+    const shocks = _stScenarioToFactorShocks(d);
     let totalValue = 0;
     for (const h of holdings) totalValue += Math.max(0, +h.value || 0);
-    if (totalValue <= 0) return { totalValue: 0, newValue: 0, pnl: 0, weightedDrop: 0, fragility: 1, rows: [], dominant: null };
+    if (totalValue <= 0) return { totalValue: 0, newValue: 0, pnl: 0, weightedDrop: 0, fragility: 1, rows: [], dominant: null, realCount: 0 };
 
-    // Track each factor's contribution to the portfolio drop, to name the dominant risk.
-    const factorContribution = { rate: 0, infl: 0, usd: 0, vix: 0, tech: 0, ils: 0 };
-    const rows = [];
-    let weightedSum = 0;
-    const classWeight = {};
+    const factorContribution = { rate: 0, usd: 0, vix: 0, tech: 0, cmdty: 0, infl: 0, ils: 0 };
+    const rows = []; let weightedSum = 0; const classWeight = {}; let realCount = 0;
 
     for (const h of holdings) {
         const value = Math.max(0, +h.value || 0);
         if (value <= 0) continue;
         const weight = value / totalValue;
         const cls = _stClassify(h);
-        const s = ST_SENS[cls] || ST_SENS.equity;
         const beta = (h.beta != null && isFinite(h.beta) && h.beta > 0) ? h.beta : null;
+        let drop, parts, real = false;
 
-        // Per-factor % move, summed.
-        const parts = {
-            rate: s.rate * d.rate, infl: s.infl * d.infl, usd: s.usd * d.usd,
-            vix: s.vix * d.vix, tech: s.tech * d.tech, ils: s.ils * d.ils,
-        };
-        let drop = parts.rate + parts.infl + parts.usd + parts.vix + parts.tech + parts.ils;
-        // Real-beta tilt for equity-like classes (a high-beta name amplifies the equity-driven part).
-        if (beta && /semis|tech|equity|consumer|il_stock|il_index/.test(cls)) drop *= (0.65 + 0.35 * beta);
-        drop = Math.max(-65, Math.min(25, drop));   // clamp to a sane band
-
+        if (h.realBetas) {
+            // REAL: projected % move = Σ (regression beta to factor × the factor's shock in this scenario)
+            const b = h.realBetas;
+            parts = { rate: b.rate * shocks.rate, usd: b.usd * shocks.usd, vix: b.vix * shocks.vix, tech: b.tech * shocks.tech, cmdty: b.cmdty * shocks.cmdty, ils: (ST_SENS[cls] ? ST_SENS[cls].ils : 0) * d.ils };
+            drop = parts.rate + parts.usd + parts.vix + parts.tech + parts.cmdty + parts.ils;
+            real = true; realCount++;
+        } else {
+            // FALLBACK: calibrated per-asset-class sensitivity model.
+            const s = ST_SENS[cls] || ST_SENS.equity;
+            parts = { rate: s.rate * d.rate, infl: s.infl * d.infl, usd: s.usd * d.usd, vix: s.vix * d.vix, tech: s.tech * d.tech, ils: s.ils * d.ils };
+            drop = parts.rate + parts.infl + parts.usd + parts.vix + parts.tech + parts.ils;
+            if (beta && /semis|tech|equity|consumer|il_stock|il_index/.test(cls)) { const t = (0.65 + 0.35 * beta); drop *= t; for (const k in parts) parts[k] *= t; }
+        }
+        drop = Math.max(-65, Math.min(25, drop));
         const valueChange = value * drop / 100;
         weightedSum += weight * drop;
-        for (const k in parts) factorContribution[k] += weight * (beta && /semis|tech|equity|consumer|il_stock|il_index/.test(cls) ? parts[k] * (0.65 + 0.35 * beta) : parts[k]);
+        for (const k in parts) factorContribution[k] = (factorContribution[k] || 0) + weight * parts[k];
         classWeight[cls] = (classWeight[cls] || 0) + weight;
-
-        rows.push({
-            ticker: h.ticker, name: h.name || '', cls, classHe: ST_CLASS_HE[cls] || cls,
-            weightPct: weight * 100, beta: beta, dropPct: drop, valueChange, value,
-        });
+        rows.push({ ticker: h.ticker, name: h.name || '', cls, classHe: ST_CLASS_HE[cls] || cls, weightPct: weight * 100, beta, dropPct: drop, valueChange, value, real });
     }
 
-    rows.sort((a, b) => a.dropPct - b.dropPct);   // most-hit first (the weakest links)
-    const weightedDrop = weightedSum;             // portfolio % change (negative = loss)
+    rows.sort((a, b) => a.dropPct - b.dropPct);
+    const weightedDrop = weightedSum;
     const newValue = totalValue * (1 + weightedDrop / 100);
     const pnl = newValue - totalValue;
-
-    // Concentration penalty (Herfindahl on class weights) — a concentrated portfolio is more fragile.
     let hhi = 0; for (const k in classWeight) hhi += classWeight[k] * classWeight[k];
-    const concPenalty = Math.max(0, (hhi - 0.25)) * 40;   // 0 when diversified, up to ~30 when concentrated
-
-    // Fragility 1-100: driven by the loss magnitude + concentration.
+    const concPenalty = Math.max(0, (hhi - 0.25)) * 40;
     const fragility = Math.max(1, Math.min(100, Math.round(-Math.min(0, weightedDrop) * 4.2 + concPenalty)));
-
-    // Dominant negative factor (most responsible for the loss) → drives the hedge wording.
     let dominant = null, worst = 0;
     for (const k in factorContribution) { if (factorContribution[k] < worst) { worst = factorContribution[k]; dominant = k; } }
-
-    return { totalValue, newValue, pnl, weightedDrop, fragility, rows, dominant, classWeight };
+    return { totalValue, newValue, pnl, weightedDrop, fragility, rows, dominant, classWeight, realCount };
 }
 
 // Estimate how much allocating `pct`% to a hedge instrument reduces the portfolio drop (the hedge's own
 // drop in this scenario vs. the average holding), and find the allocation that reaches a target fragility.
 function _stHedgePlan(holdings, deltas, baseResult) {
     // Pick the hedge class by the dominant risk factor.
-    const map = { rate: 'bond_short', infl: 'gold', usd: 'gold', vix: 'gold', tech: 'bond_long', ils: 'cash' };
+    const map = { rate: 'bond_short', infl: 'gold', cmdty: 'gold', usd: 'gold', vix: 'gold', tech: 'bond_long', ils: 'cash' };
     const hedgeCls = map[baseResult.dominant] || 'gold';
     const s = ST_SENS[hedgeCls];
     const d = Object.assign({ rate: 0, infl: 0, usd: 0, vix: 0, tech: 0, ils: 0 }, deltas);
@@ -432,25 +555,25 @@ function _stMethodologyHTML() {
     }).join('');
     return `
     <div class="st-m-block">
-        <div class="st-m-h">1 · מאיפה מגיעים הנתונים</div>
+        <div class="st-m-h">1 · מאיפה מגיעים הנתונים (הכל אמיתי וחי)</div>
         <ul class="st-m-list">
             <li><b>התיק שלך</b> — ההחזקות, השווי והמשקלים האמיתיים שלך מתוך המערכת (Supabase).</li>
-            <li><b>מצב המאקרו הנוכחי</b> — ריבית הפד, CPI ו-VIX נמשכים <b>חיים</b> מה-feeds של המערכת (FRED, שוק) — אותם מקורות שהסוכנים אוספים 24/7.</li>
-            <li><b>אינדיקטור המשברים</b> — נקרא ישירות מטבלת <code>crisis_indicator</code> שהסוכן הייעודי מחשב 24/7 מנתוני אמת (10 גורמים: פחד/חמדנות, CPI, ריבית, עקום תשואות, VIX, מינוף NFCI, מרווחי אשראי, ריבית ריאלית, תנאים פיננסיים, כלל Sahm).</li>
-            <li><b>בטא</b> — אם מודל הסיכון (CML/SML) חישב בטא אמיתית לנכס, היא משמשת להטיית התוצאה.</li>
+            <li><b>מחירים היסטוריים אמיתיים</b> — בעת ההרצה נמשכות ~2 שנות מחירי-סגירה שבועיים אמיתיים (Yahoo, דרך <code>/api/history</code>) לכל נכס בתיק וגם לגורמי-המאקרו.</li>
+            <li><b>גורמי-המאקרו האמיתיים</b> — תשואת ה-10 שנים (^TNX), הדולר (UUP), ה-VIX, הסמיקונדקטורס (SOXX) והסחורות (DBC).</li>
+            <li><b>אינדיקטור המשברים</b> — מטבלת <code>crisis_indicator</code> שהסוכן מחשב 24/7 מ-10 גורמי-אמת; ומצב המאקרו הנוכחי (ריבית/CPI/VIX) חי מה-feeds.</li>
         </ul>
-        <div class="st-m-h">2 · הנוסחה לכל נכס</div>
-        <p class="st-m-text">לכל נכס מחושבת הפגיעה הצפויה כסכום מכפלות של <b>רגישות הנכס לכל גורם</b> × <b>עוצמת הזעזוע בתרחיש</b>:</p>
-        <div class="st-m-formula">פגיעה% = Σ ( רגישות[גורם] × Δתרחיש[גורם] ) × הטיית-בטא &nbsp;|&nbsp; מוגבל ל-[−65% .. +25%]</div>
-        <p class="st-m-text">דוגמה, בתרחיש "תיקון טק" (VIX +12, שוק-טק −15%): סמיקונדקטור כמו NVDA סופג ‎(−0.85×12)‎ מ-VIX ‎+ (1.45×−15)‎ מהטק ‎≈ −32%‎, מוכפל בהטיית הבטא הגבוהה שלו ‎→ ≈ −40%‎.</p>
-        <div class="st-m-h">3 · טבלת הרגישויות — המודל המלא (מכויל היסטורית)</div>
+        <div class="st-m-h">2 · החישוב — רגרסיה אמיתית (לא מקדמים מומצאים)</div>
+        <p class="st-m-text">לכל נכס מורצת <b>רגרסיית-גורמים (ridge OLS)</b> של התשואות השבועיות שלו מול שינויי גורמי-המאקרו, לאורך ~2 שנים. התוצאה: <b>בטא אמיתי</b> של הנכס לכל גורם — כמה הוא זז היסטורית כשהריבית/הדולר/VIX/הטק/הסחורות זזים.</p>
+        <div class="st-m-formula">תשואה_שבועית = α + β_ריבית·Δתשואה + β_דולר·Δ%דולר + β_VIX·ΔVIX + β_טק·Δ%טק + β_סחורות·Δ%סחורות</div>
+        <p class="st-m-text">ואז הפגיעה בתרחיש = <b>Σ ( בטא_אמיתי[גורם] × עוצמת-הזעזוע[גורם] )</b>. כך לדוגמה NVDA מקבל בטא גבוה ל-SOXX ול-VIX מתוך ההיסטוריה שלו, ולכן נופל חזק בתרחיש תיקון-טק — כי כך הוא באמת התנהג.</p>
+        <p class="st-m-note">נכס בלי היסטוריית מחירים זמינה (למשל קרן ישראלית מספרית) מסומן "מודל" ומשתמש בטבלת-הגיבוי הבאה — רגישויות מכוילות להתנהגות ההיסטורית של כל סוג נכס:</p>
+        <div class="st-m-h">3 · טבלת הגיבוי (משמשת רק כשאין מחירים)</div>
         <div class="st-m-table-wrap"><table class="st-m-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
-        <p class="st-m-note">המקדמים מכוילים להתנהגות ההיסטורית המתועדת של כל סוג נכס: מח״מ ארוך לאג״ח (TLT ≈ 17 → רגיש מאוד לריבית), כיווץ-מכפילים למניות צמיחה, זהב כמגן אינפלציה/משבר (עולה כש-VIX והאינפלציה עולים), ובנקים שמרוויחים מריבית גבוהה (מקדם חיובי).</p>
         <div class="st-m-h">4 · ציון הפגיעוּת וה-P&L</div>
-        <p class="st-m-text">פגיעת התיק = ממוצע משוקלל לפי משקל כל נכס. <b>ציון פגיעוּת (1–100)</b> = גודל ההפסד המשוקלל × 4.2 + קנס ריכוזיות (מדד הרפינדל על פיזור סוגי הנכסים). <b>P&L</b> = שווי התיק × (1 + הפגיעה%).</p>
+        <p class="st-m-text">פגיעת התיק = ממוצע משוקלל לפי משקל כל נכס. <b>ציון פגיעוּת (1–100)</b> = גודל ההפסד המשוקלל × 4.2 + קנס ריכוזיות (מדד הרפינדל). <b>P&L</b> = שווי התיק × (1 + הפגיעה%).</p>
         <div class="st-m-h">5 · מנוע הגידור</div>
-        <p class="st-m-text">המערכת מזהה את <b>הגורם הדומיננטי</b> שתורם הכי הרבה להפסד, בוחרת נכס-מגן עם קורלציה הפוכה אליו, ומחשבת איזו הקצאה (%) תוריד את ציון הפגיעוּת לכ-45.</p>
-        <div class="st-m-foot">⚖️ שקיפות מלאה: זהו <b>מודל-גורמים (factor stress-test)</b> כמו שמשמש בחדרי-סיכון מוסדיים — הנתונים (תיק, מאקרו, אינדיקטור) אמיתיים וחיים, והמקדמים מכוילים לנתונים היסטוריים. זו הערכה שמרנית ושקופה, לא רגרסיה חיה על מחירים היסטוריים, ואינה ייעוץ השקעות.</div>
+        <p class="st-m-text">המערכת מזהה את <b>הגורם הדומיננטי</b> שתורם הכי הרבה להפסד (מתוך הרגרסיה), בוחרת נכס-מגן עם קורלציה הפוכה אליו, ומחשבת איזו הקצאה (%) תוריד את ציון הפגיעוּת לכ-45.</p>
+        <div class="st-m-foot">⚖️ שקיפות מלאה: זהו <b>מודל-גורמים (factor stress-test)</b> שבו הבטא של כל נכס נגזר מ<b>רגרסיה על מחירים היסטוריים אמיתיים</b> — לא מקדמים שרירותיים. הזעזועים מיושמים על הבטא הנמדד. אינה ייעוץ השקעות.</div>
     </div>`;
 }
 
@@ -557,20 +680,21 @@ function _stSetCustom(key, val) {
 if (typeof window !== 'undefined') window._stSetCustom = _stSetCustom;
 
 // ── Run the simulation (elegant loading → compute → render) ───────────────────
-function _stRun() {
+async function _stRun() {
     const btn = document.getElementById('stRunBtn');
     const results = document.getElementById('stResults');
+    const holdings = _stHoldings();
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="st-spin"></span> מריץ סימולציה…'; }
-    if (results) results.innerHTML = `<div class="st-loading"><span class="st-spin st-spin-lg"></span><div>מחשב את השפעת התרחיש על ${_stHoldings().length} נכסי התיק…</div></div>`;
-    setTimeout(() => {
-        const holdings = _stHoldings();
-        const deltas = _stActiveDeltas();
-        _stResult = calculateScenarioImpact(holdings, deltas);
-        if (results) results.innerHTML = _stResultsHTML(_stResult, deltas);
-        if (btn) { btn.disabled = false; btn.innerHTML = '⚡ הרצת סימולציה'; }
-        const rc = document.getElementById('stResults');
-        if (rc) rc.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 650);
+    if (results) results.innerHTML = `<div class="st-loading"><span class="st-spin st-spin-lg"></span><div>מושך מחירים היסטוריים אמיתיים ומחשב את בטא־הגורמים של ${holdings.length} נכסי התיק…</div></div>`;
+    try {
+        await _stAttachRealBetas(holdings);   // REAL regression betas (best-effort, per holding)
+    } catch (e) { /* fall back to the calibrated model */ }
+    const deltas = _stActiveDeltas();
+    _stResult = calculateScenarioImpact(holdings, deltas);
+    if (results) results.innerHTML = _stResultsHTML(_stResult, deltas);
+    if (btn) { btn.disabled = false; btn.innerHTML = '⚡ הרצת סימולציה'; }
+    const rc = document.getElementById('stResults');
+    if (rc) rc.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 if (typeof window !== 'undefined') window._stRun = _stRun;
 
@@ -578,8 +702,10 @@ if (typeof window !== 'undefined') window._stRun = _stRun;
 function _stResultsHTML(r, deltas) {
     if (!r || !r.rows.length) return '<div class="st-empty">אין נכסים לחישוב בתיק זה.</div>';
     const scenario = _stScenarioId === 'custom' ? null : ST_SCENARIOS.find(s => s.id === _stScenarioId);
+    const realBadge = `<div class="st-data-badge ${r.realCount === r.rows.length ? 'st-data-full' : ''}"><span class="st-data-dot"></span> ${r.realCount}/${r.rows.length} מהנכסים חושבו מ<b>רגרסיה על מחירים היסטוריים אמיתיים</b>${r.realCount < r.rows.length ? ' · השאר מהמודל המכויל' : ''}</div>`;
     return `
         <div class="st-section-title">2 · ניתוח השפעה על התיק</div>
+        ${realBadge}
         <div class="st-impact-grid">
             <div class="st-card st-gauge-card">
                 <div class="st-card-h">מדד רגישות התיק</div>
@@ -650,16 +776,18 @@ function _stWeakestHTML(rows) {
     const body = rows.map(h => {
         const extreme = h.dropPct <= -18;
         const dropCls = h.dropPct < -0.5 ? 'st-neg' : h.dropPct > 0.5 ? 'st-pos' : '';
+        const src = h.real ? '<span class="st-src st-src-real" title="חושב מרגרסיה על מחירים היסטוריים אמיתיים">נתוני אמת</span>' : '<span class="st-src st-src-model" title="מודל מכויל (אין היסטוריית מחירים זמינה)">מודל</span>';
         return `<tr class="${extreme ? 'st-row-extreme' : ''}">
             <td class="st-tk">${_stEsc(String(h.ticker || '').replace(/\.TA$/, ''))}<span class="st-tk-cls">${_stEsc(h.classHe)}</span></td>
             <td>${h.weightPct.toFixed(1)}%</td>
             <td>${h.beta != null ? h.beta.toFixed(2) : '—'}</td>
             <td class="${dropCls} st-drop">${h.dropPct >= 0 ? '+' : ''}${h.dropPct.toFixed(1)}%</td>
             <td class="${dropCls}">${h.valueChange >= 0 ? '+' : '−'}$${Math.round(Math.abs(h.valueChange)).toLocaleString('en-US')}</td>
+            <td>${src}</td>
         </tr>`;
     }).join('');
     return `<div class="st-table-wrap"><table class="st-table">
-        <thead><tr><th>נכס</th><th>משקל</th><th>β</th><th>פגיעה משוערת</th><th>שינוי בשווי</th></tr></thead>
+        <thead><tr><th>נכס</th><th>משקל</th><th>β</th><th>פגיעה משוערת</th><th>שינוי בשווי</th><th>מקור</th></tr></thead>
         <tbody>${body}</tbody>
     </table></div>`;
 }
@@ -672,7 +800,7 @@ function _stAiHTML(r, scenario, deltas) {
     const bondW = ((cw.bond_long || 0) + (cw.bond_short || 0)) * 100;
     const ilW = ((cw.il_stock || 0) + (cw.il_bank || 0) + (cw.il_index || 0)) * 100;
     const topRow = r.rows[0];
-    const factorHe = { rate: 'עליית הריבית', infl: 'האינפלציה', usd: 'תנועת הדולר', vix: 'זינוק התנודתיות (VIX)', tech: 'תיקון הטכנולוגיה', ils: 'פיחות השקל' }[r.dominant] || 'התרחיש';
+    const factorHe = { rate: 'עליית הריבית', infl: 'האינפלציה', cmdty: 'זינוק הסחורות/האינפלציה', usd: 'תנועת הדולר', vix: 'זינוק התנודתיות (VIX)', tech: 'תיקון הטכנולוגיה', ils: 'פיחות השקל' }[r.dominant] || 'התרחיש';
     const base = scenario ? scenario.risk_he : 'התרחיש המותאם שהגדרת משלב את שינויי הריבית, האינפלציה, הדולר וה-VIX שבחרת.';
     const exposure = [];
     if (techW >= 12) exposure.push(`חשיפה של ${techW.toFixed(0)}% לטכנולוגיה/סמיקונדקטורס (בטא גבוהה — רגישה במיוחד ל${factorHe})`);
@@ -691,6 +819,6 @@ function _stAiHTML(r, scenario, deltas) {
             <div class="st-ai-h">🛡️ מגן התיק — הצעות לגידור</div>
             <p class="st-ai-text">כדי להוריד את מדד הרגישות מ-<b>${hedge.fromFrag}</b> ל-<b>~${hedge.toFrag}</b> בתרחיש זה, מומלץ להקצות כ-<b>${hedge.pct}%</b> מהתיק ל־<b>${_stEsc(hedge.hedgeLabel)}</b> — נכס שמציג היסטורית קורלציה הפוכה ל${factorHe}${scenario ? ` (${_stEsc(scenario.hedge.reason_he)})` : ''}. הקצאה זו מקזזת חלק מהפגיעה ומקטינה את הריכוזיות בתיק.</p>
         </div>
-        <div class="st-ai-foot">הערכה מבוססת על רגישויות מאקרו מכוילות־היסטורית לכל סוג נכס × המשקלים בפועל בתיק שלך, על בסיס המצב הנוכחי שהסוכנים אוספים 24/7. אינה ייעוץ השקעות.</div>
+        <div class="st-ai-foot">${r.realCount > 0 ? `<b>${r.realCount}/${r.rows.length}</b> מהנכסים חושבו מ<b>רגרסיה על מחירים היסטוריים אמיתיים</b> (בטא לכל גורם-מאקרו, ~2 שנים שבועי); השאר מהמודל המכויל. ` : ''}× המשקלים בפועל בתיק שלך × המצב שהסוכנים אוספים 24/7. אינה ייעוץ השקעות.</div>
     </div>`;
 }
