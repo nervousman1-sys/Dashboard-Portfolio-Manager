@@ -22,6 +22,7 @@ const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const MACRO_INTERVAL_MIN = parseFloat(process.env.MACRO_INTERVAL_MIN || '30');
 const MACRO_PER_CYCLE = parseInt(process.env.MACRO_PER_CYCLE || '8', 10);   // max new items per cycle
+const BASE = process.env.FINEXTIUM_BASE || 'https://www.finextium.com';
 const RUN_ONCE = process.argv.includes('--once');
 
 function log(...a) { console.log(`[${new Date().toISOString()}]`, ...a); }
@@ -147,7 +148,25 @@ async function runCycle() {
     log(`✓ Macro feed: +${inserted} new updates (of ${fresh.length} fresh, ${items.length} material).`);
 }
 
-async function safeCycle() { try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); } }
+// Fetch the live yield curves (US + IL, FRED) and persist them, so the macro page reads an
+// agent-backed, 24/7-fresh row instead of every client hitting FRED. Runs every cycle, independent
+// of the news flow (which returns early when there's nothing new).
+async function updateYields() {
+    try {
+        const r = await fetch(`${BASE}/api/yields?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) { log('yields fetch HTTP', r.status); return; }
+        const data = await r.json();
+        if (!data || !Array.isArray(data.us) || data.us.length < 3) { log('yields payload thin — skipping'); return; }
+        const { error } = await supabase.rpc('upsert_yield_curve', { p_secret: AGENT_WRITE_SECRET, p_data: data });
+        if (error) log('yields upsert warn:', error.message);
+        else log(`✓ Yield curves stored · US ${data.us.length} pts · IL ${(data.il || []).length} pts · asOf ${data.asOf || '—'}`);
+    } catch (e) { log('yields update warn:', e.message); }
+}
+
+async function safeCycle() {
+    try { await updateYields(); } catch (e) { log('yields cycle error:', e.message); }
+    try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); }
+}
 
 (async () => {
     log(`Finextium Macro-Feed online · model=${GEMINI_MODEL} · interval=${MACRO_INTERVAL_MIN}min · perCycle=${MACRO_PER_CYCLE}`);

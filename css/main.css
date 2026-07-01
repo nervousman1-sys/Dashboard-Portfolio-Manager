@@ -4737,6 +4737,13 @@ body.filter-modal-open::after {
     gap: 8px;
 }
 
+/* "connected to 24/7 agent · updated X ago" tag on the yield-curves header */
+.yield-agent-tag { font-size: 11px; font-weight: 700; color: var(--text-muted, #9aa3b2); display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border); background: rgba(255,255,255,0.03); }
+.yield-agent-tag.on { color: var(--accent-green, #00ff94); border-color: rgba(0,255,148,0.35); background: rgba(0,255,148,0.06); }
+.yield-agent-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.yield-agent-tag.on .yield-agent-dot { animation: yield-pulse 1.5s ease-in-out infinite; }
+@keyframes yield-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
 .macro-country-flag {
     font-size: 22px;
     line-height: 1;

@@ -1523,7 +1523,7 @@ function _renderIndicatorsTab() {
     // ── Yield curves (US + Israel) — charts filled async by _renderYieldCurves ──
     html += `
     <div class="macro-country-section">
-        <h2 class="macro-country-header">עקומות תשואה</h2>
+        <h2 class="macro-country-header">עקומות תשואה <span class="yield-agent-tag" id="yieldAgentTag"></span></h2>
         <div class="macro-yield-grid">
             <div class="macro-yield-card glass-card">
                 <h3 class="macro-yield-title">עקומת התשואה — ארה"ב (אג"ח ממשלתי)</h3>
@@ -1572,11 +1572,22 @@ async function _fetchYieldsCached(onData) {
             if (c && c.data && Array.isArray(c.data.us) && c.data.us.length >= 3) {
                 onData(c.data);            // instant paint
                 served = true;
-                // Same calendar day → cache IS today's scan; skip the network entirely
-                if (c.day === new Date().toISOString().slice(0, 10)) return;
             }
         }
     } catch (e) { /* ignore */ }
+    // PRIMARY: the 24/7 agent-backed row in Supabase (fresh + carries an updated_at heartbeat).
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data: row } = await supabaseClient.from('yield_curve').select('data,updated_at').eq('id', 1).maybeSingle();
+            if (row && row.data && Array.isArray(row.data.us) && row.data.us.length >= 3) {
+                window._yieldAgentTs = row.updated_at;
+                try { localStorage.setItem(_YIELDS_LS_KEY, JSON.stringify({ day: new Date().toISOString().slice(0, 10), data: row.data })); } catch (e) { }
+                onData(row.data);
+                return;                    // agent data is authoritative
+            }
+        }
+    } catch (e) { /* fall through to the live API */ }
+    // FALLBACK: live FRED endpoint (used before the agent's first write, or if Supabase is unreachable).
     try {
         const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
         if (ctrl) setTimeout(() => ctrl.abort(), 10000); // never hang the section
@@ -1585,10 +1596,27 @@ async function _fetchYieldsCached(onData) {
         if (!res.ok) { if (!served) onData(null); return; }
         const data = await res.json();
         if (data && Array.isArray(data.us) && data.us.length >= 3) {
+            window._yieldAgentTs = null;   // live source (no agent timestamp)
             try { localStorage.setItem(_YIELDS_LS_KEY, JSON.stringify({ day: new Date().toISOString().slice(0, 10), data })); } catch (e) {}
             onData(data);
         } else if (!served) onData(null);
     } catch (e) { if (!served) onData(null); }
+}
+
+// Live "connected to the 24/7 agent · updated X ago" tag next to the yields header.
+function _updateYieldAgentTag() {
+    const el = document.getElementById('yieldAgentTag');
+    if (!el) return;
+    const ts = window._yieldAgentTs;
+    if (ts) {
+        const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+        const ago = m < 1 ? 'הרגע' : m < 60 ? `לפני ${m} דק׳` : `לפני ${Math.round(m / 60)} שע׳`;
+        el.innerHTML = `<span class="yield-agent-dot"></span>מחובר לסוכן 24/7 · עודכן ${ago}`;
+        el.className = 'yield-agent-tag on';
+    } else {
+        el.innerHTML = `<span class="yield-agent-dot"></span>נתונים חיים (FRED)`;
+        el.className = 'yield-agent-tag';
+    }
 }
 
 // Warm the yields cache in the background shortly after app boot, so by the time
@@ -1622,6 +1650,7 @@ function _paintYieldCurves(data) {
         _renderMacroAnalysis(null);
         return;
     }
+    _updateYieldAgentTag();   // refresh the "connected to 24/7 agent · updated X ago" tag
     // Skip repaint when nothing changed (cache → identical network response)
     if (window._yieldData && JSON.stringify(window._yieldData) === JSON.stringify(data)) return;
     window._yieldData = data;
