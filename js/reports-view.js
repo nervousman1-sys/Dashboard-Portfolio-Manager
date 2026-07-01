@@ -12,13 +12,14 @@
 
 const _REP_MKT = {
     us: { ls: 'rep_uni_us_v4', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
+    r2k: { ls: 'rep_uni_r2k_v1', cur: '$', label: 'מניות ראסל 2000', search: 'חיפוש מניה (למשל: SOFI)…' },
     il: { ls: 'rep_uni_il_v4', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
 };
 const _REP_SCORES_LS = 'rep_scores_v1';
 
 let _repMarket = 'us';
-let _repUniverse = { us: null, il: null };
-let _repSectors = { us: null, il: null };  // { ticker: GICS sector (English) }
+let _repUniverse = { us: null, r2k: null, il: null };
+let _repSectors = { us: null, r2k: null, il: null };  // { ticker: GICS sector (English) }
 let _repSearch = '';
 
 // GICS sector → Hebrew label (for grouping the board).
@@ -155,6 +156,7 @@ function _repRenderShell() {
                 <div class="tech-toolbar">
                     <div class="tech-mkt" id="repMkt">
                         <button class="tech-mkt-btn active" data-mkt="us" onclick="setRepMarket('us')">ארה״ב</button>
+                        <button class="tech-mkt-btn" data-mkt="r2k" onclick="setRepMarket('r2k')">ראסל 2000</button>
                         <button class="tech-mkt-btn" data-mkt="il" onclick="setRepMarket('il')">ישראל</button>
                     </div>
                     <input type="text" id="repSearch" class="tech-search" autocomplete="off"
@@ -279,7 +281,9 @@ function _repRenderList() {
         // Group by sector → sections, ordered by the canonical sector order; unknown last.
         const groups = {};
         list.forEach(t => { const sec = sectorMap[t] || '__other'; (groups[sec] = groups[sec] || []).push(t); });
-        const order = [..._REP_SECTOR_ORDER.filter(s => groups[s]), ...Object.keys(groups).filter(s => s !== '__other' && !_REP_SECTOR_ORDER.includes(s)).sort()];
+        // Dedupe: _REP_SECTOR_ORDER intentionally lists some sectors in both the US and IL
+        // blocks (e.g. 'Energy'), which would otherwise render the same group twice.
+        const order = [...new Set([..._REP_SECTOR_ORDER.filter(s => groups[s]), ...Object.keys(groups).filter(s => s !== '__other' && !_REP_SECTOR_ORDER.includes(s)).sort()])];
         if (groups['__other']) order.push('__other');
         listHtml = order.map(sec => {
             const he = sec === '__other' ? 'אחר' : (_REP_SECTOR_HE[sec] || sec);
