@@ -107,6 +107,60 @@ async function fetchNasdaq100() {
     return [...out];
 }
 
+// ── Russell 2000 (small/mid-cap US) — Nasdaq's public screener → tickers + sectors + market cap. ──
+const _NASDAQ_TO_GICS = {
+    'Technology': 'Information Technology', 'Finance': 'Financials', 'Health Care': 'Health Care',
+    'Consumer Discretionary': 'Consumer Discretionary', 'Consumer Staples': 'Consumer Staples',
+    'Energy': 'Energy', 'Industrials': 'Industrials', 'Basic Materials': 'Materials',
+    'Real Estate': 'Real Estate', 'Telecommunications': 'Communication Services', 'Utilities': 'Utilities',
+    'Miscellaneous': 'Industrials', 'Consumer Services': 'Consumer Discretionary',
+};
+// Guaranteed core of "interesting" Russell-2000 names (used if the Nasdaq screener is unreachable).
+const _R2K_CORE = {
+    SOFI: 'Financials', MARA: 'Crypto', BTDR: 'Crypto', RIOT: 'Crypto', CLSK: 'Crypto', HUT: 'Crypto',
+    BITF: 'Crypto', CIFR: 'Crypto', WULF: 'Crypto', IREN: 'Crypto', CORZ: 'Information Technology',
+    IONQ: 'Information Technology', RGTI: 'Information Technology', QBTS: 'Information Technology',
+    LUNR: 'Industrials', RKLB: 'Industrials', ACHR: 'Industrials', JOBY: 'Industrials',
+    OKLO: 'Utilities', SMR: 'Utilities', PLUG: 'Industrials', FCEL: 'Industrials',
+    UPST: 'Financials', AFRM: 'Financials', OPEN: 'Real Estate', LMND: 'Financials', HIMS: 'Health Care',
+    CVNA: 'Consumer Discretionary', DKNG: 'Consumer Discretionary', RUM: 'Communication Services',
+};
+
+async function fetchRussell2000() {
+    let rows = [];
+    try {
+        const r = await fetch('https://api.nasdaq.com/api/screener/stocks?download=true', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json', 'Accept-Language': 'en-US' },
+        });
+        if (r.ok) { const j = await r.json(); rows = (j && j.data && (j.data.rows || (j.data.table && j.data.table.rows))) || []; }
+    } catch (e) { /* fall back to the curated core below */ }
+
+    if (rows.length >= 500) {
+        // Exclude the large-cap universe (already the 'us' market) so r2k is a DISTINCT small/mid-cap set.
+        const [sp, ndx] = await Promise.all([fetchSP500().catch(() => []), fetchNasdaq100().catch(() => [])]);
+        const big = new Set([...sp, ...ndx]);
+        const parsed = [];
+        for (const row of rows) {
+            const t = String(row.symbol || '').toUpperCase().trim();
+            if (!/^[A-Z][A-Z0-9\-]{0,6}$/.test(t)) continue;
+            if (big.has(t) || big.has(t.replace('-', '.'))) continue;
+            const mc = parseFloat(String(row.marketCap || '').replace(/[$,]/g, ''));
+            if (!isFinite(mc) || mc < 150e6 || mc > 30e9) continue;   // Russell-2000-ish small/mid cap
+            parsed.push({ t, mc, gics: _NASDAQ_TO_GICS[String(row.sector || '').trim()] || null });
+        }
+        parsed.sort((a, b) => b.mc - a.mc);
+        const top = parsed.slice(0, 2000);
+        const sectors = {};
+        top.forEach(x => { const s = _CRYPTO_OVERRIDE.has(x.t) ? 'Crypto' : x.gics; if (s) sectors[x.t] = s; });
+        // Always fold in the curated core (so key names never drop out).
+        for (const [t, sec] of Object.entries(_R2K_CORE)) if (!sectors[t]) sectors[t] = sec;
+        const tickers = [...new Set([...top.map(x => x.t), ...Object.keys(_R2K_CORE)])].sort();
+        return { tickers, sectors };
+    }
+    // Fallback: the curated core only.
+    return { tickers: Object.keys(_R2K_CORE).sort(), sectors: { ..._R2K_CORE } };
+}
+
 // ── Israeli market: TA-125 constituents (Wikipedia) + index-tracking ETFs (Yahoo search) ──
 // Yahoo symbol form is SYMBOL.TA; delisted/stale rows simply fail the chart fetch and drop.
 // ticker(.TA) → sector (English, from the Wikipedia TA-125 "Sector" column).
@@ -355,6 +409,14 @@ module.exports = async (req, res) => {
                 all.forEach(t => { if (_IL_SECTORS[t]) sectors[t] = _IL_SECTORS[t]; });
                 res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
                 res.status(200).json({ tickers: all, sectors, ta125: stocks.length, etfs: etfs.length, asOf: new Date().toISOString().slice(0, 10) });
+                return;
+            }
+            if (market === 'r2k') {
+                // Russell 2000 — small/mid-cap US stocks (SOFI, MARA, BTDR…), grouped by sector.
+                const { tickers, sectors } = await fetchRussell2000();
+                if (tickers.length < 20) throw new Error(`r2k universe too small: ${tickers.length}`);
+                res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+                res.status(200).json({ tickers, sectors, count: tickers.length, asOf: new Date().toISOString().slice(0, 10) });
                 return;
             }
             const [sp, ndx] = await Promise.all([fetchSP500(), fetchNasdaq100()]);
