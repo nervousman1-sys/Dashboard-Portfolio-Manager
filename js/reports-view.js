@@ -10,16 +10,21 @@
 // risk flags, score, "השתפרה" verdict) → rendered here. SWOT + strategy in Hebrew
 // come from /api/report-ai (Gemini), loaded async into the detail view.
 
+// One tab per index. `db` = the market value the 24/7 reports-agent stores in
+// company_reports (S&P 500 and Nasdaq-100 share the agent's 'us' sweep).
 const _REP_MKT = {
-    us: { ls: 'rep_uni_us_v4', cur: '$', label: 'מניות (S&P 500 + Nasdaq-100)', search: 'חיפוש מניה (למשל: NVDA)…' },
-    r2k: { ls: 'rep_uni_r2k_v1', cur: '$', label: 'מניות ראסל 2000', search: 'חיפוש מניה (למשל: SOFI)…' },
-    il: { ls: 'rep_uni_il_v4', cur: '₪', label: 'מניות (ת"א-125)', search: 'חיפוש מניה (למשל: TEVA)…' },
+    sp500: { ls: 'rep_uni_sp500_v1', cur: '$', label: 'מדד S&P 500', search: 'חיפוש מניה (למשל: NVDA)…', db: 'us' },
+    ndx: { ls: 'rep_uni_ndx_v1', cur: '$', label: 'מדד נאסד"ק 100', search: 'חיפוש מניה (למשל: AAPL)…', db: 'us' },
+    r2k: { ls: 'rep_uni_r2k_v1', cur: '$', label: 'מדד ראסל 2000', search: 'חיפוש מניה (למשל: SOFI)…', db: 'r2k' },
+    il: { ls: 'rep_uni_il_v4', cur: '₪', label: 'מדד ת"א 125', search: 'חיפוש מניה (למשל: TEVA)…', db: 'il' },
 };
+// Legacy market ids (URLs, watchlist rows) → current tab.
+const _REP_MKT_ALIAS = { us: 'sp500' };
 const _REP_SCORES_LS = 'rep_scores_v1';
 
-let _repMarket = 'us';
-let _repUniverse = { us: null, r2k: null, il: null };
-let _repSectors = { us: null, r2k: null, il: null };  // { ticker: GICS sector (English) }
+let _repMarket = 'sp500';
+let _repUniverse = { sp500: null, ndx: null, r2k: null, il: null };
+let _repSectors = { sp500: null, ndx: null, r2k: null, il: null };  // { ticker: GICS sector (English) }
 let _repSearch = '';
 
 // GICS sector → Hebrew label (for grouping the board).
@@ -107,7 +112,7 @@ function openReportsPage() {
     const params = new URLSearchParams(window.location.search);
     const urlMkt = (params.get('mkt') || '').toLowerCase();
     const urlSym = (params.get('sym') || '').toUpperCase();
-    _repMarket = _REP_MKT[urlMkt] ? urlMkt : 'us';
+    _repMarket = _REP_MKT[urlMkt] ? urlMkt : (_REP_MKT_ALIAS[urlMkt] || 'sp500');
     _repView = 'list';
     _repSearch = ''; // always reopen on the full list, never a stale search filter
     if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: urlSym || null });
@@ -155,15 +160,16 @@ function _repRenderShell() {
             <div class="risk-table-card glass-card">
                 <div class="tech-toolbar">
                     <div class="tech-mkt" id="repMkt">
-                        <button class="tech-mkt-btn active" data-mkt="us" onclick="setRepMarket('us')">ארה״ב</button>
+                        <button class="tech-mkt-btn" data-mkt="sp500" onclick="setRepMarket('sp500')">S&amp;P 500</button>
+                        <button class="tech-mkt-btn" data-mkt="ndx" onclick="setRepMarket('ndx')">נאסד״ק 100</button>
                         <button class="tech-mkt-btn" data-mkt="r2k" onclick="setRepMarket('r2k')">ראסל 2000</button>
-                        <button class="tech-mkt-btn" data-mkt="il" onclick="setRepMarket('il')">ישראל</button>
+                        <button class="tech-mkt-btn" data-mkt="il" onclick="setRepMarket('il')">ת״א 125</button>
                     </div>
                     <input type="text" id="repSearch" class="tech-search" autocomplete="off"
-                           placeholder="${_REP_MKT.us.search}"
-                           oninput="_repSearch=this.value.toUpperCase().trim(); _repRenderList()" />
+                           placeholder="${(_REP_MKT[_repMarket] || _REP_MKT.sp500).search}"
+                           oninput="_repSearch=this.value.toUpperCase().trim(); _repRenderListDebounced()" />
                 </div>
-                <div id="repWatchBar" class="rep-intel"></div>
+                <div id="repWatchBar" class="rep-intel"${(() => { try { return localStorage.getItem('rep_watch_has') === '1' ? ' style="min-height:40px"' : ''; } catch (e) { return ''; } })()}></div>
                 <div id="repIntel" class="rep-intel"></div>
                 <div id="repBody"><div class="adv-empty">טוען רשימת חברות…</div></div>
                 <div class="tech-foot">דו"ח נמשך בלחיצה על חברה · היסטוריה של עד 8 רבעונים · נתונים מתעדכנים אוטומטית מהדוח האחרון שהוגש · ציון 0–100 משוקלל מרווחיות, צמיחה, איתנות, תזרים ומומנטום</div>
@@ -241,6 +247,14 @@ function _repScoreClass(v) {
     return 'rep-score-bad';
 }
 
+// Debounced list render for the search box — a full board rebuild per keystroke is
+// heavy with ~2000 Russell-2000 cards; coalesce fast typing into one render.
+let _repSearchTimer = null;
+function _repRenderListDebounced() {
+    if (_repSearchTimer) clearTimeout(_repSearchTimer);
+    _repSearchTimer = setTimeout(() => { _repSearchTimer = null; _repRenderList(); }, 160);
+}
+
 // ── List of company cards (search-filtered, capped) ──
 function _repRenderList() {
     if (_repView !== 'list') return;
@@ -312,15 +326,25 @@ function _repRenderList() {
 // to fill the few names the agent hasn't covered yet.
 let _repSbSyncedAt = {};
 async function _repSyncSupabaseReports(market) {
-    if (Date.now() - (_repSbSyncedAt[market] || 0) < 5 * 60 * 1000) return; // re-sync at most every 5 min
-    _repSbSyncedAt[market] = Date.now();
-    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _repSbSyncedAt[market] = 0; return; }
+    // The agent stores by DB market ('us' covers both the S&P 500 and Nasdaq-100 tabs).
+    const dbMkt = (_REP_MKT[market] && _REP_MKT[market].db) || market;
+    if (Date.now() - (_repSbSyncedAt[dbMkt] || 0) < 5 * 60 * 1000) return; // re-sync at most every 5 min
+    _repSbSyncedAt[dbMkt] = Date.now();
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _repSbSyncedAt[dbMkt] = 0; return; }
     try {
-        const { data, error } = await supabaseClient
-            .from('company_reports')
-            .select('symbol,score,improved,as_of')
-            .eq('market', market);
-        if (error || !Array.isArray(data) || !data.length) { _repSbSyncedAt[market] = 0; return; }
+        // PostgREST caps a select at 1000 rows — page through (Russell 2000 has ~2000).
+        let data = [];
+        for (let from = 0; ; from += 1000) {
+            const { data: page, error } = await supabaseClient
+                .from('company_reports')
+                .select('symbol,score,improved,as_of')
+                .eq('market', dbMkt)
+                .range(from, from + 999);
+            if (error) throw error;
+            data = data.concat(page || []);
+            if (!page || page.length < 1000) break;
+        }
+        if (!data.length) { _repSbSyncedAt[dbMkt] = 0; return; }
         const cache = _repScoreCache();
         const now = Date.now();
         for (const r of data) {
@@ -329,11 +353,23 @@ async function _repSyncSupabaseReports(market) {
             if (r.score == null) cache[r.symbol].noData = true;
         }
         try { localStorage.setItem(_REP_SCORES_LS, JSON.stringify(cache)); } catch (e) { }
-        // Live-update chips if we're still on this market's list.
+        // Live-update chips if we're still on this market's list. One DOM pass builds the
+        // element maps (a per-symbol querySelector over ~2000 cards froze the r2k board).
         if (_repMarket === market && _repView === 'list') {
-            for (const r of data) if (r.score != null) _repUpdateCardChip(r.symbol, r.score, !!r.improved);
+            const chipEl = {}, beatEl = {};
+            document.querySelectorAll('[data-rep-score]').forEach(el => { chipEl[el.getAttribute('data-rep-score')] = el; });
+            document.querySelectorAll('[data-rep-beat]').forEach(el => { beatEl[el.getAttribute('data-rep-beat')] = el; });
+            for (const r of data) {
+                if (r.score == null) continue;
+                const chip = chipEl[r.symbol];
+                if (chip) { chip.className = `rep-card-score ${_repScoreClass(r.score)}`; chip.textContent = r.score; }
+                if (r.improved) {
+                    const slot = beatEl[r.symbol];
+                    if (slot && !slot.innerHTML) slot.innerHTML = '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>';
+                }
+            }
         }
-    } catch (e) { _repSbSyncedAt[market] = 0; }
+    } catch (e) { _repSbSyncedAt[dbMkt] = 0; }
 }
 
 // ── Reports-page intel strip: 24/7 agent freshness + companies that reported most recently ──────
@@ -348,7 +384,11 @@ function _repAgo(ts) {
 async function _repLoadIntel() {
     const el = document.getElementById('repIntel');
     if (!el || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    // Reserve the status-strip height NOW (same frame as the shell render) so the async
+    // fill doesn't push the whole board down — one of the "page jumps" reported.
+    el.style.minHeight = '40px';
     const market = _repMarket;
+    const dbMkt = (_REP_MKT[market] && _REP_MKT[market].db) || market; // agent rows use us/r2k/il
     const todayStr = new Date().toISOString().slice(0, 10);
     // Tickers the user actually holds (across all portfolios) → their upcoming earnings.
     const held = new Set();
@@ -356,7 +396,7 @@ async function _repLoadIntel() {
     try {
         const [statusRes, recentRes, earnRes] = await Promise.all([
             supabaseClient.from('agent_status').select('last_run,last_result').eq('agent', 'reports').maybeSingle(),
-            supabaseClient.from('company_reports').select('symbol,score,improved,as_of,company_name').eq('market', market).order('as_of', { ascending: false }).limit(16),
+            supabaseClient.from('company_reports').select('symbol,score,improved,as_of,company_name').eq('market', dbMkt).order('as_of', { ascending: false }).limit(16),
             held.size ? supabaseClient.from('company_reports').select('symbol,company_name,next_earnings').in('symbol', [...held]).gte('next_earnings', todayStr).order('next_earnings', { ascending: true }).limit(12) : Promise.resolve({ data: [] }),
         ]);
         if (document.getElementById('repIntel') !== el || _repMarket !== market || _repView !== 'list') return;
@@ -387,7 +427,7 @@ async function _repLoadIntel() {
         }).join('');
         const earnHtml = earnChips ? `<div class="rep-new-strip rep-earn-strip"><span class="rep-new-lbl">📅 דוחות קרובים שלך</span><div class="rep-new-chips">${earnChips}</div></div>` : '';
         el.innerHTML = statusHtml + earnHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
-    } catch (e) { /* non-fatal */ }
+    } catch (e) { el.style.minHeight = ''; /* non-fatal — release the reserved strip space */ }
 }
 
 // ── Watchlist (per-user, Supabase `watchlist` with RLS) ─────────────────────────────────────────
@@ -411,7 +451,10 @@ async function _repRenderWatchBar() {
     const el = document.getElementById('repWatchBar');
     if (!el) return;
     const syms = [..._repWatch];
-    if (!syms.length) { el.innerHTML = ''; return; }
+    // Remember whether this user has watch items → the next shell render reserves the
+    // bar's height up front instead of pushing the board down when it fills.
+    try { localStorage.setItem('rep_watch_has', syms.length ? '1' : '0'); } catch (e) { }
+    if (!syms.length) { el.innerHTML = ''; el.style.minHeight = ''; return; }
     let info = {};
     try {
         const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms);
@@ -440,7 +483,8 @@ async function _repToggleWatch(symbol) {
             if (error) throw error;
             _repWatch.delete(symbol);
         } else {
-            const mkt = _repWatchMkt[symbol] || (/\.TA$/.test(symbol) ? 'il' : (_repMarket || 'us'));
+            // Store the DB-vocabulary market (us/r2k/il), not the tab id (sp500/ndx).
+            const mkt = _repWatchMkt[symbol] || (/\.TA$/.test(symbol) ? 'il' : ((_REP_MKT[_repMarket] && _REP_MKT[_repMarket].db) || 'us'));
             const { error } = await supabaseClient.from('watchlist').insert({ symbol, market: mkt });
             if (error) throw error;
             _repWatch.add(symbol); _repWatchMkt[symbol] = mkt;
@@ -471,13 +515,18 @@ async function _repPrefetchScores() {
     const todo = uni.filter(t => {
         const s = scores[t];
         if (!s) return true;
+        // Agent-sourced entries are refreshed continuously by the 24/7 sweep — never
+        // re-fetch them client-side (this is what keeps the Russell-2000 board cheap).
+        if (s.src === 'agent' && (s.score != null || s.noData)) return false;
         if (now - (s.ts || 0) > TTL) return true; // re-check stale entries (data may have appeared since)
         return s.score == null && !s.noData;       // still need a score, and not already known-empty
     });
     if (!todo.length) return;
+    // Fill what's on screen first: with a search filter active, its matches jump the queue.
+    if (_repSearch) todo.sort((a, b) => (b.includes(_repSearch) ? 1 : 0) - (a.includes(_repSearch) ? 1 : 0));
 
     let idx = 0;
-    const CONCURRENCY = 4;
+    const CONCURRENCY = 8;
     const worker = async () => {
         while (idx < todo.length) {
             if (myToken !== _repPrefetchToken || _repView !== 'list' || _repMarket !== market) return;
@@ -500,7 +549,7 @@ async function _repPrefetchScores() {
                     if (stillCurrent()) _repRemoveCard(t);
                 }
             } catch (e) { /* skip — transient errors must NOT mark a ticker as no-data */ }
-            await new Promise(res => setTimeout(res, 140)); // gentle on the data source
+            await new Promise(res => setTimeout(res, 60)); // gentle on the data source (most hits land on the CDN cache)
         }
     };
     for (let w = 0; w < CONCURRENCY; w++) worker();
@@ -589,7 +638,7 @@ function openReportForTicker(ticker) {
             try { currentModalClientId = null; } catch (e) { }
         }
         if (typeof openReportsPage === 'function') openReportsPage();
-        _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
+        _repMarket = sym.endsWith('.TA') ? 'il' : 'sp500';
         openReportDetail(sym);
     } finally {
         if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);
@@ -1185,7 +1234,7 @@ function openReportForTicker(ticker) {
             try { currentModalClientId = null; } catch (e) { }
         }
         if (typeof openReportsPage === 'function') openReportsPage();
-        _repMarket = sym.endsWith('.TA') ? 'il' : 'us';
+        _repMarket = sym.endsWith('.TA') ? 'il' : 'sp500';
         if (typeof openReportDetail === 'function') openReportDetail(sym);
     } finally {
         if (typeof window !== 'undefined' && typeof window._navSuppressURL === 'function') window._navSuppressURL(false);

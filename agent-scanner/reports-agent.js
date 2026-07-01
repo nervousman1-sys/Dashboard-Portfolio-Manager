@@ -47,7 +47,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // ── Universe: same source the reports page uses (tickers + GICS sectors) ──────
 async function loadUniverse() {
     const out = [];
-    for (const market of ['us', 'il']) {
+    // r2k (Russell 2000, ~2000 small/mid-caps) is swept LAST each cycle so the large-cap
+    // US + IL boards always refresh first — r2k roughly quadruples the sweep length.
+    for (const market of ['us', 'il', 'r2k']) {
         try {
             const url = `${SITE}/api/technicals?mode=tickers&market=${market}&sv=3` + (market === 'il' ? '&stocksOnly=1' : '');
             const r = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -62,7 +64,7 @@ async function loadUniverse() {
 }
 
 // ── Refresh one company → upsert its latest report + score ────────────────────
-async function refreshOne(item, lastSeen, nextEarn) {
+async function refreshOne(item, lastSeen, nextEarn, lastSig) {
     const { symbol, market } = item;
     let report;
     try {
@@ -87,6 +89,13 @@ async function refreshOne(item, lastSeen, nextEarn) {
     }
     if (nextEarn && nextEarnings) nextEarn[symbol] = nextEarnings;
 
+    // CHANGE DETECTION — the board only reads score/improved/as_of/next_earnings, so when none
+    // of them moved there is NOTHING to write. Rewriting the full report JSONB for every company
+    // every sweep flooded Postgres with WAL/TOAST writes, drained the disk-I/O budget, and made
+    // the whole platform (incl. login) hang intermittently. Skip unchanged rows entirely.
+    const sig = `${asOf}|${score}|${improved ? 1 : 0}|${nextEarnings || ''}`;
+    if (lastSig && lastSig[symbol] === sig) return { ok: true, skipped: true, symbol };
+
     const payload = {
         symbol, market,
         company_name: report.companyName || symbol,
@@ -98,6 +107,7 @@ async function refreshOne(item, lastSeen, nextEarn) {
     };
     const { error } = await supabase.rpc('upsert_company_report', { p_secret: AGENT_WRITE_SECRET, p_item: payload });
     if (error) { log(`upsert ${symbol} warn:`, error.message); return { ok: false }; }
+    if (lastSig) lastSig[symbol] = sig;
 
     // Fresh report = asOf advanced past what we last stored for this symbol.
     const isNew = asOf && lastSeen[symbol] && lastSeen[symbol] !== asOf;
@@ -113,16 +123,17 @@ async function heartbeat(nextRunMs, result) {
 }
 
 // ── One full sweep over the whole universe ────────────────────────────────────
-async function sweep(universe, lastSeen, nextEarn) {
-    let ok = 0, fresh = 0, done = 0;
+async function sweep(universe, lastSeen, nextEarn, lastSig) {
+    let ok = 0, fresh = 0, done = 0, skipped = 0;
     const freshNames = [];
     // Process in small concurrent waves with a gentle gap so we don't hammer Yahoo.
     for (let i = 0; i < universe.length; i += BATCH) {
         const wave = universe.slice(i, i + BATCH);
-        const results = await Promise.all(wave.map(it => refreshOne(it, lastSeen, nextEarn)));
+        const results = await Promise.all(wave.map(it => refreshOne(it, lastSeen, nextEarn, lastSig)));
         for (const r of results) {
             done++;
             if (r.ok) ok++;
+            if (r.skipped) skipped++;
             if (r.ok && r.isNew) { fresh++; if (freshNames.length < 8) freshNames.push(r.symbol); }
         }
         if (done % HEARTBEAT_EVERY < BATCH) {
@@ -131,17 +142,26 @@ async function sweep(universe, lastSeen, nextEarn) {
         }
         await sleep(GAP_MS);
     }
-    return { ok, fresh, freshNames, total: universe.length };
+    return { ok, fresh, freshNames, skipped, total: universe.length };
 }
 
 async function runForever() {
     log(`Finextium Reports-Agent online · site=${SITE} · batch=${BATCH} · gap=${GAP_MS}ms · rest=${REST_MIN}min`);
     const lastSeen = Object.create(null); // symbol → last stored asOf (for fresh-report detection)
     const nextEarn = Object.create(null); // symbol → stored next-earnings date (skip re-fetch while future)
+    const lastSig = Object.create(null);  // symbol → asOf|score|improved|nextEarnings — skip unchanged upserts
     // Seed from what's already in the table so we only flag genuinely NEW reports + skip known dates.
     try {
-        const { data } = await supabase.from('company_reports').select('symbol,as_of,next_earnings');
-        for (const r of (data || [])) { if (r.as_of) lastSeen[r.symbol] = r.as_of; if (r.next_earnings) nextEarn[r.symbol] = r.next_earnings; }
+        // Page through — PostgREST caps a select at 1000 rows and the table now holds ~2600+ (incl. r2k).
+        for (let from = 0; ; from += 1000) {
+            const { data } = await supabase.from('company_reports').select('symbol,as_of,next_earnings,score,improved').range(from, from + 999);
+            for (const r of (data || [])) {
+                if (r.as_of) lastSeen[r.symbol] = r.as_of;
+                if (r.next_earnings) nextEarn[r.symbol] = r.next_earnings;
+                lastSig[r.symbol] = `${r.as_of}|${r.score != null ? r.score : null}|${r.improved ? 1 : 0}|${r.next_earnings || ''}`;
+            }
+            if (!data || data.length < 1000) break;
+        }
         log(`Seeded ${Object.keys(lastSeen).length} report dates, ${Object.keys(nextEarn).length} earnings dates.`);
     } catch (e) { log('seed warn:', e.message); }
 
@@ -153,9 +173,9 @@ async function runForever() {
         if (!universe.length) { log('Empty universe — retrying in 60s.'); await sleep(60000); continue; }
         log(`Sweep #${cycle} starting · ${universe.length} companies.`);
         const t0 = Date.now();
-        const res = await sweep(universe, lastSeen, nextEarn);
+        const res = await sweep(universe, lastSeen, nextEarn, lastSig);
         const mins = ((Date.now() - t0) / 60000).toFixed(1);
-        const summary = `סריקת דוחות הושלמה · ${res.ok}/${res.total} עודכנו · ${res.fresh} דוחות חדשים${res.fresh ? ` (${res.freshNames.join(', ')})` : ''} · ${mins} דק׳`;
+        const summary = `סריקת דוחות הושלמה · ${res.ok}/${res.total} עודכנו · ${res.skipped} ללא שינוי (לא נכתבו) · ${res.fresh} דוחות חדשים${res.fresh ? ` (${res.freshNames.join(', ')})` : ''} · ${mins} דק׳`;
         log(`✓ ${summary}`);
         await heartbeat(REST_MIN * 60 * 1000, summary);
         if (RUN_ONCE) { log('--once: done.'); process.exit(0); }

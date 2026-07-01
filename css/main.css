@@ -9917,7 +9917,9 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .rep-chart-modal-foot { margin-top: 10px; font-size: 11px; color: var(--text-primary); opacity: 0.7; text-align: center; }
 
 /* ── Sector-grouped list ── */
-.rep-sector-group { margin-bottom: 18px; }
+/* content-visibility: off-screen sector groups skip layout/paint entirely — the ~2000-card
+   Russell-2000 board renders in a fraction of the time and scrolling stays smooth. */
+.rep-sector-group { margin-bottom: 18px; content-visibility: auto; contain-intrinsic-size: auto 340px; }
 .rep-sector-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800;
     color: var(--accent-blue); letter-spacing: 0.02em; margin: 4px 2px 10px; padding-bottom: 6px;
     border-bottom: 1px solid var(--border); }

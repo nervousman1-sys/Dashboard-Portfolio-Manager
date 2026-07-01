@@ -85,7 +85,9 @@ async function fetchSP500() {
     const sect = html.split('id="constituents"')[1] || html;
     const out = new Set();
     // Capture symbol (1st cell) + GICS Sector (3rd cell). The 2nd cell (security name) is skipped.
-    const rowRe = /<tr>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>\s*<td[^>]*>[\s\S]*?<\/td>\s*<td[^>]*>\s*(?:<a[^>]*>)?([^<]+?)(?:<\/a>)?\s*<\/td>/g;
+    // <tr[^>]*> — Wikipedia's Parsoid render puts id attributes on every row (<tr id="mwX">),
+    // and a bare <tr> match silently returns 0 constituents.
+    const rowRe = /<tr[^>]*>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>\s*<td[^>]*>[\s\S]*?<\/td>\s*<td[^>]*>\s*(?:<a[^>]*>)?([^<]+?)(?:<\/a>)?\s*<\/td>/g;
     let m;
     while ((m = rowRe.exec(sect)) !== null) {
         const tk = m[1].replace('.', '-'); // BRK.B → BRK-B (Yahoo)
@@ -101,7 +103,8 @@ async function fetchNasdaq100() {
     const html = await r.text();
     const sect = html.split('id="constituents"')[1] || html;
     const out = new Set();
-    const rowRe = /<tr>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>/g;
+    // <tr[^>]*> — tolerate Parsoid row attributes (see fetchSP500).
+    const rowRe = /<tr[^>]*>\s*<td[^>]*>\s*(?:<a [^>]*>)?([A-Z][A-Z0-9.\-]{0,6})(?:<\/a>)?\s*<\/td>/g;
     let m;
     while ((m = rowRe.exec(sect)) !== null) out.add(m[1].replace('.', '-'));
     return [...out];
@@ -172,7 +175,7 @@ async function fetchTA125() {
     const out = new Set();
     // Columns: Name | Symbol | Market Cap | Weight | Sector | Comments. Strip tags per
     // cell and read symbol (cell 1) + sector (cell 4) — robust to nested <a>/<span>.
-    const rows = sect.match(/<tr>[\s\S]*?<\/tr>/g) || [];
+    const rows = sect.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || []; // tolerate Parsoid row attributes
     for (const row of rows) {
         const cells = (row.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []).map(c => c.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim());
         if (cells.length < 2) continue;
@@ -359,7 +362,8 @@ module.exports = async (req, res) => {
         if (mode === 'report') {
             const { fetchReport } = require('../lib/reports-data.js');
             const symbol = String(req.query.symbol || '').trim().toUpperCase();
-            const market = (req.query.market || (symbol.endsWith('.TA') ? 'il' : 'us')).toLowerCase();
+            let market = (req.query.market || (symbol.endsWith('.TA') ? 'il' : 'us')).toLowerCase();
+            if (market !== 'il') market = 'us'; // sp500/ndx/r2k tabs are all US-style symbols
             if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
             const yahooFirst = req.query.fast === '1' || req.query.src === 'yahoo';
             try {
@@ -417,6 +421,31 @@ module.exports = async (req, res) => {
                 if (tickers.length < 20) throw new Error(`r2k universe too small: ${tickers.length}`);
                 res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
                 res.status(200).json({ tickers, sectors, count: tickers.length, asOf: new Date().toISOString().slice(0, 10) });
+                return;
+            }
+            if (market === 'sp500' || market === 'ndx') {
+                // Single-index views (the reports board shows each index as its own tab).
+                // S&P sectors are always fetched — they're also the GICS source for NDX names.
+                const [sp, ndx] = await Promise.all([fetchSP500(), market === 'ndx' ? fetchNasdaq100() : Promise.resolve([])]);
+                let all = (market === 'sp500' ? sp : ndx).filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t));
+                if (all.length < (market === 'sp500' ? 100 : 50)) throw new Error(`${market} constituent parse too small: ${all.length}`);
+                if (market === 'sp500') {
+                    // Merge the guaranteed core so a flaky Wikipedia parse never drops a major.
+                    const s = new Set(all);
+                    for (const [t, sec] of Object.entries(_CORE_US)) {
+                        s.add(t);
+                        if (!_SP_SECTORS[t] && !_EXTRA_SECTORS[t]) _EXTRA_SECTORS[t] = sec;
+                    }
+                    all = [...s];
+                }
+                all = [...new Set(all)].sort();
+                const sectors = {};
+                all.forEach(t => {
+                    const s = _CRYPTO_OVERRIDE.has(t) ? 'Crypto' : (_SP_SECTORS[t] || _EXTRA_SECTORS[t] || _CORE_US[t]);
+                    if (s) sectors[t] = s;
+                });
+                res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
+                res.status(200).json({ tickers: all, sectors, count: all.length, asOf: new Date().toISOString().slice(0, 10) });
                 return;
             }
             const [sp, ndx] = await Promise.all([fetchSP500(), fetchNasdaq100()]);
