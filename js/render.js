@@ -1375,7 +1375,7 @@ function renderClientCards() {
                         </span>
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
-                            <span class="alloc-chg price-change ${changeClass}">${changeSign}${change.toFixed(1)}%</span>
+                            <span class="alloc-chg price-change ${changeClass}" title="שינוי יומי (מול סגירה קודמת)">${changeSign}${change.toFixed(1)}%</span>
                             <span class="alloc-price">${currSym}${formatNumber(h.price)}</span>
                         </span>
                     </div>`;

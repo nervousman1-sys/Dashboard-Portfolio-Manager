@@ -2,18 +2,19 @@
 
 // ── Quick-Watch: searchable pool — indices, US mega-caps, TASE stocks, crypto ──
 const _QW_TICKER_POOL = [
-    // Global Indices
-    { sym: 'SPY',      label: 'S&P 500',          type: 'index',  currency: 'USD' },
-    { sym: 'QQQ',      label: 'NASDAQ 100',        type: 'index',  currency: 'USD' },
-    { sym: 'DIA',      label: 'Dow Jones',         type: 'index',  currency: 'USD' },
-    { sym: 'IWM',      label: 'Russell 2000',      type: 'index',  currency: 'USD' },
-    { sym: 'EWG',      label: 'DAX (Germany)',     type: 'index',  currency: 'USD' },
-    { sym: 'EWQ',      label: 'CAC 40 (France)',   type: 'index',  currency: 'USD' },
-    { sym: 'EWJ',      label: 'Nikkei (Japan)',    type: 'index',  currency: 'USD' },
-    { sym: 'FXI',      label: 'China Large-Cap',   type: 'index',  currency: 'USD' },
+    // Global Indices — REAL index symbols (^GSPC = S&P 500 itself), not ETF proxies.
+    // Showing SPY/QQQ/EWG prices under index names displayed "DAX 41.21" — meaningless.
+    { sym: '^GSPC',    label: 'S&P 500',           type: 'index',  currency: 'USD' },
+    { sym: '^NDX',     label: 'NASDAQ 100',        type: 'index',  currency: 'USD' },
+    { sym: '^DJI',     label: 'Dow Jones',         type: 'index',  currency: 'USD' },
+    { sym: '^RUT',     label: 'Russell 2000',      type: 'index',  currency: 'USD' },
+    { sym: '^GDAXI',   label: 'DAX (Germany)',     type: 'index',  currency: 'EUR' },
+    { sym: '^FCHI',    label: 'CAC 40 (France)',   type: 'index',  currency: 'EUR' },
+    { sym: '^N225',    label: 'Nikkei (Japan)',    type: 'index',  currency: 'JPY' },
+    { sym: '^HSI',     label: 'Hang Seng (China)', type: 'index',  currency: 'HKD' },
     { sym: 'TA35.TA',  label: 'TA-35',             type: 'index',  currency: 'ILS' },
-    { sym: 'GLD',      label: 'Gold',              type: 'index',  currency: 'USD' },
-    { sym: 'USO',      label: 'Oil (WTI)',         type: 'index',  currency: 'USD' },
+    { sym: 'GC=F',     label: 'Gold',              type: 'index',  currency: 'USD' },
+    { sym: 'CL=F',     label: 'Oil (WTI)',         type: 'index',  currency: 'USD' },
     { sym: 'TLT',      label: 'US Bonds 20Y',      type: 'index',  currency: 'USD' },
     // US Mega-Cap Stocks (NASDAQ / S&P 500)
     { sym: 'AAPL',     label: 'Apple',             type: 'stock',  currency: 'USD' },
@@ -43,18 +44,35 @@ const _QW_LS_KEY = 'finextium_qw_tickers';
 
 // Default 4 tickers: the core analytical indices
 const _QW_DEFAULT = [
-    { sym: 'SPY',     label: 'S&P 500',    type: 'index', currency: 'USD' },
-    { sym: 'QQQ',     label: 'NASDAQ 100', type: 'index', currency: 'USD' },
-    { sym: 'EWG',     label: 'DAX',        type: 'index', currency: 'USD' },
+    { sym: '^GSPC',   label: 'S&P 500',    type: 'index', currency: 'USD' },
+    { sym: '^NDX',    label: 'NASDAQ 100', type: 'index', currency: 'USD' },
+    { sym: '^GDAXI',  label: 'DAX',        type: 'index', currency: 'EUR' },
     { sym: 'TA35.TA', label: 'TA-35',      type: 'index', currency: 'ILS' }
 ];
+
+// Saved lists may still hold the legacy ETF proxies — upgrade them to the real indices
+// (keeps the user's chosen labels/slots, just swaps the data source).
+const _QW_SYM_MIGRATE = { SPY: '^GSPC', QQQ: '^NDX', DIA: '^DJI', IWM: '^RUT', EWG: '^GDAXI', EWQ: '^FCHI', EWJ: '^N225', FXI: '^HSI', GLD: 'GC=F', USO: 'CL=F' };
 
 function _loadQWTickers() {
     try {
         const saved = localStorage.getItem(_QW_LS_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 5) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 5) {
+                let migrated = false;
+                for (const t of parsed) {
+                    // Only migrate rows saved as an INDEX — a user tracking GLD/TLT as a holding keeps the ETF.
+                    if (t && t.type === 'index' && _QW_SYM_MIGRATE[t.sym]) {
+                        const fresh = _QW_TICKER_POOL.find(p => p.sym === _QW_SYM_MIGRATE[t.sym]);
+                        t.sym = _QW_SYM_MIGRATE[t.sym];
+                        if (fresh) { t.currency = fresh.currency; }
+                        migrated = true;
+                    }
+                }
+                if (migrated) { try { localStorage.setItem(_QW_LS_KEY, JSON.stringify(parsed)); } catch (_) {} }
+                return parsed;
+            }
         }
     } catch (_) {}
     return _QW_DEFAULT.map(t => ({ ...t }));

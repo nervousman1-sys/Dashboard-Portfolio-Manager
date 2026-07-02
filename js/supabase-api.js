@@ -279,10 +279,13 @@ async function supaAddClientWithHoldings(name, cashUsd, cashIls, holdings, onPro
         bulkErr = retry.error;
     }
 
-    // Retry without bond_type if column doesn't exist
+    // Retry without bond_type if column doesn't exist. Strip ONLY bond_type — deleting
+    // buy_date here too silently erased every purchase date in the batch, which made the
+    // cards' "bought today" daily-baseline heuristic treat historical imports as
+    // opened-today positions (the daily % then showed the TOTAL return).
     if (bulkErr && bulkErr.message && bulkErr.message.includes('bond_type')) {
         console.warn('[supaAddClientWithHoldings] bond_type column missing — retrying without it');
-        holdingRows.forEach(r => { delete r.bond_type; delete r.buy_date; });
+        holdingRows.forEach(r => { delete r.bond_type; });
         const retry = await supabaseClient.from('holdings').insert(holdingRows);
         bulkErr = retry.error;
     }

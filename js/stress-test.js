@@ -472,7 +472,7 @@ async function _stComputeProximity() {
         try { const r = await fetch(`/api/macro?d=${new Date().toISOString().slice(0, 10)}`, { headers: { Accept: 'application/json' } }); if (r.ok) { const j = await r.json(); macro = (j && (j.us || j.US)) || macro; } } catch (e) { }
     }
     const cpi = macro ? num(macro.cpi) : null;
-    if (cpi != null && isFinite(cpi)) parts.push({ key: 'לחצי אינפלציה', score: Math.round(Math.max(0, Math.min(100, (cpi - 1.5) / 4 * 100))), w: 0.2, note: `CPI ${cpi}%` });
+    if (cpi != null && isFinite(cpi)) parts.push({ key: 'לחצי אינפלציה', score: Math.round(Math.max(0, Math.min(100, (cpi - 1.5) / 4 * 100))), w: 0.2, note: `CPI ${Number(cpi).toFixed(2)}%` });
     else { missing++; parts.push({ key: 'לחצי אינפלציה', score: 50, w: 0.2, note: 'נתון חלקי' }); }
     const rate = macro ? (num(macro.fed_rate) ?? num(macro.rate) ?? num(macro.fedRate) ?? num(macro.interestRate)) : null;
     if (rate != null && isFinite(rate)) parts.push({ key: 'מדיניות מוניטרית מהדקת', score: Math.round(Math.max(0, Math.min(100, rate / 6 * 100))), w: 0.2, note: `ריבית ${rate}%` });

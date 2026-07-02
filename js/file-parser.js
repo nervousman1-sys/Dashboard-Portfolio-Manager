@@ -101,7 +101,11 @@ async function _readExcelRows(file) {
         reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
+                // raw:true only affects PLAIN-TEXT (CSV) input: keep values as strings so an
+                // ambiguous "03/06/2025" reaches our own DAY-FIRST date parser (_cleanDate)
+                // instead of being pre-parsed by the lib as the US mm/dd (June→March bug).
+                // Binary .xlsx cells are natively typed and unaffected.
+                const workbook = XLSX.read(data, { type: 'array', raw: true });
                 const sheetName = workbook.SheetNames[0];
                 if (!sheetName) { resolve([]); return; }
                 resolve(XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) || []);
@@ -119,7 +123,9 @@ async function parseExcelFile(file) {
         reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
+                // raw:true — CSV values stay strings so dates go through our day-first parser
+                // (see _readExcelRows); binary .xlsx is unaffected.
+                const workbook = XLSX.read(data, { type: 'array', raw: true });
 
                 const sheetName = workbook.SheetNames[0];
                 if (!sheetName) { resolve([]); return; }
