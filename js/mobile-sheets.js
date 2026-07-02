@@ -139,42 +139,36 @@
         body.appendChild(grid);
         w.classList.add('open');
     }
-    function railify(el) {
-        if (!el || !el.parentNode) return;
-        if (el.dataset.mrail) {
-            // The button lives INSIDE the rail — a re-render that replaces the rail's
-            // innerHTML (e.g. the technical chips on every scan wave) wipes it while
-            // the container's dataset survives. Detect and rebuild.
-            if (el.querySelector('.mrail-btn')) return;   // intact
-            delete el.dataset.mrail;
-            el.classList.remove('mrail');
-            el.style.paddingInlineEnd = '';
-        }
-        // Defer until it has real layout (post-render measurements)
-        if (!el.clientWidth) return;
-        if (el.scrollWidth <= el.clientWidth + 8) return;  // fits — nothing to do
-        el.dataset.mrail = '1';
-        el.classList.add('mrail');
-        const n = el.children.length;
-        // Reserve the row's END (RTL: left side) for the anchored "הצג הכל" chip, then
-        // hide any chip that would be PARTIALLY clipped by it or the edge — whole pills
-        // only; the button completes the line instead of a cut chip + orphan row.
-        const RESERVE = 96;
-        el.style.paddingInlineEnd = RESERVE + 'px';
+    // Whole-pill clipping, re-measured on EVERY chip re-render: hide chips crossing
+    // the rail's own left content edge (RTL overflow side). The button is a flex
+    // SIBLING outside the rail — overlap is structurally impossible.
+    function _recut(el) {
         const box = el.getBoundingClientRect();
-        const cutoff = box.left + RESERVE;
         for (const c of el.children) {
-            const r = c.getBoundingClientRect();
-            if (r.left < cutoff - 2) c.classList.add('mrail-cut');
+            c.classList.remove('mrail-cut');
+            if (c.getBoundingClientRect().left < box.left - 1) c.classList.add('mrail-cut');
         }
-        const title = (el.closest('.rep-new-strip')?.querySelector('.rep-new-lbl')?.textContent || '').trim()
-            || (el.classList.contains('tech-chips') ? 'כל המסננים והאינדיקטורים' : 'הרשימה המלאה');
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'mrail-btn';
-        btn.innerHTML = `הצג הכל · ${n}`;
-        btn.addEventListener('click', (e) => { e.stopPropagation(); openRailSheet(el, title); });
-        el.appendChild(btn); // anchored INSIDE the row's end via CSS (absolute, left)
+        const btn = el.nextElementSibling;
+        if (btn && btn.classList.contains('mrail-btn')) btn.textContent = `הצג הכל · ${el.children.length}`;
+    }
+    function railify(el) {
+        if (!el || !el.parentNode || !el.clientWidth) return;
+        const hasBtn = el.nextElementSibling && el.nextElementSibling.classList && el.nextElementSibling.classList.contains('mrail-btn');
+        if (!el.dataset.mrail) {
+            if (el.scrollWidth <= el.clientWidth + 8) return;  // fits — nothing to do
+            el.dataset.mrail = '1';
+            el.classList.add('mrail');
+        }
+        if (!hasBtn) {
+            const title = (el.closest('.rep-new-strip')?.querySelector('.rep-new-lbl')?.textContent || '').trim()
+                || (el.classList.contains('tech-chips') ? 'כל המסננים והאינדיקטורים' : 'הרשימה המלאה');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'mrail-btn';
+            btn.addEventListener('click', (e) => { e.stopPropagation(); openRailSheet(el, title); });
+            el.parentNode.insertBefore(btn, el.nextSibling); // SIBLING on the same flex row
+        }
+        _recut(el);
     }
     function unrailAll() {
         document.querySelectorAll('.mrail').forEach(el => { el.classList.remove('mrail', 'mrail-open'); delete el.dataset.mrail; });

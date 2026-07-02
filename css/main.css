@@ -11029,3 +11029,85 @@ html:not(.day-mode) { background-color: #020617; }
     .rep-table .rep-hint { display: none; }        /* ⓘ tooltips are desktop-only affordances */
     .rep-detail .risk-table-scroll { overflow-x: visible !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — rail v3 (sibling button, zero overlap) · strip cards · FX toggle back
+   (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── Rail v3: the rail is a shrinking flex item; the button is its SIBLING on
+       the same row — they can never overlap. Whole pills only inside the rail. ── */
+    .mrail {
+        flex: 1 1 0 !important;
+        min-width: 0;
+        overflow: hidden !important;
+        flex-wrap: nowrap !important;
+        padding-inline-end: 0 !important;
+    }
+    .mrail + .mrail-btn {
+        position: static;
+        transform: none;
+        flex: 0 0 auto;
+        align-self: center;
+        margin: 0;
+        min-height: 36px;
+        padding: 5px 11px;
+        background: rgba(7, 12, 26, 0.98);
+        border: 1px solid rgba(0, 229, 255, 0.3);
+        color: #67e8f9;
+        white-space: nowrap;
+    }
+    .mrail + .mrail-btn:active { transform: scale(0.96); }
+
+    /* ── Reports strips (מעקב / דוחות קרובים / דיווחו לאחרונה): card layout —
+       header row = title (right) + "הצג הכל" (left), chip rail on its own row. ── */
+    .rep-new-strip {
+        display: flex !important;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 10px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 10px 12px;
+        margin-top: 10px;
+    }
+    .rep-new-strip .rep-new-lbl { order: 1; flex: 1 1 auto; font-weight: 900; font-size: 12.5px; }
+    .rep-new-strip .mrail-btn { order: 2; }
+    .rep-new-strip .rep-new-chips { order: 3; flex: 1 1 100% !important; }
+
+    /* Technical toolbar: the caption + rail + button share one row. */
+    .tech-toolbar .tech-chips.mrail { flex: 1 1 0 !important; }
+    .tech-toolbar .mrail-btn { flex: 0 0 auto; }
+
+    /* ── FX-adjusted return toggle: RESTORED on phones (it was display:none) —
+       a full-width tappable row above the filters, thumb-friendly. ── */
+    .filters-search-row .fx-toggle-wrap {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        margin-bottom: 8px;
+    }
+    .filters-search-row .fx-toggle-wrap .fx-toggle-label { font-size: 12.5px; font-weight: 800; }
+}
+
+/* Mobile hit-slop — round 2 (from the QA sweep): the remaining small targets get the
+   invisible ±8px touch expansion (visual size unchanged). */
+@media (max-width: 768px) {
+    .sidebar-tz-btn, .currency-btn, .qw-settings-btn, .view-toggle-btn, .adv-cand-gf {
+        position: relative;
+    }
+    .sidebar-tz-btn::after, .currency-btn::after, .qw-settings-btn::after,
+    .view-toggle-btn::after, .adv-cand-gf::after {
+        content: '';
+        position: absolute;
+        inset: -8px;
+    }
+}
