@@ -139,7 +139,7 @@ async function sweep(universe, lastSeen, nextEarn, lastSig) {
             if (r.ok && r.isNew) { fresh++; if (freshNames.length < 8) freshNames.push(r.symbol); }
         }
         if (done % HEARTBEAT_EVERY < BATCH) {
-            const note = `מעדכן דוחות · ${done}/${universe.length} · ${ok} נשמרו${fresh ? ` · ${fresh} דוחות חדשים (${freshNames.join(', ')})` : ''}`;
+            const note = `מעדכן דוחות · ${done}/${universe.length} · ${ok - skipped} נכתבו · ${skipped} ללא שינוי${fresh ? ` · ${fresh} דוחות חדשים (${freshNames.join(', ')})` : ''}`;
             await heartbeat(REST_MIN * 60 * 1000, note);
         }
         await sleep(GAP_MS);
