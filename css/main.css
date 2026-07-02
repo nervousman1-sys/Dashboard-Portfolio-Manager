@@ -10832,3 +10832,88 @@ html:not(.day-mode) { background-color: #020617; }
         overflow-x: visible !important;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — sheet chip GRID + compact economic indicators (less scrolling)
+   (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── Sheet chips: ragged pill cloud → orderly two-column grid of row-buttons.
+       Every option is a full-width cell: label right, count/date left — one clear
+       scannable column pair, iOS-list style. ── */
+    .msheet-chipwrap {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    .msheet-chipwrap > * {
+        width: 100%;
+        min-height: 48px;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 12px !important;
+        background: rgba(255, 255, 255, 0.045) !important;
+        border: 1px solid rgba(255, 255, 255, 0.11) !important;
+        border-radius: 12px !important;
+        font-size: 12.5px !important;
+        font-weight: 800;
+        text-align: right;
+    }
+    .msheet-chipwrap > *:active { transform: scale(0.97); }
+    .msheet-chipwrap > .dn-tab.active {
+        background: rgba(0, 229, 255, 0.08) !important;
+        border-color: rgba(0, 229, 255, 0.45) !important;
+        color: var(--accent-blue, #00e5ff) !important;
+    }
+
+    /* ── Economic indicators (US/IL Indicators): tall card → slim stat row.
+       One compact row per indicator — title + tag on top, then עכשיו (hero,
+       colored) beside קודם (dim) — ~55% less scrolling for the same data. ── */
+    .macro-indicator-grid { gap: 8px !important; }
+    .macro-hw-card {
+        padding: 10px 14px !important;
+        min-height: 0 !important;
+        border-radius: 14px;
+    }
+    .macro-hw-card-header { margin-bottom: 6px !important; }
+    .macro-hw-title { font-size: 12.5px !important; line-height: 1.3; }
+    .macro-hw-tag { font-size: 8.5px !important; padding: 2px 7px !important; }
+    .macro-hw-card-body {
+        display: flex !important;
+        flex-direction: row-reverse;      /* DOM order is קודם→עכשיו; show עכשיו FIRST (right) */
+        justify-content: flex-end;
+        align-items: baseline;
+        gap: 18px;
+        padding: 0 !important;
+    }
+    .macro-hw-col {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: baseline;
+        gap: 6px;
+    }
+    .macro-hw-col-label { font-size: 9.5px !important; opacity: 0.7; }
+    .macro-hw-col-value { font-size: 13.5px !important; }
+    .macro-hw-card-body .macro-hw-col:last-child .macro-hw-col-value { font-size: 17px !important; font-weight: 900; }
+    .macro-hw-card-footer {
+        font-size: 8.5px !important;
+        margin-top: 5px !important;
+        padding-top: 0 !important;
+        border-top: none !important;
+        opacity: 0.55;
+    }
+}
+
+/* Mobile: indicator inner value boxes — flatten (no sub-box padding) for true stat rows */
+@media (max-width: 768px) {
+    .macro-hw-col {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    .macro-hw-card-body { margin: 0 !important; }
+}
