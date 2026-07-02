@@ -10595,3 +10595,102 @@ html:not(.day-mode) { background-color: #020617; }
     .risk-table--recs th, .risk-table--recs td,
     .corr-table th, .corr-table td { padding: 10px 6px; font-size: 12.5px; white-space: nowrap; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE DISCLOSURE — one-row KPI strip · "הסבר" bottom sheets · folded sections
+   (Hard isolation: @media max-width 768px only.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── CML/SML reference panel: FIVE KPIs on ONE row (app stat-strip) ── */
+    .risk-ref-panel {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0 !important;
+        padding: 10px 4px !important;
+    }
+    .risk-ref-cell {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+        gap: 3px;
+        padding: 0 3px;
+        border-inline-start: 1px solid rgba(255,255,255,0.07);
+        text-align: center;
+    }
+    .risk-ref-cell:first-child { border-inline-start: none; }
+    .risk-ref-label { font-size: 8.5px !important; line-height: 1.25; font-weight: 700; opacity: 0.75; }
+    .risk-ref-val { font-size: 15px !important; font-weight: 900; }
+    .risk-ref-sub { display: none; }
+
+    /* ── Explainer paragraphs collapse behind a small "הסבר" pill ── */
+    .msheet-hidden { display: none !important; }
+    .msheet-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 36px;
+        margin: 6px 0 2px;
+        padding: 6px 14px;
+        background: rgba(0, 229, 255, 0.07);
+        border: 1px solid rgba(0, 229, 255, 0.25);
+        border-radius: 999px;
+        color: #67e8f9;
+        font-size: 12px; font-weight: 800;
+        font-family: inherit;
+        cursor: pointer;
+        transition: transform 0.12s ease;
+    }
+    .msheet-btn:active { transform: scale(0.97); }
+
+    /* ── Bottom sheet (fixed → blur allowed per the mobile spec) ── */
+    #mobileSheetWrap { position: fixed; inset: 0; z-index: 7000; pointer-events: none; }
+    #mobileSheetWrap .msheet-backdrop {
+        position: absolute; inset: 0;
+        background: rgba(1, 4, 12, 0.7);
+        opacity: 0; transition: opacity 0.2s ease;
+    }
+    #mobileSheetWrap .msheet {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        background: rgba(6, 11, 25, 0.96);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-bottom: none;
+        border-radius: 20px 20px 0 0;
+        padding: 8px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+        max-height: 72vh;
+        display: flex; flex-direction: column;
+        transform: translateY(105%);
+        transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+        box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.55);
+    }
+    #mobileSheetWrap.open { pointer-events: auto; }
+    #mobileSheetWrap.open .msheet-backdrop { opacity: 1; }
+    #mobileSheetWrap.open .msheet { transform: translateY(0); }
+    .msheet-grip { width: 42px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.25); margin: 4px auto 10px; }
+    .msheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .msheet-title { font-size: 15px; font-weight: 900; color: #fff; }
+    .msheet-close {
+        min-width: 44px; min-height: 44px;
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px; color: #cbd5e1; font-size: 15px; cursor: pointer;
+    }
+    .msheet-body { overflow-y: auto; color: #dbe2ee; font-size: 13.5px; line-height: 1.75; padding-bottom: 6px; }
+    .msheet-body b { color: #fff; }
+
+    /* ── Dashboard "סקירת חשיפה כוללת": folded by default, tap the title to open ── */
+    .mfold-title { cursor: pointer; user-select: none; position: relative; }
+    .mfold-title::after {
+        content: '▾';
+        margin-inline-start: 8px;
+        font-size: 13px; color: #67e8f9;
+        display: inline-block;
+        transition: transform 0.2s ease;
+    }
+    .mfold-closed .mfold-title::after { transform: rotate(-90deg); }
+    .mfold-closed .exposure-inner { display: none; }
+}
+/* Desktop guard: the sheet infra exists in the DOM but must never show above 768px. */
+@media (min-width: 769px) {
+    #mobileSheetWrap, .msheet-btn { display: none !important; }
+    .msheet-hidden { display: revert !important; }
+}
