@@ -1099,11 +1099,50 @@ function _repSetAiSec(containerId, wrapperId, html) {
     const wrap = document.getElementById(wrapperId);
     if (wrap) wrap.style.display = (html && html.trim()) ? '' : 'none';
 }
-function _repApplyAI(j) {
+// ── Deterministic SWOT — computed straight from the report's own numbers ──
+// EVERY company with data gets a structured SWOT even when the AI is rate-limited:
+// strengths/weaknesses from the engine's key points + profitability/growth/FCF,
+// opportunities from valuation + buyback/R&D notes + the next report date,
+// threats from the engine's risk flags + beta/multiple sensitivity.
+function _repFallbackSwot(m) {
+    const S = [], W = [], O = [], T = [];
+    const v = m.valuation || {};
+    const q = (m.rows && m.rows[0]) || {};
+    const pct = (x) => (x != null && isFinite(x)) ? (x > 0 ? '+' : '') + (x * 100).toFixed(1) + '%' : null;
+    if (m.beat && m.beat.improved) S.push(m.beat.label || 'שיפור תוצאות מול הרבעון המקביל אשתקד');
+    if (v.roeTTM != null && v.roeTTM >= 0.15) S.push('תשואה גבוהה על ההון: ROE ‏' + pct(v.roeTTM));
+    if (q.yoyRevenue != null && q.yoyRevenue >= 0.10) S.push('צמיחת הכנסות של ' + pct(q.yoyRevenue) + ' ברבעון האחרון לעומת אשתקד');
+    if (v.fcfYield != null && v.fcfYield >= 0.04) S.push('תזרים מזומנים חופשי חזק: תשואת FCF ‏' + pct(v.fcfYield));
+    (m.keyPoints || []).filter(p => p && p.tone === 'good').forEach(p => { if (S.length < 5 && !S.includes(p.he)) S.push(p.he); });
+    (m.keyPoints || []).filter(p => p && p.tone === 'bad').forEach(p => { if (W.length < 4) W.push(p.he); });
+    if (q.yoyRevenue != null && q.yoyRevenue < -0.02) W.push('ירידת הכנסות של ' + pct(q.yoyRevenue) + ' לעומת אשתקד');
+    if (v.fcfYield != null && v.fcfYield < 0) W.push('תזרים מזומנים חופשי שלילי — החברה שורפת מזומן');
+    if (v.roeTTM != null && v.roeTTM < 0) W.push('תשואה שלילית על ההון — הפסדים ברמת השורה התחתונה');
+    (m.accountingNotes || []).filter(n => n && n.tone === 'good').forEach(n => { if (O.length < 2) O.push(n.he); });
+    if (v.peTrailing != null && v.peTrailing > 0 && v.peTrailing <= 15) O.push('תמחור נוח יחסית: מכפיל רווח ' + v.peTrailing.toFixed(1) + ' — מרווח ביטחון בשיערוך');
+    if (v.evToEbitda != null && v.evToEbitda > 0 && v.evToEbitda <= 10) O.push('EV/EBITDA נמוך ‏(' + v.evToEbitda.toFixed(1) + ') — פוטנציאל לסגירת פער מול הסקטור');
+    if (m.nextEarningsDate) O.push('הדוח הבא ב-' + _repHeDate(m.nextEarningsDate) + ' — קטליזטור קרוב להמשך המומנטום');
+    (m.flags || []).filter(f => f && f.severity && f.severity !== 'ok').forEach(f => { if (T.length < 3) T.push(f.he); });
+    if (m.beta != null && isFinite(m.beta) && m.beta >= 1.4) T.push('ביתא גבוהה ‏(' + Number(m.beta).toFixed(2) + ') — רגישות מוגברת לירידות שוק');
+    if (v.peTrailing != null && v.peTrailing >= 35) T.push('מכפיל רווח גבוה ‏(' + v.peTrailing.toFixed(0) + ') — תמחור שדורש עמידה בציפיות; אכזבה בדוח תתומחר בחדות');
+    const cap = (a, fb) => { const out = a.filter(Boolean).slice(0, 4); return out.length ? out : [fb]; };
+    return {
+        strengths: cap(S, 'לא זוהו חוזקות בולטות בנתוני הדוח האחרון'),
+        weaknesses: cap(W, 'לא זוהו חולשות מהותיות בנתוני הדוח האחרון'),
+        opportunities: cap(O, 'שיפור עקבי בתוצאות עשוי להוביל לשיערוך כלפי מעלה'),
+        threats: cap(T, 'סיכוני מאקרו וענף כלליים' + (m.sector ? ' — ' + m.sector : '')),
+    };
+}
+function _repFallbackSwotHtml(m) {
+    return _repSwotHtml(_repFallbackSwot(m)) +
+        '<div class="rep-ai-fallback-note">ניתוח מובנה המחושב ישירות מנתוני הדוח · ניתוח ה-AI המורחב יתווסף אוטומטית כשהשרת פנוי</div>';
+}
+
+function _repApplyAI(j, m) {
     const swot = j.swot || {};
     const swotHasContent = ['strengths', 'weaknesses', 'opportunities', 'threats'].some(k => Array.isArray(swot[k]) && swot[k].length);
     _repSetAiSec('repSummary', 'repSecSummary', _repSummaryHtml(j.summary || {}));
-    _repSetAiSec('repSwot', 'repSecSwot', swotHasContent ? _repSwotHtml(swot) : '');
+    _repSetAiSec('repSwot', 'repSecSwot', swotHasContent ? _repSwotHtml(swot) : (m ? _repFallbackSwotHtml(m) : ''));
     _repSetAiSec('repStrategy', 'repSecStrategy', _repStrategyHtml(j.strategy || {}));
     _repSetAiSec('repRisks', 'repSecRisks', _repRisksHtml(j.risks || {}));
     const exps = Array.isArray(j.declineExplanations) ? j.declineExplanations : [];
@@ -1121,7 +1160,7 @@ async function _repLoadAI(m, attempt) {
     if (attempt === 0) {
         try {
             const cached = JSON.parse(localStorage.getItem(_repAiCacheKey(m)) || 'null');
-            if (cached && cached.swot) { _repApplyAI(cached); return; }
+            if (cached && cached.swot) { _repApplyAI(cached, m); return; }
         } catch (e) { /* ignore */ }
     }
     try {
@@ -1134,24 +1173,27 @@ async function _repLoadAI(m, attempt) {
         const j = await r.json();
         if (!r.ok || j.error || !j.swot) throw new Error(j.message || 'ai failed');
         if (!stillHere()) return;
-        _repApplyAI(j);
+        _repApplyAI(j, m);
         try { localStorage.setItem(_repAiCacheKey(m), JSON.stringify(j)); } catch (e) { /* quota — fine */ }
     } catch (e) {
         if (!stillHere()) return;
+        // The SWOT is NEVER empty: show the deterministic, report-data SWOT right away —
+        // if the AI succeeds on retry it simply replaces it with the richer version.
+        _repSetAiSec('repSwot', 'repSecSwot', _repFallbackSwotHtml(m));
         // ONE gentle retry after a longer wait (lets a rate/overload window pass).
         if (attempt < 1) {
             const note = `<div class="rep-ai-loading"><div class="rep-spinner"></div>שרת ה-AI עמוס כרגע — מנסה שוב בעוד מספר שניות…</div>`;
             if (summaryEl) summaryEl.innerHTML = note;
-            _repSetAiSec('repSwot', 'repSecSwot', ''); _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
+            _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
             setTimeout(() => { if (stillHere()) _repLoadAI(m, attempt + 1); }, 9000);
             return;
         }
         const is429 = /429|RESOURCE_EXHAUSTED/i.test(e.message || '');
         const msg = is429
-            ? '<div class="adv-empty">מכסת ה-AI היומית/דקתית של Gemini מוצתה כרגע. הניתוח יתחדש מאליו בהמשך — או רענן בעוד מספר דקות. (דוחות שכבר נותחו נשמרים ולא נטענים מחדש.)</div>'
-            : '<div class="adv-empty">ניתוח ה-AI אינו זמין כרגע (שרת ג\'מיני עמוס). נסה לרענן בעוד מספר דקות.</div>';
+            ? '<div class="adv-empty">מכסת ה-AI היומית/דקתית של Gemini מוצתה כרגע. ניתוח ה-SWOT המוצג חושב ישירות מנתוני הדוח; הניתוח המורחב יתחדש מאליו בהמשך.</div>'
+            : '<div class="adv-empty">ניתוח ה-AI המורחב אינו זמין כרגע — מוצג ניתוח מובנה מנתוני הדוח. נסה לרענן בעוד מספר דקות.</div>';
         if (summaryEl) summaryEl.innerHTML = msg;
-        _repSetAiSec('repSwot', 'repSecSwot', ''); _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
+        _repSetAiSec('repStrategy', 'repSecStrategy', ''); _repSetAiSec('repRisks', 'repSecRisks', '');
     }
 }
 // Short business summary: activity sector, growth/hurt divisions, decline reasons,

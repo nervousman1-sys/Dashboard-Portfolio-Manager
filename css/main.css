@@ -10969,3 +10969,63 @@ html:not(.day-mode) { background-color: #020617; }
         font-weight: 700;
     }
 }
+
+/* Fallback-SWOT footnote (shared — appears wherever the data-driven SWOT renders) */
+.rep-ai-fallback-note { margin-top: 8px; font-size: 10.5px; color: #8ea0bd; opacity: 0.85; line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — indicators label · tidy report-detail action bar · 4-quarter table fits
+   (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── Technical: a clear caption before the filter chips — users now know the
+       row (and the "הצג הכל" sheet) is the INDICATOR filter set. ── */
+    .tech-chips::before {
+        content: 'אינדיקטורים:';
+        flex-shrink: 0;
+        align-self: center;
+        font-size: 10.5px;
+        font-weight: 900;
+        color: #67e8f9;
+        letter-spacing: 0.02em;
+        padding-inline-end: 2px;
+    }
+
+    /* ── Report detail: the three actions become ONE orderly 3-cell bar ── */
+    .rep-detail-top {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .rep-detail-top > button {
+        width: 100%;
+        min-height: 44px;
+        margin: 0 !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 4px !important;
+        font-size: 11.5px !important;
+        white-space: nowrap;
+        border-radius: 12px;
+    }
+
+    /* ── Quarters table: ALL 4 quarters visible, zero sideways scroll.
+       Fixed layout: metric column 86px, the four quarter columns split the rest;
+       values stay tabular, the YoY delta drops to its own micro-line. ── */
+    .rep-table { table-layout: fixed; width: 100% !important; min-width: 0 !important; }
+    .rep-table .rep-metric-name {
+        white-space: normal !important;
+        width: 86px;
+        font-size: 10px !important;
+        line-height: 1.35;
+        padding: 8px 4px !important;
+    }
+    .rep-table th, .rep-table td { font-size: 10.5px !important; padding: 8px 2px !important; }
+    .rep-table td { overflow: hidden; }
+    .rep-table .rep-delta { display: block; font-size: 8.5px; margin-top: 2px; }
+    .rep-table .rep-delta-ref { display: none; }   /* "אשתקד" implied — the % + arrow carry it */
+    .rep-table .rep-hint { display: none; }        /* ⓘ tooltips are desktop-only affordances */
+    .rep-detail .risk-table-scroll { overflow-x: visible !important; }
+}

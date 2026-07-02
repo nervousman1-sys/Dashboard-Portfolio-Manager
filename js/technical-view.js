@@ -300,12 +300,15 @@ function _tNearAnyMA(v) {
     const m = v.ma || {};
     return [m.d200dist, m.d300dist, m.w200dist, m.w300dist].some(d => d != null && Math.abs(d) <= _TECH_NEAR_PCT);
 }
+// Order matters: the first chips after "הכל" are the two HEADLINE indicators the
+// user scans first (ממוצע 200 יום, RSI שבועי) — on phones only the leading chips
+// fit next to הכל before the "הצג הכל" sheet button.
 const _TECH_FILTERS = [
     { id: 'all', label: 'הכל', test: () => true },
-    { id: 'rsi40', label: 'RSI יומי<40', test: v => v.rsiD != null && v.rsiD < 40 },
-    { id: 'oversold', label: 'RSI Oversold שבועי', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 30 },
-    { id: 'overbought', label: 'RSI Overbought שבועי', test: v => v.rsiW != null && v.rsiW > 70 },
     { id: 'near_d200', label: 'ממוצע 200 יום', test: v => v.ma.d200dist != null && Math.abs(v.ma.d200dist) <= _TECH_NEAR_PCT },
+    { id: 'overbought', label: 'RSI שבועי גבוה', test: v => v.rsiW != null && v.rsiW > 70 },
+    { id: 'oversold', label: 'RSI שבועי נמוך', test: v => v.rsiW != null && v.rsiW < 30 && v.rsiD != null && v.rsiD < 30 },
+    { id: 'rsi40', label: 'RSI יומי<40', test: v => v.rsiD != null && v.rsiD < 40 },
     { id: 'near_d300', label: 'ממוצע 300 יום', test: v => v.ma.d300dist != null && Math.abs(v.ma.d300dist) <= _TECH_NEAR_PCT },
     { id: 'near_w200', label: 'ממוצע 200 שבועות', test: v => v.ma.w200dist != null && Math.abs(v.ma.w200dist) <= _TECH_NEAR_PCT },
     { id: 'near_w300', label: 'ממוצע 300 שבועות', test: v => v.ma.w300dist != null && Math.abs(v.ma.w300dist) <= _TECH_NEAR_PCT },
