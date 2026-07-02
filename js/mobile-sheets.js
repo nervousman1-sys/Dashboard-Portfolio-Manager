@@ -122,6 +122,51 @@
         }
     });
 
+    // ── Technical table: tap a stock row → sheet with the FULL metric set ──
+    // The phone table shows the 5 decision columns; the sheet completes the picture
+    // (ממוצע 200/300 יום ושבועות, FVG רבעוני, ATR, נפח) exactly like the desktop grid.
+    const _esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const _fmtVol = (n) => n == null ? '—' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : n;
+    function openTechSheet(sym) {
+        if (typeof window._techSheetData !== 'function') return;
+        const d = window._techSheetData(sym);
+        if (!d) return;
+        const v = d.v;
+        const maRow = (label, dist) => {
+            if (dist == null) return `<div class="msheet-kv"><span>${label}</span><b class="msheet-dim">—</b></div>`;
+            const near = Math.abs(dist) <= (d.nearPct || 3);
+            const val = `${dist >= 0 ? '+' : ''}${dist.toFixed(1)}%`;
+            return `<div class="msheet-kv"><span>${label}</span><b class="${near ? 'msheet-good' : 'msheet-dim'}">${near ? '✓' : '✗'} ${val}</b></div>`;
+        };
+        const fvgRow = (label, f) => f && f.inside
+            ? `<div class="msheet-kv"><span>${label}</span><b class="msheet-good">✓ בפנים ${_esc(f.lo)}–${_esc(f.hi)}</b></div>`
+            : `<div class="msheet-kv"><span>${label}</span><b class="msheet-dim">✗</b></div>`;
+        const rsiCls = (x, lo, hi) => x == null ? 'msheet-dim' : x < lo ? 'msheet-warn' : x > hi ? 'msheet-bad' : '';
+        const html = `
+            <div class="msheet-tech-top">
+                <div><span>מחיר</span><b>${d.cur}${(v.price ?? 0).toLocaleString('en-US')}</b></div>
+                <div><span>RSI יומי</span><b class="${rsiCls(v.rsiD, 30, 70)}">${v.rsiD ?? '—'}</b></div>
+                <div><span>RSI שבועי</span><b class="${rsiCls(v.rsiW, 30, 70)}">${v.rsiW ?? '—'}</b></div>
+            </div>
+            ${maRow('ממוצע 200 יום', v.ma && v.ma.d200dist)}
+            ${maRow('ממוצע 300 יום', v.ma && v.ma.d300dist)}
+            ${maRow('ממוצע 200 שבועות', v.ma && v.ma.w200dist)}
+            ${maRow('ממוצע 300 שבועות', v.ma && v.ma.w300dist)}
+            ${fvgRow('FVG חודשי', v.fvgM)}
+            ${fvgRow('FVG רבעוני', v.fvgQ)}
+            <div class="msheet-kv"><span>ATR יומי</span><b>${v.atrPct != null ? v.atrPct + '%' : '—'}</b></div>
+            <div class="msheet-kv"><span>נפח · ממוצע 20 יום</span><b>${_fmtVol(v.vol)} · ${_fmtVol(v.volAvg)}</b></div>
+            <a class="msheet-tv" href="${_esc(d.tv)}" target="_blank" rel="noopener">פתח גרף מלא ב-TradingView ↗</a>
+            <div class="msheet-note">✓ ליד ממוצע = בטווח ±${d.nearPct || 3}% מהממוצע · FVG = פער שווי הוגן פתוח</div>`;
+        openSheet(_esc(d.disp) + ' · ניתוח מלא', html);
+    }
+    document.addEventListener('click', (e) => {
+        if (!MQ.matches) return;
+        const tr = e.target.closest && e.target.closest('#techTable tbody tr[data-sym]');
+        if (!tr || (e.target.closest && e.target.closest('a'))) return;
+        openTechSheet(tr.getAttribute('data-sym'));
+    });
+
     function boot() {
         sweep(document);
         mo.observe(document.body, { childList: true, subtree: true });

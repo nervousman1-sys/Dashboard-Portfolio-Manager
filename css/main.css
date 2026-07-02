@@ -10694,3 +10694,47 @@ html:not(.day-mode) { background-color: #020617; }
     #mobileSheetWrap, .msheet-btn { display: none !important; }
     .msheet-hidden { display: revert !important; }
 }
+
+/* Mobile: technical-row bottom sheet (full metric set) + tap affordance */
+@media (max-width: 768px) {
+    #technicalPage .tech-table tbody tr[data-sym] { cursor: pointer; }
+    #technicalPage .tech-table tbody tr[data-sym]:active { background: rgba(0,229,255,0.05); }
+    /* RTL continuation chevron on the row's LEFT edge — "יש עוד, הקש" */
+    #technicalPage .tech-table tbody tr[data-sym] td:last-child { position: relative; padding-inline-end: 4px; }
+    #technicalPage .tech-table tbody tr[data-sym] td:last-child::after {
+        content: '‹'; position: absolute; left: 2px; top: 50%; transform: translateY(-50%);
+        color: rgba(103,232,249,0.55); font-size: 15px; font-weight: 900;
+    }
+    .msheet-tech-top {
+        display: flex; gap: 0; margin-bottom: 10px;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 14px; padding: 10px 4px;
+    }
+    .msheet-tech-top > div {
+        flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+        border-inline-start: 1px solid rgba(255,255,255,0.07);
+    }
+    .msheet-tech-top > div:first-child { border-inline-start: none; }
+    .msheet-tech-top span { font-size: 10px; font-weight: 700; color: #94a3b8; }
+    .msheet-tech-top b { font-size: 16px; font-weight: 900; color: #fff; }
+    .msheet-kv {
+        display: flex; align-items: center; justify-content: space-between;
+        min-height: 44px; padding: 0 2px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        font-size: 13.5px;
+    }
+    .msheet-kv span { color: #b6c0d4; font-weight: 600; }
+    .msheet-kv b { font-weight: 800; color: #fff; }
+    .msheet-good { color: #34d399 !important; }
+    .msheet-dim { color: rgba(255,255,255,0.4) !important; }
+    .msheet-warn { color: #fbbf24 !important; }
+    .msheet-bad { color: #f87171 !important; }
+    .msheet-tv {
+        display: flex; align-items: center; justify-content: center;
+        min-height: 46px; margin-top: 12px;
+        background: rgba(0,229,255,0.09); border: 1px solid rgba(0,229,255,0.3);
+        border-radius: 12px; color: #67e8f9; font-size: 13.5px; font-weight: 800; text-decoration: none;
+    }
+    .msheet-tv:active { transform: scale(0.98); }
+    .msheet-note { margin-top: 10px; font-size: 10.5px; color: #7c8aa5; line-height: 1.6; }
+}

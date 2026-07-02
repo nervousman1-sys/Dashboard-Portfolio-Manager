@@ -384,7 +384,7 @@ function _techRender() {
         const disp = isIL ? t.replace(/\.TA$/, '') : (isCrypto ? t.replace(/-USD$/, '') : t);
         const tvSym = isIL ? `TASE:${disp}` : (isCrypto ? `CRYPTO:${t.replace('-USD', 'USD')}` : t);
         return `
-        <tr>
+        <tr data-sym="${t}">
             <td class="risk-td-name">
                 <div class="tech-name-cell">
                     <span>${disp}</span>
@@ -413,6 +413,21 @@ function _techRender() {
         ${rows.length > 250 ? `<div class="tech-foot">מוצגות 250 מתוך ${rows.length} — חדד את הסינון/חיפוש.</div>` : ''}`;
 }
 
+// Mobile bottom-sheet: the phone table shows only the 5 decision columns — this getter
+// hands the FULL metric set for one row (MAs 200/300 d+w, FVGs, ATR, volume, TV link)
+// to js/mobile-sheets.js, which renders it in a tap-to-open sheet. Additive export —
+// desktop never calls it.
+function _techSheetData(sym) {
+    const data = Object.assign({}, _techDataMkt[_techMarket] || {}, _techExtra[_techMarket] || {});
+    const v = data[sym];
+    if (!v) return null;
+    const isIL = _techMarket === 'il';
+    const isCrypto = /-USD$/.test(sym);
+    const disp = isIL ? sym.replace(/\.TA$/, '') : (isCrypto ? sym.replace(/-USD$/, '') : sym);
+    const tvSym = isIL ? `TASE:${disp}` : (isCrypto ? `CRYPTO:${sym.replace('-USD', 'USD')}` : sym);
+    return { v, disp, cur: _TECH_MKT[_techMarket].cur, tv: _techTvUrl(tvSym, v), nearPct: _TECH_NEAR_PCT };
+}
+
 if (typeof window !== 'undefined') {
     window.openTechnicalPage = openTechnicalPage;
     window.closeTechnicalPage = closeTechnicalPage;
@@ -420,4 +435,5 @@ if (typeof window !== 'undefined') {
     window.setTechMarket = setTechMarket;
     window._techRescan = _techRescan;
     window._techRender = _techRender;
+    window._techSheetData = _techSheetData;
 }
