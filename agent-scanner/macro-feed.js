@@ -163,6 +163,25 @@ async function updateYields() {
     } catch (e) { log('yields update warn:', e.message); }
 }
 
+// Economic-calendar snapshot (release dates + released-vs-pending status + the figure each
+// report published, from /api/fred?cal=1) → Supabase `econ_calendar`. The macro page reads
+// this row FIRST, so on release day the "התקבל ✓ + מה יצא בדוח" flip happens 24/7 within
+// minutes — no user has to be the one whose browser hits FRED at the right moment.
+async function updateEconCalendar() {
+    try {
+        const r = await fetch(`${BASE}/api/fred?cal=1&t=${Math.floor(Date.now() / 300000)}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) { log('econ-cal fetch HTTP', r.status); return; }
+        const data = await r.json();
+        if (!data || !Array.isArray(data.events) || !data.events.length) { log('econ-cal payload thin — skipping'); return; }
+        const { error } = await supabase.rpc('upsert_econ_calendar', { p_secret: AGENT_WRITE_SECRET, p_key: 'us', p_payload: data });
+        if (error) log('econ-cal upsert warn:', error.message);
+        else {
+            const released = data.events.filter(e => e.released).map(e => e.key);
+            log(`✓ Econ calendar stored · ${data.events.length} upcoming · released today: ${released.length ? released.join(',') : '—'}`);
+        }
+    } catch (e) { log('econ-cal update warn:', e.message); }
+}
+
 async function safeCycle() {
     try { await updateYields(); } catch (e) { log('yields cycle error:', e.message); }
     try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); }
@@ -170,8 +189,12 @@ async function safeCycle() {
 
 (async () => {
     log(`Finextium Macro-Feed online · model=${GEMINI_MODEL} · interval=${MACRO_INTERVAL_MIN}min · perCycle=${MACRO_PER_CYCLE}`);
+    await updateEconCalendar();
     await safeCycle();
     if (RUN_ONCE) { log('--once: done.'); process.exit(0); }
     setInterval(safeCycle, Math.max(5, MACRO_INTERVAL_MIN) * 60 * 1000);
+    // Calendar refresh on its own FASTER clock (10 min): a report flips to "released" within
+    // minutes of the official print, independent of the heavier 30-min news cycle.
+    setInterval(() => updateEconCalendar().catch(e => log('econ-cal tick warn:', e.message)), 10 * 60 * 1000);
 })();
 process.on('unhandledRejection', (e) => log('unhandledRejection:', e && e.message));

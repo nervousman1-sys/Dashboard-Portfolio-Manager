@@ -1033,7 +1033,11 @@ function _startMacroAutoRefresh() {
     _macroNewsTimer = setInterval(() => {
         if (!document.getElementById('macroPage')?.classList.contains('active')) return;
         _loadGeoMacroNews(true);
-    }, 5 * 60 * 1000); // news every 5 min
+        // Calendar rides the same 5-min clock: on release day the row flips to
+        // "התקבל ✓ + מה יצא" within minutes (agent row read — cheap; signature
+        // check skips the re-render when nothing changed, so no page jumps).
+        _loadEconCalendar(true);
+    }, 5 * 60 * 1000); // news + calendar every 5 min
     _macroDataTimer = setInterval(() => {
         if (!document.getElementById('macroPage')?.classList.contains('active')) return;
         _loadEconCalendar(true);
@@ -1072,26 +1076,42 @@ try { _ecHistCollapsed = localStorage.getItem('ec_past_collapsed') === '1'; } ca
 async function _loadEconCalendar(forceRefresh) {
     const el = document.getElementById('econCalSection');
     if (!el) return;
-    const CACHE_KEY = 'econ_cal_v5'; // v5: + pastEvents (last month's releases WITH their results)
-    let cached = forceRefresh ? null : _cacheGet(CACHE_KEY, 6 * 60 * 60 * 1000); // 6h
+    const CACHE_KEY = 'econ_cal_v6'; // v6: released/pending status per event — short TTL so release day flips fast
+    let cached = forceRefresh ? null : _cacheGet(CACHE_KEY, 15 * 60 * 1000); // 15 min
     let us = cached ? cached.events : null, results = cached ? cached.results : [], history = cached ? cached.history : [], pastEvents = cached ? cached.pastEvents : [];
     if (!us) {
         if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
             <div class="macro-loading" style="padding:16px;min-height:300px">טוען יומן…</div>`;
+        // 1) The 24/7 agent snapshot (Supabase) — freshest, updated within minutes of a release.
         try {
-            const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
-            const j = await r.json();
-            us = (j && Array.isArray(j.events)) ? j.events : [];
-            results = (j && Array.isArray(j.results)) ? j.results : [];
-            history = (j && Array.isArray(j.history)) ? j.history : [];
-            pastEvents = (j && Array.isArray(j.pastEvents)) ? j.pastEvents : [];
-            if (us.length || pastEvents.length) _cacheSet(CACHE_KEY, { events: us, results, history, pastEvents });
-        } catch (e) { us = []; results = []; history = []; pastEvents = []; }
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                const { data } = await supabaseClient.from('econ_calendar').select('payload,updated_at').eq('key', 'us').maybeSingle();
+                if (data && data.payload && Array.isArray(data.payload.events)
+                    && Date.now() - new Date(data.updated_at).getTime() < 2 * 3600 * 1000) {
+                    const p = data.payload;
+                    us = p.events; results = p.results || []; history = p.history || []; pastEvents = p.pastEvents || [];
+                    window._ecAgentTs = data.updated_at;
+                }
+            }
+        } catch (e) { /* fall through to the live endpoint */ }
+        // 2) Live endpoint fallback (also covers a stale/missing agent row).
+        if (!us) {
+            try {
+                const r = await _macroFetch(`/api/fred?cal=1`, 11000, 1);
+                const j = await r.json();
+                us = (j && Array.isArray(j.events)) ? j.events : [];
+                results = (j && Array.isArray(j.results)) ? j.results : [];
+                history = (j && Array.isArray(j.history)) ? j.history : [];
+                pastEvents = (j && Array.isArray(j.pastEvents)) ? j.pastEvents : [];
+                window._ecAgentTs = null;
+            } catch (e) { us = []; results = []; history = []; pastEvents = []; }
+        }
+        if (us && (us.length || pastEvents.length)) _cacheSet(CACHE_KEY, { events: us, results, history, pastEvents });
     }
     _ecData = { US: (us || []).filter(e => e.country === 'US' || !e.country), IL: _ilCalendarEvents(), results: results || [], history: history || [], past: pastEvents || [] };
     // Avoid needless re-render on the hourly auto-refresh (prevents page jumps); tab/collapse below
-    // always call _ecRender directly.
-    const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he])) + '|' + JSON.stringify((_ecData.results || []).map(r => [r.he, r.value])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
+    // always call _ecRender directly. released/value are IN the signature so a release-day flip repaints.
+    const sig = JSON.stringify(_ecData.US.map(e => [e.date, e.he, e.released ? 1 : 0, e.value])) + '|' + JSON.stringify((_ecData.results || []).map(r => [r.he, r.value])) + '|' + (document.getElementById('ecBody') ? '1' : '0');
     if (forceRefresh && sig === _ecSig && document.querySelector('.ec-table')) return;
     _ecSig = sig;
     _ecRender();
@@ -1138,26 +1158,51 @@ function _ecRender() {
             for (const e of groups[k]) {
                 const d = new Date(e.date); const dd = d.getDate(), mo = d.getMonth() + 1;
                 const high = e.imp === 'high'; const soon = e.date <= soonStr;
-                // Inline last-published result for this indicator (first occurrence only).
-                const r = (e.key && resultByKey[e.key] && !shownResult[e.key]) ? resultByKey[e.key] : null;
+                // Release-day: when THIS event's report has been published (agent/FRED detected the
+                // new period), show the figure IT put out — labeled as the released print, not as
+                // the previous reading. Otherwise show the last print + a pending status.
                 let resultHtml = '';
-                if (r) {
+                if (e.released && e.value != null) {
                     shownResult[e.key] = true;
                     const anId = 'ecAn_' + (rid++);
-                    resultHtml = `<div class="ec-row-result ec-res-${r.sentiment}">
-                        <span class="ec-rr-label">תוצאה אחרונה:</span>
-                        <b class="ec-rr-val">${_ecResVal(r.value, r.unit, r.kind)}</b>
-                        <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span>
-                        <span class="ec-rr-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span>
-                        <span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span>
+                    resultHtml = `<div class="ec-row-result ec-res-${e.sentiment}">
+                        <span class="ec-rr-label ec-rr-released">📢 יצא בדיווח:</span>
+                        <b class="ec-rr-val">${_ecResVal(e.value, e.unit, e.kind)}</b>
+                        <span class="ec-res-arrow ec-res-${e.sentiment}">${arrow(e.dir)}</span>
+                        <span class="ec-rr-prev">קודם ${_ecResVal(e.previous, e.unit, e.kind)}</span>
+                        <span class="ec-res-badge ec-res-${e.sentiment}">${sentLabel[e.sentiment] || ''}</span>
                         <button class="ec-res-inline-btn" onclick="_ecToggleRowAnalysis('${anId}')">ניתוח קצר ›</button>
-                        <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
+                        <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(e))}</div>
                     </div>`;
+                } else {
+                    // Inline last-published result for this indicator (first occurrence only).
+                    const r = (e.key && resultByKey[e.key] && !shownResult[e.key]) ? resultByKey[e.key] : null;
+                    if (r) {
+                        shownResult[e.key] = true;
+                        const anId = 'ecAn_' + (rid++);
+                        resultHtml = `<div class="ec-row-result ec-res-${r.sentiment}">
+                            <span class="ec-rr-label">תוצאה אחרונה:</span>
+                            <b class="ec-rr-val">${_ecResVal(r.value, r.unit, r.kind)}</b>
+                            <span class="ec-res-arrow ec-res-${r.sentiment}">${arrow(r.dir)}</span>
+                            <span class="ec-rr-prev">קודם ${_ecResVal(r.previous, r.unit, r.kind)}</span>
+                            <span class="ec-res-badge ec-res-${r.sentiment}">${sentLabel[r.sentiment] || ''}</span>
+                            <button class="ec-res-inline-btn" onclick="_ecToggleRowAnalysis('${anId}')">ניתוח קצר ›</button>
+                            <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(r))}</div>
+                        </div>`;
+                    }
                 }
+                // Side status: received / publishing today / pending — the at-a-glance chip.
+                const recv = e.country === 'US' || !e.country
+                    ? (e.released
+                        ? '<div class="ec-recv ec-recv-yes">התקבל ✓</div>'
+                        : e.date === todayStr
+                            ? '<div class="ec-recv ec-recv-today">מתפרסם היום · טרם התקבל</div>'
+                            : '<div class="ec-recv ec-recv-no">טרם התקבל</div>')
+                    : '';
                 rows += `<tr class="ec-tr ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
                     <td class="ec-td-date"><span class="ec-d">${dd}.${mo}</span>${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</td>
                     <td class="ec-td-name">${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער · לוח הלמ״ס)</small>' : ''}${resultHtml}</td>
-                    <td class="ec-td-imp"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}</td>
+                    <td class="ec-td-imp"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}${recv}</td>
                 </tr>`;
             }
         }
@@ -1166,10 +1211,18 @@ function _ecRender() {
     const ilNote = _ecTab === 'IL'
         ? `<div class="ec-il-note">מוצג מדד המחירים לצרכן לפי לוח הפרסומים הקבוע של הלמ״ס (~אמצע החודש). מועדי החלטות הריבית של בנק ישראל מתפרסמים בלוח הרשמי שלו.</div>` : '';
 
+    // 24/7 agent freshness stamp (present when the calendar came from the agent's Supabase row)
+    let agentTag = '';
+    if (window._ecAgentTs) {
+        const mins = Math.max(0, Math.round((Date.now() - new Date(window._ecAgentTs).getTime()) / 60000));
+        const ago = mins < 1 ? 'ממש עכשיו' : mins < 60 ? `לפני ${mins} דק׳` : `לפני ${Math.round(mins / 60)} שע׳`;
+        agentTag = `<span class="ec-agent-tag"><span class="rep-live on"></span> מחובר לסוכן 24/7 · עודכן ${ago}</span>`;
+    }
     el.innerHTML = `
         <div class="ec-head">
             <button class="ec-collapse" onclick="toggleEcCollapse()" title="קפל / פתח">${_ecCollapsed ? '▸' : '▾'}</button>
             <span class="ec-title">🗓️ יומן כלכלי — תוצאות ופרסומים קרובים</span>
+            ${agentTag}
             <button class="gm-refresh" onclick="_loadEconCalendar(true)" title="רענן יומן">⟳</button>
         </div>
         <div class="ec-body ${_ecCollapsed ? 'ec-hidden' : ''}" id="ecBody">

@@ -125,12 +125,38 @@ module.exports = async (req, res) => {
                 const pts = byKey[e.key];
                 const hit = pts ? pts.find(p => p.date <= e.date) : null;
                 return hit
-                    ? { ...e, value: hit.value, previous: hit.previous, dir: hit.dir, sentiment: hit.sentiment, unit: hit.unit, kind: hit.kind, refDate: hit.date }
-                    : { ...e };
+                    ? { ...e, value: hit.value, previous: hit.previous, dir: hit.dir, sentiment: hit.sentiment, unit: hit.unit, kind: hit.kind, refDate: hit.date, released: true }
+                    : { ...e, released: false };
             });
 
-            res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
-            res.status(200).json({ events, results, history, pastEvents });
+            // ── RELEASE-DAY STATUS per upcoming event ─────────────────────────────────────
+            // A release "landed" when FRED already carries the observation for the period the
+            // event publishes: monthlies (CPI/PPI/PCE/NFP/RETAIL) publish the PREVIOUS month,
+            // GDP publishes the last COMPLETE quarter (advance/2nd/3rd estimates all cover it).
+            // FRED updates within ~1h of the official print, so on release day the row flips to
+            // released + carries the freshly published figure.
+            const expPeriod = (key, d) => {
+                const y = parseInt(d.slice(0, 4), 10), m = parseInt(d.slice(5, 7), 10);
+                if (key === 'GDP') {
+                    const done = Math.floor((m - 1) / 3) * 3;         // months of completed quarters this year
+                    if (done === 0) return `${y - 1}-10-01`;          // last complete quarter = Q4 previous year
+                    return `${y}-${String(done - 2).padStart(2, '0')}-01`;
+                }
+                return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`;
+            };
+            for (const e of events) {
+                const latest = byKey[e.key] && byKey[e.key][0];
+                e.released = !!(latest && e.date <= today && latest.date >= expPeriod(e.key, e.date));
+                if (e.released) {
+                    e.value = latest.value; e.previous = latest.previous; e.dir = latest.dir;
+                    e.sentiment = latest.sentiment; e.unit = latest.unit; e.kind = latest.kind; e.refDate = latest.date;
+                }
+            }
+
+            // Short CDN cache: on release day the flip from "טרם התקבל" to the published figure
+            // must show within minutes, not after a 6-hour edge cache.
+            res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=3600');
+            res.status(200).json({ events, results, history, pastEvents, asOf: new Date().toISOString() });
             return;
         }
 
