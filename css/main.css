@@ -10512,3 +10512,86 @@ html:not(.day-mode) { background-color: #020617; }
     .macro-content { padding: 12px 10px; }
     .tech-foot { font-size: 10px; line-height: 1.6; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE UX — top-app patterns (Apple HIG segmented controls · Revolut-style
+   chip carousels · phone-first list tables). Hard-isolated: max-width 768px only.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── A. MARKET TABS → full-width iOS SEGMENTED CONTROL (HIG: ≤5 equal segments).
+       Shared by the reports + technical pages. The toolbar stacks into three clean
+       rows: segmented control → search → filter-chip rail. ── */
+    .tech-toolbar { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
+    .tech-mkt { flex: 1 1 100%; display: flex; order: -2; }
+    .tech-mkt-btn {
+        flex: 1 1 0;
+        min-height: 42px;
+        font-size: 12.5px !important;
+        padding: 0 2px !important;
+        display: inline-flex; align-items: center; justify-content: center;
+        white-space: nowrap;
+    }
+    .tech-toolbar .tech-search {
+        flex: 1 1 100%;
+        max-width: none; min-width: 0;
+        min-height: 42px;
+        order: -1;
+        font-size: 13px;
+    }
+    /* Filter chips: ONE horizontal rail — swipe, never wrap (Revolut carousel). */
+    .tech-chips {
+        flex: 1 1 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+    }
+    .tech-chips::-webkit-scrollbar { display: none; }
+    .tech-chips .dn-tab { flex-shrink: 0; min-height: 36px; scroll-snap-align: start; display: inline-flex; align-items: center; gap: 4px; }
+
+    /* ── B. REPORTS CHIP STRIPS (דוחות קרובים שלך · דיווחו לאחרונה · מעקב) →
+       single-line swipe carousels with an edge fade hinting "יש עוד", instead of
+       a wrapped chip cloud that buried the list under two screens of pills. ── */
+    .rep-new-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+        /* RTL rail: continuation is on the LEFT — fade that edge. */
+        -webkit-mask-image: linear-gradient(to left, #000 0, #000 calc(100% - 28px), transparent 100%);
+        mask-image: linear-gradient(to left, #000 0, #000 calc(100% - 28px), transparent 100%);
+    }
+    .rep-new-chips::-webkit-scrollbar { display: none; }
+    .rep-new-chip, .rep-earn-chip, .rep-watch-chip { flex-shrink: 0; min-height: 40px; scroll-snap-align: start; }
+    .rep-new-strip { align-items: center; }
+
+    /* ── C. REPORTS BOARD: two comfortable columns (thumb-sized tiles), not three
+       cramped ones. ── */
+    .rep-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
+    .rep-card { min-height: 52px; }
+
+    /* ── D. CML/SML TABLES → phone-first decision columns (full width, no h-scroll).
+       Desktop keeps the complete grid. ── */
+    /* סיכון לפי תיק: keep תיק · תשואה צפויה · α מול CML · רמת סיכון (hide β, σ, Sharpe, מיקום) */
+    .risk-table--folios th:nth-child(2), .risk-table--folios td:nth-child(2),
+    .risk-table--folios th:nth-child(4), .risk-table--folios td:nth-child(4),
+    .risk-table--folios th:nth-child(5), .risk-table--folios td:nth-child(5),
+    .risk-table--folios th:nth-child(8), .risk-table--folios td:nth-child(8) { display: none; }
+    /* המלצות נכסים: keep נכס · תשואה צפויה · α · המלצה (hide סקטור, β, נדרשת, מתאים-לתיק) */
+    .risk-table--recs th:nth-child(2), .risk-table--recs td:nth-child(2),
+    .risk-table--recs th:nth-child(3), .risk-table--recs td:nth-child(3),
+    .risk-table--recs th:nth-child(5), .risk-table--recs td:nth-child(5),
+    .risk-table--recs th:nth-child(8), .risk-table--recs td:nth-child(8) { display: none; }
+    /* קורלציות: keep נכס · ρ לשוק · רמת קורלציה (hide ρ-לתיק, מתואם-עם) */
+    .corr-table th:nth-child(3), .corr-table td:nth-child(3),
+    .corr-table th:nth-child(5), .corr-table td:nth-child(5) { display: none; }
+    .risk-table--folios, .risk-table--recs, .corr-table { width: 100%; min-width: 0 !important; }
+    .risk-table--folios th, .risk-table--folios td,
+    .risk-table--recs th, .risk-table--recs td,
+    .corr-table th, .corr-table td { padding: 10px 6px; font-size: 12.5px; white-space: nowrap; }
+}

@@ -218,7 +218,7 @@ function _renderPortfolioTable(model) {
             <div class="risk-chart-head"><h3>סיכון לפי תיק</h3>
                 <span class="risk-chart-sub">סיווג אוטומטי לפי β ו-σ ביחס לשוק</span></div>
             <div class="risk-table-scroll">
-            <table class="risk-table">
+            <table class="risk-table risk-table--folios">
                 <thead><tr>
                     <th>תיק</th><th>β</th><th>תשואה צפויה</th><th>σ (סיכון)</th>
                     <th>Sharpe</th><th>α מול CML</th><th>רמת סיכון</th><th>מיקום</th>
@@ -624,7 +624,7 @@ function _renderRecommendations(model) {
                 <span class="risk-chart-sub">לפי אלפא של ג'נסן — לחץ על הכותרת לקיפול/פתיחה · "מתאים לתיק" = התיק שבו ההוספה תורמת הכי הרבה (α גבוה + קורלציה נמוכה)</span></span>
             </summary>
             <div class="risk-table-scroll">
-            <table class="risk-table">
+            <table class="risk-table risk-table--recs">
                 <thead><tr>
                     <th>נכס</th><th>סקטור</th><th>β</th><th>תשואה צפויה</th>
                     <th>תשואה נדרשת</th><th>α</th><th>המלצה</th><th>מתאים לתיק</th>
