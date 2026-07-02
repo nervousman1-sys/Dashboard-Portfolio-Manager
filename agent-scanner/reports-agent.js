@@ -27,7 +27,9 @@ const ReportsEngine = require(path.join(__dirname, '..', 'js', 'reports-engine.j
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 const AGENT_WRITE_SECRET = process.env.AGENT_WRITE_SECRET;
-const SITE = (process.env.SITE_URL || 'https://finextium-dashboard.vercel.app').replace(/\/+$/, '');
+// NOTE: finextium-dashboard.vercel.app is a STALE alias pinned to an old deployment
+// (no r2k branch, pre-Parsoid Wikipedia parsers) — always use the production domain.
+const SITE = (process.env.SITE_URL || 'https://www.finextium.com').replace(/\/+$/, '');
 // GENTLE defaults — the upserts share Supabase's 60-connection pool with the AUTH service. Too much
 // concurrency/frequency here once exhausted the pool and locked everyone out of login. Keep BATCH low.
 const BATCH = parseInt(process.env.REPORTS_BATCH || '2', 10);          // concurrent fetches per wave (low → few DB conns)
