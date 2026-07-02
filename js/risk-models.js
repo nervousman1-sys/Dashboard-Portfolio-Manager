@@ -1249,7 +1249,9 @@ function _rmApplyFinalScore(cands, techOverride) {
     const tech = _rmReadTechCaches();
     // Freshly-fetched technicals (passed straight in) take priority over the cache —
     // avoids relying on a localStorage write that can silently fail when storage is full.
-    if (techOverride) tech = Object.assign(tech, techOverride);
+    // (Merge IN PLACE — reassigning the const here threw a TypeError that silently killed
+    // the "המלצות לאיזון התיק" button, since onclick errors don't surface to the user.)
+    if (techOverride) Object.assign(tech, techOverride);
 
     // Cross-sectional percentile of α across the candidate pool (bounds any peak's
     // inflated reading and judges it RELATIVE to the rest of the universe).
