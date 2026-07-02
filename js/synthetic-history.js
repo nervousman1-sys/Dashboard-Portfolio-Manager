@@ -50,7 +50,7 @@ const SYNTHETIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 // Prevents API burnout: never fetch the same ticker twice per session or within 24h.
 // v2 prefix invalidates any history cached before the serverless-proxy fix
 // (old entries could be sparse/flat fallbacks that collapsed variance & beta to ~0).
-const TICKER_LS_PREFIX = 'ticker_hist_v3_';
+const TICKER_LS_PREFIX = 'ticker_hist_v4_'; // v4: dividend-adjusted closes (total return) — old close-only series must not mix in
 const TICKER_LS_TTL = 72 * 60 * 60 * 1000; // 72h — daily closes barely change; longer TTL = far fewer cold refetches of the ~200-name model universe
 
 // Session-level dedup: track tickers already fetched this session
@@ -171,9 +171,12 @@ async function _fetchYahooHistory(ticker, currency, outputSize) {
             const ts = r?.timestamp;
             const closes = r?.indicators?.quote?.[0]?.close;
             if (!ts || !closes) continue;
+            // Same total-return preference as /api/history: dividend-adjusted close first.
+            const adj = r?.indicators?.adjclose?.[0]?.adjclose || null;
             const out = [];
             for (let i = 0; i < ts.length; i++) {
-                const c = closes[i];
+                const a = adj ? adj[i] : null;
+                const c = (a != null && isFinite(a) && a > 0) ? a : closes[i];
                 if (c != null && isFinite(c) && c > 0) {
                     out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: c });
                 }

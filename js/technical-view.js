@@ -1,26 +1,30 @@
 // ========== TECHNICAL ANALYSIS PAGE — ניתוח טכני למניות ==========
 //
-// Smart scanner over every S&P 500 + Nasdaq-100 stock (~516 tickers):
+// Smart scanner with one tab per index (S&P 500 / Nasdaq-100 / Russell 2000 / TA-125):
 //   RSI(14) daily+weekly, SMA 200/300 days + 200/300 weeks (with ±3% "near" mark),
 //   monthly + quarterly FVG (price inside an unfilled gap), ATR(14), volume.
 // Filter chips: RSI<40, oversold/overbought (weekly), near-MA, in-FVG; search box;
 // a TradingView button per stock for verification. Scan cached per day.
 
 const _TECH_NEAR_PCT = 3;            // "near MA" = within ±3%
-// Two markets: US (S&P 500 + Nasdaq-100) and IL (TA-125 + index-tracking ETFs)
+// One tab per index — mirrors the reports page: S&P 500 | Nasdaq-100 | Russell 2000 | TA-125.
 const _TECH_MKT = {
-    us: { ls: 'tech_scan_v3', min: 100, cur: '$', scanLabel: 'מניות (S&P 500 + Nasdaq-100)' },
-    il: { ls: 'tech_scan_il_v2', min: 40, cur: '₪', scanLabel: 'ניירות (ת"א-125 + תעודות סל)' },
+    sp500: { ls: 'tech_scan_sp500_v1', min: 100, cur: '$', scanLabel: 'מניות S&P 500', search: 'חיפוש מניה (למשל: NVDA)…' },
+    ndx: { ls: 'tech_scan_ndx_v1', min: 40, cur: '$', scanLabel: 'מניות נאסד"ק 100', search: 'חיפוש מניה (למשל: AAPL)…' },
+    r2k: { ls: 'tech_scan_r2k_v1', min: 300, cur: '$', scanLabel: 'מניות ראסל 2000', search: 'חיפוש מניה (למשל: SOFI)…' },
+    il: { ls: 'tech_scan_il_v2', min: 40, cur: '₪', scanLabel: 'ניירות (ת"א-125 + תעודות סל)', search: 'חיפוש נייר (למשל: TEVA)…' },
 };
+// Legacy market id (pre index-split) → current tab.
+const _TECH_MKT_ALIAS = { us: 'sp500' };
 
-let _techMarket = 'us';              // default — US market
-let _techDataMkt = { us: null, il: null };
+let _techMarket = 'sp500';           // default — S&P 500
+let _techDataMkt = { sp500: null, ndx: null, r2k: null, il: null };
 let _techData = null;                // alias of _techDataMkt[_techMarket]
 let _techFilter = 'all';
 let _techSearch = '';
 let _techExact = '';                 // when set (deep-link), match this ticker EXACTLY (not substring)
-let _techExtra = { us: {}, il: {} }; // on-demand-scanned tickers (insider/reco deep-links) outside the index
-let _techLoading = { us: false, il: false };
+let _techExtra = { sp500: {}, ndx: {}, r2k: {}, il: {} }; // on-demand-scanned tickers (deep-links) outside the index
+let _techLoading = { sp500: false, ndx: false, r2k: false, il: false };
 
 // Open the in-app technical-analysis page focused on a SPECIFIC ticker (from the
 // recommendation cards). Closes other overlays, opens the scanner, switches market
@@ -93,7 +97,8 @@ function openTechnicalPage() {
     if (typeof updateURLState === 'function') updateURLState({ view: 'technical' });
     if (typeof _setActiveNav === 'function') _setActiveNav('technical');
 
-    _techMarket = 'us'; // always open on the US market
+    _techMarket = 'sp500'; // always open on the S&P 500 tab
+    try { localStorage.removeItem('tech_scan_v3'); } catch (e) { } // pre-split combined-US cache — no longer read
     page.innerHTML = `
     <div dir="rtl">
         <div class="macro-page-header">
@@ -107,8 +112,10 @@ function openTechnicalPage() {
             <div class="risk-table-card glass-card">
                 <div class="tech-toolbar">
                     <div class="tech-mkt" id="techMkt">
-                        <button class="tech-mkt-btn active" data-mkt="us" onclick="setTechMarket('us')">ארה״ב</button>
-                        <button class="tech-mkt-btn" data-mkt="il" onclick="setTechMarket('il')">ישראל</button>
+                        <button class="tech-mkt-btn active" data-mkt="sp500" onclick="setTechMarket('sp500')">S&amp;P 500</button>
+                        <button class="tech-mkt-btn" data-mkt="ndx" onclick="setTechMarket('ndx')">נאסד״ק 100</button>
+                        <button class="tech-mkt-btn" data-mkt="r2k" onclick="setTechMarket('r2k')">ראסל 2000</button>
+                        <button class="tech-mkt-btn" data-mkt="il" onclick="setTechMarket('il')">ת״א 125</button>
                     </div>
                     <input type="text" id="techSearch" class="tech-search" autocomplete="off"
                            placeholder="חיפוש מניה (למשל: NVDA)…"
@@ -154,14 +161,15 @@ function _techRescan() {
     _techLoad(true);
 }
 
-// ── Market toggle (ארה"ב / ישראל) ──
+// ── Market toggle (S&P 500 / נאסד"ק 100 / ראסל 2000 / ת"א 125) ──
 function setTechMarket(mkt) {
+    if (_TECH_MKT_ALIAS[mkt]) mkt = _TECH_MKT_ALIAS[mkt]; // legacy 'us' → sp500
     if (!_TECH_MKT[mkt] || mkt === _techMarket) return;
     _techMarket = mkt;
     document.querySelectorAll('#techMkt .tech-mkt-btn').forEach(b =>
         b.classList.toggle('active', b.getAttribute('data-mkt') === mkt));
     const search = document.getElementById('techSearch');
-    if (search) search.placeholder = mkt === 'il' ? 'חיפוש נייר (למשל: TEVA)…' : 'חיפוש מניה (למשל: NVDA)…';
+    if (search) search.placeholder = _TECH_MKT[mkt].search;
     _techData = _techDataMkt[mkt];
     const tbl = document.getElementById('techTable');
     if (_techData) {

@@ -41,11 +41,19 @@ async function fetchYahoo(symbol, range, interval) {
     const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0]
         && result.indicators.quote[0].close;
     if (!ts || !closes) return [];
+    // TOTAL-RETURN accuracy: prefer the dividend-adjusted close for daily bars. quote.close is
+    // split-adjusted but EXCLUDES dividends — that understates E(R) for dividend payers by
+    // 3-6%/yr and made them sit "below the SML" unfairly in the CML/SML model. adjclose equals
+    // close on the latest bar (adjustments apply backward), so live/current prices are
+    // unaffected. Per-point fallback to raw close when adjclose is missing.
+    const adj = (!intraday && result.indicators.adjclose && result.indicators.adjclose[0]
+        && result.indicators.adjclose[0].adjclose) || null;
     // Exchange-local timestamps for intraday bars (Yahoo gives the offset)
     const gmtoff = (result.meta && result.meta.gmtoffset) || 0;
     const out = [];
     for (let i = 0; i < ts.length; i++) {
-        const c = closes[i];
+        const a = adj ? adj[i] : null;
+        const c = (a != null && isFinite(a) && a > 0) ? a : closes[i];
         if (c != null && isFinite(c) && c > 0) {
             const d = new Date((ts[i] + (intraday ? gmtoff : 0)) * 1000).toISOString();
             out.push({ date: intraday ? d.slice(0, 19).replace('T', ' ') : d.slice(0, 10), close: c });

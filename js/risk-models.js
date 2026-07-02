@@ -38,9 +38,12 @@ const RISK_MODEL = {
     MARKET_SYMBOL: 'SPY',          // S&P 500 ETF — broad, liquid, FMP/TwelveData friendly
     MARKET_CURRENCY: 'USD',
     MARKET_LABEL: 'S&P 500',
-    LOOKBACK_DAYS: 1040,          // ~4 trading years — the expected return is the AVERAGE of the
-                                  // last 4 CALENDAR-YEAR returns (each year computed separately,
-                                  // then averaged), which is what positions a stock vs the SML/CML
+    LOOKBACK_DAYS: 1300,          // ~5.2 trading years. The expected return is the AVERAGE of the
+                                  // last 4 CALENDAR-YEAR returns — a 1040-day window truncated the
+                                  // 4th year back (e.g. 2022) into a <200-day partial that the
+                                  // full-year filter then DROPPED, silently turning the basis into
+                                  // a 3-year average that skipped the down year and inflated E(R).
+                                  // 1300 days keeps 4 complete calendar years inside the window.
     TRADING_DAYS: 252,            // annualization factor
     RF_FALLBACK: 0.038,           // ~3.8% — used only if DGS3MO proxy + CORS are unreachable
     RF_SERIES: 'DGS3MO',          // FRED series: 3-Month Treasury (secondary market rate)
@@ -261,12 +264,20 @@ async function getRiskFreeRate(forceRefresh = false) {
 
 // ========== HOLDINGS COLLECTION ==========
 // Eligible "risky" holdings are those with a ticker and price history: stocks,
-// funds/ETFs, and index positions. Bonds and cash are treated as ~risk-free
+// funds/ETFs, index positions AND tradeable bond ETFs. Cash and non-tradeable
+// bonds (numeric TASE id / ISIN — no fetchable series) are treated as ~risk-free
 // (β ≈ 0, return ≈ Rf, σ ≈ 0) when aggregating a portfolio.
 
 function _rmIsRiskyHolding(h) {
     if (!h || !h.ticker) return false;
     if (h.type === 'stock' || h.type === 'fund' || h.type === 'index') return (h.shares || 0) > 0 || (h.value || 0) > 0;
+    // A bond ETF (TLT, IEF, LQD…) is NOT risk-free — TLT swings ±15%/yr with strong
+    // duration/rate beta. A bond with a Latin ETF-style ticker gets its REAL σ/β from
+    // history like any asset; if its series can't be fetched it falls back to the
+    // risk-free leg in _rmComputePortfolio (never to the β=1 market proxy).
+    if (h.type === 'bond' && /^[A-Z][A-Z.\-]{0,9}$/.test(String(h.ticker).trim().toUpperCase())) {
+        return (h.shares || 0) > 0 || (h.value || 0) > 0;
+    }
     return false;
 }
 
@@ -599,6 +610,11 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
         if (_rmIsRiskyHolding(h)) {
             if (assets[h.ticker] && assets[h.ticker].hasData) {
                 riskyPositions.push({ ticker: h.ticker, value: v, a: assets[h.ticker] });
+            } else if (h.type === 'bond') {
+                // A bond ETF whose series couldn't be fetched: the honest fallback is the
+                // risk-free leg (its old treatment) — NOT the β=1 equity-market proxy,
+                // which would overstate a bond book's risk wildly.
+                riskFreeWeightValue += v;
             } else {
                 // A stock whose history failed/not-yet-loaded is NOT risk-free. Model it as
                 // a neutral, fairly-priced market proxy (β=1, E[r]=Rm, α=0). This keeps the
@@ -608,7 +624,7 @@ function _rmComputePortfolio(client, assets, closeMaps, ctx) {
                 riskyPositions.push({ ticker: h.ticker, value: v, _proxy: true, a: { beta: 1, expReturn: rm, vol: marketVol, alpha: 0, requiredReturn: rm, hasData: false } });
             }
         } else {
-            riskFreeWeightValue += v; // bond / cash → true risk-free leg
+            riskFreeWeightValue += v; // non-tradeable bond / cash → true risk-free leg
         }
     }
     // Client-level cash buckets (stored outside holdings)
@@ -858,12 +874,16 @@ function classifyRisk(beta, vol, marketVol) {
 // Safe to call repeatedly; cached + de-duped.
 
 // ── Persisted model (localStorage) — instant CML/SML after a page reload ──
-const _RM_PERSIST_KEY = 'risk_model_persist_v13'; // v10: expected return = avg of last 4 annual returns
-const _RM_SCORE_KEY = 'rm_scores_v5'; // v4: recompute scores on the new return basis
+const _RM_PERSIST_KEY = 'risk_model_persist_v15'; // v15: total-return closes + real bond-ETF stats + true 4-full-year E(R) window
+const _RM_SCORE_KEY = 'rm_scores_v7'; // v7: recompute scores on the total-return, 4-full-year basis
+// Version stamped INSIDE each persisted entry. The cloud mirror (user_cache) has no
+// versioned key, so without this a model computed by OLD code on another device/session
+// re-hydrates into the new key and silently defeats a methodology bump.
+const _RM_MODEL_VER = 15;
 const _RM_PERSIST_TTL = 18 * 60 * 60 * 1000; // 18h — keep the SAME score for a whole working day; stats are 1Y dailies so a daily rebuild is plenty. Score only changes on a holdings change (signature) or once per day.
 
 function _rmPersistModel(sig, model) {
-    const entry = { sig, ts: Date.now(), model };
+    const entry = { sig, ts: Date.now(), v: _RM_MODEL_VER, model };
     try {
         localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify(entry));
     } catch (e) { /* localStorage full — skip persistence */ }
@@ -899,6 +919,7 @@ async function rmHydrateModelFromCloud() {
         if (error || !data || !data.value) return;
         const entry = data.value;
         if (!entry.sig || !entry.model || Date.now() - entry.ts > _RM_PERSIST_TTL) return;
+        if (entry.v !== _RM_MODEL_VER) return; // other device ran older code — don't hydrate its model
         localStorage.setItem(_RM_PERSIST_KEY, JSON.stringify(entry));
         console.log('[RiskModel] Hydrated model from cloud cache (cross-device)');
     } catch (e) { /* silent — model will just build normally */ }
@@ -911,6 +932,7 @@ function _rmLoadPersistedModel(sig) {
         if (!raw) return null;
         const entry = JSON.parse(raw);
         if (!entry || entry.sig !== sig || !entry.model) return null;
+        if (entry.v !== _RM_MODEL_VER) return null; // built by older methodology → rebuild
         // Reuse for the full TTL whether partial or not. (Previously partial models expired
         // after 1h, which made the score visibly change ~hourly with no portfolio change —
         // exactly the "73 then 77 later" the user reported.) The score now stays CONSTANT
@@ -1144,19 +1166,25 @@ function _rmTechIndicatorScore(t) {
     return score;
 }
 
+// Merge every technical-page scan cache (one per index tab since the split; the legacy
+// combined-US key kept last for any stale browser that still holds it).
+function _rmReadTechCaches() {
+    const tech = {};
+    for (const k of ['tech_scan_sp500_v1', 'tech_scan_ndx_v1', 'tech_scan_r2k_v1', 'tech_scan_il_v2', 'tech_scan_v3']) {
+        try { const c = JSON.parse(localStorage.getItem(k) || '{}'); if (c && c.data) Object.assign(tech, c.data); } catch (e) { }
+    }
+    return tech;
+}
+
 // Factory: returns finalScoreOf(ticker, alpha) → { final, fund, sml, tech } using the same
 // 40/40/20 composite (report score + cross-sectional α percentile + count-based technical).
 // Reads the caches + builds the universe α percentile ONCE. Shared by the portfolio score and
 // the action plan so they agree.
 function _rmFinalScoreFn(model) {
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
-    let fund = {}, tech = {};
+    let fund = {};
     try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
-    try {
-        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
-        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
-        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
-    } catch (e) { }
+    const tech = _rmReadTechCaches();
     const sorted = Object.values(model.assets)
         .filter(a => a && a.hasData && a.alpha != null && isFinite(a.alpha)).map(a => a.alpha).sort((a, b) => a - b);
     const n = sorted.length;
@@ -1177,13 +1205,9 @@ function _rmFinalScoreFn(model) {
 function _rmComputeModelScores(model, clients_) {
     if (!model || !model.assets || !model.portfolios) return;
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
-    let fund = {}, tech = {};
+    let fund = {};
     try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
-    try {
-        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
-        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
-        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
-    } catch (e) { }
+    const tech = _rmReadTechCaches();
     // Universe α percentile (cross-sectional) — the SML/CML sub-score, bounded relative to all.
     const sorted = Object.values(model.assets)
         .filter(a => a && a.hasData && a.alpha != null && isFinite(a.alpha)).map(a => a.alpha).sort((a, b) => a - b);
@@ -1214,19 +1238,15 @@ function _rmComputeModelScores(model, clients_) {
 
 // Attach Fund/SML-CML/Technical sub-scores + the weighted Final Score (0–100) to each
 // candidate, in place. Reads the platform's existing client-side caches:
-//   • rep_scores_v1   → the financial-report score (0–100)  → Fundamental (40%)
-//   • tech_scan_v3/il → MA200/WMA200 distance + weekly RSI  → Technical entry timing (20%)
-//   • cross-sectional percentile of the de-biased α          → SML/CML (40%)
+//   • rep_scores_v1     → the financial-report score (0–100)  → Fundamental (40%)
+//   • tech_scan_* caches → MA200/WMA200 distance + weekly RSI → Technical entry timing (20%)
+//   • cross-sectional percentile of the de-biased α            → SML/CML (40%)
 function _rmApplyFinalScore(cands, techOverride) {
     if (!cands || !cands.length) return cands;
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
-    let fund = {}, tech = {};
+    let fund = {};
     try { fund = JSON.parse(localStorage.getItem('rep_scores_v1') || '{}'); } catch (e) { }
-    try {
-        const us = JSON.parse(localStorage.getItem('tech_scan_v3') || '{}');
-        const il = JSON.parse(localStorage.getItem('tech_scan_il_v2') || '{}');
-        tech = Object.assign({}, (us && us.data) || {}, (il && il.data) || {});
-    } catch (e) { }
+    const tech = _rmReadTechCaches();
     // Freshly-fetched technicals (passed straight in) take priority over the cache —
     // avoids relying on a localStorage write that can silently fail when storage is full.
     if (techOverride) tech = Object.assign(tech, techOverride);
