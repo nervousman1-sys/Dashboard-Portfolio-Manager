@@ -10738,3 +10738,69 @@ html:not(.day-mode) { background-color: #020617; }
     .msheet-tv:active { transform: scale(0.98); }
     .msheet-note { margin-top: 10px; font-size: 10.5px; color: #7c8aa5; line-height: 1.6; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — no sideways scrolling: chip rails clip to ONE line + "הצג הכל" button;
+   USD/ILS becomes a full-width rate card. (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── Rails: clipped line instead of swipe-scroll ── */
+    .mrail {
+        overflow: hidden !important;
+        flex-wrap: nowrap !important;
+        scrollbar-width: none;
+    }
+    .mrail:not(.mrail-open) {
+        -webkit-mask-image: linear-gradient(to left, #000 0, #000 calc(100% - 34px), transparent 100%);
+        mask-image: linear-gradient(to left, #000 0, #000 calc(100% - 34px), transparent 100%);
+    }
+    .mrail.mrail-open {
+        flex-wrap: wrap !important;
+        overflow: visible !important;
+        -webkit-mask-image: none;
+        mask-image: none;
+    }
+    .mrail-btn {
+        display: inline-flex; align-items: center; gap: 4px;
+        min-height: 36px;
+        margin-top: 6px;
+        padding: 5px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 999px;
+        color: #9fb2cc;
+        font-size: 11.5px; font-weight: 800;
+        font-family: inherit;
+        cursor: pointer;
+        transition: transform 0.12s ease;
+    }
+    .mrail-btn:active { transform: scale(0.97); }
+    /* The old swipe-carousel masks/scroll on these are superseded by .mrail. */
+    .rep-new-chips, .tech-chips { -webkit-overflow-scrolling: auto; }
+
+    /* ── USD/ILS: from a floating pill → a full-width executive rate card ── */
+    .qw-fx {
+        display: flex !important;
+        width: calc(100% - 20px);
+        margin: 8px 10px 2px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 11px 14px !important;
+        background: linear-gradient(-90deg, rgba(0, 229, 255, 0.08), rgba(3, 7, 18, 0.9) 55%);
+        border: 1px solid rgba(0, 229, 255, 0.22);
+        border-radius: 14px;
+        box-shadow: 0 0 18px rgba(0, 229, 255, 0.06);
+    }
+    .qw-fx-label {
+        display: flex; flex-direction: column; gap: 1px;
+        font-size: 9px !important; letter-spacing: 0.08em;
+    }
+    .qw-fx-label::before {
+        content: 'שער דולר · שקל';
+        font-size: 12.5px; font-weight: 900; color: #fff; letter-spacing: 0;
+    }
+    .qw-fx-rate { font-size: 21px !important; }
+    .qw-fx-chg { display: inline-flex !important; font-size: 10.5px !important; font-weight: 800; text-align: left; }
+}

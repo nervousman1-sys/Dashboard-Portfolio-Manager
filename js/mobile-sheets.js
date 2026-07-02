@@ -104,22 +104,64 @@
         delete wrapEl.dataset.mfold;
     }
 
+    // ── Chip rails → "הצג הכל" button (the user dislikes sideways scrolling) ──
+    // Default: ONE clipped line, no scroll at all. A compact toggle under the rail
+    // expands it into a fully-wrapped grid inline; tap again to fold back.
+    const RAILS = '.rep-new-chips, .tech-chips';
+    function railify(el) {
+        if (!el || el.dataset.mrail || !el.parentNode) return;
+        // Defer until it has real layout (post-render measurements)
+        if (!el.clientWidth) return;
+        if (el.scrollWidth <= el.clientWidth + 8) return;  // fits — nothing to do
+        el.dataset.mrail = '1';
+        el.classList.add('mrail');
+        const n = el.children.length;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mrail-btn';
+        const label = (open) => btn.innerHTML = open ? 'צמצם ▴' : `הצג הכל · ${n} ▾`;
+        label(false);
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const open = el.classList.toggle('mrail-open');
+            label(open);
+        });
+        el.parentNode.insertBefore(btn, el.nextSibling);
+    }
+    function unrailAll() {
+        document.querySelectorAll('.mrail').forEach(el => { el.classList.remove('mrail', 'mrail-open'); delete el.dataset.mrail; });
+        document.querySelectorAll('.mrail-btn').forEach(b => b.remove());
+    }
+
     function sweep(root) {
         if (!MQ.matches) return;
         const scope = root && root.querySelectorAll ? root : document;
         if (scope.matches && scope.matches(SEL)) collapse(scope);
         scope.querySelectorAll(SEL).forEach(collapse);
+        // Rails measure layout — wait a tick so freshly-inserted DOM has widths.
+        setTimeout(() => {
+            if (!MQ.matches) return;
+            const sc = root && root.querySelectorAll ? root : document;
+            if (sc.matches && sc.matches(RAILS)) railify(sc);
+            sc.querySelectorAll(RAILS).forEach(railify);
+        }, 60);
         foldExposure();
     }
 
     // Re-apply after every render (pages/cards rebuild their DOM constantly).
     const mo = new MutationObserver((muts) => {
         if (!MQ.matches) return;
+        const railParents = new Set();
         for (const m of muts) {
+            // A rail container often exists EMPTY first and only later gets its chips
+            // (innerHTML fills) — the mutation then carries the chips, not the rail.
+            // Measure the PARENT the chips landed in.
+            if (m.target && m.target.nodeType === 1 && m.target.matches && m.target.matches(RAILS)) railParents.add(m.target);
             for (const n of m.addedNodes) {
                 if (n.nodeType === 1) sweep(n);
             }
         }
+        if (railParents.size) setTimeout(() => { if (MQ.matches) railParents.forEach(railify); }, 60);
     });
 
     // ── Technical table: tap a stock row → sheet with the FULL metric set ──
@@ -170,7 +212,7 @@
     function boot() {
         sweep(document);
         mo.observe(document.body, { childList: true, subtree: true });
-        MQ.addEventListener('change', () => { if (MQ.matches) sweep(document); else { expandAll(); unfoldExposure(); } });
+        MQ.addEventListener('change', () => { if (MQ.matches) sweep(document); else { expandAll(); unfoldExposure(); unrailAll(); } });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
     else boot();
