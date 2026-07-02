@@ -14,6 +14,14 @@
             border-radius: 8px; padding: 6px 10px; pointer-events: none;
         }
         #tv_note b { color: #38bdf8; }
+        /* Phones: the note must never cover TradingView's timeframe toolbar (top row) —
+           park it at the BOTTOM start corner instead, compact. */
+        @media (max-width: 768px) {
+            #tv_note {
+                top: auto; bottom: 52px; inset-inline-start: 8px;
+                font-size: 10.5px; padding: 4px 8px; opacity: 0.92;
+            }
+        }
         #tv_fallback {
             position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
             color: #e2e8f0; font: 600 15px Assistant, system-ui, sans-serif; text-align: center; padding: 24px;

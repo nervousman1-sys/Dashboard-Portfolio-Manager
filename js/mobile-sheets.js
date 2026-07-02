@@ -140,29 +140,41 @@
         w.classList.add('open');
     }
     function railify(el) {
-        if (!el || el.dataset.mrail || !el.parentNode) return;
+        if (!el || !el.parentNode) return;
+        if (el.dataset.mrail) {
+            // The button lives INSIDE the rail — a re-render that replaces the rail's
+            // innerHTML (e.g. the technical chips on every scan wave) wipes it while
+            // the container's dataset survives. Detect and rebuild.
+            if (el.querySelector('.mrail-btn')) return;   // intact
+            delete el.dataset.mrail;
+            el.classList.remove('mrail');
+            el.style.paddingInlineEnd = '';
+        }
         // Defer until it has real layout (post-render measurements)
         if (!el.clientWidth) return;
         if (el.scrollWidth <= el.clientWidth + 8) return;  // fits — nothing to do
         el.dataset.mrail = '1';
         el.classList.add('mrail');
-        // Hide PARTIALLY clipped chips (RTL: they poke past the container's left edge) —
-        // a half-cut pill reads as a rendering bug.
+        const n = el.children.length;
+        // Reserve the row's END (RTL: left side) for the anchored "הצג הכל" chip, then
+        // hide any chip that would be PARTIALLY clipped by it or the edge — whole pills
+        // only; the button completes the line instead of a cut chip + orphan row.
+        const RESERVE = 96;
+        el.style.paddingInlineEnd = RESERVE + 'px';
         const box = el.getBoundingClientRect();
-        let visible = 0;
+        const cutoff = box.left + RESERVE;
         for (const c of el.children) {
             const r = c.getBoundingClientRect();
-            if (r.left < box.left - 1) c.classList.add('mrail-cut'); else visible++;
+            if (r.left < cutoff - 2) c.classList.add('mrail-cut');
         }
-        const n = el.children.length;
         const title = (el.closest('.rep-new-strip')?.querySelector('.rep-new-lbl')?.textContent || '').trim()
             || (el.classList.contains('tech-chips') ? 'כל המסננים והאינדיקטורים' : 'הרשימה המלאה');
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'mrail-btn';
-        btn.innerHTML = `הצג הכל · ${n} ‹`;
+        btn.innerHTML = `הצג הכל · ${n}`;
         btn.addEventListener('click', (e) => { e.stopPropagation(); openRailSheet(el, title); });
-        el.parentNode.insertBefore(btn, el.nextSibling);
+        el.appendChild(btn); // anchored INSIDE the row's end via CSS (absolute, left)
     }
     function unrailAll() {
         document.querySelectorAll('.mrail').forEach(el => { el.classList.remove('mrail', 'mrail-open'); delete el.dataset.mrail; });
@@ -198,7 +210,13 @@
                 if (n.nodeType === 1) sweep(n);
             }
         }
-        if (railParents.size) setTimeout(() => { if (MQ.matches) railParents.forEach(railify); }, 60);
+        if (railParents.size) {
+            // A previously-railified rail whose innerHTML was just replaced lost its
+            // anchored button — rebuild SYNCHRONOUSLY (no flicker window). Fresh rails
+            // wait a tick for full layout.
+            railParents.forEach(p => { if (p.dataset.mrail && !p.querySelector('.mrail-btn')) railify(p); });
+            setTimeout(() => { if (MQ.matches) railParents.forEach(railify); }, 60);
+        }
     });
 
     // ── Technical table: tap a stock row → sheet with the FULL metric set ──
