@@ -10341,3 +10341,106 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
 .sa-act { flex: 1; background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.30); color: #67e8f9;
     font-size: 12px; font-weight: 800; padding: 7px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
 .sa-act:hover { background: rgba(0,229,255,0.2); }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE POLISH — "Executive Dark" (Linear/Monzo-grade mobile finish)
+   HARD ISOLATION: every rule here lives inside @media (max-width: 768px).
+   Desktop (>768px) is untouched by definition — no selector leaks out.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── 1. SCROLL PERFORMANCE — kill backdrop-blur on everything that scrolls ──
+       Heavy blur layers repaint on every scrolled frame and cause visible jank on
+       phones. Blur is KEPT only on the fixed bottom nav + the slide-in sidebar
+       (they don't scroll with content). Every in-flow surface becomes a solid,
+       high-contrast obsidian card: bg-slate-950-style + micro-border. */
+    .glass-card, .stat-card, .client-card, .exposure-card, .exp-cur-box,
+    .macro-country-section, .macro-hw-card, .dc-card,
+    .additional-filters-inline.open, .qw-config-modal {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    html:not(.day-mode) .glass-card,
+    html:not(.day-mode) .stat-card,
+    html:not(.day-mode) .client-card,
+    html:not(.day-mode) .exposure-card,
+    html:not(.day-mode) .macro-country-section,
+    html:not(.day-mode) .macro-hw-card {
+        background: rgba(3, 7, 18, 0.92) !important;
+        border-color: rgba(255, 255, 255, 0.10);
+    }
+    /* Sticky headers scroll WITH the page — solid, not blurred. */
+    .header, .macro-page-header {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    html:not(.day-mode) .header,
+    html:not(.day-mode) .macro-page-header {
+        background: rgba(2, 6, 23, 0.97) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    /* Static full-screen backdrops: solid dim instead of blur (opens instantly). */
+    .modal-overlay, .dc-overlay, .sa-overlay, .rep-chart-modal,
+    .chart-info-overlay, body.filter-modal-open::after {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: rgba(1, 4, 12, 0.88);
+    }
+
+    /* ── 2. MICRO-INTERACTIONS — native-app press feedback (touch devices only) ── */
+    @media (hover: none) {
+        .client-card, .stat-card, .rep-card, .reco-card, .qw-ticker,
+        .mobile-nav-btn, .tech-mkt-btn, .ec-tab, .dn-tab, .macro-back-btn,
+        .mgmt-btn, .card-action-btn, .card-alloc-btn, .time-range-btn,
+        .rep-new-chip, .rep-watch-chip, .mcs-reco-btn, .sidebar-item {
+            transition: transform 0.12s ease, filter 0.12s ease;
+        }
+        .client-card:active, .stat-card:active, .rep-card:active, .reco-card:active,
+        .mobile-nav-btn:active, .tech-mkt-btn:active, .ec-tab:active, .dn-tab:active,
+        .macro-back-btn:active, .mgmt-btn:active, .card-action-btn:active,
+        .card-alloc-btn:active, .time-range-btn:active, .rep-new-chip:active,
+        .rep-watch-chip:active, .mcs-reco-btn:active, .sidebar-item:active {
+            transform: scale(0.98);
+            filter: brightness(1.15);
+        }
+        /* No sticky hover states on touch — hover styles only where a real pointer exists. */
+        * { -webkit-tap-highlight-color: transparent; }
+    }
+
+    /* ── 3. THUMB ZONE — every interactive target ≥ 44×44px ──
+       Bottom-nav buttons get a real 48px body; small visual chips (card action
+       icons, timeframe chips) keep their compact look but their TOUCH area is
+       expanded invisibly to 44px+ via an ::after hit-slop. */
+    .mobile-nav-btn { min-height: 48px; min-width: 48px; }
+    .card-action-btn, .time-range-btn, .card-alloc-btn, .ec-res-inline-btn,
+    .reco-alt, .rep-star, .gm-refresh, .ec-collapse {
+        position: relative;
+    }
+    .card-action-btn::after, .time-range-btn::after, .card-alloc-btn::after,
+    .ec-res-inline-btn::after, .reco-alt::after, .rep-star::after,
+    .gm-refresh::after, .ec-collapse::after {
+        content: '';
+        position: absolute;
+        inset: -8px;
+    }
+
+    /* ── 4. LAYOUT DENSITY — the dashboard reads like an app, not a shrunk site ── */
+    /* Portfolio-card donut: centered and compact (was ~2/3 of the viewport tall). */
+    .client-card .chart-container { width: 180px; height: 180px; margin-inline: auto; }
+    /* Card paddings tighten a notch for information density. */
+    .client-card { border-radius: 18px; }
+    .stat-card { border-radius: 16px; }
+    /* Long user email in the bottom-nav menu label must never blow the bar. */
+    #mobileMenuLabel {
+        max-width: 72px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        direction: ltr;
+    }
+    /* Index strip: one clean horizontally-snapping row (no wrap-jumps). */
+    .qw-ticker { scroll-snap-align: start; }
+
+    /* ── 5. SAFE AREA — content never hides behind the iPhone home indicator ── */
+    .mobile-bottom-nav { padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)); }
+}

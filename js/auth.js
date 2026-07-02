@@ -347,11 +347,13 @@ function updateUserDisplay() {
         avatarEl.innerHTML = `<span style="font-size:13px;font-weight:900;color:var(--accent-blue)">${initials}</span>`;
     }
 
-    // Populate mobile bottom nav menu label with user name
+    // Populate mobile bottom nav menu label with user name. An email-as-username used to
+    // render the FULL address into the 5-button bar ("finextium.qa.tester@gmail.com") and
+    // blow its layout — show only a short, human first-name-like token (≤10 chars).
     const mobileMenuLabel = document.getElementById('mobileMenuLabel');
     if (mobileMenuLabel && user?.username) {
-        const parts = user.username.split(/[\s@]/);
-        mobileMenuLabel.textContent = parts.length > 1 ? `${parts[0]} ${parts[1].charAt(0)}.` : parts[0];
+        const first = String(user.username).split(/[\s@]/)[0].split(/[._-]/)[0];
+        mobileMenuLabel.textContent = (first && first.length <= 10) ? first : 'תפריט';
     } else if (mobileMenuLabel) {
         mobileMenuLabel.textContent = 'תפריט';
     }
