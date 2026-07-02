@@ -10804,3 +10804,31 @@ html:not(.day-mode) { background-color: #020617; }
     .qw-fx-rate { font-size: 21px !important; }
     .qw-fx-chg { display: inline-flex !important; font-size: 10.5px !important; font-weight: 800; text-align: left; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — rail sheets, whole-chip clipping, exposure-fold fix, scenario grid
+   (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* Rails: clean edge — whole chips only, no fade over a half-cut pill. */
+    .mrail:not(.mrail-open) { -webkit-mask-image: none !important; mask-image: none !important; }
+    .mrail-cut { visibility: hidden; }
+
+    /* The rail sheet: chips flow as a tappable wrapped grid. */
+    .msheet-chipwrap { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }
+    .msheet-chipwrap > * { flex-shrink: 0; min-height: 42px; }
+
+    /* Exposure fold: NO phantom 300px box when closed — the "bug" the user saw. */
+    #exposureSection .exposure-wrapper.mfold-closed { min-height: 0 !important; padding-bottom: 12px; }
+    .mfold-closed > *:not(.section-title) { display: none !important; }
+    .mfold-closed .section-title { margin-bottom: 0 !important; }
+
+    /* Stress-test scenario picker: 2-column grid — every card whole, no side scroll. */
+    .st-scenarios {
+        grid-auto-flow: row !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        grid-auto-columns: unset !important;
+        overflow-x: visible !important;
+    }
+}

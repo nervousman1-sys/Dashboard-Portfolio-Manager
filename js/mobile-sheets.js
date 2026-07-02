@@ -92,8 +92,18 @@
         wrapEl.classList.toggle('mfold-closed', !open);
         title.classList.add('mfold-title');
         title.addEventListener('click', () => {
-            const closed = wrapEl.classList.toggle('mfold-closed');
-            try { localStorage.setItem(EXP_LS, closed ? '0' : '1'); } catch (e) { }
+            const opening = wrapEl.classList.contains('mfold-closed');
+            try { localStorage.setItem(EXP_LS, opening ? '1' : '0'); } catch (e) { }
+            if (opening && typeof window.renderExposureSection === 'function') {
+                // Re-render on open: the donut was created inside display:none → 0-size
+                // canvas. A fresh render draws it at real width (the MutationObserver
+                // re-folds per the just-saved state, so it comes back OPEN).
+                wrapEl.classList.remove('mfold-closed');
+                delete wrapEl.dataset.mfold;
+                window.renderExposureSection();
+            } else {
+                wrapEl.classList.toggle('mfold-closed');
+            }
         });
     }
     function unfoldExposure() {
@@ -104,10 +114,31 @@
         delete wrapEl.dataset.mfold;
     }
 
-    // ── Chip rails → "הצג הכל" button (the user dislikes sideways scrolling) ──
-    // Default: ONE clipped line, no scroll at all. A compact toggle under the rail
-    // expands it into a fully-wrapped grid inline; tap again to fold back.
+    // ── Chip rails → "הצג הכל" opens a SHEET with the full list (no sideways
+    // scrolling, no half-cut pills). The visible line keeps only WHOLE chips;
+    // the sheet shows clones of every chip — their inline onclick works as-is,
+    // and activating one closes the sheet. ──
     const RAILS = '.rep-new-chips, .tech-chips';
+    function openRailSheet(el, title) {
+        const w = ensureSheet();
+        w.querySelector('.msheet-title').textContent = title;
+        const body = w.querySelector('.msheet-body');
+        body.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.className = 'msheet-chipwrap';
+        for (const c of el.children) {
+            if (c.classList && c.classList.contains('mrail-btn')) continue;
+            const clone = c.cloneNode(true);
+            clone.classList.remove('mrail-cut');
+            grid.appendChild(clone);
+        }
+        grid.addEventListener('click', (ev) => {
+            // A chip was activated → let its inline onclick run, then close the sheet.
+            if (ev.target.closest('button, a, [onclick]')) setTimeout(() => w.classList.remove('open'), 120);
+        });
+        body.appendChild(grid);
+        w.classList.add('open');
+    }
     function railify(el) {
         if (!el || el.dataset.mrail || !el.parentNode) return;
         // Defer until it has real layout (post-render measurements)
@@ -115,21 +146,27 @@
         if (el.scrollWidth <= el.clientWidth + 8) return;  // fits — nothing to do
         el.dataset.mrail = '1';
         el.classList.add('mrail');
+        // Hide PARTIALLY clipped chips (RTL: they poke past the container's left edge) —
+        // a half-cut pill reads as a rendering bug.
+        const box = el.getBoundingClientRect();
+        let visible = 0;
+        for (const c of el.children) {
+            const r = c.getBoundingClientRect();
+            if (r.left < box.left - 1) c.classList.add('mrail-cut'); else visible++;
+        }
         const n = el.children.length;
+        const title = (el.closest('.rep-new-strip')?.querySelector('.rep-new-lbl')?.textContent || '').trim()
+            || (el.classList.contains('tech-chips') ? 'כל המסננים והאינדיקטורים' : 'הרשימה המלאה');
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'mrail-btn';
-        const label = (open) => btn.innerHTML = open ? 'צמצם ▴' : `הצג הכל · ${n} ▾`;
-        label(false);
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const open = el.classList.toggle('mrail-open');
-            label(open);
-        });
+        btn.innerHTML = `הצג הכל · ${n} ‹`;
+        btn.addEventListener('click', (e) => { e.stopPropagation(); openRailSheet(el, title); });
         el.parentNode.insertBefore(btn, el.nextSibling);
     }
     function unrailAll() {
         document.querySelectorAll('.mrail').forEach(el => { el.classList.remove('mrail', 'mrail-open'); delete el.dataset.mrail; });
+        document.querySelectorAll('.mrail-cut').forEach(c => c.classList.remove('mrail-cut'));
         document.querySelectorAll('.mrail-btn').forEach(b => b.remove());
     }
 

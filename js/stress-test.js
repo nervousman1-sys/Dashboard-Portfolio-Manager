@@ -525,9 +525,12 @@ function _stProximityHTML() {
         <div class="dc-prox-parts">
             ${p.parts.map(part => {
         const c = part.score >= 70 ? '#ef4444' : part.score >= 45 ? '#f59e0b' : '#10b981';
+        // Agent-stored notes may carry raw precision ("CPI 4.16661%") — round any
+        // long decimal to 2 places at render time, whatever the source computed.
+        const note = String(part.note || '').replace(/(\d+\.\d{3,})/g, (m) => (+m).toFixed(2));
         return `<div class="dc-prox-row"><span class="dc-prox-key">${_stEsc(part.key)}</span>
                     <div class="dc-prox-track"><span class="dc-prox-fill" style="width:${part.score}%;background:${c}"></span></div>
-                    <span class="dc-prox-val" style="color:${c}">${part.score} <small>${_stEsc(part.note)}</small></span></div>`;
+                    <span class="dc-prox-val" style="color:${c}">${part.score} <small>${_stEsc(note)}</small></span></div>`;
     }).join('')}
         </div>
         <div class="dc-card-foot">מבוסס על הערכות-שווי ושאננות שוק, לחצי אינפלציה, מדיניות מוניטרית, היפוך עקום התשואות, תנודתיות (VIX) ורמות המינוף בשוק — נתוני אמת. סוכן ייעודי סורק את השוק ומעדכן את האינדיקטור 24/7.</div>`;
