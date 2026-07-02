@@ -10452,3 +10452,63 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     /* ── 5. SAFE AREA — content never hides behind the iPhone home indicator ── */
     .mobile-bottom-nav { padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE LAYOUT ORDER — dashboard stats + technical table readability
+   (Same hard isolation: everything inside @media (max-width: 768px).)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+/* No pale edges ever: paint the root the same obsidian as the app (body already
+   covers it on desktop — this only kills white overscroll/edge bleed on phones). */
+html:not(.day-mode) { background-color: #020617; }
+
+@media (max-width: 768px) {
+
+    /* ── Dashboard summary: hero stat + clean 2-column rhythm ──
+       7 equal tiles left the last one floating alone in a half-empty row. The
+       headline number (סך נכסים מנוהלים, the FIRST card) becomes a full-width
+       hero; the remaining 6 sit in exact 2-column rows — no orphans. */
+    .summary-main { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .summary-main .stat-card:first-child { grid-column: 1 / -1; }
+    .summary-main .stat-card:first-child .stat-value { font-size: 30px; }
+    .summary-main .stat-card { min-height: 92px; border-radius: 16px; }
+
+    /* ── Page headers (ניתוח טכני, דוחות, מאקרו…): one compact row, not a third
+       of the screen. Title right, actions left — app-bar style. ── */
+    .macro-page-header {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 14px;
+        flex-wrap: wrap;
+    }
+    .macro-page-header h1, .macro-main-title { font-size: 17px !important; margin: 0; }
+    .macro-page-header .macro-back-btn { padding: 8px 12px; font-size: 12px; min-height: 40px; }
+
+    /* ── Technical table: phone-first columns ──
+       12 desktop columns squeezed a 1027px table into a 316px viewport — a giant
+       horizontal scroll with a hollow middle. On phones the table shows the FIVE
+       decision columns (מניה · מחיר · RSI יומי · RSI שבועי · FVG חודשי) at full
+       width, zero horizontal scroll; the full grid stays on desktop/tablet. */
+    #technicalPage .tech-table th:nth-child(5), #technicalPage .tech-table td:nth-child(5),
+    #technicalPage .tech-table th:nth-child(6), #technicalPage .tech-table td:nth-child(6),
+    #technicalPage .tech-table th:nth-child(7), #technicalPage .tech-table td:nth-child(7),
+    #technicalPage .tech-table th:nth-child(8), #technicalPage .tech-table td:nth-child(8),
+    #technicalPage .tech-table th:nth-child(10), #technicalPage .tech-table td:nth-child(10),
+    #technicalPage .tech-table th:nth-child(11), #technicalPage .tech-table td:nth-child(11),
+    #technicalPage .tech-table th:nth-child(12), #technicalPage .tech-table td:nth-child(12) {
+        display: none;
+    }
+    #technicalPage .tech-table { width: 100%; min-width: 0; }
+    #technicalPage .tech-table th, #technicalPage .tech-table td { padding: 10px 6px; font-size: 12.5px; }
+    /* The weekly-RSI warning chip is desktop luxury — on phones the number + color say it. */
+    #technicalPage .tech-warn { display: none; }
+    #technicalPage .tech-rsiw-num { font-weight: 800; }
+    /* The TradingView link under each ticker stays tappable but compact. */
+    #technicalPage .tech-tv { font-size: 9.5px; padding: 2px 6px; }
+
+    /* ── Card + section rhythm: consistent margins, no dead bands ── */
+    .risk-table-card { padding: 12px 10px; border-radius: 16px; }
+    .macro-content { padding: 12px 10px; }
+    .tech-foot { font-size: 10px; line-height: 1.6; }
+}
