@@ -306,11 +306,12 @@ async function refreshAllPrices() {
     };
     const onRefreshUpdate = () => { if (_ruTimer) clearTimeout(_ruTimer); _ruTimer = setTimeout(_doRefreshRender, 250); };
 
-    if (supabaseConnected) {
-        await updatePricesFromAPI(onRefreshUpdate);
-    } else {
-        await updatePricesForClients();
-    }
+    // Live prices come from the CLIENT-SIDE price service (Yahoo / Twelve Data), NOT
+    // from any backend — so ALWAYS use it, regardless of the Supabase flag. The old
+    // `!supabaseConnected → updatePricesForClients()` branch hit a dead legacy backend
+    // (localhost:3001/api/prices/refresh) that fails in production, so a refresh while
+    // the flag was momentarily false left prices frozen (the "משיכת נתונים" bug).
+    await updatePricesFromAPI(onRefreshUpdate);
 
     if (_ruTimer) clearTimeout(_ruTimer);
     _doRefreshRender(); // final, immediate render after the cycle
@@ -351,27 +352,29 @@ async function init() {
     // 12s cap → fall through to the cached portfolios (offline-first), hide the loader,
     // and re-try the fetch quietly in the background.
     const _bootTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('boot-timeout')), ms))]);
+    // The app is SUPABASE-ONLY — the legacy backend (localhost:3001) is dead. If the
+    // Supabase client isn't ready yet on this tick, wait briefly for it rather than
+    // falling to the dead path (which returned nothing → empty dashboard "בעיה במשיכת נתונים").
+    if (!useSupabase && typeof supabaseClient !== 'undefined') {
+        for (let i = 0; i < 10 && !supabaseClient; i++) await new Promise(r => setTimeout(r, 200));
+        if (supabaseClient) { supabaseConnected = true; useSupabase = true; }
+    }
     try {
-        if (useSupabase) {
-            freshClients = await _bootTimeout(supaFetchClients(), 12000);
-        } else {
-            freshClients = typeof fetchClients === 'function' ? await _bootTimeout(fetchClients(), 12000) : null;
-        }
+        freshClients = await _bootTimeout(supaFetchClients(), 12000);
     } catch (e) {
         console.error('[Init] Phase 1: Client fetch failed:', e.message);
         freshClients = null;
-        if (useSupabase && /boot-timeout/.test(e.message || '')) {
-            // Background retry once the degraded window passes — hydrates without a reload.
-            setTimeout(() => {
-                supaFetchClients().then(fc => {
-                    if (fc && fc.length && typeof clients !== 'undefined') {
-                        clients = fc;
-                        saveClientsToCache(clients);
-                        if (typeof refreshDashboard === 'function') refreshDashboard();
-                    }
-                }).catch(() => { /* stays on cache */ });
-            }, 20000);
-        }
+        // Background retry (degraded-DB window or client-not-ready) — hydrates without a reload.
+        setTimeout(() => {
+            supaFetchClients().then(fc => {
+                if (fc && typeof clients !== 'undefined' && (!clients.length || fc.length)) {
+                    clients = fc;
+                    saveClientsToCache(clients);
+                    if (typeof window !== 'undefined') window._clientsConfirmedEmpty = (fc.length === 0);
+                    if (typeof refreshDashboard === 'function') refreshDashboard();
+                }
+            }).catch(() => { /* stays on cache */ });
+        }, 8000);
     }
 
     if (freshClients) {

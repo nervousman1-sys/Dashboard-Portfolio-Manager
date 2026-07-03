@@ -372,10 +372,29 @@ function _lheMapHTML(m) {
             <span class="lhe-tm-val">$${+p.valueT}T ${arr}</span>
         </div>`;
     }).join('');
+    // MOBILE companion list — the treemap conveys PROPORTION, but small tiles can't hold
+    // readable labels on a phone. This grouped, fully-legible list shows every pool's name,
+    // value and direction (CSS reveals it only ≤768px, right under the map).
+    const listHtml = groups.map(g => {
+        const rows = g.pools.slice().sort((a, b) => (+b.valueT || 0) - (+a.valueT || 0)).map(p => {
+            const arr = p.dir === 'up' ? '▲' : p.dir === 'down' ? '▼' : '▬';
+            const dcls = p.dir === 'up' ? 'lhe-ml-up' : p.dir === 'down' ? 'lhe-ml-down' : 'lhe-ml-flat';
+            const scope = p.scope === 'global' ? '🌍' : '🇺🇸';
+            return `<div class="lhe-ml-row">
+                <span class="lhe-ml-name">${scope} ${_lheEsc(p.label)}</span>
+                <span class="lhe-ml-val ${dcls}">$${+p.valueT}T <span class="lhe-ml-arr">${arr}</span></span>
+            </div>`;
+        }).join('');
+        return `<div class="lhe-ml-group">
+            <div class="lhe-ml-ghead ${g.cls}">${_lheEsc(g.he)} · $${g.value.toFixed(0)}T</div>
+            ${rows}
+        </div>`;
+    }).join('');
     return `<div class="lhe-map">
         <div class="lhe-map-title">🗺️ מפת נזילות — איפה נמצא הכסף (גודל המלבן = היקף)</div>
         <div class="lhe-map-sub">מזומן בצד: <b>$${map.cashSidelinesT}T</b> &nbsp;·&nbsp; 🇺🇸 ארה"ב &nbsp; 🌍 גלובלי &nbsp;·&nbsp; ▲/▼ כיוון תנועה &nbsp;·&nbsp; 🟢 חי / ~ אומדן</div>
         <div class="lhe-treemap">${html}</div>
+        <div class="lhe-map-list">${listHtml}</div>
     </div>`;
 }
 

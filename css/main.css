@@ -11186,3 +11186,39 @@ html:not(.day-mode) { background-color: #020617; }
         text-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
     }
 }
+
+/* ── LHE liquidity map: readable companion list ── */
+.lhe-map-list { display: none; }   /* desktop: treemap labels are legible — list hidden */
+
+@media (max-width: 768px) {
+    /* On phones the treemap is a COMPACT proportion glance (shorter), and the readable
+       data lives in the grouped list below — no more squinting at cut labels. */
+    .lhe-treemap { height: 360px !important; }
+    .lhe-tm-name, .lhe-tm-val, .lhe-tm-vlabel { display: none; }  /* tiny tiles: color+size only */
+    .lhe-tm-ghead { font-size: 9px !important; }
+
+    .lhe-map-list { display: block; margin-top: 12px; }
+    .lhe-ml-group { margin-bottom: 10px; }
+    .lhe-ml-ghead {
+        font-size: 12px; font-weight: 900; color: #fff;
+        padding: 7px 12px; border-radius: 10px 10px 0 0;
+        border-inline-start: 4px solid rgba(255,255,255,0.35);
+    }
+    .lhe-ml-ghead.lhe-g-market { background: rgba(16,185,129,0.16); border-inline-start-color: #10b981; }
+    .lhe-ml-ghead.lhe-g-bonds  { background: rgba(139,92,246,0.16); border-inline-start-color: #8b5cf6; }
+    .lhe-ml-ghead.lhe-g-cash   { background: rgba(245,158,11,0.16); border-inline-start-color: #f59e0b; }
+    .lhe-ml-ghead.lhe-g-other  { background: rgba(56,189,248,0.14); border-inline-start-color: #38bdf8; }
+    .lhe-ml-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        min-height: 42px; padding: 6px 12px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.07); border-top: none;
+    }
+    .lhe-ml-group .lhe-ml-row:last-child { border-radius: 0 0 10px 10px; }
+    .lhe-ml-name { font-size: 12.5px; font-weight: 700; color: #e6ecf5; flex: 1 1 auto; min-width: 0; }
+    .lhe-ml-val { font-size: 13px; font-weight: 900; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .lhe-ml-up { color: #34d399; }
+    .lhe-ml-down { color: #f87171; }
+    .lhe-ml-flat { color: #cbd5e1; }
+    .lhe-ml-arr { font-size: 10px; }
+}
