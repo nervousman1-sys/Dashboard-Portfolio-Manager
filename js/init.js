@@ -1,5 +1,19 @@
 // ========== INIT - Initialization & Event Handlers ==========
 
+// ── BOOT WATCHDOG — the loading overlay must NEVER stick ──────────────────────
+// If anything in the boot chain hangs (a degraded Supabase window once left users
+// on "טוען נתוני שוק…" forever), reveal the app after 18s no matter what: cached
+// portfolios render beneath, and data keeps loading in the background.
+if (typeof window !== 'undefined') {
+    setTimeout(() => {
+        const o = document.getElementById('loadingOverlay');
+        if (o && !o.classList.contains('hidden')) {
+            console.warn('[Init] Boot watchdog: force-revealing the app (loader stuck >18s)');
+            o.classList.add('hidden');
+        }
+    }, 18000);
+}
+
 // ── Quick-Watch: searchable pool — indices, US mega-caps, TASE stocks, crypto ──
 const _QW_TICKER_POOL = [
     // Global Indices — REAL index symbols (^GSPC = S&P 500 itself), not ETF proxies.
@@ -332,15 +346,32 @@ async function init() {
     }
 
     let freshClients;
+    // HARD TIMEOUT: supabase-js has no fetch timeout of its own — when the DB is in a
+    // degraded window the await hung FOREVER and the user stayed on "טוען נתוני שוק…".
+    // 12s cap → fall through to the cached portfolios (offline-first), hide the loader,
+    // and re-try the fetch quietly in the background.
+    const _bootTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('boot-timeout')), ms))]);
     try {
         if (useSupabase) {
-            freshClients = await supaFetchClients();
+            freshClients = await _bootTimeout(supaFetchClients(), 12000);
         } else {
-            freshClients = typeof fetchClients === 'function' ? await fetchClients() : null;
+            freshClients = typeof fetchClients === 'function' ? await _bootTimeout(fetchClients(), 12000) : null;
         }
     } catch (e) {
         console.error('[Init] Phase 1: Client fetch failed:', e.message);
         freshClients = null;
+        if (useSupabase && /boot-timeout/.test(e.message || '')) {
+            // Background retry once the degraded window passes — hydrates without a reload.
+            setTimeout(() => {
+                supaFetchClients().then(fc => {
+                    if (fc && fc.length && typeof clients !== 'undefined') {
+                        clients = fc;
+                        saveClientsToCache(clients);
+                        if (typeof refreshDashboard === 'function') refreshDashboard();
+                    }
+                }).catch(() => { /* stays on cache */ });
+            }, 20000);
+        }
     }
 
     if (freshClients) {

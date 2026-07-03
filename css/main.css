@@ -11111,3 +11111,78 @@ html:not(.day-mode) { background-color: #020617; }
         inset: -8px;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE — peers table fits · treemap labels never cut · pro score card · star
+   watch action. (Isolated: max-width 768px.)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* ── השוואת מכפילים מול הסקטור: phone columns — חברה · P/E · P/B · ROE.
+       (P/S, EV/EBITDA ושווי שוק נשארים בדסקטופ.) Full width, zero side scroll. ── */
+    .rep-peers-table th:nth-child(4), .rep-peers-table td:nth-child(4),
+    .rep-peers-table th:nth-child(5), .rep-peers-table td:nth-child(5),
+    .rep-peers-table th:nth-child(7), .rep-peers-table td:nth-child(7) { display: none; }
+    .rep-peers-table { table-layout: fixed; width: 100% !important; min-width: 0 !important; }
+    .rep-peers-table th, .rep-peers-table td { font-size: 10.5px !important; padding: 8px 3px !important; }
+    .rep-peers-table th:first-child, .rep-peers-table td:first-child {
+        width: 42%;
+        text-align: right;
+        white-space: normal !important;
+        overflow: hidden;
+        line-height: 1.35;
+        font-size: 10px !important;
+    }
+    .rep-peers-panel { overflow-x: visible !important; }
+    .rep-peers-legend { font-size: 9.5px; line-height: 1.6; }
+
+    /* ── מפת הנזילות: labels always readable — clean ellipsis, never a mid-letter cut;
+       flags dropped on phones; extra map height gives small tiles room to breathe. ── */
+    .lhe-treemap { height: 860px; }
+    .lhe-tm-tile { overflow: hidden; }
+    .lhe-tm-name, .lhe-tm-val, .lhe-tm-vlabel, .lhe-tm-ghead {
+        max-width: 96%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .lhe-tm-name { font-size: 10px !important; }
+    .lhe-tm-val { font-size: 9.5px !important; }
+    .lhe-tm-ghead { font-size: 9px !important; }
+    .lhe-tm-scope { display: none; }
+
+    /* ── ציון הדו"ח: executive score card — full-width row, verdict beside a large
+       numeral, keeps the score-class colors (excellent/good/…): premium, not boxy. ── */
+    .rep-head { flex-direction: column-reverse; gap: 12px; }
+    .rep-score-box {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row-reverse;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-radius: 18px;
+    }
+    .rep-score-num { font-size: 46px; letter-spacing: -0.02em; }
+    .rep-score-label { font-size: 15px; margin-top: 0; }
+    .rep-score-cap { font-size: 9.5px; margin-top: 2px; opacity: 0.8; }
+
+    /* ── "הוסף למעקב" → a single star at the row's side (444px acts like an icon).
+       The action bar becomes [חזרה לרשימה][ניתוח טכני][★]. ── */
+    .rep-detail-top { grid-template-columns: 1fr 1fr 54px !important; }
+    .rep-detail-top .macro-back-btn { order: 1; }
+    .rep-detail-top .rep-tech-link { order: 2; }
+    .rep-detail-top .rep-watch-btn { order: 3; font-size: 0 !important; padding: 0 !important; }
+    .rep-detail-top .rep-watch-btn::before {
+        content: '☆';
+        font-size: 24px;
+        line-height: 1;
+        color: #9fb2cc;
+    }
+    .rep-detail-top .rep-watch-btn.on::before {
+        content: '★';
+        color: #fbbf24;
+        text-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
+    }
+}

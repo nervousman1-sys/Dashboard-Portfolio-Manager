@@ -258,6 +258,25 @@
         openTechSheet(tr.getAttribute('data-sym'));
     });
 
+    // ── Bottom-nav "מעקב": open the reports page and pop the watchlist as a sheet ──
+    // (Replaces the old רענן slot per the user's request.) With watch items → a sheet
+    // of tappable watch chips (each opens its company); empty → the reports page with
+    // its watch bar, where stars add companies.
+    window.openMobileWatchlist = function () {
+        if (typeof navigateTo === 'function') navigateTo('reports');
+        let tries = 0;
+        const attempt = () => {
+            const chips = document.querySelector('#repWatchBar .rep-new-chips');
+            if (chips && chips.children.length) {
+                openRailSheet(chips, '⭐ רשימת המעקב שלי');
+                return;
+            }
+            if (++tries < 8) setTimeout(attempt, 700);
+            // else: reports page is open — the (empty) watch bar area explains itself
+        };
+        setTimeout(attempt, 900);
+    };
+
     function boot() {
         sweep(document);
         mo.observe(document.body, { childList: true, subtree: true });
