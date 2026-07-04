@@ -47,11 +47,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persist
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ── Universe: same source the reports page uses (tickers + GICS sectors) ──────
+// r2k (Russell 2000, ~2000 small/mid-caps) is OPT-IN (SWEEP_R2K=1). It quadrupled the
+// table to ~2500 JSONB rows, whose autovacuum/checkpoint pegged the free-tier compute
+// and starved the AUTH service's DB connection ("dial tcp 5432: i/o timeout" → login
+// 504s). Default: sweep us+il only (~700 companies); r2k board scores load on-demand
+// client-side, so nothing user-facing is lost.
+const SWEEP_R2K = process.env.SWEEP_R2K === '1';
 async function loadUniverse() {
     const out = [];
-    // r2k (Russell 2000, ~2000 small/mid-caps) is swept LAST each cycle so the large-cap
-    // US + IL boards always refresh first — r2k roughly quadruples the sweep length.
-    for (const market of ['us', 'il', 'r2k']) {
+    const markets = SWEEP_R2K ? ['us', 'il', 'r2k'] : ['us', 'il'];
+    for (const market of markets) {
         try {
             const url = `${SITE}/api/technicals?mode=tickers&market=${market}&sv=3` + (market === 'il' ? '&stocksOnly=1' : '');
             const r = await fetch(url, { headers: { Accept: 'application/json' } });
