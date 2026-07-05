@@ -129,6 +129,7 @@
             attentionNotes,
             accountingNotes,
             insiders: report.insiders || null,
+            rpo: report.rpo || null,
         };
     }
 

@@ -693,6 +693,34 @@ function _repFmtMoney(v, cur) {
     if (abs >= 1e3) return `${sign}${s}${(abs / 1e3).toFixed(1)}K`;
     return `${sign}${s}${abs.toFixed(0)}`;
 }
+// RPO card — Remaining Performance Obligation: signed contracts NOT yet booked as revenue
+// (committed future-revenue backlog). Real data from SEC XBRL; shown only when the company
+// reports it (SaaS/subscription/contract firms). A rising RPO = strong forward demand.
+function _repRpoHtml(m) {
+    const r = m && m.rpo;
+    if (!r || r.total == null) return '';
+    const cur = '$';
+    const pct = (a, b) => (a != null && b != null && b !== 0) ? (a - b) / b : null;
+    const qoq = pct(r.total, r.prev);
+    const yoy = pct(r.total, r.yoy);
+    const chip = (label, v) => v == null ? '' :
+        `<span class="rep-rpo-chip ${v >= 0 ? 'pos' : 'neg'}">${label} ${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%</span>`;
+    const he = (d) => { try { return new Date(d).toLocaleDateString('he-IL'); } catch (e) { return d; } };
+    return `
+        <div class="rep-rpo-card">
+            <div class="rep-rpo-head">
+                <span class="rep-rpo-title">צבר הזמנות חוזי — RPO</span>
+                <span class="rep-rpo-sub">עסקאות שנחתמו וטרם הוכרו כהכנסה · דיווח SEC נכון ל-${he(r.date)}</span>
+            </div>
+            <div class="rep-rpo-body">
+                <div class="rep-rpo-main">
+                    <span class="rep-rpo-val">${_repFmtMoney(r.total, cur)}</span>
+                    <div class="rep-rpo-chips">${chip('רבעוני', qoq)}${chip('שנתי', yoy)}</div>
+                </div>
+                <p class="rep-rpo-note">הערך הכולל של חוזים חתומים שההכנסה מהם עדיין לא נרשמה בדוח — אינדיקטור מקדים לביקוש עתידי. עלייה = צבר מתחזק.</p>
+            </div>
+        </div>`;
+}
 function _repFmtPct(v, withSign) {
     if (v == null || isNaN(v)) return '—';
     const p = v * 100;
@@ -802,6 +830,8 @@ function _repRenderDetail(m) {
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
             ${m.nextEarningsDate ? `<div class="rep-keyfig rep-keyfig-earn"><span class="rep-keyfig-label">מועד הדוח הבא</span><span class="rep-keyfig-val">${_repHeDate(m.nextEarningsDate)}${m.earningsIsEstimate ? ' <span class="rep-est">משוער</span>' : ''}</span></div>` : ''}
         </div>
+
+        ${_repRpoHtml(m)}
 
         <div class="rep-peers-cta">
             <button class="rep-peers-btn" onclick="_repTogglePeers()">

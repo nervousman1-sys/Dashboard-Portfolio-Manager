@@ -11222,3 +11222,29 @@ html:not(.day-mode) { background-color: #020617; }
     .lhe-ml-flat { color: #cbd5e1; }
     .lhe-ml-arr { font-size: 10px; }
 }
+
+/* ── RPO card — Remaining Performance Obligation (signed-but-unrecognized revenue) ── */
+.rep-rpo-card {
+    margin: 14px 0;
+    background: linear-gradient(-90deg, rgba(0,229,255,0.06), rgba(3,7,18,0.5) 60%);
+    border: 1px solid rgba(0,229,255,0.22);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+.rep-rpo-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.rep-rpo-title { font-size: 14px; font-weight: 900; color: #67e8f9; letter-spacing: 0.01em; }
+.rep-rpo-sub { font-size: 10.5px; color: var(--text-secondary); }
+.rep-rpo-body { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.rep-rpo-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rep-rpo-val { font-size: 30px; font-weight: 900; color: #fff; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.rep-rpo-chips { display: flex; gap: 6px; }
+.rep-rpo-chip { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.rep-rpo-chip.pos { color: #052e16; background: #34d399; }
+.rep-rpo-chip.neg { color: #fff; background: #ef4444; }
+.rep-rpo-note { flex: 1 1 220px; min-width: 200px; font-size: 11.5px; line-height: 1.6; color: var(--text-primary); opacity: 0.82; margin: 0; }
+html.day-mode .rep-rpo-val { color: var(--text-primary); }
+html.day-mode .rep-rpo-title { color: #0369a1; }
+@media (max-width: 768px) {
+    .rep-rpo-val { font-size: 26px; }
+    .rep-rpo-body { gap: 12px; }
+}
