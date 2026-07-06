@@ -588,7 +588,7 @@ async function openReportDetail(symbol) {
     if (body) body.innerHTML = `<div class="rep-loading"><div class="rep-spinner"></div><span>טוען דו"ח עבור ${symbol.replace(/\.TA$/, '')}…</span></div>`;
 
     try {
-        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}&rv=4`, { headers: { Accept: 'application/json' } });
+        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}&rv=5`, { headers: { Accept: 'application/json' } });
         if (!r.ok) {
             const j = await r.json().catch(() => ({}));
             const msg = r.status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
