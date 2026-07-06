@@ -380,6 +380,18 @@ module.exports = async (req, res) => {
             return;
         }
 
+        // mode=segments — business-segment revenue (FMP product + geographic, Supabase-cached).
+        // Delegated to the shared lib to stay under the 12-serverless-function cap.
+        if (mode === 'segments') {
+            const { fetchSegments } = require('../lib/reports-data.js');
+            const symbol = String(req.query.symbol || '').trim().toUpperCase();
+            if (!symbol) { res.status(400).json({ error: 'symbol required' }); return; }
+            const out = await fetchSegments(symbol);
+            res.setHeader('Cache-Control', out && (out.product.length || out.geographic.length) ? 's-maxage=86400, stale-while-revalidate=604800' : 's-maxage=600');
+            res.status(200).json(out || { symbol, product: [], geographic: [] });
+            return;
+        }
+
         // mode=peers — sector peer-multiples comparison (Yahoo quoteSummary per symbol).
         // The client passes same-sector tickers via &peers=A,B,C; we fetch the base + peers in
         // parallel, keep those with usable multiples, and return the largest by market cap.

@@ -11248,3 +11248,19 @@ html.day-mode .rep-rpo-title { color: #0369a1; }
     .rep-rpo-val { font-size: 26px; }
     .rep-rpo-body { gap: 12px; }
 }
+
+/* ── Business segments — revenue by division/product/geography ── */
+.rep-seg-section { margin: 14px 0; }
+.rep-seg-block { margin-bottom: 14px; }
+.rep-seg-title { font-size: 12.5px; font-weight: 800; color: var(--accent-blue); margin: 8px 2px 6px; }
+.rep-seg-tbl .rep-seg-name { text-align: right; font-weight: 700; color: var(--text-primary); white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.rep-seg-trend { font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 999px; }
+.rep-seg-trend.pos { color: #34d399; background: rgba(52,211,153,0.12); }
+.rep-seg-trend.neg { color: #f87171; background: rgba(248,113,113,0.12); }
+.rep-seg-tbl td { text-align: center; font-variant-numeric: tabular-nums; }
+.rep-seg-foot { font-size: 10.5px; color: var(--text-secondary); opacity: 0.8; margin-top: 4px; line-height: 1.5; }
+@media (max-width: 768px) {
+    .rep-seg-tbl { table-layout: auto; }
+    .rep-seg-tbl th, .rep-seg-tbl td { font-size: 10.5px; padding: 7px 5px; }
+    .rep-seg-tbl .rep-seg-name { font-size: 10.5px; }
+}

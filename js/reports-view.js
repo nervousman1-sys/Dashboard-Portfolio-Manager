@@ -606,6 +606,7 @@ async function openReportDetail(symbol) {
         else if (!hasData && _repMarket === 'il') _repSaveScore(symbol, { noData: true });
         _repRenderDetail(model);         // a clean "no data" view is rendered when hasData is false
         if (hasData) _repLoadAI(model);  // async SWOT + strategy only when there's something to analyze
+        if (hasData && model.market !== 'il') _repLoadSegments(model); // business segments (lazy, cached)
     } catch (e) {
         if (body) body.innerHTML = `<div class="adv-empty">שגיאה בטעינת הדו"ח.<br><button class="macro-back-btn" style="margin-top:12px" onclick="backToReportsList()">חזרה לרשימה</button></div>`;
     }
@@ -721,6 +722,59 @@ function _repRpoHtml(m) {
             </div>
         </div>`;
 }
+// ── Business segments — the divisions a company operates in + quarterly revenue each ──
+// Lazy-loaded from /api/segments (FMP product + geographic, Supabase-cached). Rendered as
+// two compact tables (segment rows × quarter columns) with a YoY-style latest-vs-first trend.
+async function _repLoadSegments(m) {
+    const el = document.getElementById('repSegments');
+    if (!el || !m || !m.symbol) return;
+    el.innerHTML = `<div class="rep-section-title">סגמנטים עסקיים — הכנסה לפי חטיבה</div>
+        <div class="rep-ai-loading"><div class="rep-spinner"></div>טוען חלוקת הכנסות לפי סגמנט…</div>`;
+    try {
+        const r = await fetch(`/api/technicals?mode=segments&symbol=${encodeURIComponent(m.symbol)}&v=1`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        if (document.getElementById('repSegments') !== el || !_repCurrent || _repCurrent.symbol !== m.symbol) return; // navigated away
+        const cur = m.currency === 'ILS' ? '₪' : '$';
+        const blocks = [
+            _repSegTable('חלוקה לפי מוצר / שירות', j.product, cur),
+            _repSegTable('חלוקה גיאוגרפית', j.geographic, cur),
+        ].filter(Boolean);
+        el.innerHTML = blocks.length
+            ? `<div class="rep-section-title">סגמנטים עסקיים — הכנסה לפי חטיבה</div>${blocks.join('')}
+               <div class="rep-seg-foot">חלוקת ההכנסות כפי שדווחה בדוחות · מוצג עד 5 רבעונים אחרונים${j.cached ? '' : ' · נטען זה עתה'}</div>`
+            : ''; // nothing to show → hide the whole section
+    } catch (e) {
+        if (document.getElementById('repSegments') === el) el.innerHTML = '';
+    }
+}
+function _repSegTable(title, segs, cur) {
+    if (!Array.isArray(segs) || !segs.length) return '';
+    // Union of period dates across segments, chronological, last 5.
+    const dates = [...new Set(segs.flatMap(s => (s.points || []).map(p => p.date)))].sort().slice(-5);
+    if (!dates.length) return '';
+    const shortD = (d) => { const s = String(d); const m2 = s.match(/(\d{4})-(\d{2})/); return m2 ? `${m2[2]}/${m2[1].slice(2)}` : s; };
+    const head = dates.map(d => `<th>${shortD(d)}</th>`).join('');
+    const rows = segs.map(s => {
+        const byDate = {}; (s.points || []).forEach(p => { byDate[p.date] = p.value; });
+        const cells = dates.map(d => `<td>${byDate[d] != null ? _repFmtMoney(byDate[d], cur) : '—'}</td>`).join('');
+        // trend: latest vs earliest available in the window
+        const vals = dates.map(d => byDate[d]).filter(v => v != null);
+        const trend = (vals.length >= 2 && vals[0] !== 0) ? (vals[vals.length - 1] - vals[0]) / Math.abs(vals[0]) : null;
+        const tChip = trend == null ? '' : `<span class="rep-seg-trend ${trend >= 0 ? 'pos' : 'neg'}">${trend >= 0 ? '▲' : '▼'} ${trend >= 0 ? '+' : ''}${(trend * 100).toFixed(0)}%</span>`;
+        return `<tr><td class="rep-seg-name">${_repEscape(s.name)}${tChip}</td>${cells}</tr>`;
+    }).join('');
+    return `<div class="rep-seg-block">
+        <div class="rep-seg-title">${_repEscape(title)}</div>
+        <div class="risk-table-scroll" style="max-height:none">
+        <table class="risk-table rep-table rep-seg-tbl">
+            <thead><tr><th class="rep-metric-name">סגמנט</th>${head}</tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>
+    </div>`;
+}
+function _repEscape(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+if (typeof window !== 'undefined') window._repLoadSegments = _repLoadSegments;
+
 function _repFmtPct(v, withSign) {
     if (v == null || isNaN(v)) return '—';
     const p = v * 100;
@@ -833,6 +887,8 @@ function _repRenderDetail(m) {
 
         ${_repRpoHtml(m)}
 
+        ${m.market !== 'il' ? '<div class="rep-seg-section" id="repSegments"></div>' : ''}
+
         <div class="rep-peers-cta">
             <button class="rep-peers-btn" onclick="_repTogglePeers()">
                 📊 השוואת מכפילים מול הסקטור${m.sector ? ' · ' + m.sector : ''}
@@ -891,6 +947,7 @@ function _repRenderDetail(m) {
                 ${metricRow('תזרים תפעולי', fmM, 'operatingCashFlow')}
                 ${metricRow('תזרים חופשי (FCF)', fmM, 'fcf', null, 'תזרים תפעולי פחות השקעות הוניות')}
                 ${metricRow('שולי FCF', fmP, 'fcfMargin', null, 'תזרים חופשי חלקי הכנסות')}
+                ${metricRow('RPO', fmM, 'rpo', null, 'צבר הזמנות חוזי — ערך העסקאות שנחתמו וטרם הוכרו כהכנסה (דיווח SEC)')}
             </tbody>
         </table>
         </div>
