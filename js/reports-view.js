@@ -722,6 +722,66 @@ function _repRpoHtml(m) {
             </div>
         </div>`;
 }
+// ── Credit-quality grade — "bond rating" derived from the real balance sheet ──
+// Official S&P/Moody's/Fitch ratings are licensed and not freely available, so this is a
+// TRANSPARENT credit-quality assessment computed from the same metrics agencies weight most:
+// leverage (Net Debt / EBITDA), liquidity (current ratio) and solvency (debt/equity). Mapped
+// to an investment-grade-style band, clearly labeled as derived (not an agency rating).
+function _repCreditHtml(m) {
+    const rows = Array.isArray(m.rows) ? m.rows : [];
+    const latest = m.latest || rows[0];
+    if (!latest) return '';
+    const isNum = (x) => typeof x === 'number' && isFinite(x);
+    // TTM EBITDA (sum of last 4 quarters) — the credit denominator.
+    const ttm = rows.slice(0, 4);
+    const ttmEbitda = (ttm.length === 4 && ttm.every(r => isNum(r.ebitda))) ? ttm.reduce((s, r) => s + r.ebitda, 0) : null;
+    const netDebt = isNum(latest.netDebt) ? latest.netDebt : null;
+    const cr = isNum(latest.currentRatio) ? latest.currentRatio : null;
+    const de = isNum(latest.debtToEquity) ? latest.debtToEquity : null;
+    // Need at least leverage OR solvency to say anything.
+    const lev = (netDebt != null && ttmEbitda != null && ttmEbitda > 0) ? netDebt / ttmEbitda : null;
+    if (lev == null && de == null) return '';
+
+    // Band by leverage (primary), nudged by liquidity. Net cash = strongest.
+    let tier, label, cls;
+    const netCash = netDebt != null && netDebt < 0;
+    if (ttmEbitda != null && ttmEbitda <= 0) { tier = 5; }
+    else if (netCash || (lev != null && lev < 1)) tier = 0;
+    else if (lev != null && lev < 2) tier = 1;
+    else if (lev != null && lev < 3) tier = 2;
+    else if (lev != null && lev < 4.5) tier = 3;
+    else if (lev != null) tier = 4;
+    else tier = (de != null && de < 1) ? 1 : (de != null && de < 2) ? 2 : 3; // no EBITDA → judge by D/E
+    if (cr != null && cr < 1 && tier < 4) tier += 1;  // liquidity stress → one notch down
+
+    const BANDS = [
+        { label: 'איתנות פיננסית מצוינת · דמוי AAA–AA', cls: 'excellent' },
+        { label: 'איתנות גבוהה · דירוג השקעה (דמוי A)', cls: 'good' },
+        { label: 'איתנות טובה · דירוג השקעה (דמוי BBB)', cls: 'good' },
+        { label: 'מינוף מוגבר · תשואה גבוהה (דמוי BB)', cls: 'mid' },
+        { label: 'מינוף גבוה / ספקולטיבי · דמוי B', cls: 'weak' },
+        { label: 'מינוף כבד · EBITDA שלילי · סיכון אשראי גבוה', cls: 'bad' },
+    ];
+    const b = BANDS[Math.min(tier, 5)];
+    const cur = m.currency === 'ILS' ? '₪' : '$';
+    const metric = (lbl, val) => val == null ? '' : `<span class="rep-cr-metric"><span class="rep-cr-mlabel">${lbl}</span><b>${val}</b></span>`;
+    const levTxt = lev != null ? `${lev < 0 ? 'עודף מזומן' : lev.toFixed(1) + 'x'}` : (netCash ? 'עודף מזומן' : null);
+    return `
+        <div class="rep-cr-card rep-cr-${b.cls}">
+            <div class="rep-cr-head">
+                <span class="rep-cr-title">דירוג אשראי — הערכת איתנות</span>
+                <span class="rep-cr-grade">${b.label}</span>
+            </div>
+            <div class="rep-cr-metrics">
+                ${metric('חוב נטו / EBITDA', levTxt)}
+                ${metric('יחס שוטף', cr != null ? cr.toFixed(2) : null)}
+                ${metric('חוב / הון', de != null ? de.toFixed(2) : null)}
+                ${metric('חוב נטו', netDebt != null ? _repFmtMoney(netDebt, cur) : null)}
+            </div>
+            <p class="rep-cr-note">הערכת איכות-אשראי המחושבת ממבנה המאזן והתזרים בדוח — מינוף, נזילות ויחס חוב/הון (המדדים שסוכנויות הדירוג משקללות). אינה דירוג רשמי של S&amp;P / Moody's.</p>
+        </div>`;
+}
+
 // ── Business segments — the divisions a company operates in + quarterly revenue each ──
 // Lazy-loaded from /api/segments (FMP product + geographic, Supabase-cached). Rendered as
 // two compact tables (segment rows × quarter columns) with a YoY-style latest-vs-first trend.
@@ -884,6 +944,8 @@ function _repRenderDetail(m) {
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
             ${m.nextEarningsDate ? `<div class="rep-keyfig rep-keyfig-earn"><span class="rep-keyfig-label">מועד הדוח הבא</span><span class="rep-keyfig-val">${_repHeDate(m.nextEarningsDate)}${m.earningsIsEstimate ? ' <span class="rep-est">משוער</span>' : ''}</span></div>` : ''}
         </div>
+
+        ${_repCreditHtml(m)}
 
         ${_repRpoHtml(m)}
 

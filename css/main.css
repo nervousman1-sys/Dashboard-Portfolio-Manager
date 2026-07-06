@@ -11264,3 +11264,22 @@ html.day-mode .rep-rpo-title { color: #0369a1; }
     .rep-seg-tbl th, .rep-seg-tbl td { font-size: 10.5px; padding: 7px 5px; }
     .rep-seg-tbl .rep-seg-name { font-size: 10.5px; }
 }
+
+/* ── Credit-quality card — derived "bond rating" from the balance sheet ── */
+.rep-cr-card { margin: 14px 0; border-radius: 14px; padding: 14px 16px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); }
+.rep-cr-head { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.rep-cr-title { font-size: 12px; font-weight: 800; color: var(--text-secondary); letter-spacing: 0.02em; }
+.rep-cr-grade { font-size: 16px; font-weight: 900; }
+.rep-cr-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.rep-cr-metric { display: flex; flex-direction: column; gap: 2px; min-width: 96px; flex: 1 1 96px; padding: 8px 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; }
+.rep-cr-mlabel { font-size: 9.5px; color: var(--text-secondary); }
+.rep-cr-metric b { font-size: 14px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
+.rep-cr-note { font-size: 10.5px; line-height: 1.55; color: var(--text-secondary); opacity: 0.85; margin: 0; }
+/* Grade-band accents */
+.rep-cr-excellent { border-color: rgba(52,211,153,0.4); } .rep-cr-excellent .rep-cr-grade { color: #34d399; }
+.rep-cr-good      { border-color: rgba(96,165,250,0.4); } .rep-cr-good .rep-cr-grade { color: #60a5fa; }
+.rep-cr-mid       { border-color: rgba(251,191,36,0.4); } .rep-cr-mid .rep-cr-grade { color: #fbbf24; }
+.rep-cr-weak      { border-color: rgba(248,113,113,0.4); } .rep-cr-weak .rep-cr-grade { color: #f87171; }
+.rep-cr-bad       { border-color: rgba(239,68,68,0.55); } .rep-cr-bad .rep-cr-grade { color: #ef4444; }
+html.day-mode .rep-cr-metric b { color: var(--text-primary); }
+@media (max-width: 768px) { .rep-cr-grade { font-size: 14px; } .rep-cr-metric { min-width: 44%; flex-basis: 44%; } }
