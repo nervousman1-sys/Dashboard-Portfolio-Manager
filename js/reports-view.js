@@ -154,7 +154,10 @@ function _repRenderShell() {
     <div dir="rtl">
         <div class="macro-page-header">
             <h1 class="macro-main-title">ניתוח דוחות כספיים</h1>
-            <button class="macro-back-btn" onclick="closeReportsPage()">חזור לדשבורד</button>
+            <div class="macro-header-actions">
+                <button class="macro-watch-btn" onclick="openWatchlistModal()" title="רשימת מעקב">⭐ רשימת מעקב</button>
+                <button class="macro-back-btn" onclick="closeReportsPage()">חזור לדשבורד</button>
+            </div>
         </div>
         <div class="macro-content">
             <div class="risk-table-card glass-card">
@@ -499,6 +502,149 @@ function _repRefreshStars() {
     document.querySelectorAll('[data-rep-star]').forEach(el => el.classList.toggle('on', _repWatch.has(el.getAttribute('data-rep-star'))));
 }
 if (typeof window !== 'undefined') { window._repToggleWatch = _repToggleWatch; window._repLoadWatch = _repLoadWatch; }
+
+// ══ Watchlist MODAL — shared window (dashboard button + reports button + mobile nav) ══
+// Shows each watched stock with its live price + a link to its report, plus a search
+// field to add a stock. Reuses the Supabase `watchlist` state above.
+async function openWatchlistModal() {
+    let ov = document.getElementById('wlOverlay');
+    if (!ov) {
+        ov = document.createElement('div'); ov.id = 'wlOverlay'; ov.className = 'wl-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeWatchlistModal(); });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = `<div class="wl-box" dir="rtl">
+        <div class="wl-head">
+            <span class="wl-title">⭐ רשימת המעקב שלי</span>
+            <button class="wl-close" onclick="closeWatchlistModal()" aria-label="סגור">✕</button>
+        </div>
+        <div class="wl-search-wrap">
+            <input type="text" id="wlSearch" class="wl-search" autocomplete="off" placeholder="חיפוש מניה להוספה (למשל: NVDA, TEVA)…"
+                oninput="_wlSuggest(this.value)" onkeydown="if(event.key==='Enter'){_wlAddFromSearch(this.value); this.value='';}" />
+            <div id="wlSuggest" class="wl-suggest"></div>
+        </div>
+        <div id="wlList" class="wl-list"><div class="wl-empty"><div class="rep-spinner"></div>טוען…</div></div>
+    </div>`;
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    _wlPrimeUniverse();              // fill the search-suggestion pool (cheap; cached)
+    await _repLoadWatch();            // refresh the set from Supabase
+    _wlRenderList();
+    setTimeout(() => { const s = document.getElementById('wlSearch'); if (s) s.focus(); }, 80);
+}
+// Fill _repUniverse for search suggestions WITHOUT rendering the reports list.
+// Instant path: read every market's localStorage cache (returning users have these).
+// Cold start (nothing cached): fetch the S&P 500 ticker list once so US names autocomplete.
+let _wlPrimed = false;
+async function _wlPrimeUniverse() {
+    let any = false;
+    for (const mkt of Object.keys(_REP_MKT)) {
+        if (_repUniverse[mkt] && _repUniverse[mkt].length) { any = true; continue; }
+        try {
+            const raw = localStorage.getItem(_REP_MKT[mkt].ls);
+            if (raw) { const c = JSON.parse(raw); if (c && Array.isArray(c.tickers) && c.tickers.length) { _repUniverse[mkt] = c.tickers; any = true; } }
+        } catch (e) { }
+    }
+    if (any || _wlPrimed) { const s = document.getElementById('wlSearch'); if (s && s.value) _wlSuggest(s.value); return; }
+    _wlPrimed = true; // fetch S&P 500 once even if the modal is reopened
+    try {
+        const r = await fetch('/api/technicals?mode=tickers&market=sp500&sv=3', { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const tickers = (j.tickers || []).slice().sort((a, b) => a.localeCompare(b));
+        if (tickers.length) {
+            _repUniverse.sp500 = tickers;
+            try { localStorage.setItem(_REP_MKT.sp500.ls, JSON.stringify({ day: new Date().toISOString().slice(0, 10), tickers, sectors: j.sectors || null })); } catch (e) { }
+            const s = document.getElementById('wlSearch'); if (s && s.value) _wlSuggest(s.value);
+        }
+    } catch (e) { }
+}
+function closeWatchlistModal() {
+    const ov = document.getElementById('wlOverlay');
+    if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; }
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+}
+// Batch quotes via the same-origin /api/quote endpoint (Yahoo). Returns {SYM:{price,prevClose,currency}}.
+async function _wlFetchPrices(symbols) {
+    if (!symbols.length) return {};
+    try {
+        // Symbols are already in Yahoo form (TASE names carry the .TA suffix).
+        const r = await fetch(`/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        return (j && j.quotes) ? j.quotes : (j || {});
+    } catch (e) { return {}; }
+}
+async function _wlRenderList() {
+    const el = document.getElementById('wlList');
+    if (!el) return;
+    const syms = [..._repWatch];
+    if (!syms.length) { el.innerHTML = '<div class="wl-empty">אין מניות במעקב עדיין. חפש מניה למעלה כדי להוסיף, או הוסף מכוכב ★ בעמוד הדוח.</div>'; return; }
+    // Company names + report scores from company_reports (best-effort).
+    let info = {};
+    try {
+        const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms);
+        (data || []).forEach(r => { info[String(r.symbol).toUpperCase()] = r; });
+    } catch (e) { }
+    const prices = await _wlFetchPrices(syms);
+    if (document.getElementById('wlList') !== el) return;
+    el.innerHTML = syms.map(s => {
+        const r = info[s] || {};
+        const disp = String(s).replace(/\.TA$/, '');
+        const q = prices[s] || prices[disp] || {};
+        const price = q.price != null ? q.price : (q.regularMarketPrice != null ? q.regularMarketPrice : null);
+        const prev = q.prevClose != null ? q.prevClose : (q.previousClose != null ? q.previousClose : (q.regularMarketPreviousClose != null ? q.regularMarketPreviousClose : null));
+        const chg = (price != null && prev) ? (price - prev) / prev * 100 : null;
+        const cur = /\.TA$/.test(s) ? '₪' : '$';
+        const priceHtml = price != null
+            ? `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>${chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : ''}`
+            : '<span class="wl-price wl-dim">—</span>';
+        const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
+        return `<div class="wl-row">
+            <button class="wl-star" onclick="_wlRemove('${s}')" title="הסר ממעקב">★</button>
+            <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
+            <div class="wl-priceblock">${priceHtml}</div>
+            ${sc}
+            <button class="wl-report" onclick="openReportForTicker('${s}'); closeWatchlistModal();" title="פתח דוח">📊 דוח</button>
+        </div>`;
+    }).join('');
+}
+async function _wlRemove(sym) { await _repToggleWatch(sym); _wlRenderList(); }
+// Add whatever the user typed (validate it resolves to a real quote first).
+async function _wlAddFromSearch(raw) {
+    let sym = String(raw || '').trim().toUpperCase();
+    if (!sym) return;
+    if (typeof showToast === 'function') showToast('מוסיף…', 'info');
+    // TASE names: accept with or without the .TA suffix.
+    const cand = /\.TA$/.test(sym) ? [sym] : [sym, sym + '.TA'];
+    let resolved = null;
+    try {
+        const r = await fetch(`/api/quote?symbols=${encodeURIComponent(cand.join(','))}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const q = (j && j.quotes) ? j.quotes : (j || {});
+        resolved = cand.find(c => q[c] && (q[c].price != null || q[c].regularMarketPrice != null)) || null;
+    } catch (e) { }
+    if (!resolved) { if (typeof showToast === 'function') showToast('לא נמצאה מניה בשם ' + sym, 'error'); return; }
+    if (!_repWatch.has(resolved)) await _repToggleWatch(resolved);
+    const s = document.getElementById('wlSearch'); if (s) s.value = '';
+    const sg = document.getElementById('wlSuggest'); if (sg) sg.innerHTML = '';
+    _wlRenderList();
+}
+// As-you-type suggestions from the loaded reports universe (any market) — click to add.
+function _wlSuggest(q) {
+    const sg = document.getElementById('wlSuggest');
+    if (!sg) return;
+    q = String(q || '').trim().toUpperCase();
+    if (q.length < 1) { sg.innerHTML = ''; return; }
+    const pool = new Set();
+    try { for (const m of Object.keys(_repUniverse)) (_repUniverse[m] || []).forEach(t => pool.add(t)); } catch (e) { }
+    const matches = [...pool].filter(t => t.replace(/\.TA$/, '').includes(q)).slice(0, 8);
+    sg.innerHTML = matches.length
+        ? matches.map(t => `<button class="wl-sg-item" onclick="_wlAddFromSearch('${t}')">${t.replace(/\.TA$/, '')}${_repWatch.has(t) ? ' <span class="wl-sg-on">★ במעקב</span>' : ''}</button>`).join('')
+        : '';
+}
+if (typeof window !== 'undefined') {
+    window.openWatchlistModal = openWatchlistModal; window.closeWatchlistModal = closeWatchlistModal;
+    window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest;
+}
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the
 // board shows scores without the user opening each one. Uses the free Yahoo path
