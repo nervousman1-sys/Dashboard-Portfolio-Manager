@@ -11283,3 +11283,7 @@ html.day-mode .rep-rpo-title { color: #0369a1; }
 .rep-cr-bad       { border-color: rgba(239,68,68,0.55); } .rep-cr-bad .rep-cr-grade { color: #ef4444; }
 html.day-mode .rep-cr-metric b { color: var(--text-primary); }
 @media (max-width: 768px) { .rep-cr-grade { font-size: 14px; } .rep-cr-metric { min-width: 44%; flex-basis: 44%; } }
+
+/* 24/7 agent freshness tag on the IL indicators header */
+.macro-country-header .macro-agent-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #34d399; margin-inline-start: 12px; vertical-align: middle; }
+@media (max-width: 768px) { .macro-country-header .macro-agent-tag { display: flex; margin: 4px 0 0; font-size: 10px; } }

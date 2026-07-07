@@ -27,7 +27,7 @@ const MACRO_VERIFIED_BASELINE = {
     il: {
         il_cpi:          { value: 1.9,    previous: 1.9,   forecast: 1.8,  label: 'אינפלציה שנתית (CPI YoY)',  unit: '%',   date: '2026-05-15', refLabel: 'Apr 2026' },
         il_core_cpi:     { value: 2.1,    previous: 2.0,   forecast: 2.1,  label: 'אינפלציה ליבה (Core CPI)',   unit: '%',   date: '2026-05-15', refLabel: 'Apr 2026' },
-        boi_rate:        { value: 3.75,   previous: 4.0,   forecast: 3.75, label: 'ריבית בנק ישראל (BOI Rate)', unit: '%',   date: '2026-05-25', refLabel: '25 May 2026' },
+        boi_rate:        { value: 3.5,    previous: 3.75,  forecast: 3.5,  label: 'ריבית בנק ישראל (BOI Rate)', unit: '%',   date: '2026-07-06', refLabel: '6 Jul 2026' },
         il_unemployment: { value: 3.2,    previous: 3.1,   forecast: 3.3,  label: 'שיעור אבטלה (Unemployment)', unit: '%',   date: '2026-04-30', refLabel: 'Mar 2026' },
         il_ppi:          { value: 118.0,  previous: 117.7, forecast: 118.2, label: 'מדד מחירי יצרן (PPI)',     unit: 'idx', date: '2026-02-20', refLabel: 'Feb 2026' },
         il_gdp:          { value: 4.0,    previous: 12.7,  forecast: 3.8,  label: 'צמיחת תמ״ג (GDP QoQ)',      unit: '%',   date: '2026-02-16', refLabel: 'Q4 2025' },
@@ -637,7 +637,25 @@ async function _fetchILHeadlines(forceRefresh) {
         }
     } catch (e) { /* keep BOI/FMP results */ }
 
-    // Merge: live API results override baseline
+    // TOP PRIORITY overlay: the 24/7 agent's Israeli-macro row (Supabase `il_macro`).
+    // The agent pulls the REAL live values server-side (BOI PublicApi policy rate + FRED
+    // CPI/unemployment/GDP) and updates on every change — so this wins over the client's
+    // own (often blocked) fetches and the static baseline. This is what makes the Israeli
+    // rate actually track reality (e.g. a cut from 3.75% → 3.5%) instead of freezing.
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data } = await supabaseClient.from('il_macro').select('data,updated_at').eq('id', 'current').maybeSingle();
+            if (data && data.data) {
+                for (const [k, v] of Object.entries(data.data)) {
+                    if (v && v.value != null && !isNaN(v.value)) results[k] = v;
+                }
+                window._ilMacroAgentTs = data.updated_at;
+                _macroApiStatus.boiIL = true;
+            }
+        }
+    } catch (e) { /* fall back to client-fetched / baseline */ }
+
+    // Merge: live results override baseline
     const merged = { ...baseline, ...results };
     const count = Object.keys(merged).length;
     console.log(`[Macro] IL merged: ${count} indicators (baseline + ${Object.keys(results).length} live)`);
@@ -1546,8 +1564,14 @@ function _renderIndicatorsTab() {
     html += '</div>';
 
     // ── Israel Section ──
+    let ilAgentTag = '';
+    if (window._ilMacroAgentTs) {
+        const mins = Math.max(0, Math.round((Date.now() - new Date(window._ilMacroAgentTs).getTime()) / 60000));
+        const ago = mins < 1 ? 'ממש עכשיו' : mins < 60 ? `לפני ${mins} דק׳` : mins < 1440 ? `לפני ${Math.round(mins / 60)} שע׳` : `לפני ${Math.round(mins / 1440)} ימים`;
+        ilAgentTag = `<span class="macro-agent-tag"><span class="rep-live on"></span> מחובר לסוכן 24/7 · עודכן ${ago}</span>`;
+    }
     html += `<div class="macro-country-section macro-section-il">
-        <h2 class="macro-country-header">IL Indicators</h2>
+        <h2 class="macro-country-header">IL Indicators${ilAgentTag}</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
             ${_renderHeadlineWidget('il_core_cpi',      ilHead.il_core_cpi,      'אינפלציה ליבה (Core CPI)',  '%')}

@@ -182,14 +182,86 @@ async function updateEconCalendar() {
     } catch (e) { log('econ-cal update warn:', e.message); }
 }
 
+// ── Israeli macro indicators — LIVE, 24/7 → Supabase `il_macro` ─────────────────────
+// The client used to fetch these itself (BOI SDMX — gateway-blocked; FMP calendar — 403),
+// so it always fell back to a HARDCODED baseline that never changed (BOI rate stuck at
+// 3.75% even after a cut). This agent pulls the REAL values server-side and stores them, so
+// the macro page reads fresh, agent-backed Israeli data — updated on every actual change.
+//   • BOI policy rate: boi.org.il PublicApi/GetInterest (authoritative, live)
+//   • CPI YoY / unemployment / GDP: FRED official Israeli series
+const FRED_KEY = process.env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
+async function _fredLatest(id, units) {
+    try {
+        const u = `https://api.stlouisfed.org/fred/series/observations?series_id=${id}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=6${units ? '&units=' + units : ''}`;
+        const r = await fetch(u, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const obs = (j.observations || []).filter(o => o.value !== '.' && o.value !== '');
+        if (!obs.length) return null;
+        const val = parseFloat(obs[0].value);
+        const prev = obs[1] ? parseFloat(obs[1].value) : null;
+        return { value: val, previous: isFinite(prev) ? prev : null, date: obs[0].date };
+    } catch (e) { return null; }
+}
+async function updateIsraelMacro() {
+    try {
+        // Read the current stored row so we can preserve the PREVIOUS policy-rate value across a change.
+        let prevData = {};
+        try { const { data } = await supabase.from('il_macro').select('data').eq('id', 'current').maybeSingle(); prevData = (data && data.data) || {}; } catch (e) { }
+        const out = {};
+
+        // 1) BOI policy rate — the authoritative live source.
+        try {
+            const r = await fetch('https://www.boi.org.il/PublicApi/GetInterest', {
+                headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+            });
+            if (r.ok) {
+                const j = await r.json();
+                const v = parseFloat(j.currentInterest);
+                if (isFinite(v)) {
+                    const storedBoi = prevData.boi_rate || {};
+                    // When the rate changes, the OLD stored value becomes "previous" (real change detection).
+                    const previous = (storedBoi.value != null && storedBoi.value !== v) ? storedBoi.value
+                        : (storedBoi.previous != null ? storedBoi.previous : null);
+                    out.boi_rate = {
+                        value: v, previous,
+                        trend: previous == null ? 'flat' : v > previous ? 'up' : v < previous ? 'down' : 'flat',
+                        date: (j.lastPublishedDate || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+                        nextDate: (j.nextInterestDate || '').slice(0, 10) || null,
+                        label: 'ריבית בנק ישראל', unit: '%',
+                    };
+                }
+            }
+        } catch (e) { log('BOI rate warn:', e.message); }
+
+        // 2) FRED official Israeli series (lag a month or two but real; the client shows the date).
+        const [cpi, unemp, gdp] = await Promise.all([
+            _fredLatest('CPALTT01ILM659N'),       // CPI, all items, YoY %
+            _fredLatest('LRHUTTTTILM156S'),       // Harmonized unemployment rate %
+            _fredLatest('NAEXKP01ILQ657S', 'pc1'),// Real GDP, YoY %
+        ]);
+        const sentiment = (v, p, betterLower) => p == null ? 'flat' : v === p ? 'flat' : (betterLower ? (v < p ? 'good' : 'bad') : (v > p ? 'good' : 'bad'));
+        if (cpi) out.il_cpi = { ...cpi, value: +cpi.value.toFixed(2), trend: cpi.previous == null ? 'flat' : cpi.value > cpi.previous ? 'up' : cpi.value < cpi.previous ? 'down' : 'flat', label: 'מדד המחירים לצרכן', unit: '%' };
+        if (unemp) out.il_unemployment = { ...unemp, value: +unemp.value.toFixed(1), trend: unemp.previous == null ? 'flat' : unemp.value > unemp.previous ? 'up' : unemp.value < unemp.previous ? 'down' : 'flat', label: 'שיעור אבטלה', unit: '%' };
+        if (gdp) out.il_gdp = { ...gdp, value: +gdp.value.toFixed(1), trend: gdp.previous == null ? 'flat' : gdp.value > gdp.previous ? 'up' : gdp.value < gdp.previous ? 'down' : 'flat', label: 'צמיחת תמ״ג', unit: '%' };
+
+        if (!out.boi_rate && !out.il_cpi) { log('IL-macro: no data this cycle — skipping'); return; }
+        const { error } = await supabase.rpc('upsert_il_macro', { p_secret: AGENT_WRITE_SECRET, p_data: out });
+        if (error) log('IL-macro upsert warn:', error.message);
+        else log(`✓ IL macro stored · BOI ${out.boi_rate ? out.boi_rate.value + '%' : '—'} (next ${out.boi_rate?.nextDate || '—'}) · CPI ${out.il_cpi?.value ?? '—'}% · אבטלה ${out.il_unemployment?.value ?? '—'}%`);
+    } catch (e) { log('IL-macro update warn:', e.message); }
+}
+
 async function safeCycle() {
     try { await updateYields(); } catch (e) { log('yields cycle error:', e.message); }
+    try { await updateIsraelMacro(); } catch (e) { log('IL-macro cycle error:', e.message); }
     try { await runCycle(); } catch (e) { log('Cycle error (retry next interval):', e.message); }
 }
 
 (async () => {
     log(`Finextium Macro-Feed online · model=${GEMINI_MODEL} · interval=${MACRO_INTERVAL_MIN}min · perCycle=${MACRO_PER_CYCLE}`);
     await updateEconCalendar();
+    await updateIsraelMacro();
     await safeCycle();
     if (RUN_ONCE) { log('--once: done.'); process.exit(0); }
     setInterval(safeCycle, Math.max(5, MACRO_INTERVAL_MIN) * 60 * 1000);

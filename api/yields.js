@@ -26,9 +26,20 @@ async function latest(id) {
     } catch (e) { return null; }
 }
 
-// The BOI cut to 3.75% on 25-May-2026 — FRED's Israeli policy-rate series lags.
-// Used only while newer than the FRED observation (FRED wins once it catches up).
-const IL_BOI_OVERRIDE = { value: 3.75, date: '2026-05-25' };
+// BOI policy rate — pulled LIVE from the BOI PublicApi (authoritative). FRED's series lags,
+// so we override the short end of the IL curve with the real current rate.
+async function boiRateLive() {
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 4000);
+    try {
+        const r = await fetch('https://www.boi.org.il/PublicApi/GetInterest', { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, signal: ac.signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const v = parseFloat(j.currentInterest);
+        return isFinite(v) ? { value: v, date: (j.lastPublishedDate || '').slice(0, 10) || new Date().toISOString().slice(0, 10) } : null;
+    } catch (e) { return null; } finally { clearTimeout(t); }
+}
+// Fallback constant if the BOI PublicApi is unreachable (kept current as a safety net).
+const IL_BOI_OVERRIDE = { value: 3.5, date: '2026-07-06' };
 
 // ── Bank of Israel zero-coupon nominal yield curve (NSS model, daily) ──
 // FRED only carries the Israeli 10Y (OECD, ~2-month lag). The full long end — 2/5/7/20/30Y —
@@ -81,9 +92,10 @@ module.exports = async (req, res) => {
             ['10 שנים (אג"ח ממשלתי)', 'IRLTLT01ILM156N'],
         ];
 
-        const [usVals, ilVals] = await Promise.all([
+        const [usVals, ilVals, boiLive] = await Promise.all([
             Promise.all(US.map(([, id]) => latest(id))),
             Promise.all(IL.map(([, id]) => latest(id))),
+            boiRateLive(),
         ]);
 
         const us = US.map(([label], i) => usVals[i] ? { label, value: usVals[i].value, date: usVals[i].date } : null)
@@ -91,11 +103,15 @@ module.exports = async (req, res) => {
 
         let il = IL.map(([label], i) => ilVals[i] ? { label, value: ilVals[i].value, date: ilVals[i].date } : null)
             .filter(Boolean);
-        // Apply the BOI override while it's newer than FRED's observation
+        // Short end = the REAL current BOI policy rate (live PublicApi), falling back to the
+        // dated override, then FRED. FRED's IL policy series lags, so prefer the live value.
         const boi = il.find(p => p.label === 'ריבית בנק ישראל');
-        if (boi && String(IL_BOI_OVERRIDE.date) >= String(boi.date)) {
-            boi.value = IL_BOI_OVERRIDE.value;
-            boi.date = IL_BOI_OVERRIDE.date;
+        const boiSrc = boiLive || IL_BOI_OVERRIDE;
+        if (boi && boiSrc && String(boiSrc.date) >= String(boi.date)) {
+            boi.value = boiSrc.value;
+            boi.date = boiSrc.date;
+        } else if (!boi && boiSrc) {
+            il.unshift({ label: 'ריבית בנק ישראל', value: boiSrc.value, date: boiSrc.date });
         }
         // Extend the IL curve with the BOI zero-coupon long end (2/5/10/20/30Y). When the BOI
         // data endpoint answers, this REPLACES the short 3-point curve with a full one; when it
