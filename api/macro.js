@@ -69,14 +69,35 @@ function entry(d, label, unit) {
     return { value: d.value, previous: d.previous, trend, date: d.date, prevDate: d.prevDate || null, label, unit };
 }
 
-// Verified CURRENT Israeli policy figures. FRED's Israeli series lag (e.g. the BOI
-// rate cut to 3.75% on 25-May-2026 still shows 4.0% on FRED), and FRED's harmonized
-// unemployment differs from the CBS official print. Each override is used ONLY while
-// it is MORE RECENT than the matching FRED observation — once FRED catches up, FRED
-// automatically wins. ⇢ UPDATE these two lines whenever the BOI changes the rate or a
-// newer official Israeli labour print lands.
+// BOI policy rate — pulled LIVE from the BOI PublicApi (authoritative; the FRED series
+// lags by months). Returns null on failure so the fallbacks below kick in.
+async function boiRateLive() {
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 4000);
+    try {
+        const r = await fetch('https://www.boi.org.il/PublicApi/GetInterest',
+            { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, signal: ac.signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const v = parseFloat(j.currentInterest);
+        if (!isFinite(v)) return null;
+        return {
+            value: v,
+            previous: BOI_PREV_BY_RATE[v] != null ? BOI_PREV_BY_RATE[v] : null,
+            date: (j.lastPublishedDate || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+            prevDate: null,
+            nextDate: (j.nextInterestDate || '').slice(0, 10) || null,
+        };
+    } catch (e) { return null; } finally { clearTimeout(t); }
+}
+// Real BOI decision history (previous rate per current rate): 6-Jul-2026 cut 3.75 → 3.5.
+const BOI_PREV_BY_RATE = { 3.5: 3.75, 3.75: 4.0 };
+
+// Verified CURRENT Israeli policy figures — FALLBACKS only, used while more recent than
+// the matching FRED observation (once FRED catches up, FRED automatically wins). The BOI
+// rate normally comes from the live PublicApi above; this covers an API outage.
+// ⇢ UPDATE when the BOI changes the rate or a newer official labour print lands.
 const IL_OVERRIDES = {
-    boi_rate: { value: 3.75, previous: 4.0, date: '2026-05-25', prevDate: '2026-01-05' }, // BOI -25bp → 3.75%
+    boi_rate: { value: 3.5, previous: 3.75, date: '2026-07-06', prevDate: '2026-05-25' }, // BOI -25bp → 3.5%
     il_unemployment: { value: 3.2, previous: 3.1, date: '2026-04-01', prevDate: '2026-02-01' }, // CBS official
 };
 
@@ -104,6 +125,7 @@ module.exports = async (req, res) => {
             fredSeries('XTIMVA01ILM664S', 'pc1'), fredSeries('SPASTT01ILM661N', 'pc1'),
             israelCPI(),
         ]);
+        const boiLive = await boiRateLive();
 
         const us = {};
         const add = (o, k, v) => { if (v) o[k] = v; };
@@ -124,7 +146,11 @@ module.exports = async (req, res) => {
         add(us, 'sentiment', entry(sentiment, 'אמון הצרכן (Sentiment)', 'idx'));
 
         const il = {};
-        add(il, 'boi_rate', entry(pickRecent(boi, IL_OVERRIDES.boi_rate), 'ריבית בנק ישראל (BOI Rate)', '%'));
+        // Live PublicApi first; the dated override + FRED only if the live call failed.
+        const boiBest = boiLive || pickRecent(boi, IL_OVERRIDES.boi_rate);
+        const boiEntry = entry(boiBest, 'ריבית בנק ישראל (BOI Rate)', '%');
+        if (boiEntry && boiBest.nextDate) boiEntry.nextDate = boiBest.nextDate;
+        add(il, 'boi_rate', boiEntry);
         add(il, 'il_cpi', entry(ilCpi, 'אינפלציה שנתית (CPI YoY)', '%'));
         add(il, 'il_unemployment', entry(pickRecent(ilUnemp, IL_OVERRIDES.il_unemployment), 'שיעור אבטלה (Unemployment)', '%'));
         add(il, 'il_bond10y', entry(ilBond, 'אג"ח ממשלתי 10 שנים', '%'));

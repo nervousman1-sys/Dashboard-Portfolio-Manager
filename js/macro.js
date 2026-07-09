@@ -64,8 +64,8 @@ function _sentimentColor(key, actual, previous) {
 
 // ── Cache Keys & TTLs ──
 const _MACRO_CACHE = {
-    US_HEAD: 'macro_us_headline_v7',
-    IL_HEAD: 'macro_il_headline_v7',
+    US_HEAD: 'macro_us_headline_v8',
+    IL_HEAD: 'macro_il_headline_v8',
     US_CAL:  'macro_us_calendar_v4',
     IL_CAL:  'macro_il_calendar_v4',
     LAST_TS: 'macro_lastSeenTimestamp'
@@ -430,8 +430,8 @@ async function _fetchUSHeadlines(forceRefresh) {
     const merged = { ...baseline };
     if (liveData) {
         for (const [key, val] of Object.entries(liveData)) {
-            if (val && val.value !== null && val.value !== undefined && !isNaN(val.value)) {
-                merged[key] = val;
+            if (val && val.value !== null && val.value !== undefined && !isNaN(val.value) && !_indTooStale(val)) {
+                merged[key] = _withBaseForecast(val, baseline[key]);
             }
         }
     }
@@ -441,6 +441,24 @@ async function _fetchUSHeadlines(forceRefresh) {
     _cacheSet(_MACRO_CACHE.US_HEAD, merged);
     _supaSaveMacroData('us', merged);
     return merged;
+}
+
+// ── Overlay hygiene helpers (shared US + IL) ──
+// A live observation that stopped updating must never override the baseline forever —
+// drop overlay values whose reference date is over a year old (dead upstream series,
+// e.g. FRED's OECD Israel CPI froze at 2025-03 and pinned the card at 3.34%).
+function _indTooStale(v) {
+    if (!v || !v.date) return false;
+    const t = new Date(v.date).getTime();
+    return isFinite(t) && (Date.now() - t) > 370 * 86400e3;
+}
+// Live sources carry no forecast — keep the curated baseline forecast so the תחזית
+// column survives the overlay. A live entry that explicitly sets forecast:null means
+// "my scale differs from the baseline forecast — do NOT inherit it" (e.g. QoQ GDP vs
+// the annualized baseline figure).
+function _withBaseForecast(v, base) {
+    if (base && base.forecast != null && !('forecast' in v)) return { ...v, forecast: base.forecast };
+    return v;
 }
 
 // ========== 3. ISRAEL HEADLINE INDICATORS ==========
@@ -655,8 +673,13 @@ async function _fetchILHeadlines(forceRefresh) {
         }
     } catch (e) { /* fall back to client-fetched / baseline */ }
 
-    // Merge: live results override baseline
-    const merged = { ...baseline, ...results };
+    // Merge: live results override baseline — with hygiene: dead-series values are
+    // dropped (the baseline stays) and the curated baseline forecast is preserved.
+    const merged = { ...baseline };
+    for (const [k, v] of Object.entries(results)) {
+        if (!v || v.value == null || isNaN(v.value) || _indTooStale(v)) continue;
+        merged[k] = _withBaseForecast(v, baseline[k]);
+    }
     const count = Object.keys(merged).length;
     console.log(`[Macro] IL merged: ${count} indicators (baseline + ${Object.keys(results).length} live)`);
     _cacheSet(_MACRO_CACHE.IL_HEAD, merged);
@@ -1465,6 +1488,9 @@ function _fmtUnit(v, u) {
 // Layout: tag (top-left) | title (top-right) | columns: קודם / תחזית / עכשיו | footer date.
 function _renderHeadlineWidget(key, data, label, unit) {
     const category = _INDICATOR_CATEGORY[key] || 'כלכלה';
+    // A live overlay may change an indicator's unit (e.g. IL PPI: baseline index level →
+    // live CBS YoY %) — the data's own unit must win over the static table's.
+    if (data && data.unit) unit = data.unit;
 
     if (!data || data.value === null || data.value === undefined) {
         return `<div class="macro-hw-card macro-hw-unavail">
@@ -1502,6 +1528,11 @@ function _renderHeadlineWidget(key, data, label, unit) {
         }
     } else if (data.refLabel) {
         tsStr = _macroEscape(data.refLabel);
+    }
+    // Rate-decision cards: show the REAL next decision date (from the BOI PublicApi).
+    if (data.nextDate) {
+        const nd = new Date(data.nextDate);
+        if (!isNaN(nd.getTime())) tsStr += `${tsStr ? ' · ' : ''}החלטה הבאה: ${nd.getDate()}.${nd.getMonth() + 1}.${nd.getFullYear()}`;
     }
 
     return `<div class="macro-hw-card">

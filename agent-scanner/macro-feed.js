@@ -188,7 +188,9 @@ async function updateEconCalendar() {
 // 3.75% even after a cut). This agent pulls the REAL values server-side and stores them, so
 // the macro page reads fresh, agent-backed Israeli data — updated on every actual change.
 //   • BOI policy rate: boi.org.il PublicApi/GetInterest (authoritative, live)
-//   • CPI YoY / unemployment / GDP: FRED official Israeli series
+//   • CPI YoY: CBS (הלמ"ס) api.cbs.gov.il — the official Israeli print. FRED's OECD
+//     Israel CPI series (CPALTT01ILM659N) DIED at 2025-03 and froze the card at 3.34%.
+//   • Unemployment / GDP: FRED official Israeli series (freshness-guarded)
 const FRED_KEY = process.env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
 async function _fredLatest(id, units) {
     try {
@@ -203,6 +205,31 @@ async function _fredLatest(id, units) {
         return { value: val, previous: isFinite(prev) ? prev : null, date: obs[0].date };
     } catch (e) { return null; }
 }
+// Drop observations that stopped updating (dead OECD series etc.) — a stale value must
+// NEVER override the client's fresher sources just because the agent row wins the merge.
+function _fresh(o, maxDays) {
+    return (o && o.date && (Date.now() - new Date(o.date).getTime()) < maxDays * 86400e3) ? o : null;
+}
+// Israeli price indices straight from the CBS API (percentYear = official YoY print).
+//   120010 = CPI general · 120020 = CPI ex fruits & vegetables · 170010 = industrial-output PPI
+async function _cbsIndexYoY(id) {
+    try {
+        const r = await fetch(`https://api.cbs.gov.il/index/data/price?id=${id}&format=json&download=false&last=14`,
+            { headers: { Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const dates = (j.month && j.month[0] && j.month[0].date) || [];
+        if (!dates.length) return null;
+        const sorted = dates.slice().sort((a, b) => (b.year - a.year) || (b.month - a.month));
+        const latest = sorted[0], prev = sorted[1] || null;
+        if (latest.percentYear == null) return null;
+        const ymd = (o) => `${o.year}-${String(o.month).padStart(2, '0')}-01`;
+        return { value: latest.percentYear, previous: prev ? prev.percentYear : null, date: ymd(latest) };
+    } catch (e) { return null; }
+}
+// Real BOI decision history — previous value per current rate, used only when the stored
+// row has no previous yet (e.g. the row predates change-detection). 6-Jul-2026: 3.75 → 3.5.
+const BOI_PREV_BY_RATE = { 3.5: 3.75, 3.75: 4.0 };
 async function updateIsraelMacro() {
     try {
         // Read the current stored row so we can preserve the PREVIOUS policy-rate value across a change.
@@ -221,8 +248,9 @@ async function updateIsraelMacro() {
                 if (isFinite(v)) {
                     const storedBoi = prevData.boi_rate || {};
                     // When the rate changes, the OLD stored value becomes "previous" (real change detection).
+                    // First run / null history: fall back to the documented BOI decision history.
                     const previous = (storedBoi.value != null && storedBoi.value !== v) ? storedBoi.value
-                        : (storedBoi.previous != null ? storedBoi.previous : null);
+                        : (storedBoi.previous != null ? storedBoi.previous : (BOI_PREV_BY_RATE[v] != null ? BOI_PREV_BY_RATE[v] : null));
                     out.boi_rate = {
                         value: v, previous,
                         trend: previous == null ? 'flat' : v > previous ? 'up' : v < previous ? 'down' : 'flat',
@@ -234,16 +262,39 @@ async function updateIsraelMacro() {
             }
         } catch (e) { log('BOI rate warn:', e.message); }
 
-        // 2) FRED official Israeli series (lag a month or two but real; the client shows the date).
-        const [cpi, unemp, gdp] = await Promise.all([
-            _fredLatest('CPALTT01ILM659N'),       // CPI, all items, YoY %
-            _fredLatest('LRHUTTTTILM156S'),       // Harmonized unemployment rate %
-            _fredLatest('NAEXKP01ILQ657S', 'pc1'),// Real GDP, YoY %
+        // 2) Prices from CBS (the official prints) + FRED for unemployment/GDP — every source
+        //    freshness-guarded so a dead series silently drops out instead of freezing a card.
+        const [cpiRaw, coreRaw, ppiRaw, unempRaw, gdpRaw] = await Promise.all([
+            _cbsIndexYoY(120010),                  // CPI YoY % — CBS official (e.g. 1.9%)
+            _cbsIndexYoY(120020),                  // CPI ex fruits & vegetables YoY %
+            _cbsIndexYoY(170010),                  // Industrial-output PPI YoY %
+            _fredLatest('LRHUTTTTILM156S'),        // Harmonized unemployment rate %
+            _fredLatest('NAEXKP01ILQ657S'),        // Real GDP growth QoQ % — series IS a growth rate; no extra transform
         ]);
-        const sentiment = (v, p, betterLower) => p == null ? 'flat' : v === p ? 'flat' : (betterLower ? (v < p ? 'good' : 'bad') : (v > p ? 'good' : 'bad'));
-        if (cpi) out.il_cpi = { ...cpi, value: +cpi.value.toFixed(2), trend: cpi.previous == null ? 'flat' : cpi.value > cpi.previous ? 'up' : cpi.value < cpi.previous ? 'down' : 'flat', label: 'מדד המחירים לצרכן', unit: '%' };
-        if (unemp) out.il_unemployment = { ...unemp, value: +unemp.value.toFixed(1), trend: unemp.previous == null ? 'flat' : unemp.value > unemp.previous ? 'up' : unemp.value < unemp.previous ? 'down' : 'flat', label: 'שיעור אבטלה', unit: '%' };
-        if (gdp) out.il_gdp = { ...gdp, value: +gdp.value.toFixed(1), trend: gdp.previous == null ? 'flat' : gdp.value > gdp.previous ? 'up' : gdp.value < gdp.previous ? 'down' : 'flat', label: 'צמיחת תמ״ג', unit: '%' };
+        const cpi = _fresh(cpiRaw, 75), core = _fresh(coreRaw, 75), ppiIl = _fresh(ppiRaw, 75),
+            unemp = _fresh(unempRaw, 120), gdp = _fresh(gdpRaw, 220);
+        if (cpi) out.il_cpi = { ...cpi, value: +cpi.value.toFixed(2), trend: cpi.previous == null ? 'flat' : cpi.value > cpi.previous ? 'up' : cpi.value < cpi.previous ? 'down' : 'flat', label: 'מדד המחירים לצרכן (CPI YoY)', unit: '%' };
+        // Honest labels for the CBS definitions; forecast:null blocks inheriting the baseline
+        // forecasts, which refer to DIFFERENT definitions/scales (core-CPI defn, PPI index level).
+        if (core) out.il_core_cpi = { ...core, value: +core.value.toFixed(2), forecast: null, trend: core.previous == null ? 'flat' : core.value > core.previous ? 'up' : core.value < core.previous ? 'down' : 'flat', label: 'מדד ללא ירקות ופירות (YoY)', unit: '%' };
+        if (ppiIl) out.il_ppi = { ...ppiIl, value: +ppiIl.value.toFixed(2), forecast: null, trend: ppiIl.previous == null ? 'flat' : ppiIl.value > ppiIl.previous ? 'up' : ppiIl.value < ppiIl.previous ? 'down' : 'flat', label: 'מדד מחירי יצרן (PPI YoY)', unit: '%' };
+        // Unemployment: forecast:null — the baseline forecast is the CBS-official definition,
+        // which doesn't match this harmonized series; inheriting it would mislead.
+        if (unemp) out.il_unemployment = { ...unemp, value: +unemp.value.toFixed(1), forecast: null, trend: unemp.previous == null ? 'flat' : unemp.value > unemp.previous ? 'up' : unemp.value < unemp.previous ? 'down' : 'flat', label: 'שיעור אבטלה', unit: '%' };
+        // GDP: baseline-forecast is on a different scale (annualized) → forecast:null blocks inheriting it.
+        if (gdp) out.il_gdp = { ...gdp, value: +gdp.value.toFixed(1), forecast: null, trend: gdp.previous == null ? 'flat' : gdp.value > gdp.previous ? 'up' : gdp.value < gdp.previous ? 'down' : 'flat', label: 'צמיחת תמ״ג (רבעוני, QoQ)', unit: '%' };
+        // 3) Real policy rate — BOI rate minus CPI YoY (both real prints above).
+        if (out.boi_rate && cpi) {
+            const rr = +(out.boi_rate.value - cpi.value).toFixed(2);
+            const rrPrev = (out.boi_rate.previous != null && cpi.previous != null)
+                ? +(out.boi_rate.previous - cpi.previous).toFixed(2) : null;
+            out.il_real_rate = {
+                value: rr, previous: rrPrev, forecast: null,
+                trend: rrPrev == null ? 'flat' : rr > rrPrev ? 'up' : rr < rrPrev ? 'down' : 'flat',
+                date: new Date().toISOString().slice(0, 10),
+                label: 'ריבית ריאלית (Real Rate)', unit: '%',
+            };
+        }
 
         if (!out.boi_rate && !out.il_cpi) { log('IL-macro: no data this cycle — skipping'); return; }
         const { error } = await supabase.rpc('upsert_il_macro', { p_secret: AGENT_WRITE_SECRET, p_data: out });
