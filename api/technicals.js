@@ -99,6 +99,23 @@ async function fetchSP500() {
 }
 
 async function fetchNasdaq100() {
+    // Primary: Nasdaq's OWN index-components API (authoritative, ~103 rows incl. dual
+    // classes). The Wikipedia article dropped its constituents table in July 2026, which
+    // silently broke the old parse ("ndx constituent parse too small: 14").
+    try {
+        const r = await fetch('https://api.nasdaq.com/api/quote/list-type/nasdaq100', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json', 'Accept-Language': 'en-US' },
+        });
+        if (r.ok) {
+            const j = await r.json();
+            const rows = (j && j.data && j.data.data && j.data.data.rows) || [];
+            const out = [...new Set(rows
+                .map(x => String(x.symbol || '').toUpperCase().trim().replace('.', '-'))
+                .filter(t => /^[A-Z][A-Z0-9\-]{0,6}$/.test(t)))];
+            if (out.length >= 80) return out;   // sanity: a real NDX list is ~100 names
+        }
+    } catch (e) { /* fall through to the Wikipedia parse */ }
+    // Fallback: the Wikipedia constituents table (only useful if the article restores it).
     const r = await fetch('https://en.wikipedia.org/wiki/Nasdaq-100', { headers: { ...UA, Accept: 'text/html' } });
     const html = await r.text();
     const sect = html.split('id="constituents"')[1] || html;

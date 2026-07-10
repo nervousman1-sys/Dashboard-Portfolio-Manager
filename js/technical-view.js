@@ -225,7 +225,13 @@ async function _techLoad(force) {
     const prog = document.getElementById('techProgress');
     const fill = document.getElementById('techProgressFill');
     const txt = document.getElementById('techProgressTxt');
-    if (prog && _techMarket === mkt) prog.style.display = '';
+    if (prog && _techMarket === mkt) {
+        // Reset the bar — it may still show the PREVIOUS market's text/fill (e.g. a
+        // finished Russell scan) which otherwise sticks around if this load fails early.
+        if (fill) fill.style.width = '0%';
+        if (txt) txt.textContent = 'טוען רשימת מניות…';
+        prog.style.display = '';
+    }
 
     try {
         const tr = await fetch(`/api/technicals?mode=tickers&market=${mkt}&sv=3`, { headers: { Accept: 'application/json' } });
@@ -262,6 +268,8 @@ async function _techLoad(force) {
     } catch (e) {
         const tbl = document.getElementById('techTable');
         if (tbl && _techMarket === mkt && !_techData) tbl.innerHTML = '<div class="adv-empty">הסריקה נכשלה — נסה שוב בעוד רגע.</div>';
+        // A failed load must not leave a stuck progress bar on screen.
+        if (prog && _techMarket === mkt && !_techData) prog.style.display = 'none';
     } finally {
         _techLoading[mkt] = false;
         if (prog && _techMarket === mkt && _techData && Object.keys(_techData).length > cfg.min) prog.style.display = 'none';
