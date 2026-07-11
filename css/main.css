@@ -86,6 +86,18 @@ body {
     width: 100%;
 }
 
+/* ── Native <select> dropdown lists — SOLID dark options everywhere ──
+   The OS paints option lists over white; any translucent/unset background turns the
+   text white-on-white (e.g. portfolio names). Solid navy + light text, flipped in day-mode. */
+select option {
+    background-color: #161d2e;
+    color: #f5f5f5;
+}
+html.day-mode select option {
+    background-color: #ffffff;
+    color: #0f172a;
+}
+
 /* ── Glass Card Component ── */
 .glass-card {
     background: var(--bg-card);
@@ -1169,7 +1181,9 @@ body {
 .summary-main {
     display: grid;
     grid-template-columns: repeat(7, 1fr);   /* 7 cards — slightly narrower, same design */
-    gap: 8px;
+    /* 16px — the SAME gap as .clients-grid below, so the stats row shares the page's
+       spacing rhythm (24px side inset : 16px gaps) and card edges line up column-true. */
+    gap: 16px;
 }
 
 /* ── Stat Card Base ── */
