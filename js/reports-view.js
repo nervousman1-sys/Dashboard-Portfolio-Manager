@@ -888,10 +888,29 @@ function _repCreditHtml(m) {
     const lev = (netDebt != null && ttmEbitda != null && ttmEbitda > 0) ? netDebt / ttmEbitda : null;
     if (lev == null && de == null) return '';
 
+    // Cash runway for cash-burners: cash on hand ÷ TTM free-cash-flow burn.
+    const cash = isNum(latest.cash) ? latest.cash : null;
+    const ttmFcf = (ttm.length === 4 && ttm.every(r => isNum(r.fcf))) ? ttm.reduce((s, r) => s + r.fcf, 0) : null;
+    const runwayYrs = (ttmFcf != null && ttmFcf < 0 && cash != null && cash > 0) ? cash / -ttmFcf : null;
+
     // Band by leverage (primary), nudged by liquidity. Net cash = strongest.
-    let tier, label, cls;
+    let tier, special = null;
     const netCash = netDebt != null && netDebt < 0;
-    if (ttmEbitda != null && ttmEbitda <= 0) { tier = 5; }
+    if (ttmEbitda != null && ttmEbitda <= 0) {
+        if (netCash) {
+            // No net debt — the credit question is the BURN RATE, not leverage. Calling
+            // a company sitting on net cash "מינוף כבד" was simply wrong.
+            const strong = runwayYrs == null ? (cr != null && cr >= 2) : runwayYrs >= 2;
+            tier = strong ? 3 : 4;
+            const rwTxt = runwayYrs != null
+                ? (runwayYrs >= 1 ? `~${runwayYrs.toFixed(1)} שנים` : `~${Math.max(1, Math.round(runwayYrs * 12))} חודשים`)
+                : null;
+            special = {
+                label: 'EBITDA שלילי · עודף מזומן — הסיכון בקצב השריפה' + (rwTxt ? ` (אורך נשימה ${rwTxt})` : ''),
+                cls: strong ? 'mid' : 'weak',
+            };
+        } else tier = 5;
+    }
     else if (netCash || (lev != null && lev < 1)) tier = 0;
     else if (lev != null && lev < 2) tier = 1;
     else if (lev != null && lev < 3) tier = 2;
@@ -908,10 +927,13 @@ function _repCreditHtml(m) {
         { label: 'מינוף גבוה / ספקולטיבי · דמוי B', cls: 'weak' },
         { label: 'מינוף כבד · EBITDA שלילי · סיכון אשראי גבוה', cls: 'bad' },
     ];
-    const b = BANDS[Math.min(tier, 5)];
+    const b = special || BANDS[Math.min(tier, 5)];
     const cur = m.currency === 'ILS' ? '₪' : '$';
     const metric = (lbl, val) => val == null ? '' : `<span class="rep-cr-metric"><span class="rep-cr-mlabel">${lbl}</span><b>${val}</b></span>`;
     const levTxt = lev != null ? `${lev < 0 ? 'עודף מזומן' : lev.toFixed(1) + 'x'}` : (netCash ? 'עודף מזומן' : null);
+    const runwayTxt = runwayYrs != null
+        ? (runwayYrs >= 1 ? runwayYrs.toFixed(1) + ' שנים' : Math.max(1, Math.round(runwayYrs * 12)) + ' חודשים')
+        : null;
     return `
         <div class="rep-cr-card rep-cr-${b.cls}">
             <div class="rep-cr-head">
@@ -923,6 +945,7 @@ function _repCreditHtml(m) {
                 ${metric('יחס שוטף', cr != null ? cr.toFixed(2) : null)}
                 ${metric('חוב / הון', de != null ? de.toFixed(2) : null)}
                 ${metric('חוב נטו', netDebt != null ? _repFmtMoney(netDebt, cur) : null)}
+                ${metric('אורך נשימה (מזומן ÷ שריפה)', runwayTxt)}
             </div>
             <p class="rep-cr-note">הערכת איכות-אשראי המחושבת ממבנה המאזן והתזרים בדוח — מינוף, נזילות ויחס חוב/הון (המדדים שסוכנויות הדירוג משקללות). אינה דירוג רשמי של S&amp;P / Moody's.</p>
         </div>`;
@@ -1088,7 +1111,13 @@ function _repRenderDetail(m) {
             ${keyFig('EV/EBITDA', _repFmtRatio(v.evToEbitda, 1))}
             ${keyFig('תשואת FCF', _repFmtPct(v.fcfYield))}
             ${keyFig('ביתא', _repFmtRatio(m.beta, 2))}
-            ${m.nextEarningsDate ? `<div class="rep-keyfig rep-keyfig-earn"><span class="rep-keyfig-label">מועד הדוח הבא</span><span class="rep-keyfig-val">${_repHeDate(m.nextEarningsDate)}${m.earningsIsEstimate ? ' <span class="rep-est">משוער</span>' : ''}</span></div>` : ''}
+            ${(() => {
+        // Guard: a cached PAST date must never render as the "next" report (Yahoo returns
+        // the last report date for small caps whose next earnings isn't scheduled yet).
+        const t = new Date().toISOString().slice(0, 10);
+        const ne = (m.nextEarningsDate && String(m.nextEarningsDate).slice(0, 10) >= t) ? m.nextEarningsDate : null;
+        return `<div class="rep-keyfig rep-keyfig-earn"><span class="rep-keyfig-label">מועד הדוח הבא</span><span class="rep-keyfig-val">${ne ? _repHeDate(ne) + (m.earningsIsEstimate ? ' <span class="rep-est">משוער</span>' : '') : '<span class="rep-est">טרם נקבע</span>'}</span></div>`;
+    })()}
         </div>
 
         ${_repCreditHtml(m)}
@@ -1416,7 +1445,7 @@ function _repFallbackSwot(m) {
     (m.accountingNotes || []).filter(n => n && n.tone === 'good').forEach(n => { if (O.length < 2) O.push(n.he); });
     if (v.peTrailing != null && v.peTrailing > 0 && v.peTrailing <= 15) O.push('תמחור נוח יחסית: מכפיל רווח ' + v.peTrailing.toFixed(1) + ' — מרווח ביטחון בשיערוך');
     if (v.evToEbitda != null && v.evToEbitda > 0 && v.evToEbitda <= 10) O.push('EV/EBITDA נמוך ‏(' + v.evToEbitda.toFixed(1) + ') — פוטנציאל לסגירת פער מול הסקטור');
-    if (m.nextEarningsDate) O.push('הדוח הבא ב-' + _repHeDate(m.nextEarningsDate) + ' — קטליזטור קרוב להמשך המומנטום');
+    if (m.nextEarningsDate && String(m.nextEarningsDate).slice(0, 10) >= new Date().toISOString().slice(0, 10)) O.push('הדוח הבא ב-' + _repHeDate(m.nextEarningsDate) + ' — קטליזטור קרוב להמשך המומנטום');
     (m.flags || []).filter(f => f && f.severity && f.severity !== 'ok').forEach(f => { if (T.length < 3) T.push(f.he); });
     if (m.beta != null && isFinite(m.beta) && m.beta >= 1.4) T.push('ביתא גבוהה ‏(' + Number(m.beta).toFixed(2) + ') — רגישות מוגברת לירידות שוק');
     if (v.peTrailing != null && v.peTrailing >= 35) T.push('מכפיל רווח גבוה ‏(' + v.peTrailing.toFixed(0) + ') — תמחור שדורש עמידה בציפיות; אכזבה בדוח תתומחר בחדות');

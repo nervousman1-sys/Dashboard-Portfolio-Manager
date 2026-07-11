@@ -67,6 +67,26 @@ async function loadUniverse() {
             for (const t of tickers) out.push({ symbol: t, market, sector: sectors[t] || null });
         } catch (e) { log(`universe ${market} failed:`, e.message); }
     }
+    // WATCHED symbols (any user's watchlist) always join the sweep — so a starred
+    // Russell name gets 24/7 score/next-earnings updates even though the full ~2000-name
+    // r2k sweep is opt-in. A handful of extra names can't re-bloat the table.
+    if (!SWEEP_R2K) {
+        try {
+            const { data, error } = await supabase.rpc('get_tracked_symbols', { p_secret: AGENT_WRITE_SECRET });
+            if (error) log('tracked-symbols warn:', error.message);
+            else if (Array.isArray(data)) {
+                const have = new Set(out.map(x => x.symbol));
+                let added = 0;
+                for (const row of data) {
+                    const sym = String(row.symbol || '').toUpperCase().trim();
+                    if (!sym || have.has(sym)) continue;
+                    out.push({ symbol: sym, market: row.market || 'r2k', sector: null });
+                    have.add(sym); added++;
+                }
+                if (added) log(`universe: +${added} watched symbols (outside the base sweep)`);
+            }
+        } catch (e) { log('tracked-symbols warn:', e.message); }
+    }
     return out;
 }
 
