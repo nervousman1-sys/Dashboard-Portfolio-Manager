@@ -451,29 +451,13 @@ async function _repLoadWatch() {
 }
 
 async function _repRenderWatchBar() {
+    // The watchlist no longer renders as an always-on strip — per the user's request it
+    // lives ONLY behind the ⭐ buttons (reports header / dashboard header / mobile nav),
+    // which open the shared watchlist modal (openWatchlistModal). Keep the bar empty and
+    // clear the legacy height reservation so the board doesn't leave a gap.
+    try { localStorage.setItem('rep_watch_has', '0'); } catch (e) { }
     const el = document.getElementById('repWatchBar');
-    if (!el) return;
-    const syms = [..._repWatch];
-    // Remember whether this user has watch items → the next shell render reserves the
-    // bar's height up front instead of pushing the board down when it fills.
-    try { localStorage.setItem('rep_watch_has', syms.length ? '1' : '0'); } catch (e) { }
-    if (!syms.length) { el.innerHTML = ''; el.style.minHeight = ''; return; }
-    let info = {};
-    try {
-        const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms);
-        (data || []).forEach(r => { info[String(r.symbol).toUpperCase()] = r; });
-    } catch (e) { /* show without scores */ }
-    if (document.getElementById('repWatchBar') !== el) return;
-    const chips = syms.map(s => {
-        const r = info[s] || {};
-        const disp = String(s).replace(/\.TA$/, '');
-        const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
-        return `<span class="rep-watch-chip" onclick="openReportForTicker('${s}')" title="${String(r.company_name || '').replace(/"/g, '')}">
-            <span class="rep-new-tk">${disp}</span>${sc}
-            <span class="rep-watch-x" onclick="event.stopPropagation(); _repToggleWatch('${s}')" title="הסר ממעקב">✕</span>
-        </span>`;
-    }).join('');
-    el.innerHTML = `<div class="rep-new-strip rep-watch-strip"><span class="rep-new-lbl">⭐ המעקב שלי</span><div class="rep-new-chips">${chips}</div></div>`;
+    if (el) { el.innerHTML = ''; el.style.minHeight = ''; }
 }
 
 async function _repToggleWatch(symbol) {
@@ -578,10 +562,10 @@ async function _wlRenderList() {
     if (!el) return;
     const syms = [..._repWatch];
     if (!syms.length) { el.innerHTML = '<div class="wl-empty">אין מניות במעקב עדיין. חפש מניה למעלה כדי להוסיף, או הוסף מכוכב ★ בעמוד הדוח.</div>'; return; }
-    // Company names + report scores from company_reports (best-effort).
+    // Company names + report scores + report-signal fields from company_reports (best-effort).
     let info = {};
     try {
-        const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms);
+        const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name,improved,next_earnings,as_of').in('symbol', syms);
         (data || []).forEach(r => { info[String(r.symbol).toUpperCase()] = r; });
     } catch (e) { }
     const prices = await _wlFetchPrices(syms);
@@ -598,14 +582,80 @@ async function _wlRenderList() {
             ? `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>${chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : ''}`
             : '<span class="wl-price wl-dim">—</span>';
         const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
-        return `<div class="wl-row">
-            <button class="wl-star" onclick="_wlRemove('${s}')" title="הסר ממעקב">★</button>
-            <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
-            <div class="wl-priceblock">${priceHtml}</div>
-            ${sc}
-            <button class="wl-report" onclick="openReportForTicker('${s}'); closeWatchlistModal();" title="פתח דוח">📊 דוח</button>
+        return `<div class="wl-row" data-wl-row="${s}">
+            <div class="wl-main">
+                <button class="wl-star" onclick="_wlRemove('${s}')" title="הסר ממעקב">★</button>
+                <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
+                <div class="wl-priceblock">${priceHtml}</div>
+                ${sc}
+                <button class="wl-report" onclick="openReportForTicker('${s}'); closeWatchlistModal();" title="ניתוח דוחות כספיים">📊 דוח</button>
+                <button class="wl-report wl-tech" onclick="if(typeof openTechnicalForTicker==='function'){openTechnicalForTicker('${s}'); closeWatchlistModal();}" title="ניתוח טכני">📈 טכני</button>
+            </div>
+            <div class="wl-sig" id="wlSig-${disp}">${_wlReportSignals(r).join('')}</div>
         </div>`;
     }).join('');
+    // Significant signals (technical extremes + fresh company news) load async and patch in.
+    _wlLoadSignals(syms);
+}
+
+// ── Watchlist signals — anything MATERIAL about a watched name, shown next to it ──
+// Reports: from company_reports (fresh filing / improved-vs-YoY / earnings coming up).
+const _wlSig = (txt, cls, title) => `<span class="wl-sig-chip wl-sig-${cls}" title="${_repEscape(title || '')}">${txt}</span>`;
+function _wlReportSignals(r) {
+    const out = [];
+    if (!r) return out;
+    const today = new Date();
+    const days = (d) => Math.round((new Date(d) - today) / 86400e3);
+    if (r.as_of && days(r.as_of) >= -6) out.push(_wlSig('🆕 דיווחה', 'pos', `דוח כספי חדש פורסם (${_repHeDate(r.as_of)})`));
+    if (r.improved) out.push(_wlSig('📈 דוח משתפר', 'pos', 'הרבעון האחרון השתפר מול הרבעון המקביל אשתקד'));
+    if (r.next_earnings) {
+        const d = days(r.next_earnings);
+        if (d >= 0 && d <= 10) out.push(_wlSig(`📅 דוח ${d === 0 ? 'היום' : 'בעוד ' + d + ' ימים'}`, 'warn', `מועד הדוח הבא: ${_repHeDate(r.next_earnings)}`));
+    }
+    return out;
+}
+// Technical (live /api/technicals scan: RSI extremes, key-MA touch, FVG, unusual volume)
+// + news (portfolio_alerts — the 24/7 SEC press agent) — appended to each row when found.
+async function _wlLoadSignals(syms) {
+    const patch = (sym, chips) => {
+        const el = document.getElementById('wlSig-' + String(sym).replace(/\.TA$/, ''));
+        if (el && chips.length) el.innerHTML += chips.join('');
+    };
+    // 1) Technical scan (single batched call; 60-symbol API cap).
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        const r = await fetch(`/api/technicals?mode=scan&symbols=${encodeURIComponent(syms.slice(0, 60).join(','))}&d=${today}&v=2`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const res = (j && j.results) || {};
+        for (const s of syms) {
+            const t = res[s] || res[String(s).replace(/\.TA$/, '')];
+            if (!t) continue;
+            const chips = [];
+            if (t.rsiD != null && t.rsiD >= 70) chips.push(_wlSig('🔥 RSI קנוי־יתר', 'neg', `RSI יומי ${t.rsiD}`));
+            else if (t.rsiD != null && t.rsiD <= 30) chips.push(_wlSig('🧊 RSI מכור־יתר', 'pos', `RSI יומי ${t.rsiD}`));
+            const d200 = t.ma && t.ma.d200dist;
+            if (d200 != null && Math.abs(d200) <= 2.5) chips.push(_wlSig('🎯 על ממוצע 200', 'warn', `${d200 > 0 ? '+' : ''}${d200}% מממוצע 200 יום — אזור תמיכה/התנגדות`));
+            if ((t.fvgM && t.fvgM.inside) || (t.fvgQ && t.fvgQ.inside)) chips.push(_wlSig('🕳️ בתוך FVG', 'warn', 'המחיר בתוך פער שווי הוגן ' + (t.fvgM && t.fvgM.inside ? 'חודשי' : 'רבעוני')));
+            if (t.vol != null && t.volAvg > 0 && t.vol >= 2 * t.volAvg) chips.push(_wlSig('📢 נפח חריג', 'warn', `נפח ${(t.vol / t.volAvg).toFixed(1)}× מהממוצע`));
+            patch(s, chips);
+        }
+    } catch (e) { /* signals are best-effort */ }
+    // 2) Fresh company news from the SEC press feed (last 7 days).
+    try {
+        const since = new Date(Date.now() - 7 * 86400e3).toISOString();
+        const bases = syms.map(s => String(s).replace(/\.TA$/, ''));
+        const { data } = await supabaseClient.from('portfolio_alerts')
+            .select('ticker,summary_he,headline_en,published_at,materiality')
+            .in('ticker', bases).gte('published_at', since)
+            .order('published_at', { ascending: false }).limit(40);
+        const seen = new Set();
+        (data || []).forEach(a => {
+            const tk = String(a.ticker || '').toUpperCase();
+            if (!tk || seen.has(tk)) return;
+            seen.add(tk);
+            patch(tk, [_wlSig(a.materiality ? '📰 חדשות מהותיות' : '📰 חדשות', a.materiality ? 'neg' : 'info', a.summary_he || a.headline_en || 'הודעה לעיתונות')]);
+        });
+    } catch (e) { /* no alerts visible / offline — fine */ }
 }
 async function _wlRemove(sym) { await _repToggleWatch(sym); _wlRenderList(); }
 // Add whatever the user typed (validate it resolves to a real quote first).
