@@ -8575,6 +8575,9 @@ html.day-mode .ov-cell-risk-score .ov-cell-value { filter: brightness(0.55) satu
 html.day-mode .ov-compliance { filter: brightness(0.68) saturate(1.4); }
 /* Portfolio data cells (הרכב תיק / מדדי סיכון): a deeper cream than the card white */
 html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.14); }
+/* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
+html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
+html.day-mode .adv-dim { color: #675f50; }
 /* Report detail — watch star, credit grade, peers CTA */
 html.day-mode .rep-watch-btn { color: #443e33; }
 html.day-mode .rep-cr-grade { filter: brightness(0.62) saturate(1.5); }
@@ -9066,11 +9069,13 @@ html.day-mode .exp-asset-bar-fill { filter: brightness(0.72) saturate(1.7); box-
 html.day-mode .exp-asset-dot { filter: brightness(0.7) saturate(1.6); box-shadow: none; }
 html.day-mode .exp-asset-pct { filter: brightness(0.55) saturate(1.9); font-weight: 800; }
 
-/* 3. Primary action buttons (בצע פעולה / החל על כלל התיקים / קנה / הפקד) — solid day blue */
+/* 3. Primary action buttons (בצע פעולה / החל על כלל התיקים / קנה / הפקד) — LIGHT day blue
+   (dark navy read too heavy on the cream skin; bright pill + dark ink, like the range pills) */
 html.day-mode .mgmt-btn.primary, html.day-mode .alloc-fix-btn, html.day-mode .alloc-bulk-apply {
-    background: var(--accent-blue); color: #ffffff; border: 1px solid var(--accent-blue);
+    background: #bfe0f2; color: #0f2f45; border: 1px solid #7cc0e0;
 }
-html.day-mode .mgmt-btn.primary:hover, html.day-mode .alloc-bulk-apply:hover { background: #075985; }
+html.day-mode .mgmt-btn.primary:hover, html.day-mode .alloc-bulk-apply:hover { background: #a9d5ec; }
+html.day-mode .order-toggle-btn.active { background: #bfe0f2; border-color: #7cc0e0; color: #0f2f45; }
 html.day-mode .mgmt-btn.secondary, html.day-mode .alloc-bulk-clear {
     background: #ffffff; color: var(--text-primary); border: 1px solid var(--border);
 }
