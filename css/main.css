@@ -151,7 +151,7 @@ select option {
     color: #f5f5f5;
 }
 html.day-mode select option {
-    background-color: #ffffff;
+    background-color: #faf8f1;
     color: #0f172a;
 }
 
@@ -8578,6 +8578,17 @@ html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36,
 /* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
 html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
 html.day-mode .adv-dim { color: #675f50; }
+/* Portfolio modal: emphasized warm frames on every panel (charts, advisory, metrics) */
+html.day-mode .modal { border: 1px solid rgba(58, 50, 36, 0.28); }
+html.day-mode .mcs-chart-card, html.day-mode .risk-chart-card, html.day-mode .mcs-canvas-wrap,
+html.day-mode .ov-panel, html.day-mode .ov-hero-block, html.day-mode .adv-action-col,
+html.day-mode .ov-compliance, html.day-mode .adv-fit, html.day-mode .adv-stats,
+html.day-mode .adv-verdict, html.day-mode .adv-plan {
+    border: 1px solid rgba(58, 50, 36, 0.24);
+    background: #fcfaf4;
+    border-radius: 12px;
+}
+html.day-mode .mcs-chart-card { background: #faf8f1; }
 /* Report detail — watch star, credit grade, peers CTA */
 html.day-mode .rep-watch-btn { color: #443e33; }
 html.day-mode .rep-cr-grade { filter: brightness(0.62) saturate(1.5); }
@@ -8595,7 +8606,7 @@ html.day-mode .header,
 html.day-mode .sidebar,
 html.day-mode .mobile-bottom-nav,
 html.day-mode .quick-watch-bar {
-    background: #ffffff;
+    background: #faf8f1;
     border-color: var(--border);
 }
 html.day-mode .client-card { background: #fcfaf4; }
@@ -8642,7 +8653,7 @@ html.day-mode .bulk-risk-row, html.day-mode .dn-embed {
 html.day-mode .dn-day-head:hover, html.day-mode .bulk-row:hover { background: #eef4fb; }
 /* Inputs */
 html.day-mode input, html.day-mode select, html.day-mode textarea {
-    background: #ffffff !important;
+    background: #faf8f1 !important;
     color: var(--text-primary) !important;
     border-color: var(--border) !important;
 }
@@ -8651,7 +8662,7 @@ html.day-mode .alloc-input-wrap { background: #fcfaf4; }
 html.day-mode .macro-back-btn, html.day-mode .mgmt-btn.secondary, html.day-mode .dn-tab,
 html.day-mode .bulk-mode-btn, html.day-mode .filter-btn, html.day-mode .view-toggle-btn,
 html.day-mode .qw-settings-btn, html.day-mode .header-action-btn {
-    background: #ffffff; color: var(--text-primary); border-color: var(--border);
+    background: #faf8f1; color: var(--text-primary); border-color: var(--border);
 }
 html.day-mode .dn-tab.active, html.day-mode .bulk-mode-btn.active {
     color: var(--accent-blue); background: rgba(3,105,161,0.08); border-color: rgba(3,105,161,0.4);
@@ -9077,13 +9088,13 @@ html.day-mode .mgmt-btn.primary, html.day-mode .alloc-fix-btn, html.day-mode .al
 html.day-mode .mgmt-btn.primary:hover, html.day-mode .alloc-bulk-apply:hover { background: #a9d5ec; }
 html.day-mode .order-toggle-btn.active { background: #bfe0f2; border-color: #7cc0e0; color: #0f2f45; }
 html.day-mode .mgmt-btn.secondary, html.day-mode .alloc-bulk-clear {
-    background: #ffffff; color: var(--text-primary); border: 1px solid var(--border);
+    background: #faf8f1; color: var(--text-primary); border: 1px solid var(--border);
 }
 html.day-mode .mgmt-btn.danger { background: #dc2626; color: #fcfaf4; border-color: #dc2626; }
 
 /* 4. Page headers (חדשות / אינדיקטורים / ניהול חכם / ניתוח) — black on white, framed */
 html.day-mode .macro-page-header {
-    background: #ffffff; border-bottom: 1px solid var(--border);
+    background: #faf8f1; border-bottom: 1px solid var(--border);
 }
 html.day-mode .macro-main-title { color: var(--text-primary); }
 html.day-mode .macro-back-btn { background: #f1eee4; color: var(--text-primary); border: 1px solid var(--border); }
@@ -9175,7 +9186,7 @@ html.day-mode .reco-eff-sub, html.day-mode .reco-eff-title, html.day-mode .reco-
    charts — only the curve panels stay dark), and the sector donut blends into
    the white modal instead of sitting on a black box. ═══ */
 html.day-mode .macro-analysis-host {
-    background: #ffffff !important;
+    background: #faf8f1 !important;
     border: 1px solid var(--border) !important;
 }
 html.day-mode .macro-analysis-host .macro-yield-title { color: var(--text-primary) !important; }
@@ -9189,8 +9200,8 @@ html.day-mode .sectors-chart-wrap { background: transparent !important; border: 
 
 /* 1. Hero value panel → WHITE with bold, high-contrast numbers */
 html.day-mode .ov-hero-block {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: #faf8f1 !important;
+    background-color: #faf8f1 !important;
     border: 1px solid var(--border) !important;
     box-shadow: var(--shadow);
 }
@@ -9244,7 +9255,7 @@ html.day-mode .adv-act-ic { filter: saturate(1.4); }
    These override the earlier keep-dark rules (later in file + !important wins). */
 html.day-mode .risk-chart-card,
 html.day-mode .mcs-canvas-wrap {
-    background: #ffffff !important;
+    background: #faf8f1 !important;
     border-color: var(--border) !important;
 }
 html.day-mode .risk-chart-card h3,
@@ -9285,7 +9296,7 @@ html.day-mode .adv-score-den {
 
 /* ═══ DAY MODE — pass 8: yield-curve panels go light with black ink ═══ */
 html.day-mode .macro-yield-card {
-    background: #ffffff !important;
+    background: #faf8f1 !important;
     border-color: var(--border) !important;
 }
 html.day-mode .macro-yield-card .macro-yield-title { color: var(--text-primary) !important; }
