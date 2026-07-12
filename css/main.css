@@ -8396,11 +8396,12 @@ details.recs-details:not([open]) { padding-bottom: 14px; }
    targeted overrides fix components that hardcode dark-theme colors. Chart panels
    intentionally STAY dark — the chart inks are light and read best on dark. */
 html.day-mode {
-    --bg-primary: #eef1f6;
-    --bg-secondary: #ffffff;
-    --bg-card: #ffffff;
-    --bg-card-hover: #f3f6fb;
-    --bg-surface: #ffffff;
+    /* Softly-gray whites — the pure-white page read as glaring; a light slate tint. */
+    --bg-primary: #e7ebf2;
+    --bg-secondary: #fafbfd;
+    --bg-card: #fbfcfd;
+    --bg-card-hover: #f1f4f9;
+    --bg-surface: #fafbfd;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-muted: #64748b;
@@ -8409,6 +8410,9 @@ html.day-mode {
     --accent-blue: #0369a1;
     --accent-green: #047857;
     --accent-red: #dc2626;
+    /* Yellow/orange were never flipped for day mode — #facc15 on white is invisible. */
+    --accent-yellow: #a16207;
+    --accent-orange: #b45309;
     --risk-high: #dc2626;
     --risk-medium: #b45309;
     --risk-low: #047857;
@@ -8420,6 +8424,27 @@ html.day-mode body {
     background-image: none;
     color: var(--text-primary);
 }
+/* ── Contrast fixes (scanner-driven): light hardcoded text → dark on light surfaces ── */
+html.day-mode .card-fx-pnl { color: #475569; }
+html.day-mode .ov-panel-title { color: #0369a1; }
+html.day-mode .rep-earn-strip .rep-new-lbl,
+html.day-mode .rep-watch-strip .rep-new-lbl { color: #92400e; }
+html.day-mode .rep-earn-date { color: #92400e; background: rgba(180, 83, 9, 0.12); }
+html.day-mode .rep-new-lbl { color: #475569; }
+html.day-mode .rep-score-good { color: #059669; background: rgba(5, 150, 105, 0.1); }
+html.day-mode .rep-intel-status b { color: #047857; }
+/* Dynamic JS-injected colors (sentiment mood, per-asset tints, model-score chips):
+   a darkening filter keeps each hue but makes it readable on white. */
+html.day-mode .sentiment-score-badge,
+html.day-mode .sentiment-label,
+html.day-mode .exp-asset-pct { filter: brightness(0.5) saturate(1.7); }
+html.day-mode .card-model-btn {
+    color: color-mix(in srgb, var(--mc) 55%, #1e293b);
+    border-color: color-mix(in srgb, var(--mc) 50%, #94a3b8);
+}
+html.day-mode .val-warn,
+html.day-mode .ov-kpi-value.val-warn,
+html.day-mode .ov-cell-value.val-warn { color: #a16207 !important; }
 /* Surfaces that hardcode dark backgrounds */
 html.day-mode .stat-card,
 html.day-mode .glass-card,
