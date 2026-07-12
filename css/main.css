@@ -8479,7 +8479,6 @@ html.day-mode .dc-live-tag { color: #047857 !important; }
 html.day-mode .dc-prox-val { filter: brightness(0.62) saturate(1.5); }
 html.day-mode #stressTestPage small, html.day-mode .dc-card-foot { color: #675f50 !important; }
 /* Active time-range pill keeps a dark/accent fill — its label stays light */
-html.day-mode .time-range-btn.active { color: #fcfaf4; }
 html.day-mode .ec-hist-title { color: #443e33; }
 /* Econ-calendar release-history block */
 html.day-mode .ec-res-badge { filter: brightness(0.6) saturate(1.6); }
@@ -8555,6 +8554,27 @@ html.day-mode .ec-tr-month td { background: none; }
 html.day-mode .rep-rpo-card { background: #fcfaf4; border-color: rgba(58, 50, 36, 0.2); }
 html.day-mode .rep-rpo-title { color: #0369a1; }
 html.day-mode .rep-rpo-val { color: #191612; }
+/* תנועות הון (sector rotation): black labels, deepened bars/values, cream card */
+html.day-mode .dn-mflow-card { background: #fcfaf4; border-color: rgba(58, 50, 36, 0.2); }
+html.day-mode .dn-mflow-head { color: #0369a1; }
+html.day-mode .dn-mflow-name { color: #191612; }
+html.day-mode .dn-mflow-name small { color: #675f50; }
+html.day-mode .dn-mflow-track { background: rgba(58, 50, 36, 0.1); }
+html.day-mode .dn-mflow-fill { filter: brightness(0.82) saturate(1.15); }
+html.day-mode .dn-mflow-val { filter: brightness(0.6) saturate(1.5); }
+html.day-mode .dn-mflow-row:hover { background: #f3f0e6; }
+/* Time-range pills: the ACTIVE range gets a bright light-blue pill with dark digits */
+html.day-mode .time-range-btn.active {
+    background: #bfe0f2;
+    border-color: #7cc0e0;
+    color: #0f2f45;
+    font-weight: 800;
+}
+/* Portfolio model/compliance numbers: darken the dynamic score colors */
+html.day-mode .ov-cell-risk-score .ov-cell-value { filter: brightness(0.55) saturate(1.6); }
+html.day-mode .ov-compliance { filter: brightness(0.68) saturate(1.4); }
+/* Portfolio data cells (הרכב תיק / מדדי סיכון): a deeper cream than the card white */
+html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.14); }
 /* Report detail — watch star, credit grade, peers CTA */
 html.day-mode .rep-watch-btn { color: #443e33; }
 html.day-mode .rep-cr-grade { filter: brightness(0.62) saturate(1.5); }

@@ -1565,9 +1565,12 @@ function renderClientCards() {
                 <span class="card-cur-label">₪ ${_cardIlsPct}%</span>
             </div>
             ${(() => {
-                if (typeof calcFxPnlIls !== 'function') return '';
-                const pnl = calcFxPnlIls(client);
-                if (!pnl || !isFinite(pnl.ils) || Math.abs(pnl.ils) < 1) return '';
+                // ALWAYS rendered (— when there's no USD exposure): a conditional row made
+                // cards different heights, so the sparkline/footer didn't align across cards.
+                const pnl = (typeof calcFxPnlIls === 'function') ? calcFxPnlIls(client) : null;
+                if (!pnl || !isFinite(pnl.ils) || Math.abs(pnl.ils) < 1) {
+                    return `<div class="card-fx-pnl" title="הרווח/הפסד בשקלים הנובע משינוי שער הדולר על אחזקות ה-USD בתיק">רווח/הפסד מהחזקת מט"ח ($): <b>—</b></div>`;
+                }
                 const cls = pnl.ils >= 0 ? 'val-positive' : 'val-negative';
                 const sign = pnl.ils >= 0 ? '+' : '−';
                 return `<div class="card-fx-pnl" title="הרווח/הפסד בשקלים הנובע משינוי שער הדולר על אחזקות ה-USD בתיק">רווח/הפסד מהחזקת מט"ח ($): <b class="${cls}">${sign}₪${Math.abs(Math.round(pnl.ils)).toLocaleString('en-US')}</b></div>`;
