@@ -214,7 +214,7 @@ function _buildHoldingsTable(client) {
                 <div style="display:flex;flex-direction:column;gap:2px">
                     ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}
                     ${subName}
-                    <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                    <span style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
                         <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>
                         ${_recChip}
                         ${_orderChip}
@@ -381,7 +381,7 @@ async function openModal(clientId) {
                 <div style="display:flex;flex-direction:column;gap:2px">
                     ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}
                     ${subName}
-                    <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                    <span style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
                         <span class="asset-type-badge ${(typeof isFundLike === 'function' && isFundLike(h)) ? 'fund' : h.type}" style="font-size:10px;width:fit-content">${(typeof assetTypeLabel === 'function') ? assetTypeLabel(h) : h.typeLabel}</span>
                         ${_recChip}
                         ${_orderChip}
@@ -2174,6 +2174,7 @@ async function _fetchLivePricePreview(symbol) {
 
     previewEl.textContent = 'טוען מחיר שוק...';
     previewEl.style.display = '';
+    if (typeof window !== 'undefined') window._mgmtLivePrice = null; // stale price must not fill the field
 
     const currency = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
     // Pass buy_price as fallback baseline if all live APIs fail
@@ -2192,6 +2193,10 @@ async function _fetchLivePricePreview(symbol) {
             const curr = document.getElementById('mgmt-ticker-currency')?.value || 'USD';
             const sym = curr === 'ILS' ? '₪' : '$';
             el.innerHTML = `<span style="color:var(--accent-blue);font-weight:600">מחיר שוק נוכחי: ${result.price.toFixed(2)} ${sym}</span>`;
+            if (typeof window !== 'undefined') window._mgmtLivePrice = result.price;
+            // Market order selected (the default) → the price goes straight into the
+            // buy field (without clobbering a value the user already typed).
+            _applyMarketPrice(false);
         } else {
             el.textContent = 'לא ניתן לטעון מחיר שוק';
         }
@@ -2439,6 +2444,37 @@ function _setOrderType(t) {
     document.querySelectorAll('.order-toggle .order-toggle-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-ot') === t));
     const lbl = document.getElementById('mgmt-price-label-text');
     if (lbl) lbl.textContent = t === 'limit' ? 'מחיר לימיט' : 'מחיר קנייה';
+    // Market order = buy at the CURRENT price — fill it in immediately so the
+    // purchase can proceed without retyping what's already on screen.
+    if (t === 'market') _applyMarketPrice(true);
+}
+
+// The live market price known to the buy modal: the fetched preview value, or —
+// in the buy-more flow, where the preview is rendered server-side — the number
+// parsed out of the "מחיר שוק נוכחי" line itself.
+function _mgmtGetLivePrice() {
+    if (typeof window !== 'undefined' && window._mgmtLivePrice > 0) return window._mgmtLivePrice;
+    const el = document.getElementById('mgmt-live-price-preview');
+    if (!el) return null;
+    const m = (el.textContent || '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+    const v = m ? parseFloat(m[1]) : NaN;
+    return (isFinite(v) && v > 0) ? v : null;
+}
+// Fill the price field with the live market price. force=true (clicking "קנייה
+// במחיר שוק") overwrites whatever is typed; force=false (price preview just
+// loaded) only fills an empty/zero field — never clobbers the user's input.
+function _applyMarketPrice(force) {
+    const ot = document.getElementById('mgmt-order-type');
+    if (!ot || ot.value !== 'market') return;
+    const inp = document.getElementById('mgmt-price');
+    const p = _mgmtGetLivePrice();
+    if (!inp || !(p > 0)) return;
+    const cur = parseFloat(String(inp.value || '').replace(/,/g, ''));
+    if (!force && isFinite(cur) && cur > 0) return;
+    inp.value = (typeof formatPrice === 'function') ? formatPrice(p) : String(p);
+    if (typeof formatInputWithCommas === 'function') formatInputWithCommas(inp);
+    if (typeof updateBuyCost === 'function') updateBuyCost();
+    if (typeof _updateQtyPreview === 'function') _updateQtyPreview('mgmt-qty', 'mgmt-qty-preview');
 }
 
 // Lock an action button on submit: shows a pressed/spinner state and blocks a second click while
