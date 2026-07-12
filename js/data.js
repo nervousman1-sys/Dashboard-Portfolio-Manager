@@ -214,7 +214,7 @@ const SECTOR_COLORS = {
     'Consumer Staples': '#84cc16', 'Healthcare': '#ec4899', 'Financials': '#eab308',
     'Energy': '#ef4444', 'Industrials': '#8b5cf6', 'Utilities': '#14b8a6',
     'Real Estate': '#f43f5e', 'Materials': '#10b981', 'Crypto': '#f7931a', 'Bonds': '#a855f7', 'Other': '#64748b',
-    'תעודות סל עוקבות מדד': '#22d3ee', 'תעודות סל': '#0ea5e9', 'סחורות': '#d4af37'
+    'תעודות סל': '#22d3ee', 'סחורות': '#d4af37'
 };
 
 const COLORS = { profit: '#22c55e', loss: '#ef4444', neutral: '#3b82f6', bonds: '#a855f7' };
@@ -310,7 +310,7 @@ const SECTOR_ETF_MAP = {
     XLU: 'Utilities', VPU: 'Utilities', IDU: 'Utilities', TAN: 'Utilities', ICLN: 'Utilities',
     XLRE: 'Real Estate', VNQ: 'Real Estate', IYR: 'Real Estate',
 };
-// Broad index-tracking ETFs → grouped together under "תעודות סל עוקבות מדד".
+// Broad index-tracking ETFs → grouped together under "תעודות סל".
 const INDEX_ETF_SET = new Set([
     'SPY', 'VOO', 'IVV', 'SPLG', 'VTI', 'VT', 'ITOT', 'SCHB', 'SCHX', 'QQQ', 'QQQM', 'ONEQ', 'DIA', 'IWM', 'IWB', 'IWV', 'RSP',
     'MDY', 'IJH', 'IJR', 'VB', 'VO', 'VV', 'VUG', 'VTV', 'IWF', 'IWD', 'SCHG', 'SCHD', 'VXUS', 'ACWI', 'VEA', 'VWO', 'EEM', 'EFA', 'IEFA', 'IEMG',
@@ -321,7 +321,7 @@ const CRYPTO_ETF_SET = new Set(['IBIT', 'FBTC', 'GBTC', 'ARKB', 'BITO', 'ETHE'])
 
 // Resolve the SECTOR-BREAKDOWN bucket for a holding:
 //  • sector ETF (XLF, SOXX…) → the sector it tracks
-//  • broad index tracker (SPY, QQQ, קסם S&P 500 KTF…) → "תעודות סל עוקבות מדד"
+//  • broad index tracker (SPY, QQQ, קסם S&P 500 KTF…) → "תעודות סל"
 //  • bond/commodity/crypto ETF → Bonds / סחורות / Crypto
 //  • otherwise → the stock's own sector
 function resolveHoldingSector(h) {
@@ -331,10 +331,10 @@ function resolveHoldingSector(h) {
     if (BOND_ETF_SET.has(t)) return 'Bonds';
     if (COMMODITY_ETF_SET.has(t)) return 'סחורות';
     if (CRYPTO_ETF_SET.has(t)) return 'Crypto';
-    if (INDEX_ETF_SET.has(t)) return 'תעודות סל עוקבות מדד';
+    if (INDEX_ETF_SET.has(t)) return 'תעודות סל';
     // Israeli index-tracking funds (numeric id) — detect by the resolved fund name.
     const info = (typeof window !== 'undefined' && window._ilFundInfo) ? window._ilFundInfo[t] : null;
-    if (info && /S&P|נאסד|מדד|ת["״]?א|MSCI|דאו|index|טק|נאסדק/i.test(info.name || '')) return 'תעודות סל עוקבות מדד';
+    if (info && /S&P|נאסד|מדד|ת["״]?א|MSCI|דאו|index|טק|נאסדק/i.test(info.name || '')) return 'תעודות סל';
     return h.sector || (typeof resolveSectorFor === 'function' ? resolveSectorFor(t) : null) || 'Other';
 }
 
