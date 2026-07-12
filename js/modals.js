@@ -96,6 +96,11 @@ function switchModalTab(tabName) {
         if (typeof _prMount === 'function') _prMount(client.id);
     }
 
+    // Correlation calculator scoped to THIS portfolio (shared engine with the routed page).
+    if (tabName === 'correlation') {
+        if (typeof _corrMountInModal === 'function') _corrMountInModal(client.id);
+    }
+
     // Fresh-fetch transactions from Supabase every time the tab is opened
     if (tabName === 'transactions') {
         const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
@@ -473,6 +478,7 @@ async function openModal(clientId) {
             <button class="modal-tab" data-tab="cmlsml" onclick="switchModalTab('cmlsml')">CML / SML</button>
             <button class="modal-tab" data-tab="holdings" onclick="switchModalTab('holdings')">נכסים</button>
             <button class="modal-tab" data-tab="sectors" onclick="switchModalTab('sectors')">נתוני תיק</button>
+            <button class="modal-tab" data-tab="correlation" onclick="switchModalTab('correlation')">קורלציה</button>
             <button class="modal-tab" data-tab="pressreleases" onclick="switchModalTab('pressreleases')">הוצאות לעיתונות</button>
             <button class="modal-tab" data-tab="transactions" onclick="switchModalTab('transactions')">היסטוריית פעולות</button>
         </div>
@@ -726,6 +732,7 @@ async function openModal(clientId) {
                 </div>
             </div>
             <!-- Tab: Press Releases (SEC EDGAR 8-K filings for this portfolio's holdings) -->
+            <div class="modal-tab-content" id="tab-correlation"></div>
             <div class="modal-tab-content" id="tab-pressreleases">
                 <div class="pr-head">
                     <div class="pa-live">

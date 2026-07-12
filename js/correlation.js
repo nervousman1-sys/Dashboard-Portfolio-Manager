@@ -62,11 +62,29 @@ function _corrPortfolio() {
     return clients.find(c => c.id === _corrPortfolioId) || clients[0] || null;
 }
 
+// Shared calculator body — used by BOTH the routed page (with a portfolio selector)
+// and the portfolio-modal "קורלציה" tab (portfolio fixed to the open client).
+function _corrBodyHtml(withSelect) {
+    const list = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients : [];
+    const opts = list.map(c => `<option value="${c.id}" ${c.id === _corrPortfolioId ? 'selected' : ''}>${_corrEsc(c.name)}</option>`).join('');
+    return `
+        ${withSelect ? `<div class="st-portfolio-row">
+            <label class="st-pf-label">תיק לבדיקה:</label>
+            <select class="st-pf-select" onchange="_corrPortfolioId=+this.value; const r=document.getElementById('corrResult'); if(r) r.innerHTML='';">${opts}</select>
+        </div>` : ''}
+        <div class="st-portfolio-row">
+            <label class="st-pf-label">נכס לבדיקה:</label>
+            <input type="text" id="corrSymbol" class="corr-input" autocomplete="off" placeholder="למשל: NVDA, GLD, TLT, TEVA…"
+                onkeydown="if(event.key==='Enter') _corrRun()" />
+            <button class="corr-run-btn" id="corrRunBtn" onclick="_corrRun()">חשב קורלציה</button>
+        </div>
+        <div class="corr-note">מתאם פירסון (ρ) על תשואות יומיות · 365 הימים האחרונים (~250 ימי מסחר) · מחירי סגירה מתוקני-דיבידנד · הנתונים נמשכים מחדש בכל חישוב</div>
+        <div id="corrResult"></div>`;
+}
+
 function _corrRenderShell() {
     const page = document.getElementById('correlationPage');
     if (!page) return;
-    const list = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients : [];
-    const opts = list.map(c => `<option value="${c.id}" ${c.id === _corrPortfolioId ? 'selected' : ''}>${_corrEsc(c.name)}</option>`).join('');
     page.innerHTML = `
     <div dir="rtl">
         <div class="macro-page-header">
@@ -75,21 +93,18 @@ function _corrRenderShell() {
         </div>
         <div class="macro-content">
             <div class="risk-table-card glass-card" style="padding:18px">
-                <div class="st-portfolio-row">
-                    <label class="st-pf-label">תיק לבדיקה:</label>
-                    <select class="st-pf-select" onchange="_corrPortfolioId=+this.value; const r=document.getElementById('corrResult'); if(r) r.innerHTML='';">${opts}</select>
-                </div>
-                <div class="st-portfolio-row">
-                    <label class="st-pf-label">נכס לבדיקה:</label>
-                    <input type="text" id="corrSymbol" class="corr-input" autocomplete="off" placeholder="למשל: NVDA, GLD, TLT, TEVA…"
-                        onkeydown="if(event.key==='Enter') _corrRun()" />
-                    <button class="corr-run-btn" id="corrRunBtn" onclick="_corrRun()">חשב קורלציה</button>
-                </div>
-                <div class="corr-note">מתאם פירסון (ρ) על תשואות יומיות · 365 הימים האחרונים (~250 ימי מסחר) · מחירי סגירה מתוקני-דיבידנד · הנתונים נמשכים מחדש בכל חישוב</div>
-                <div id="corrResult"></div>
+                ${_corrBodyHtml(true)}
             </div>
         </div>
     </div>`;
+}
+
+// Mount inside the portfolio modal's "קורלציה" tab — the portfolio is the open client.
+function _corrMountInModal(clientId) {
+    _corrPortfolioId = clientId;
+    const host = document.getElementById('tab-correlation');
+    if (!host) return;
+    host.innerHTML = `<div dir="rtl" style="padding:4px 2px">${_corrBodyHtml(false)}</div>`;
 }
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
@@ -249,4 +264,5 @@ if (typeof window !== 'undefined') {
     window.openCorrelationPage = openCorrelationPage;
     window.closeCorrelationPage = closeCorrelationPage;
     window._corrRun = _corrRun;
+    window._corrMountInModal = _corrMountInModal;
 }
