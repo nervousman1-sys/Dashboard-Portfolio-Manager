@@ -10548,6 +10548,33 @@ html.day-mode .rep-strat-part p { color: var(--text-primary); }
     font-size: 12px; font-weight: 800; padding: 7px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
 .sa-act:hover { background: rgba(0,229,255,0.2); }
 
+/* ── Scanner-agent page/modal in DAY mode — the sa-* palette above is dark-only,
+   so every light hardcoded text flips to its dark equivalent on white. ── */
+html.day-mode .sa-modal { background: #fbfcfd; }
+html.day-mode .sa-title, html.day-mode .sa-sector,
+html.day-mode .sa-targets-title, html.day-mode .sa-co { color: #0f172a; }
+html.day-mode .sa-subtitle, html.day-mode .sa-loading, html.day-mode .sa-empty,
+html.day-mode .sa-layer-b, html.day-mode .sa-thesis { color: #1e293b; }
+html.day-mode .sa-why, html.day-mode .sa-sources, html.day-mode .sa-status-sub { color: #475569; }
+html.day-mode .sa-empty small { color: #64748b; }
+html.day-mode .sa-status-line { color: #065f46; }
+html.day-mode .sa-meta-bar { color: #047857; }
+html.day-mode .sa-status-note, html.day-mode .sa-src, html.day-mode .sa-sat-low,
+html.day-mode .sa-caret { color: #0369a1; }
+html.day-mode .sa-chip, html.day-mode .sa-layer-t,
+html.day-mode .sa-tk-link, html.day-mode .sa-act { color: #0e7490; }
+html.day-mode .sa-card-head:hover .sa-sector { color: #0369a1; }
+html.day-mode .sa-stage, html.day-mode .sa-mcap { color: #047857; }
+html.day-mode .sa-sat-hi { color: #92400e; }
+html.day-mode .sa-date, html.day-mode .sa-tk-na { background: rgba(15,23,42,0.06); color: #475569; }
+html.day-mode .sa-card { background: #ffffff; border-color: rgba(15,23,42,0.1); }
+html.day-mode .sa-layer { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.08); }
+html.day-mode .sa-refresh { color: #475569; border-color: rgba(15,23,42,0.2); }
+html.day-mode .sa-refresh:hover { background: rgba(15,23,42,0.05); }
+html.day-mode .sa-close { color: #475569; }
+html.day-mode .sa-close:hover { color: #0f172a; }
+html.day-mode .sa-sources { border-top-color: rgba(15,23,42,0.08); }
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    MOBILE POLISH — "Executive Dark" (Linear/Monzo-grade mobile finish)
    HARD ISOLATION: every rule here lives inside @media (max-width: 768px).
