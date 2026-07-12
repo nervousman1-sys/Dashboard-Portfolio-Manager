@@ -86,6 +86,63 @@ body {
     width: 100%;
 }
 
+/* ══ Correlation calculator (מחשבון קורלציה) ══ */
+.corr-input {
+    background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-hover);
+    border-radius: 8px; padding: 8px 12px; font-family: inherit; font-size: 0.88rem; font-weight: 700;
+    min-width: 220px; outline: none; direction: ltr; text-align: left;
+}
+.corr-input:focus { border-color: var(--accent-blue); }
+.corr-run-btn {
+    background: rgba(0,229,255,0.12); color: var(--accent-blue); border: 1px solid rgba(0,229,255,0.35);
+    border-radius: 8px; padding: 8px 16px; font-family: inherit; font-size: 0.88rem; font-weight: 800; cursor: pointer;
+}
+.corr-run-btn:hover { background: rgba(0,229,255,0.2); }
+.corr-run-btn:disabled { opacity: 0.55; cursor: wait; }
+.corr-note { font-size: 11.5px; color: var(--text-muted); margin: 8px 0 4px; line-height: 1.6; }
+.corr-verdict { border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-top: 14px; background: var(--bg-card); }
+.corr-verdict.corr-pos  { border-color: rgba(0,255,148,0.35); }
+.corr-verdict.corr-info { border-color: rgba(0,229,255,0.35); }
+.corr-verdict.corr-warn { border-color: rgba(245,158,11,0.4); }
+.corr-verdict.corr-neg  { border-color: rgba(255,77,77,0.4); }
+.corr-verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.corr-rho { font-size: 26px; font-weight: 900; color: var(--text-primary); direction: ltr; font-variant-numeric: tabular-nums; }
+.corr-chip { font-size: 13px; font-weight: 800; padding: 5px 12px; border-radius: 9px; background: rgba(255,255,255,0.05); color: var(--text-primary); }
+.corr-verdict.corr-pos  .corr-chip { color: var(--accent-green); background: rgba(0,255,148,0.1); }
+.corr-verdict.corr-info .corr-chip { color: var(--accent-blue); background: rgba(0,229,255,0.1); }
+.corr-verdict.corr-warn .corr-chip { color: var(--accent-orange); background: rgba(245,158,11,0.1); }
+.corr-verdict.corr-neg  .corr-chip { color: var(--accent-red); background: rgba(255,77,77,0.1); }
+.corr-verdict-txt { margin: 10px 0 0; font-size: 13.5px; color: var(--text-secondary); line-height: 1.7; }
+.corr-gauge { margin-top: 12px; direction: ltr; }
+.corr-gauge-track {
+    position: relative; height: 8px; border-radius: 5px;
+    background: linear-gradient(90deg, var(--accent-green), rgba(0,229,255,0.7) 50%, var(--accent-red));
+}
+.corr-gauge-dot {
+    position: absolute; top: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; border: 3px solid var(--bg-primary); box-shadow: 0 0 8px rgba(0,0,0,0.6);
+}
+.corr-gauge-lbls { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-muted); margin-top: 5px; }
+.corr-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.corr-m { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; text-align: center; }
+.corr-m-l { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.corr-m b { font-size: 16px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.corr-holds { display: flex; flex-direction: column; gap: 6px; }
+.corr-hold-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.corr-hold-tk { font-weight: 800; color: var(--text-primary); min-width: 64px; }
+.corr-hold-w { color: var(--text-muted); min-width: 46px; font-variant-numeric: tabular-nums; }
+.corr-hold-bar { flex: 1; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.05); overflow: hidden; direction: ltr; }
+.corr-hold-fill { display: block; height: 100%; border-radius: 4px; }
+.corr-hold-fill.p { background: var(--accent-red); opacity: 0.75; }
+.corr-hold-fill.n { background: var(--accent-green); opacity: 0.8; }
+.corr-hold-rho { min-width: 52px; font-weight: 800; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+.corr-t-pos { color: var(--accent-green); } .corr-t-info { color: var(--accent-blue); }
+.corr-t-warn { color: var(--accent-orange); } .corr-t-neg { color: var(--accent-red); }
+@media (max-width: 768px) {
+    .corr-input { min-width: 0; flex: 1; }
+    .corr-metrics { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── Native <select> dropdown lists — SOLID dark options everywhere ──
    The OS paints option lists over white; any translucent/unset background turns the
    text white-on-white (e.g. portfolio names). Solid navy + light text, flipped in day-mode. */

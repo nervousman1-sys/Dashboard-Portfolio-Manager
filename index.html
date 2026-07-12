@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=140.0">
+    <link rel="stylesheet" href="css/main.css?v=141.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -183,6 +183,22 @@
                         </svg>
                     </span>
                     <span class="sidebar-label">סימולטור תרחישים</span>
+                </a>
+                <!-- Correlation calculator -->
+                <a class="sidebar-item" data-nav="correlation" onclick="navigateTo('correlation')">
+                    <span class="sidebar-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="3" x2="3" y2="21" />
+                            <line x1="3" y1="21" x2="21" y2="21" />
+                            <circle cx="8" cy="15" r="1.4" />
+                            <circle cx="11" cy="11" r="1.4" />
+                            <circle cx="14" cy="13" r="1.4" />
+                            <circle cx="17" cy="7" r="1.4" />
+                            <line x1="5" y1="19" x2="19" y2="5" stroke-dasharray="2 2" />
+                        </svg>
+                    </span>
+                    <span class="sidebar-label">מחשבון קורלציה</span>
                 </a>
 
                 <a class="sidebar-item" data-nav="scanneragent" onclick="navigateTo('scanneragent')">
@@ -421,6 +437,7 @@
             <div class="riskmodel-page" id="lhePage"></div>
             <div class="riskmodel-page" id="scannerPage"></div>
             <div class="riskmodel-page" id="stressTestPage"></div>
+            <div class="riskmodel-page" id="correlationPage"></div>
 
             <!-- ═══ 6-Card Summary ═══ -->
             <div class="summary-bar" id="summaryBar"></div>
@@ -681,10 +698,11 @@
     <script src="js/lhe-view.js?v=482"></script>
     <script src="js/press-alerts.js?v=482"></script>
     <script src="js/stress-test.js?v=482"></script>
-    <script src="js/sidebar.js?v=482"></script>
+    <script src="js/correlation.js?v=1"></script>
+    <script src="js/sidebar.js?v=483"></script>
     <script src="js/auth.js?v=482"></script>
     <script src="js/mobile-sheets.js?v=2"></script>
-    <script src="js/init.js?v=483"></script>
+    <script src="js/init.js?v=484"></script>
 
 </body>
 
