@@ -8484,6 +8484,34 @@ html.day-mode .ec-agent-tag, html.day-mode .macro-agent-tag { color: #047857; }
 html.day-mode .ec-upcoming-title, html.day-mode .ec-table th { color: #675f50; }
 html.day-mode .ec-tab { color: #443e33; }
 html.day-mode .ec-tab.active { color: #0369a1; }
+/* ── Day-mode tonal pass (user: colors must sit in the cream skin, nothing neon) ── */
+/* Horizontal-scroll rails: glowing cyan → quiet warm gray */
+html.day-mode .tech-toolbar { scrollbar-color: rgba(90, 82, 68, 0.35) transparent; }
+html.day-mode .tech-toolbar::-webkit-scrollbar-thumb { background: rgba(90, 82, 68, 0.3); }
+html.day-mode .tech-toolbar::-webkit-scrollbar-thumb:hover { background: rgba(90, 82, 68, 0.5); }
+html.day-mode ::-webkit-scrollbar-thumb { background: rgba(90, 82, 68, 0.32); }
+html.day-mode ::-webkit-scrollbar-thumb:hover { background: rgba(90, 82, 68, 0.5); }
+html.day-mode ::-webkit-scrollbar-track { background: transparent; }
+/* Econ-calendar event rows: each release gets a CLEAR separated card on cream */
+html.day-mode .ec-row-result {
+    background: #fcfaf4;
+    border: 1px solid rgba(58, 50, 36, 0.2);
+    border-inline-start-width: 3px;
+    box-shadow: 0 1px 3px rgba(58, 50, 36, 0.08);
+}
+html.day-mode .ec-row-result.ec-res-good { border-inline-start-color: #059669; }
+html.day-mode .ec-row-result.ec-res-bad { border-inline-start-color: #dc2626; }
+html.day-mode .ec-row-result.ec-res-neutral { border-inline-start-color: #b45309; }
+html.day-mode .ec-il-note { color: #443e33; background: #fcfaf4; border-color: rgba(58, 50, 36, 0.16); }
+/* LHE liquidity treemap: Finviz-dark saturated fills → soft day pastels (dark ink stays readable) */
+html.day-mode .lhe-tm-up { background: linear-gradient(135deg, #6ee7b7, #a7f3d0); }
+html.day-mode .lhe-tm-down { background: linear-gradient(135deg, #fca5a5, #fecdd3); }
+html.day-mode .lhe-tm-flat { background: linear-gradient(135deg, #d8d4c8, #e8e4d9); }
+html.day-mode .lhe-tm-tile { border-color: rgba(58, 50, 36, 0.3); }
+html.day-mode .lhe-tm-group.lhe-g-market { background: #175e6b; }
+html.day-mode .lhe-tm-group.lhe-g-bonds { background: #5b2d80; }
+html.day-mode .lhe-tm-group.lhe-g-cash { background: #166534; }
+html.day-mode .lhe-tm-group.lhe-g-other { background: #7c531a; }
 /* Report detail — watch star, credit grade, peers CTA */
 html.day-mode .rep-watch-btn { color: #443e33; }
 html.day-mode .rep-cr-grade { filter: brightness(0.62) saturate(1.5); }
