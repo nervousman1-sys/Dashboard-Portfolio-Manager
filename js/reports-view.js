@@ -87,11 +87,22 @@ let _repBigChart = null;      // Chart.js instance inside the enlarge modal
 
 // Trend charts shown in the detail view (each is clickable to enlarge).
 const _REP_CHARTS = [
-    { key: 'revenue', canvas: 'repChartRev', title: 'הכנסות', color: 'rgba(56,189,248,0.85)' },
-    { key: 'netIncome', canvas: 'repChartNi', title: 'רווח נקי', color: 'rgba(132,204,22,0.85)' },
-    { key: 'ebitda', canvas: 'repChartEbitda', title: 'EBITDA', color: 'rgba(250,204,21,0.85)' },
-    { key: 'fcf', canvas: 'repChartFcf', title: 'תזרים חופשי (FCF)', color: 'rgba(168,85,247,0.85)' },
+    { key: 'revenue', canvas: 'repChartRev', title: 'הכנסות', color: 'rgba(56,189,248,0.85)', dayColor: '#0284c7' },
+    { key: 'netIncome', canvas: 'repChartNi', title: 'רווח נקי', color: 'rgba(132,204,22,0.85)', dayColor: '#4d7c0f' },
+    { key: 'ebitda', canvas: 'repChartEbitda', title: 'EBITDA', color: 'rgba(250,204,21,0.85)', dayColor: '#a16207' },
+    { key: 'fcf', canvas: 'repChartFcf', title: 'תזרים חופשי (FCF)', color: 'rgba(168,85,247,0.85)', dayColor: '#7e22ce' },
 ];
+// Chart chrome must follow the theme — light ticks are invisible on the day cream.
+function _repChartTheme() {
+    const day = typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode');
+    return day
+        ? { tick: '#443e33', grid: 'rgba(58,50,36,0.12)' }
+        : { tick: '#e8edf5', grid: 'rgba(255,255,255,0.05)' };
+}
+function _repChartColor(def) {
+    const day = typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode');
+    return (day && def.dayColor) ? def.dayColor : def.color;
+}
 
 function openReportsPage() {
     const page = document.getElementById('reportsPage');
@@ -1393,8 +1404,8 @@ function _repBarChart(canvasId, series, color, cur) {
                 tooltip: { callbacks: { label: (c) => _repFmtMoney(c.parsed.y, cur) } },
             },
             scales: {
-                x: { ticks: { color: '#e8edf5', font: { size: 9 } }, grid: { display: false } },
-                y: { ticks: { color: '#e8edf5', font: { size: 9 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: _repChartTheme().tick, font: { size: 9 } }, grid: { display: false } },
+                y: { ticks: { color: _repChartTheme().tick, font: { size: 9 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: _repChartTheme().grid } },
             },
         },
     });
@@ -1405,7 +1416,7 @@ function _repRenderCharts(m, cur) {
     const chron = m.rows.slice().reverse(); // oldest → newest
     // Only plot quarters that actually have a value — no empty leading/gap bars.
     const mk = (key) => chron.filter(q => q[key] != null && !isNaN(q[key])).map(q => ({ label: _repQuarterLabel(q), value: q[key] }));
-    _REP_CHARTS.forEach(c => _repBarChart(c.canvas, mk(c.key), c.color, cur));
+    _REP_CHARTS.forEach(c => _repBarChart(c.canvas, mk(c.key), _repChartColor(c), cur));
 }
 
 // ── Enlarge a trend chart in a modal ──
@@ -1437,13 +1448,13 @@ function _repEnlargeChart(key) {
     if (el && typeof Chart !== 'undefined') {
         _repBigChart = new Chart(el, {
             type: 'bar',
-            data: { labels: series.map(s => s.label), datasets: [{ data: series.map(s => s.value), backgroundColor: def.color, borderRadius: 4, maxBarThickness: 64 }] },
+            data: { labels: series.map(s => s.label), datasets: [{ data: series.map(s => s.value), backgroundColor: _repChartColor(def), borderRadius: 4, maxBarThickness: 64 }] },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => _repFmtMoney(c.parsed.y, cur) } } },
                 scales: {
-                    x: { ticks: { color: '#e8edf5', font: { size: 13 } }, grid: { display: false } },
-                    y: { ticks: { color: '#e8edf5', font: { size: 13 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                    x: { ticks: { color: _repChartTheme().tick, font: { size: 13 } }, grid: { display: false } },
+                    y: { ticks: { color: _repChartTheme().tick, font: { size: 13 }, callback: (val) => _repFmtMoney(val, cur) }, grid: { color: _repChartTheme().grid } },
                 },
             },
         });

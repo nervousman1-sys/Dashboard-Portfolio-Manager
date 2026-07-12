@@ -2512,7 +2512,11 @@ body.filter-modal-open::after {
 }
 
 .holdings-list {
-    flex: 1 1 auto;
+    /* FIXED height (not flex-grow): every card's list area is identical, so the
+       מזומן rows and everything below them sit at the SAME height on every card
+       regardless of how many holdings/bonds the portfolio has. Extra names scroll. */
+    flex: 0 0 122px;
+    height: 122px;
     min-height: 0;
     overflow-y: auto;
 }
@@ -5770,6 +5774,8 @@ body.filter-modal-open::after {
     .card-body .holdings-list {
         overflow: visible;
         max-height: none;
+        height: auto;          /* mobile stacks one card per row — no cross-card alignment */
+        flex: 1 1 auto;
     }
     .card-footer {
         flex-wrap: wrap;
@@ -8512,6 +8518,43 @@ html.day-mode .lhe-tm-group.lhe-g-market { background: #175e6b; }
 html.day-mode .lhe-tm-group.lhe-g-bonds { background: #5b2d80; }
 html.day-mode .lhe-tm-group.lhe-g-cash { background: #166534; }
 html.day-mode .lhe-tm-group.lhe-g-other { background: #7c531a; }
+/* Run-simulation button: glowing cyan → quiet warm gray in day mode */
+html.day-mode .st-run-btn {
+    background: linear-gradient(135deg, #6b6455, #544e41);
+    color: #faf8f1;
+    box-shadow: 0 6px 18px rgba(58, 50, 36, 0.28);
+}
+html.day-mode .st-run-btn:hover:not(:disabled) { box-shadow: 0 10px 24px rgba(58, 50, 36, 0.36); }
+html.day-mode .st-spin { border-color: rgba(250, 248, 241, 0.35); border-top-color: #faf8f1; }
+/* Crisis-indicator parameters: each factor row becomes a separated card */
+html.day-mode .dc-prox-row {
+    background: #fcfaf4;
+    border: 1px solid rgba(58, 50, 36, 0.16);
+    border-radius: 9px;
+    padding: 7px 10px;
+}
+/* Upcoming-events table: every event gets its own separated rectangle (like the results) */
+html.day-mode .ec-table { border-collapse: separate; border-spacing: 0 7px; }
+html.day-mode .ec-tr td {
+    background: #fcfaf4;
+    border-top: 1px solid rgba(58, 50, 36, 0.2);
+    border-bottom: 1px solid rgba(58, 50, 36, 0.2);
+}
+html.day-mode .ec-tr td:first-child {
+    border-inline-start: 1px solid rgba(58, 50, 36, 0.2);
+    border-start-start-radius: 10px; border-end-start-radius: 10px;
+}
+html.day-mode .ec-tr td:last-child {
+    border-inline-end: 1px solid rgba(58, 50, 36, 0.2);
+    border-start-end-radius: 10px; border-end-end-radius: 10px;
+}
+html.day-mode .ec-tr:hover td { background: #f3f0e6; }
+html.day-mode .ec-tr.ec-today td { background: #eaf3f0; }
+html.day-mode .ec-tr-month td { background: none; }
+/* RPO card: dark gradient → cream paper */
+html.day-mode .rep-rpo-card { background: #fcfaf4; border-color: rgba(58, 50, 36, 0.2); }
+html.day-mode .rep-rpo-title { color: #0369a1; }
+html.day-mode .rep-rpo-val { color: #191612; }
 /* Report detail — watch star, credit grade, peers CTA */
 html.day-mode .rep-watch-btn { color: #443e33; }
 html.day-mode .rep-cr-grade { filter: brightness(0.62) saturate(1.5); }
