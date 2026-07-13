@@ -8577,6 +8577,23 @@ html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36,
 /* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
 html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
 html.day-mode .adv-dim { color: #675f50; }
+/* Dashboard cards: calm the glow — muted currency bar, no cyan halo */
+html.day-mode .card-cur-fill {
+    background: linear-gradient(90deg, #3d94ae, #31768b);
+    box-shadow: none;
+}
+/* Options-flow (ניתוח תנועת אופציות): muted meter + darkened dynamic values */
+html.day-mode .dn-pc-track {
+    background: linear-gradient(-90deg, #15803d 0 30%, #b45309 30% 62%, #b91c1c 62% 100%);
+    opacity: 0.85;
+}
+html.day-mode .dn-pc-marker { background: #191612; box-shadow: none; }
+html.day-mode .dn-pc-val { filter: brightness(0.62) saturate(1.35); }
+html.day-mode .dn-opt-score { color: color-mix(in srgb, var(--vc) 58%, #1a1712); }
+html.day-mode .dn-opt-verdict { border-color: color-mix(in srgb, var(--vc) 55%, #8a8274); }
+html.day-mode .dn-opt-verdict .dn-opt-dir { filter: brightness(0.7) saturate(1.2); }
+html.day-mode .dn-opt-scorebar { background: rgba(58, 50, 36, 0.12); }
+html.day-mode .dn-opt-scorebar div { filter: brightness(0.82) saturate(0.85); }
 /* עמידה במודל: each sub-score histogram (CML/SML/פיזור) is its own separated card */
 html.day-mode .adv-sub {
     background: #f7f4ec;
@@ -11685,3 +11702,20 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
 /* 24/7 agent freshness tag on the IL indicators header */
 .macro-country-header .macro-agent-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #34d399; margin-inline-start: 12px; vertical-align: middle; }
 @media (max-width: 768px) { .macro-country-header .macro-agent-tag { display: flex; margin: 4px 0 0; font-size: 10px; } }
+
+/* ══ DAY-MODE MOBILE PARITY — the mobile polish layer hardcodes dark-theme surfaces/ink;
+   on the cream day skin phones must match the desktop day design. Mobile+day only. ══ */
+@media (max-width: 768px) {
+    html.day-mode #mobileSheetWrap .msheet { background: rgba(250, 248, 241, 0.98); }
+    html.day-mode .msheet-title, html.day-mode .msheet-body b, html.day-mode .msheet-tech-top b,
+    html.day-mode .msheet-kv b, html.day-mode .lhe-ml-ghead, html.day-mode .lhe-ml-name,
+    html.day-mode .rep-rpo-val { color: #191612 !important; }
+    html.day-mode .msheet-dim { color: #675f50 !important; }
+    html.day-mode .qw-fx-label::before { color: #675f50; }
+    /* Index tiles + FX rate card: dark mobile fills → cream paper */
+    html.day-mode .qw-ticker { background: #fcfaf4; border-color: rgba(58, 50, 36, 0.2) !important; }
+    html.day-mode .qw-fx {
+        background: #fcfaf4 !important;
+        border-color: rgba(58, 50, 36, 0.22) !important;
+    }
+}

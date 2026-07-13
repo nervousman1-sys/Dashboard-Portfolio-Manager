@@ -539,7 +539,8 @@ async function _renderCardSparkline(client, renderKey) {
 
     // Chart color based on actual portfolio return, not history endpoints
     const isPositive = calcPortfolioReturn(client).returnPct >= 0;
-    const lineColor = isPositive ? '#00ff94' : '#ff4d4d';
+    const _cardDay = document.documentElement.classList.contains('day-mode');
+    const lineColor = isPositive ? (_cardDay ? '#059669' : '#00ff94') : (_cardDay ? '#b91c1c' : '#ff4d4d');
 
     // Line-only sparkline (no area fill) — guarantees every card's chart occupies
     // the same vertical band regardless of trend shape, so a losing (red) portfolio
@@ -1606,8 +1607,9 @@ function renderClientCards() {
             }
             const chartData = hasData ? [totalStockPct, totalBondPct] : [1];
             const chartLabels = hasData ? ['מניות', 'אג"ח'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
-            const chartBg = hasData ? ['#00e5ff', '#a855f7'] : ['rgba(255,255,255,0.08)'];
-            const chartBorder = hasData ? ['#00b8d4', '#9333ea'] : ['rgba(255,255,255,0.15)'];
+            const _donutDay = document.documentElement.classList.contains('day-mode');
+            const chartBg = hasData ? (_donutDay ? ['#3d94ae', '#8a68c2'] : ['#00e5ff', '#a855f7']) : ['rgba(255,255,255,0.08)'];
+            const chartBorder = hasData ? (_donutDay ? ['#31768b', '#6f4fa3'] : ['#00b8d4', '#9333ea']) : ['rgba(255,255,255,0.15)'];
 
             charts[client.id] = new Chart(ctx, {
                 type: 'doughnut',
