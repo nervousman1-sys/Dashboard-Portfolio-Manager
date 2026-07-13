@@ -11764,9 +11764,14 @@ html { scrollbar-gutter: stable; }
     .quick-watch-bar { min-height: 66px; }
     /* Summary bar renders async — reserve one row of stat cards */
     #summaryBar { min-height: 200px; }
+    /* The hero is a space-between flex column: if ANY child grows when data lands,
+       ALL children redistribute (the felt "jump"). Reserve every async child at its
+       real rendered height so the layout is final from the first paint. */
+    #exposureSection { min-height: 317px; }
+    .bottom-fold-group { min-height: 113px; }
     /* Macro panel: geo feed + econ calendar land async at REAL measured heights —
        reserving them fully means the sections below never move (blank space sits
        below the fold for the ~2s of loading). Calendar releases when collapsed. */
-    #geoMacroSection { min-height: 2050px; }
+    #geoMacroSection:not(.gm-collapsed) { min-height: 2050px; }
     #econCalSection:not(.ec-collapsed) { min-height: 1830px; }
 }

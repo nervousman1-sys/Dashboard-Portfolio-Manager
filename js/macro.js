@@ -1449,6 +1449,7 @@ function _renderGeoMacro() {
     // Collapse hides the list via inline display (CSS-independent); refresh re-fetches.
     const hidden = _gmCollapsed ? ' style="display:none"' : '';
     const caret = _gmCollapsed ? '▸' : '▾';
+    el.classList.toggle('gm-collapsed', !!_gmCollapsed);   // releases the anti-jump height reservation
     el.innerHTML = `
         <div class="gm-head">
             <button type="button" class="ec-collapse" id="gmCollapseBtn" title="קפל / פתח את כל הקטע" onclick="gmToggleCollapse()">${caret}</button>
@@ -1465,6 +1466,8 @@ function gmToggleCollapse() {
     const btn = document.getElementById('gmCollapseBtn');
     if (wrap) wrap.style.display = _gmCollapsed ? 'none' : '';
     if (btn) btn.textContent = _gmCollapsed ? '▸' : '▾';
+    const sec = document.getElementById('geoMacroSection');
+    if (sec) sec.classList.toggle('gm-collapsed', _gmCollapsed);
 }
 function gmRefresh() { _loadGeoMacroNews(true); }
 // Aliases so any cached HTML calling the old names still works.
