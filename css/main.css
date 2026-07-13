@@ -11719,6 +11719,13 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     html.day-mode .rep-rpo-val { color: #191612 !important; }
     html.day-mode .msheet-dim { color: #675f50 !important; }
     html.day-mode .qw-fx-label::before { color: #675f50; }
+    /* Bottom nav: black labels; the + FAB a lighter, calmer blue */
+    html.day-mode .mobile-nav-btn { color: #191612; }
+    html.day-mode .mobile-nav-btn.mobile-fab {
+        background: #6fb9dd;
+        color: #0f2f45;
+        box-shadow: 0 4px 14px rgba(58, 50, 36, 0.25);
+    }
     /* Index tiles + FX rate card: dark mobile fills → cream paper */
     html.day-mode .qw-ticker { background: #fcfaf4; border-color: rgba(58, 50, 36, 0.2) !important; }
     html.day-mode .qw-fx {
