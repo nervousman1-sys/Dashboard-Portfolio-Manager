@@ -8577,6 +8577,14 @@ html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36,
 /* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
 html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
 html.day-mode .adv-dim { color: #675f50; }
+/* תשואה מותאמת מט"ח toggle: framed cream pill + dark ink (was invisible on cream) */
+html.day-mode .fx-toggle-wrap {
+    background: #fcfaf4;
+    border: 1px solid rgba(58, 50, 36, 0.3);
+    box-shadow: 0 1px 3px rgba(58, 50, 36, 0.08);
+}
+html.day-mode .fx-toggle-label { color: #191612; font-weight: 700; }
+html.day-mode .fx-toggle-slider { background: rgba(58, 50, 36, 0.18); border: 1px solid rgba(58, 50, 36, 0.3); }
 /* Fear & Greed header widget: a clear framed card on the cream skin.
    !important — the mood classes set their own faint tinted border, invisible on cream. */
 html.day-mode .header-sentiment {
@@ -11732,4 +11740,11 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
         background: #fcfaf4 !important;
         border-color: rgba(58, 50, 36, 0.22) !important;
     }
+}
+
+/* Mobile: tidy symmetric econ-calendar header (both themes — layout only) */
+@media (max-width: 768px) {
+    .ec-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+    .ec-title { font-size: 14px; line-height: 1.35; }
+    .ec-head .ec-agent-tag, .ec-head .macro-agent-tag { grid-column: 1 / -1; justify-self: start; margin-top: 2px; }
 }
