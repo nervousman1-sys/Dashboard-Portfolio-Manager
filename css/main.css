@@ -8577,6 +8577,13 @@ html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36,
 /* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
 html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
 html.day-mode .adv-dim { color: #675f50; }
+/* Fear & Greed header widget: a clear framed card on the cream skin.
+   !important — the mood classes set their own faint tinted border, invisible on cream. */
+html.day-mode .header-sentiment {
+    background: #fcfaf4;
+    border: 1px solid rgba(58, 50, 36, 0.32) !important;
+    box-shadow: 0 1px 3px rgba(58, 50, 36, 0.1);
+}
 /* Dashboard cards: calm the glow — muted currency bar, no cyan halo */
 html.day-mode .card-cur-fill {
     background: linear-gradient(90deg, #3d94ae, #31768b);

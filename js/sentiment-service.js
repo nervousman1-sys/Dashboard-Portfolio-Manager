@@ -257,8 +257,10 @@ function updateSentimentWidget(sentiment) {
         subEl.textContent = sourceText;
     }
 
-    // Update container border accent
-    container.style.borderColor = sentiment.color + '33';
+    // Update container border accent — night only. In day mode the widget carries a
+    // solid warm CSS frame (the faint mood tint was invisible on the cream skin).
+    container.style.borderColor = document.documentElement.classList.contains('day-mode')
+        ? '' : sentiment.color + '33';
 }
 
 // ── Initialize: fetch and render ──

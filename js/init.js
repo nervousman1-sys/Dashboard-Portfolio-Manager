@@ -164,6 +164,14 @@ function toggleDayMode() {
             window._yieldData = null;
             _renderYieldCurves();
         }
+        // Dashboard cards bake their donut/sparkline colors at render time — rebuild
+        // them so the allocation rings & lines pick up the new skin without a refresh.
+        if (typeof renderClientCards === 'function') renderClientCards();
+        // Report trend charts (מגמות 8 רבעונים) — re-render with the new ink/bar set.
+        if (document.getElementById('repChartRev') && typeof _repRenderCharts === 'function'
+            && typeof _repChartCtx !== 'undefined' && _repChartCtx && _repChartCtx.m) {
+            _repRenderCharts(_repChartCtx.m, _repChartCtx.cur);
+        }
     } catch (e) { /* best effort */ }
 }
 
