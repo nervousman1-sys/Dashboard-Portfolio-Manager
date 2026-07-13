@@ -8577,6 +8577,27 @@ html.day-mode .ov-cell { background: #f1ede1; border: 1px solid rgba(58, 50, 36,
 /* CML/SML advisory ticker chips (the fit histogram): visible frames + dark ink */
 html.day-mode .adv-chip { background: #f1ede1; border: 1px solid rgba(58, 50, 36, 0.32); color: #191612; }
 html.day-mode .adv-dim { color: #675f50; }
+/* עמידה במודל: each sub-score histogram (CML/SML/פיזור) is its own separated card */
+html.day-mode .adv-sub {
+    background: #f7f4ec;
+    border: 1px solid rgba(58, 50, 36, 0.18);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+html.day-mode .adv-sub-track { background: rgba(58, 50, 36, 0.12); }
+html.day-mode .adv-scorebar { background: #fcfaf4; border: 1px solid rgba(58, 50, 36, 0.2); }
+html.day-mode .adv-score-den { color: #675f50; }
+/* "המלצות לאיזון" strip: cyan glow → calm cream (no text-shadow, no glow) */
+html.day-mode .mcs-reco-btn {
+    background: #f1eee4;
+    border-color: rgba(58, 50, 36, 0.28);
+    text-shadow: none;
+}
+html.day-mode .mcs-reco-btn:hover {
+    background: #ece8db;
+    border-color: rgba(58, 50, 36, 0.42);
+    box-shadow: 0 2px 8px rgba(58, 50, 36, 0.12);
+}
 /* Portfolio modal: emphasized warm frames on every panel (charts, advisory, metrics) */
 html.day-mode .modal { border: 1px solid rgba(58, 50, 36, 0.28); }
 html.day-mode .mcs-chart-card, html.day-mode .risk-chart-card, html.day-mode .mcs-canvas-wrap,

@@ -1,3 +1,7 @@
+// Chart line colors follow the theme: day mode gets DEEPER, calmer tones (per the user
+// — the neon frontier green / glowing cyan CML read harsh on the cream skin).
+function _rmFrontierGreen() { return (typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode')) ? '#059669' : '#22ff88'; }
+function _rmCmlBlue() { return (typeof document !== 'undefined' && document.documentElement.classList.contains('day-mode')) ? '#0284c7' : '#38bdf8'; }
 // ========== CML / SML RISK ANALYSIS VIEW ==========
 //
 // Full-page analytical workspace driven entirely by risk-models.js. Renders:
@@ -273,7 +277,7 @@ function _drawCMLChart(model) {
     const datasets = [];
     for (const ds of _frontierDatasets(model.frontier)) datasets.push(ds);
     datasets.push({
-        type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5,
+        type: 'line', label: 'CML (קו אופטימלי)', data: cmlLine, borderColor: _rmCmlBlue(), borderWidth: 2.5,
         borderDash: [7, 4], pointRadius: 0, fill: false, tension: 0, order: 2,
     });
     // Portfolios, colored by the SAME model-compliance band as the dashboard "מודל" chip
@@ -351,7 +355,7 @@ function _drawSMLChart(model) {
     _riskCharts.sml = new Chart(canvas.getContext('2d'), {
         data: {
             datasets: [
-                { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5,
+                { type: 'line', label: 'SML', data: smlLine, borderColor: _rmCmlBlue(), borderWidth: 2.5,
                   borderDash: [6, 4], pointRadius: 0, fill: false, tension: 0 },
                 { type: 'scatter', label: 'נכסים', data: pts, pointRadius: 6, pointHoverRadius: 8,
                   backgroundColor: ptColors, borderColor: '#0b0b0f', borderWidth: 1 },
@@ -371,7 +375,7 @@ function _frontierDatasets(fr) {
     const pts = fr.points.map(p => ({ x: p.x * 100, y: p.y * 100 }));
     const gmvY = fr.gmv ? fr.gmv.y * 100 : null;
     if (gmvY == null) {
-        return [{ type: 'line', label: 'חזית יעילה', data: pts, borderColor: '#22ff88', borderWidth: 3, pointRadius: 0, fill: false, tension: 0.4, order: 5 }];
+        return [{ type: 'line', label: 'חזית יעילה', data: pts, borderColor: _rmFrontierGreen(), borderWidth: 3, pointRadius: 0, fill: false, tension: 0.4, order: 5 }];
     }
     const lower = pts.filter(p => p.y <= gmvY + 1e-6);
     const upper = pts.filter(p => p.y >= gmvY - 1e-6);
@@ -383,7 +387,7 @@ function _frontierDatasets(fr) {
     });
     if (upper.length > 1) out.push({
         type: 'line', label: 'אזור אופטימלי (חזית יעילה)', data: upper,
-        borderColor: '#22ff88', borderWidth: 4, pointRadius: 0, fill: false, tension: 0.4,
+        borderColor: _rmFrontierGreen(), borderWidth: 4, pointRadius: 0, fill: false, tension: 0.4,
         borderCapStyle: 'round', order: 5,
     });
     return out;
@@ -751,7 +755,7 @@ function _drawModalCML(model, client) {
 
     const datasets = [];
     for (const ds of _frontierDatasets(fr)) datasets.push(ds);
-    datasets.push({ type: 'line', label: 'CML', data: cmlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 });
+    datasets.push({ type: 'line', label: 'CML', data: cmlLine, borderColor: _rmCmlBlue(), borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 });
     datasets.push({ type: 'scatter', label: model.marketLabel, data: [marketPt], pointStyle: 'rectRot', pointRadius: 9, backgroundColor: '#a855f7', borderColor: '#fff', borderWidth: 1.5, order: 2 });
     if (tang) datasets.push({ type: 'scatter', label: 'תיק אופטימלי', data: [tang], pointStyle: 'star', pointRadius: 12, backgroundColor: '#facc15', borderColor: '#fff', borderWidth: 1.5, order: 1 });
     // Connector: from the portfolio to the efficient frontier at the SAME return —
@@ -810,7 +814,7 @@ function _drawModalSML(model, client) {
         { key: 'avoid', label: 'נכס לא מתאים (מתחת SML)', color: '#ef4444' },
     ];
     const datasets = [
-        { type: 'line', label: 'SML', data: smlLine, borderColor: '#38bdf8', borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },
+        { type: 'line', label: 'SML', data: smlLine, borderColor: _rmCmlBlue(), borderWidth: 2.5, borderDash: [7, 4], pointRadius: 0, fill: false, order: 3 },
     ];
     for (const g of _smlGroups) {
         const pts = holdPts.filter(q => q.rec === g.key);
