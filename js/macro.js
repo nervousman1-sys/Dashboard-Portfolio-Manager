@@ -1122,7 +1122,7 @@ async function _loadEconCalendar(forceRefresh) {
     let us = cached ? cached.events : null, results = cached ? cached.results : [], history = cached ? cached.history : [], pastEvents = cached ? cached.pastEvents : [];
     if (!us) {
         if (!_ecData) el.innerHTML = `<div class="ec-head"><span class="ec-title">🗓️ יומן כלכלי — פרסומים קרובים</span></div>
-            <div class="macro-loading" style="padding:16px;min-height:300px">טוען יומן…</div>`;
+            <div class="macro-loading" style="padding:16px;min-height:980px">טוען יומן…</div>`;
         // 1) The 24/7 agent snapshot (Supabase) — freshest, updated within minutes of a release.
         try {
             if (typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -1259,6 +1259,9 @@ function _ecRender() {
         const ago = mins < 1 ? 'ממש עכשיו' : mins < 60 ? `לפני ${mins} דק׳` : `לפני ${Math.round(mins / 60)} שע׳`;
         agentTag = `<span class="ec-agent-tag"><span class="rep-live on"></span> מחובר לסוכן 24/7 · עודכן ${ago}</span>`;
     }
+    // Anti-jump: the section keeps its full height reservation while expanded (CSS),
+    // and releases it when the user collapses it (user-initiated → no CLS, no hole).
+    el.classList.toggle('ec-collapsed', !!_ecCollapsed);
     el.innerHTML = `
         <div class="ec-head">
             <button class="ec-collapse" onclick="toggleEcCollapse()" title="קפל / פתח">${_ecCollapsed ? '▸' : '▾'}</button>

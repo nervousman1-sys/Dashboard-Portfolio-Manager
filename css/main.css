@@ -11748,3 +11748,25 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     .ec-title { font-size: 14px; line-height: 1.35; }
     .ec-head .ec-agent-tag, .ec-head .macro-agent-tag { grid-column: 1 / -1; justify-self: start; margin-top: 2px; }
 }
+
+/* ══ ANTI-JUMP (CLS) — reserve space for async content so pages never shift ══ */
+/* Route changes toggle the vertical scrollbar — reserve its gutter so the whole
+   page never jumps horizontally when navigating between short and long pages. */
+html { scrollbar-gutter: stable; }
+/* Async strips: keep their slot height while data loads */
+#repIntel.rep-intel { min-height: 44px; }
+/* Reports board: the company grid is always tall — reserve it so progressive
+   card batches never push the footer/page around. */
+#repBody { min-height: 110vh; }
+.st-prox-card { min-height: 220px; }
+#stBaseline { min-height: 44px; }
+@media (min-width: 769px) {
+    .quick-watch-bar { min-height: 66px; }
+    /* Summary bar renders async — reserve one row of stat cards */
+    #summaryBar { min-height: 200px; }
+    /* Macro panel: geo feed + econ calendar land async at REAL measured heights —
+       reserving them fully means the sections below never move (blank space sits
+       below the fold for the ~2s of loading). Calendar releases when collapsed. */
+    #geoMacroSection { min-height: 2050px; }
+    #econCalSection:not(.ec-collapsed) { min-height: 1830px; }
+}
