@@ -8495,9 +8495,29 @@ html.day-mode .ec-past-date { color: #0e7490; }
 html.day-mode .gm-title, html.day-mode .ec-title { color: #0369a1; }
 html.day-mode .ec-tr-month td, html.day-mode .ec-hist-month { color: #191612; }
 html.day-mode .ec-agent-tag, html.day-mode .macro-agent-tag { color: #047857; }
-html.day-mode .ec-upcoming-title, html.day-mode .ec-table th { color: #675f50; }
-html.day-mode .ec-tab { color: #443e33; }
-html.day-mode .ec-tab.active { color: #0369a1; }
+html.day-mode .ec-upcoming-title { color: #675f50; }
+/* ארה"ב / ישראל tabs: faint white borders vanished on cream — strong framed pills,
+   the active one a clear deep-blue card so it always reads as selected. */
+html.day-mode .ec-tab {
+    color: #1e293b;
+    background: #f3efe2;
+    border: 1.5px solid rgba(58, 50, 36, 0.4);
+}
+html.day-mode .ec-tab:hover { border-color: #0369a1; background: #ece8db; }
+html.day-mode .ec-tab.active {
+    color: #ffffff;
+    background: #0f2f45;
+    border-color: #0f2f45;
+    box-shadow: 0 2px 6px rgba(15, 47, 69, 0.28);
+}
+/* Upcoming-table header cells (תאריך / אירוע / השפעה): give each its own framed rectangle */
+html.day-mode .ec-table thead th {
+    color: #1e293b;
+    background: #f3efe2;
+    border: 1.5px solid rgba(58, 50, 36, 0.34);
+    border-radius: 9px;
+    padding: 8px 12px;
+}
 /* ── Day-mode tonal pass (user: colors must sit in the cream skin, nothing neon) ── */
 /* Horizontal-scroll rails: glowing cyan → quiet warm gray */
 html.day-mode .tech-toolbar { scrollbar-color: rgba(90, 82, 68, 0.35) transparent; }
