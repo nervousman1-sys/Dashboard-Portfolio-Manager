@@ -8508,14 +8508,18 @@ html.day-mode ::-webkit-scrollbar-thumb:hover { background: rgba(90, 82, 68, 0.5
 html.day-mode ::-webkit-scrollbar-track { background: transparent; }
 /* Econ-calendar event rows: each release gets a CLEAR separated card on cream */
 html.day-mode .ec-row-result {
-    background: #f6f2e6;
-    border: 1px solid rgba(58, 50, 36, 0.2);
-    border-inline-start-width: 3px;
-    box-shadow: 0 1px 3px rgba(58, 50, 36, 0.08);
+    background: #f3efe2;
+    border: 1.5px solid rgba(58, 50, 36, 0.34);
+    border-inline-start-width: 5px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(58, 50, 36, 0.1);
 }
-html.day-mode .ec-row-result.ec-res-good { border-inline-start-color: #059669; }
-html.day-mode .ec-row-result.ec-res-bad { border-inline-start-color: #dc2626; }
-html.day-mode .ec-row-result.ec-res-neutral { border-inline-start-color: #b45309; }
+html.day-mode .ec-row-result.ec-res-good { border-inline-start-color: #0f7a4d; }
+html.day-mode .ec-row-result.ec-res-bad { border-inline-start-color: #c81e1e; }
+html.day-mode .ec-row-result.ec-res-neutral { border-inline-start-color: #a1610a; }
+/* Deep sentiment ink for values/arrows/prev — crisp on the cream */
+html.day-mode .ec-res-arrow.ec-res-good, html.day-mode .ec-rr-val.ec-res-good { color: #0f7a4d !important; }
+html.day-mode .ec-res-arrow.ec-res-bad, html.day-mode .ec-rr-val.ec-res-bad { color: #c81e1e !important; }
 html.day-mode .ec-il-note { color: #443e33; background: #f6f2e6; border-color: rgba(58, 50, 36, 0.16); }
 /* LHE liquidity treemap: Finviz-dark saturated fills → soft day pastels (dark ink stays readable) */
 html.day-mode .lhe-tm-up { background: linear-gradient(135deg, #6ee7b7, #a7f3d0); }
@@ -8541,24 +8545,30 @@ html.day-mode .dc-prox-row {
     border-radius: 9px;
     padding: 7px 10px;
 }
-/* Upcoming-events table: every event gets its own separated rectangle (like the results) */
-html.day-mode .ec-table { border-collapse: separate; border-spacing: 0 7px; }
+/* Upcoming-events table: every event gets its own emphasized rectangle */
+html.day-mode .ec-table { border-collapse: separate; border-spacing: 0 8px; }
 html.day-mode .ec-tr td {
-    background: #f6f2e6;
-    border-top: 1px solid rgba(58, 50, 36, 0.2);
-    border-bottom: 1px solid rgba(58, 50, 36, 0.2);
+    background: #f3efe2;
+    border-top: 1.5px solid rgba(58, 50, 36, 0.32);
+    border-bottom: 1.5px solid rgba(58, 50, 36, 0.32);
+    box-shadow: 0 1px 3px rgba(58, 50, 36, 0.07);
 }
 html.day-mode .ec-tr td:first-child {
-    border-inline-start: 1px solid rgba(58, 50, 36, 0.2);
+    border-inline-start: 1.5px solid rgba(58, 50, 36, 0.32);
     border-start-start-radius: 10px; border-end-start-radius: 10px;
 }
 html.day-mode .ec-tr td:last-child {
-    border-inline-end: 1px solid rgba(58, 50, 36, 0.2);
+    border-inline-end: 1.5px solid rgba(58, 50, 36, 0.32);
     border-start-end-radius: 10px; border-end-end-radius: 10px;
 }
+/* Impact side-strip deepened so high/medium events read at a glance */
+html.day-mode .ec-tr.ec-high .ec-td-date { box-shadow: inset 4px 0 0 #c81e1e; }
+html.day-mode .ec-tr.ec-med .ec-td-date { box-shadow: inset 4px 0 0 #a1610a; }
 html.day-mode .ec-tr:hover td { background: #ebe5d5; }
-html.day-mode .ec-tr.ec-today td { background: #eaf3f0; }
-html.day-mode .ec-tr-month td { background: none; }
+html.day-mode .ec-tr.ec-today td { background: #e3eee9; }
+html.day-mode .ec-tr-month td { background: none; box-shadow: none; }
+/* "בקרוב" date chip: deeper green pill */
+html.day-mode .ec-soon { color: #0a3d24; background: #6ee7b7; }
 /* RPO card: dark gradient → cream paper */
 html.day-mode .rep-rpo-card { background: #f6f2e6; border-color: rgba(58, 50, 36, 0.2); }
 html.day-mode .rep-rpo-title { color: #0369a1; }
@@ -8817,7 +8827,10 @@ html.day-mode .qw-fx { background: rgba(3, 105, 161, 0.05); border-color: rgba(3
 /* Exposure section: labels, bar tracks, currency boxes */
 html.day-mode .exp-asset-label { color: var(--text-primary); font-weight: 700; }
 html.day-mode .exp-asset-bar-track { background: rgba(58, 50, 36, 0.08); }
-html.day-mode .exp-assets-panel, html.day-mode .exp-curr-box { background: #efeadb; border-color: var(--border); }
+/* Asset-allocation panel blends into the exposure wrapper — no distinct box/border.
+   (The currency boxes below stay as cards; the asset panel is just a column.) */
+html.day-mode .exp-assets-panel { background: transparent; border: none; }
+html.day-mode .exp-curr-box { background: #efeadb; border-color: var(--border); }
 html.day-mode .exposure-wrapper { background: #f6f2e6; }
 
 /* Search inputs + placeholders */
