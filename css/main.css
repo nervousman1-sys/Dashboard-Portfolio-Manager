@@ -8569,6 +8569,9 @@ html.day-mode .ec-tr.ec-today td { background: #e3eee9; }
 html.day-mode .ec-tr-month td { background: none; box-shadow: none; }
 /* "בקרוב" date chip: deeper green pill */
 html.day-mode .ec-soon { color: #0a3d24; background: #6ee7b7; }
+/* "ניתוח קצר" expandable analysis text — was light gray, invisible on cream */
+html.day-mode .ec-res-analysis { color: #3d372b; }
+html.day-mode .ec-res-inline-btn { color: #0369a1; }
 /* Macro OUTER panels (geo-macro + econ-calendar sections): the semi-transparent white
    card vanished on cream — give them a prominent, always-visible framed card. The geo
    section has no base padding/frame, so add both here (day only). */

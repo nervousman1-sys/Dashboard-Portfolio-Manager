@@ -40,6 +40,56 @@ async function fetchSeries(seriesId, units, limit) {
     return obs; // newest first
 }
 
+// ── BLS API: the ORIGINAL release source for CPI / PPI / jobs. BLS publishes at
+// 8:30 AM ET on release day; FRED ingests ~1h later. Pulling BLS directly means a
+// print shows the moment it's official — the release-day flip no longer waits on FRED.
+// Returned as FRED-shaped obs (newest first, values ALREADY in display units:
+// YoY % for CPI/PPI, MoM thousands for jobs) so it drops straight into the calendar.
+const BLS_KEY = process.env.BLS_API_KEY || '';
+const BLS_SERIES = {
+    CPI: { id: 'CUUR0000SA0', tf: 'yoy' },       // CPI-U all items (NSA index) → YoY %
+    PPI: { id: 'WPSFD4', tf: 'yoy' },            // PPI final demand (index) → YoY %
+    NFP: { id: 'CES0000000001', tf: 'momk' },    // total nonfarm (thousands) → MoM change
+};
+async function fetchBls(key) {
+    const cfg = BLS_SERIES[key];
+    if (!cfg) return [];
+    const yr = new Date().getFullYear();
+    const body = { seriesid: [cfg.id], startyear: String(yr - 1), endyear: String(yr) };
+    if (BLS_KEY) body.registrationkey = BLS_KEY;
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 6000);
+    try {
+        const r = await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(body), signal: ac.signal,
+        });
+        if (!r.ok) return [];
+        const j = await r.json();
+        const raw = j && j.Results && j.Results.series && j.Results.series[0] && j.Results.series[0].data;
+        if (!Array.isArray(raw) || !raw.length) return [];
+        // Monthly points only (skip M13 = annual avg); newest first, numeric.
+        const pts = raw
+            .filter(d => /^M\d\d$/.test(d.period) && d.period !== 'M13' && d.value !== '' && d.value !== '-')
+            .map(d => ({ date: `${d.year}-${d.period.slice(1)}-01`, level: parseFloat(d.value) }))
+            .filter(d => isFinite(d.level))
+            .sort((a, b) => b.date.localeCompare(a.date));
+        const out = [];
+        if (cfg.tf === 'yoy') {
+            // YoY needs the same month a year earlier (index 12 back).
+            for (let i = 0; i + 12 < pts.length; i++) {
+                const v = (pts[i].level / pts[i + 12].level - 1) * 100;
+                out.push({ date: pts[i].date, value: (+v.toFixed(5)).toString() });
+            }
+        } else { // momk — month-over-month change in thousands
+            for (let i = 0; i + 1 < pts.length; i++) {
+                out.push({ date: pts[i].date, value: (+(pts[i].level - pts[i + 1].level).toFixed(1)).toString() });
+            }
+        }
+        return out; // newest first, display units
+    } catch (e) { return []; } finally { clearTimeout(t); }
+}
+
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
@@ -102,7 +152,14 @@ module.exports = async (req, res) => {
             };
             const perSeries = await Promise.all(Object.entries(SERIES).map(async ([key, s]) => {
                 try {
-                    const obs = await fetchSeries(s.series, s.units, HIST_N); // newest first
+                    // BLS + FRED in parallel; use whichever carries the NEWER print (BLS leads
+                    // FRED by ~1h on release day, so this is what makes a fresh CPI show at once).
+                    const [fredObs, blsObs] = await Promise.all([
+                        fetchSeries(s.series, s.units, HIST_N).catch(() => []),
+                        BLS_SERIES[key] ? fetchBls(key).catch(() => []) : Promise.resolve([]),
+                    ]);
+                    const obs = (blsObs.length && (!fredObs.length || blsObs[0].date > fredObs[0].date))
+                        ? blsObs : fredObs; // newest first
                     const pts = [];
                     for (let i = 0; i < obs.length; i++) {
                         const value = parseFloat(obs[i].value);
@@ -155,7 +212,8 @@ module.exports = async (req, res) => {
 
             // Short CDN cache: on release day the flip from "טרם התקבל" to the published figure
             // must show within minutes, not after a 6-hour edge cache.
-            res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=3600');
+            // Short edge cache so a fresh print (BLS on release day) shows within ~2-3 min.
+            res.setHeader('Cache-Control', 's-maxage=180, stale-while-revalidate=1800');
             res.status(200).json({ events, results, history, pastEvents, asOf: new Date().toISOString() });
             return;
         }

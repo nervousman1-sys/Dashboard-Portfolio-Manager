@@ -1068,17 +1068,20 @@ function _renderMacroPage() {
 }
 
 // ── Live auto-refresh while the macro page is open ──
-let _macroNewsTimer = null, _macroDataTimer = null;
+let _macroNewsTimer = null, _macroDataTimer = null, _macroNewsSlowTimer = null;
 function _startMacroAutoRefresh() {
     _stopMacroAutoRefresh();
     _macroNewsTimer = setInterval(() => {
         if (!document.getElementById('macroPage')?.classList.contains('active')) return;
-        _loadGeoMacroNews(true);
-        // Calendar rides the same 5-min clock: on release day the row flips to
-        // "התקבל ✓ + מה יצא" within minutes (agent row read — cheap; signature
-        // check skips the re-render when nothing changed, so no page jumps).
+        // Calendar on a fast 2-min clock: on release day the row flips to
+        // "התקבל ✓ + מה יצא" within ~2 min of the official BLS print — no manual
+        // refresh. (Signature check skips the re-render when nothing changed → no jump.)
         _loadEconCalendar(true);
-    }, 5 * 60 * 1000); // news + calendar every 5 min
+    }, 2 * 60 * 1000); // calendar every 2 min
+    _macroNewsSlowTimer = setInterval(() => {
+        if (!document.getElementById('macroPage')?.classList.contains('active')) return;
+        _loadGeoMacroNews(true);
+    }, 5 * 60 * 1000); // geo-news every 5 min
     _macroDataTimer = setInterval(() => {
         if (!document.getElementById('macroPage')?.classList.contains('active')) return;
         _loadEconCalendar(true);
@@ -1088,6 +1091,7 @@ function _startMacroAutoRefresh() {
 function _stopMacroAutoRefresh() {
     if (_macroNewsTimer) { clearInterval(_macroNewsTimer); _macroNewsTimer = null; }
     if (_macroDataTimer) { clearInterval(_macroDataTimer); _macroDataTimer = null; }
+    if (_macroNewsSlowTimer) { clearInterval(_macroNewsSlowTimer); _macroNewsSlowTimer = null; }
 }
 if (typeof window !== 'undefined') window._stopMacroAutoRefresh = _stopMacroAutoRefresh;
 
