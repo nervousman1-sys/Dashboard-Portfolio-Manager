@@ -1060,7 +1060,9 @@ html.day-mode select option {
        phantom band under the index strip. The .fold-spacer below absorbs the leftover
        at ONE point instead, so the top sections sit tight together. */
     justify-content: flex-start;
-    padding-top: 12px;
+    /* No top padding: the hero is transparent, so any padding here shows the app
+       background as a grey band between the header and the index strip. */
+    padding-top: 0;
     padding-bottom: 0;
     min-height: calc(100vh - 76px);
     overflow-x: clip;
@@ -10113,8 +10115,8 @@ html.day-mode .er-beat-yes { color: #0f7a4d; border-color: rgba(15, 122, 77, 0.4
 html.day-mode .er-beat-no { color: #c81e1e; border-color: rgba(200, 30, 30, 0.4); background: rgba(200, 30, 30, 0.07); }
 .er-news:empty { display: none; }
 /* Reports board: the same two windows reachable from the board's intel strip */
-.rep-intel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-@media (max-width: 768px) { .rep-intel-actions .qw-earn-btn { display: inline-block; } }
+.rep-earn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }
+@media (max-width: 768px) { .rep-earn-actions .qw-earn-btn { display: inline-block; } }
 
 /* ══ Watchlist MODAL — shared window (dashboard + reports + mobile nav) ══ */
 .macro-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

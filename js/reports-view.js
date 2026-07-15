@@ -182,6 +182,11 @@ function _repRenderShell() {
                     <input type="text" id="repSearch" class="tech-search" autocomplete="off"
                            placeholder="${(_REP_MKT[_repMarket] || _REP_MKT.sp500).search}"
                            oninput="_repSearch=this.value.toUpperCase().trim(); _repRenderListDebounced()" />
+                    <!-- Earnings windows — LEFT end of the index-tabs bar (RTL: last = left) -->
+                    <div class="rep-earn-actions">
+                        <button class="qw-earn-btn" onclick="openUpcomingEarningsModal()" title="דוחות קרובים — כל המועדים הבאים">📅 דוחות קרובים</button>
+                        <button class="qw-earn-btn" onclick="openRecentEarningsModal()" title="דיווחו לאחרונה — תוצאות, הכאה וסנטימנט">🆕 דיווחו לאחרונה</button>
+                    </div>
                 </div>
                 <div id="repWatchBar" class="rep-intel"${(() => { try { return localStorage.getItem('rep_watch_has') === '1' ? ' style="min-height:40px"' : ''; } catch (e) { return ''; } })()}></div>
                 <div id="repIntel" class="rep-intel"></div>
@@ -415,13 +420,10 @@ async function _repLoadIntel() {
             <b>${live ? 'מנוע הדוחות פעיל 24/7' : 'מנוע הדוחות — בודק'}</b>
             <span class="rep-intel-sub">${cnt ? cnt + ' חברות מנותחות · ' : ''}${st && st.last_run ? 'עודכן ' + _repAgo(st.last_run) : ''}</span>
         </div>`;
-        // The "📅 דוחות קרובים" / "🆕 דיווחו לאחרונה" chip strips were retired here — both now
-        // open as full WINDOWS from the index-strip buttons (openUpcomingEarningsModal /
-        // openRecentEarningsModal), which show the complete list instead of a clipped row.
-        el.innerHTML = statusHtml + `<div class="rep-intel-actions">
-            <button class="qw-earn-btn" onclick="openUpcomingEarningsModal()">📅 דוחות קרובים</button>
-            <button class="qw-earn-btn" onclick="openRecentEarningsModal()">🆕 דיווחו לאחרונה</button>
-        </div>`;
+        // The "📅 דוחות קרובים" / "🆕 דיווחו לאחרונה" chip strips were retired — both now open
+        // as full WINDOWS from the buttons at the LEFT end of the index-tabs bar above,
+        // showing the complete list instead of a clipped row.
+        el.innerHTML = statusHtml;
     } catch (e) { el.style.minHeight = ''; /* non-fatal — release the reserved strip space */ }
 }
 
