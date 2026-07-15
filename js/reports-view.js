@@ -402,17 +402,10 @@ async function _repLoadIntel() {
     // fill doesn't push the whole board down — one of the "page jumps" reported.
     el.style.minHeight = '40px';
     const market = _repMarket;
-    const dbMkt = (_REP_MKT[market] && _REP_MKT[market].db) || market; // agent rows use us/r2k/il
-    const todayStr = new Date().toISOString().slice(0, 10);
-    // Tickers the user actually holds (across all portfolios) → their upcoming earnings.
-    const held = new Set();
-    try { (typeof clients !== 'undefined' ? clients : []).forEach(c => (c.holdings || []).forEach(h => { if (h.type === 'stock' && h.ticker) held.add(String(h.ticker).toUpperCase()); })); } catch (e) { }
     try {
-        const [statusRes, recentRes, earnRes] = await Promise.all([
-            supabaseClient.from('agent_status').select('last_run,last_result').eq('agent', 'reports').maybeSingle(),
-            supabaseClient.from('company_reports').select('symbol,score,improved,as_of,company_name').eq('market', dbMkt).order('as_of', { ascending: false }).limit(16),
-            held.size ? supabaseClient.from('company_reports').select('symbol,company_name,next_earnings').in('symbol', [...held]).gte('next_earnings', todayStr).order('next_earnings', { ascending: true }).limit(12) : Promise.resolve({ data: [] }),
-        ]);
+        // Only the agent-status line is needed here now — the recent/upcoming lists moved
+        // into their own windows, which fetch on open (two round-trips saved per board load).
+        const statusRes = await supabaseClient.from('agent_status').select('last_run,last_result').eq('agent', 'reports').maybeSingle();
         if (document.getElementById('repIntel') !== el || _repMarket !== market || _repView !== 'list') return;
         const st = statusRes && statusRes.data;
         const live = !!(st && st.last_run && (Date.now() - new Date(st.last_run).getTime() < 6 * 3600 * 1000));
@@ -422,25 +415,13 @@ async function _repLoadIntel() {
             <b>${live ? 'מנוע הדוחות פעיל 24/7' : 'מנוע הדוחות — בודק'}</b>
             <span class="rep-intel-sub">${cnt ? cnt + ' חברות מנותחות · ' : ''}${st && st.last_run ? 'עודכן ' + _repAgo(st.last_run) : ''}</span>
         </div>`;
-        const recent = (recentRes && Array.isArray(recentRes.data)) ? recentRes.data : [];
-        const chips = recent.filter(r => r && r.score != null).slice(0, 14).map(r => {
-            const disp = market === 'il' ? String(r.symbol).replace(/\.TA$/, '') : r.symbol;
-            const co = String(r.company_name || '').replace(/"/g, '');
-            return `<button class="rep-new-chip" onclick="openReportDetail('${r.symbol}')" title="${co} · דוח ${_repHeDate(r.as_of)}">
-                <span class="rep-new-tk">${disp}</span><span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>
-            </button>`;
-        }).join('');
-        // 📅 Upcoming earnings of the user's own holdings (the most actionable strip for a manager).
-        const earn = (earnRes && Array.isArray(earnRes.data)) ? earnRes.data.filter(e => e && e.next_earnings) : [];
-        const earnChips = earn.map(e => {
-            const disp = String(e.symbol).replace(/\.TA$/, '');
-            const co = String(e.company_name || '').replace(/"/g, '');
-            return `<button class="rep-new-chip rep-earn-chip" onclick="openReportForTicker('${e.symbol}')" title="${co} · מועד דוח ${_repHeDate(e.next_earnings)}">
-                <span class="rep-new-tk">${disp}</span><span class="rep-earn-date">${_repHeDate(e.next_earnings)}</span>
-            </button>`;
-        }).join('');
-        const earnHtml = earnChips ? `<div class="rep-new-strip rep-earn-strip"><span class="rep-new-lbl">📅 דוחות קרובים שלך</span><div class="rep-new-chips">${earnChips}</div></div>` : '';
-        el.innerHTML = statusHtml + earnHtml + (chips ? `<div class="rep-new-strip"><span class="rep-new-lbl">🆕 דיווחו לאחרונה</span><div class="rep-new-chips">${chips}</div></div>` : '');
+        // The "📅 דוחות קרובים" / "🆕 דיווחו לאחרונה" chip strips were retired here — both now
+        // open as full WINDOWS from the index-strip buttons (openUpcomingEarningsModal /
+        // openRecentEarningsModal), which show the complete list instead of a clipped row.
+        el.innerHTML = statusHtml + `<div class="rep-intel-actions">
+            <button class="qw-earn-btn" onclick="openUpcomingEarningsModal()">📅 דוחות קרובים</button>
+            <button class="qw-earn-btn" onclick="openRecentEarningsModal()">🆕 דיווחו לאחרונה</button>
+        </div>`;
     } catch (e) { el.style.minHeight = ''; /* non-fatal — release the reserved strip space */ }
 }
 
@@ -705,6 +686,165 @@ function _wlSuggest(q) {
 if (typeof window !== 'undefined') {
     window.openWatchlistModal = openWatchlistModal; window.closeWatchlistModal = closeWatchlistModal;
     window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest;
+}
+
+// ══ EARNINGS WINDOWS — "דוחות קרובים" + "דיווחו לאחרונה" (index-strip buttons) ══
+// Both read the 24/7 reports-agent's company_reports rows, so the lists are the same
+// data the board shows. Holdings are flagged so a manager sees their own names first.
+function _erHeldSet() {
+    const held = new Set();
+    try { (typeof clients !== 'undefined' ? clients : []).forEach(c => (c.holdings || []).forEach(h => { if (h.type === 'stock' && h.ticker) held.add(String(h.ticker).toUpperCase()); })); } catch (e) { }
+    return held;
+}
+function _erShell(id, title, sub) {
+    let ov = document.getElementById(id);
+    if (!ov) {
+        ov = document.createElement('div'); ov.id = id; ov.className = 'wl-overlay';
+        ov.addEventListener('click', (e) => { if (e.target === ov) _erClose(id); });
+        document.body.appendChild(ov);
+    }
+    ov.innerHTML = `<div class="wl-box er-box" dir="rtl">
+        <div class="wl-head">
+            <span class="wl-title">${title}</span>
+            <button class="wl-close" onclick="_erClose('${id}')" aria-label="סגור">✕</button>
+        </div>
+        <div class="er-sub">${sub}</div>
+        <div id="${id}List" class="wl-list"><div class="rep-loading"><div class="rep-spinner"></div>טוען…</div></div>
+    </div>`;
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    return ov;
+}
+function _erClose(id) {
+    const ov = document.getElementById(id);
+    if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; }
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+}
+
+// ── 📅 Upcoming earnings — every scheduled next-report date, soonest first ──
+async function openUpcomingEarningsModal() {
+    _erShell('erUpcoming', '📅 דוחות קרובים', 'כל מועדי הדוחות הבאים לפי סדר · האחזקות שלך מסומנות');
+    const el = document.getElementById('erUpcomingList');
+    if (!el) return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+        const { data } = await supabaseClient.from('company_reports')
+            .select('symbol,company_name,next_earnings,score,market')
+            .gte('next_earnings', today).order('next_earnings', { ascending: true }).limit(120);
+        if (document.getElementById('erUpcomingList') !== el) return;
+        const rows = (data || []).filter(r => r && r.next_earnings);
+        if (!rows.length) { el.innerHTML = '<div class="wl-empty">אין מועדי דוחות עתידיים ידועים כרגע.</div>'; return; }
+        const held = _erHeldSet();
+        const days = (d) => Math.round((new Date(d) - new Date(today)) / 86400e3);
+        // Holdings first, then by date — the manager's own names lead.
+        rows.sort((a, b) => (held.has(b.symbol.toUpperCase()) - held.has(a.symbol.toUpperCase())) || a.next_earnings.localeCompare(b.next_earnings));
+        el.innerHTML = rows.map(r => {
+            const sym = String(r.symbol).toUpperCase(), disp = sym.replace(/\.TA$/, '');
+            const d = days(r.next_earnings);
+            const when = d === 0 ? 'היום' : d === 1 ? 'מחר' : `בעוד ${d} ימים`;
+            const cls = d <= 3 ? 'warn' : d <= 10 ? 'info' : 'dim';
+            const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
+            return `<div class="wl-row"><div class="wl-main">
+                <div class="wl-id">
+                    <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}</span>
+                    <span class="wl-co">${_repEscape(r.company_name || '')}</span>
+                </div>
+                <div class="wl-priceblock">
+                    <span class="wl-price">${_repHeDate(r.next_earnings)}</span>
+                    <span class="er-when er-${cls}">${when}</span>
+                </div>
+                ${sc}
+                <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erUpcoming');">📊 דוח</button>
+            </div></div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = '<div class="wl-empty">טעינת המועדים נכשלה — נסה שוב בעוד רגע.</div>';
+    }
+}
+
+// ── 🆕 Recently reported — what came out: score, beat-vs-YoY, market reaction, material news ──
+async function openRecentEarningsModal() {
+    _erShell('erRecent', '🆕 דיווחו לאחרונה', 'תוצאות אחרונות · הכאה מול הרבעון המקביל · תגובת השוק וחדשות מהותיות');
+    const el = document.getElementById('erRecentList');
+    if (!el) return;
+    try {
+        const { data } = await supabaseClient.from('company_reports')
+            .select('symbol,company_name,score,improved,as_of,market')
+            .order('as_of', { ascending: false }).limit(40);
+        if (document.getElementById('erRecentList') !== el) return;
+        const rows = (data || []).filter(r => r && r.as_of && r.score != null);
+        if (!rows.length) { el.innerHTML = '<div class="wl-empty">אין דוחות אחרונים להצגה.</div>'; return; }
+        const held = _erHeldSet();
+        const syms = rows.map(r => String(r.symbol).toUpperCase());
+        el.innerHTML = rows.map(r => {
+            const sym = String(r.symbol).toUpperCase(), disp = sym.replace(/\.TA$/, '');
+            const beat = r.improved
+                ? '<span class="er-beat er-beat-yes">▲ היכתה — שיפור מול המקביל</span>'
+                : '<span class="er-beat er-beat-no">▼ לא היכתה מול המקביל</span>';
+            const sc = `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>`;
+            return `<div class="wl-row" data-er-row="${disp}"><div class="wl-main">
+                    <div class="wl-id">
+                        <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}</span>
+                        <span class="wl-co">${_repEscape(r.company_name || '')} · דוח ${_repHeDate(r.as_of)}</span>
+                    </div>
+                    <div class="wl-priceblock" id="erPx-${disp}"><span class="wl-price wl-dim">—</span></div>
+                    ${sc}
+                    <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erRecent');">📊 דוח</button>
+                </div>
+                <div class="wl-sig">${beat}<span class="er-news" id="erNews-${disp}"></span></div>
+            </div>`;
+        }).join('');
+        _erLoadReactions(syms);
+    } catch (e) {
+        el.innerHTML = '<div class="wl-empty">טעינת הדוחות נכשלה — נסה שוב בעוד רגע.</div>';
+    }
+}
+
+// Market reaction (live price + daily move) and any MATERIAL press item near the report —
+// both real: /api/quote for the move, portfolio_alerts (24/7 SEC press agent) for the news.
+async function _erLoadReactions(syms) {
+    try {
+        const prices = await _wlFetchPrices(syms.slice(0, 60));
+        for (const s of syms) {
+            const disp = s.replace(/\.TA$/, '');
+            const q = prices[s] || prices[disp] || {};
+            const price = q.price != null ? q.price : null;
+            const prev = q.prevClose != null ? q.prevClose : null;
+            const chg = (price != null && prev) ? (price - prev) / prev * 100 : null;
+            const box = document.getElementById('erPx-' + disp);
+            if (!box || price == null) continue;
+            const cur = /\.TA$/.test(s) ? '₪' : '$';
+            box.innerHTML = `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`
+                + (chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}" title="תגובת השוק היום">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '');
+        }
+    } catch (e) { /* prices are best-effort */ }
+    // Material company news from the press agent (user's own alerts — RLS scoped).
+    try {
+        const since = new Date(Date.now() - 14 * 86400e3).toISOString();
+        const { data } = await supabaseClient.from('portfolio_alerts')
+            .select('ticker,summary_he,headline_en,sentiment,materiality,published_at')
+            .in('ticker', syms.map(s => s.replace(/\.TA$/, ''))).gte('published_at', since)
+            .order('published_at', { ascending: false }).limit(60);
+        const seen = new Set();
+        (data || []).forEach(a => {
+            const tk = String(a.ticker || '').toUpperCase();
+            if (!tk || seen.has(tk)) return;
+            seen.add(tk);
+            const el = document.getElementById('erNews-' + tk);
+            if (!el) return;
+            const s = +a.sentiment || 0;
+            const cls = s > 0 ? 'pos' : s < 0 ? 'neg' : 'info';
+            const mood = s > 0 ? 'חיובי' : s < 0 ? 'שלילי' : 'ניטרלי';
+            el.innerHTML = `<span class="wl-sig-chip wl-sig-${cls}" title="${_repEscape(a.summary_he || a.headline_en || '')}">`
+                + `${a.materiality ? '📰 מהותי' : '📰'} · סנטימנט ${mood}</span>`;
+        });
+    } catch (e) { /* no alerts visible / not logged in — fine */ }
+}
+
+if (typeof window !== 'undefined') {
+    window.openUpcomingEarningsModal = openUpcomingEarningsModal;
+    window.openRecentEarningsModal = openRecentEarningsModal;
+    window._erClose = _erClose;
 }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the

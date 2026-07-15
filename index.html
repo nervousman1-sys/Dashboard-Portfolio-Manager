@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=179.0">
+    <link rel="stylesheet" href="css/main.css?v=180.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -388,6 +388,11 @@
                     <span class="qw-fx-chg" id="qwFxChg"></span>
                 </div>
                 <span class="qw-last-update" id="lastUpdate"></span>
+                <!-- Earnings shortcuts (RTL end, beside settings) — open as windows -->
+                <button class="qw-earn-btn" id="qwUpcomingBtn" title="דוחות קרובים — כל המועדים הבאים"
+                    onclick="if(typeof openUpcomingEarningsModal==='function') openUpcomingEarningsModal()">📅 דוחות קרובים</button>
+                <button class="qw-earn-btn" id="qwReportedBtn" title="דיווחו לאחרונה — תוצאות, הכאה וסנטימנט"
+                    onclick="if(typeof openRecentEarningsModal==='function') openRecentEarningsModal()">🆕 דיווחו לאחרונה</button>
                 <!-- Settings button on left (RTL end) -->
                 <button class="qw-settings-btn" title="הגדרות מעקב" onclick="openTickerModal()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -693,7 +698,7 @@
     <script defer src="js/discord-news.js?v=483"></script>
     <script defer src="js/technical-view.js?v=483"></script>
     <script defer src="js/reports-engine.js?v=482"></script>
-    <script defer src="js/reports-view.js?v=487"></script>
+    <script defer src="js/reports-view.js?v=488"></script>
     <script defer src="js/scanner-agent.js?v=482"></script>
     <script defer src="js/lhe-view.js?v=482"></script>
     <script defer src="js/press-alerts.js?v=482"></script>
