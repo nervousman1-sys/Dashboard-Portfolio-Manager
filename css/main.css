@@ -8506,17 +8506,19 @@ html.day-mode .ec-tab {
 html.day-mode .ec-tab:hover { border-color: #0369a1; background: #ece8db; }
 html.day-mode .ec-tab.active {
     color: #ffffff;
-    background: #0f2f45;
-    border-color: #0f2f45;
-    box-shadow: 0 2px 6px rgba(15, 47, 69, 0.28);
+    background: #2f7fb8;
+    border-color: #2f7fb8;
+    box-shadow: 0 2px 6px rgba(47, 127, 184, 0.3);
 }
-/* Upcoming-table header cells (תאריך / אירוע / השפעה): give each its own framed rectangle */
-html.day-mode .ec-table thead th {
-    color: #1e293b;
+/* Upcoming-table header labels (תאריך / אירוע / השפעה): each label gets its OWN framed
+   pill that shrinks to the word — so אירוע isn't a wide box across the whole column. */
+html.day-mode .ec-table thead th { color: #1e293b; }
+html.day-mode .ec-th-lbl {
+    display: inline-block;
     background: #f3efe2;
     border: 1.5px solid rgba(58, 50, 36, 0.34);
     border-radius: 9px;
-    padding: 8px 12px;
+    padding: 6px 14px;
 }
 /* ── Day-mode tonal pass (user: colors must sit in the cream skin, nothing neon) ── */
 /* Horizontal-scroll rails: glowing cyan → quiet warm gray */

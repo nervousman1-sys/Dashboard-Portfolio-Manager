@@ -1279,7 +1279,7 @@ function _ecRender() {
             ${_ecHistHTML()}
             <div class="ec-upcoming-title">📆 פרסומים קרובים</div>
             <table class="ec-table">
-                <thead><tr><th class="ec-th-date">תאריך</th><th>אירוע</th><th class="ec-th-imp">השפעה</th></tr></thead>
+                <thead><tr><th class="ec-th-date"><span class="ec-th-lbl">תאריך</span></th><th class="ec-th-event"><span class="ec-th-lbl">אירוע</span></th><th class="ec-th-imp"><span class="ec-th-lbl">השפעה</span></th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
