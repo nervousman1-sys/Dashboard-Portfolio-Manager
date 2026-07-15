@@ -1055,10 +1055,14 @@ html.day-mode select option {
 .hero-above-fold {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding-top: 20px;
+    /* flex-start (NOT space-between): space-between split the leftover height into a
+       gap between EVERY child — including the zero-height ones — which opened a ~69px
+       phantom band under the index strip. The .fold-spacer below absorbs the leftover
+       at ONE point instead, so the top sections sit tight together. */
+    justify-content: flex-start;
+    padding-top: 12px;
     padding-bottom: 0;
-    height: calc(100vh - 76px);
+    min-height: calc(100vh - 76px);
     overflow-x: clip;
     box-sizing: border-box;
 }
@@ -1075,7 +1079,9 @@ html.day-mode select option {
    and bottom-fold-group. min-height guarantees a small gap even when
    the viewport is exactly the size of the content. */
 .fold-spacer {
-    display: none;
+    display: block;
+    flex: 1 1 auto;      /* the ONLY element that absorbs leftover height */
+    min-height: 12px;
 }
 
 /* ══ Bottom Fold Group ══
@@ -8607,6 +8613,14 @@ html.day-mode .econ-cal-section {
 html.day-mode .geo-macro-section { padding: 12px 16px 14px; }
 html.day-mode .gm-refresh { color: #0369a1; border-color: rgba(3, 105, 161, 0.35); }
 html.day-mode .gm-refresh:hover { background: rgba(3, 105, 161, 0.1); }
+/* Watchlist buttons (dashboard header "מעקב" + reports "⭐ רשימת מעקב"): black frame
+   in day mode so the pill reads as a defined rectangle on cream. */
+html.day-mode .macro-watch-btn,
+html.day-mode .header-action-btn[title*="רשימת מעקב"] {
+    border: 1.5px solid #191612;
+}
+html.day-mode .macro-watch-btn:hover,
+html.day-mode .header-action-btn[title*="רשימת מעקב"]:hover { border-color: #191612; }
 /* Collapse/expand caret (geo + calendar headers): white border + light glyph made it
    invisible on cream — it looked like the button was missing. Framed cream pill, dark ink. */
 html.day-mode .ec-collapse {
