@@ -8607,6 +8607,15 @@ html.day-mode .econ-cal-section {
 html.day-mode .geo-macro-section { padding: 12px 16px 14px; }
 html.day-mode .gm-refresh { color: #0369a1; border-color: rgba(3, 105, 161, 0.35); }
 html.day-mode .gm-refresh:hover { background: rgba(3, 105, 161, 0.1); }
+/* Collapse/expand caret (geo + calendar headers): white border + light glyph made it
+   invisible on cream — it looked like the button was missing. Framed cream pill, dark ink. */
+html.day-mode .ec-collapse {
+    background: #f3efe2;
+    border: 1.5px solid rgba(58, 50, 36, 0.4);
+    color: #1e293b;
+    font-weight: 800;
+}
+html.day-mode .ec-collapse:hover { background: #e9e3d3; border-color: #0369a1; color: #0369a1; }
 /* RPO card: dark gradient → cream paper */
 html.day-mode .rep-rpo-card { background: #f6f2e6; border-color: rgba(58, 50, 36, 0.2); }
 html.day-mode .rep-rpo-title { color: #0369a1; }
