@@ -528,7 +528,8 @@ async function openWatchlistModal() {
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
     _wlPrimeUniverse();              // fill the search-suggestion pool (cheap; cached)
-    await _repLoadWatch();            // refresh the set from Supabase
+    await _repLoadWatch();            // refresh the per-symbol set from Supabase
+    await _wlLoadBaskets();           // custom-ETF baskets (self-contained lists)
     _wlRenderList();
     setTimeout(() => { const s = document.getElementById('wlSearch'); if (s) s.focus(); }, 80);
 }
@@ -611,50 +612,118 @@ async function _wlRenderList() {
             <div class="wl-sig" id="wlSig-${disp}">${_wlReportSignals(r).join('')}</div>
         </div>`;
     };
-    // Two categories: (1) stocks & other assets (ungrouped), (2) custom-ETF lists (grouped by
-    // the label the user gave the basket). Each custom-ETF list COLLAPSES to its name — click to
-    // expand its holdings — so many baskets don't flood the view.
-    const ungrouped = syms.filter(s => !_repWatchGroup[s]);
-    const groups = {};
-    syms.filter(s => _repWatchGroup[s]).forEach(s => { (groups[_repWatchGroup[s]] = groups[_repWatchGroup[s]] || []).push(s); });
-    const groupEntries = Object.entries(groups);
-    _wlGroupLabels = groupEntries.map(e => e[0]);
+    // Two categories: (1) stocks & other assets (the per-symbol watchlist), (2) custom-ETF baskets
+    // (self-contained lists from watchlist_baskets — overlaps allowed). Each basket COLLAPSES to its
+    // name; clicking it opens a detail window listing every asset (with delete options).
     let html = '';
-    if (ungrouped.length) {
-        html += `<div class="wl-cat-head">📈 מניות ונכסים <span class="wl-cat-count">${ungrouped.length}</span></div>`;
-        html += ungrouped.map(rowHtml).join('');
+    if (syms.length) {
+        html += `<div class="wl-cat-head">📈 מניות ונכסים <span class="wl-cat-count">${syms.length}</span></div>`;
+        html += syms.map(rowHtml).join('');
     }
-    if (groupEntries.length) {
-        html += `<div class="wl-cat-head wl-cat-etf">📦 תעודות סל בהתאמה אישית <span class="wl-cat-count">${groupEntries.length}</span></div>`;
-        html += groupEntries.map(([label, gsyms], idx) => `<details class="wl-etf-details">
-            <summary class="wl-etf-summary">
-                <span class="wl-etf-chevron">▸</span>
-                <span class="wl-etf-name">${_repEscape(label)}</span>
-                <span class="wl-etf-count">${gsyms.length} נכסים</span>
-                <button class="wl-etf-del" onclick="event.preventDefault();event.stopPropagation();_wlRemoveGroup(${idx})" title="הסר את כל הרשימה">🗑</button>
-            </summary>
-            <div class="wl-etf-body">${gsyms.map(rowHtml).join('')}</div>
-        </details>`).join('');
+    if (_wlBaskets.length) {
+        html += `<div class="wl-cat-head wl-cat-etf">📦 תעודות סל בהתאמה אישית <span class="wl-cat-count">${_wlBaskets.length}</span></div>`;
+        html += _wlBaskets.map(b => `<button class="wl-basket-row" onclick="openBasketDetail(${b.id})" title="פתח את פירוט הרשימה">
+            <span class="wl-etf-name">📦 ${_repEscape(b.name)}</span>
+            <span class="wl-etf-count">${(b.symbols || []).length} נכסים</span>
+            <span class="wl-basket-open">פתח ›</span>
+        </button>`).join('');
     }
     el.innerHTML = html || '<div class="wl-empty">אין מניות במעקב עדיין. חפש מניה למעלה כדי להוסיף, או הוסף מכוכב ★ בעמוד הדוח.</div>';
     // Significant signals (technical extremes + fresh company news) load async and patch in.
     _wlLoadSignals(syms);
 }
-// Remove a whole custom-ETF list (all its symbols) by its index in the last render.
-let _wlGroupLabels = [];
-async function _wlRemoveGroup(idx) {
-    const label = _wlGroupLabels[idx];
-    if (!label) return;
-    const gsyms = [..._repWatch].filter(s => _repWatchGroup[s] === label);
-    if (!gsyms.length) return;
+
+// ── Custom-ETF baskets (self-contained lists) ──
+let _wlBaskets = [];
+async function _wlLoadBaskets() {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _wlBaskets = []; return; }
+    try {
+        const { data, error } = await supabaseClient.from('watchlist_baskets').select('id,name,symbols,created_at').order('created_at', { ascending: true });
+        if (error) { _wlBaskets = []; return; }
+        _wlBaskets = (data || []).map(b => ({ id: b.id, name: b.name, symbols: Array.isArray(b.symbols) ? b.symbols.map(s => String(s).toUpperCase()) : [] }));
+    } catch (e) { _wlBaskets = []; }
+}
+// Detail window for one basket — every asset with live price/score/links + per-asset & whole-list delete.
+async function openBasketDetail(id) {
+    const b = _wlBaskets.find(x => x.id === id);
+    if (!b) return;
+    let ov = document.getElementById('wlBasketOverlay');
+    if (!ov) { ov = document.createElement('div'); ov.id = 'wlBasketOverlay'; ov.className = 'wl-overlay'; ov.addEventListener('click', e => { if (e.target === ov) closeBasketDetail(); }); document.body.appendChild(ov); }
+    ov.innerHTML = `<div class="wl-box" dir="rtl">
+        <div class="wl-head"><span class="wl-title">📦 ${_repEscape(b.name)}</span><button class="wl-close" onclick="closeBasketDetail()" aria-label="סגור">✕</button></div>
+        <div class="wl-basket-actions">
+            <button class="corr-run-btn corr-run-primary" onclick="_wlBasketBuy(${id})">🛒 קנה את הסל לתיק</button>
+            <button class="wl-close-btn wl-basket-del" onclick="_wlDeleteBasket(${id})">🗑 מחק את כל הרשימה</button>
+        </div>
+        <div id="wlBasketList" class="wl-list"><div class="wl-empty"><div class="rep-spinner"></div>טוען…</div></div>
+    </div>`;
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    _wlRenderBasketDetail(b);
+}
+function closeBasketDetail() { const ov = document.getElementById('wlBasketOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
+async function _wlRenderBasketDetail(b) {
+    const el = document.getElementById('wlBasketList'); if (!el) return;
+    const syms = (b.symbols || []).slice();
+    if (!syms.length) { el.innerHTML = '<div class="wl-empty">הרשימה ריקה.</div>'; return; }
+    let info = {};
+    try { const { data } = await supabaseClient.from('company_reports').select('symbol,score,company_name').in('symbol', syms); (data || []).forEach(r => info[String(r.symbol).toUpperCase()] = r); } catch (e) { }
+    const prices = await _wlFetchPrices(syms);
+    if (!document.getElementById('wlBasketList')) return;
+    const close2 = "closeBasketDetail(); closeWatchlistModal();";
+    el.innerHTML = syms.map(s => {
+        const r = info[s] || {};
+        const disp = String(s).replace(/\.TA$/, '');
+        const q = prices[s] || prices[disp] || {};
+        const price = q.price != null ? q.price : (q.regularMarketPrice != null ? q.regularMarketPrice : null);
+        const prev = q.prevClose != null ? q.prevClose : (q.previousClose != null ? q.previousClose : (q.regularMarketPreviousClose != null ? q.regularMarketPreviousClose : null));
+        const chg = (price != null && prev) ? (price - prev) / prev * 100 : null;
+        const cur = /\.TA$/.test(s) ? '₪' : '$';
+        const priceHtml = price != null
+            ? `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>${chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : ''}`
+            : '<span class="wl-price wl-dim">—</span>';
+        const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
+        return `<div class="wl-row"><div class="wl-main">
+            <button class="wl-star sa-del" onclick="_wlBasketRemoveSym(${b.id},'${s}')" title="הסר מהרשימה">✕</button>
+            <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
+            <div class="wl-priceblock">${priceHtml}</div>
+            ${sc}
+            <button class="wl-report" onclick="openReportForTicker('${s}'); ${close2}">📊 דוח</button>
+            <button class="wl-report wl-tech" onclick="if(typeof openTechnicalForTicker==='function'){openTechnicalForTicker('${s}'); ${close2}}">📈 טכני</button>
+        </div></div>`;
+    }).join('');
+}
+async function _wlBasketRemoveSym(id, sym) {
+    const b = _wlBaskets.find(x => x.id === id); if (!b) return;
+    if ((b.symbols || []).length <= 1) return _wlDeleteBasket(id); // removing the last asset deletes the list
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת', 'error'); return; }
+    b.symbols = b.symbols.filter(x => x !== String(sym).toUpperCase());
+    try {
+        const { error } = await supabaseClient.from('watchlist_baskets').update({ symbols: b.symbols }).eq('id', id);
+        if (error) throw error;
+        _wlRenderBasketDetail(b);
+        if (document.getElementById('wlList')) _wlRenderList();
+    } catch (e) { if (typeof showToast === 'function') showToast('ההסרה נכשלה', 'error'); }
+}
+async function _wlDeleteBasket(id) {
     if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת', 'error'); return; }
     try {
-        const { error } = await supabaseClient.from('watchlist').delete().in('symbol', gsyms);
+        const { error } = await supabaseClient.from('watchlist_baskets').delete().eq('id', id);
         if (error) throw error;
-        gsyms.forEach(s => { _repWatch.delete(s); delete _repWatchGroup[s]; delete _repWatchMkt[s]; });
-        if (typeof showToast === 'function') showToast(`הרשימה "${label}" הוסרה מהמעקב`, 'success');
-        _wlRenderList(); _repRefreshStars();
-    } catch (e) { if (typeof showToast === 'function') showToast('הסרת הרשימה נכשלה', 'error'); }
+        _wlBaskets = _wlBaskets.filter(b => b.id !== id);
+        if (typeof showToast === 'function') showToast('הרשימה נמחקה', 'success');
+        closeBasketDetail();
+        if (document.getElementById('wlList')) _wlRenderList();
+    } catch (e) { if (typeof showToast === 'function') showToast('מחיקת הרשימה נכשלה', 'error'); }
+}
+function _wlBasketBuy(id) {
+    const b = _wlBaskets.find(x => x.id === id); if (!b || !(b.symbols || []).length) return;
+    const client = (typeof clients !== 'undefined' && clients[0]) || null;
+    if (!client) { if (typeof openMgmtModal === 'function') openMgmtModal('addClient'); if (typeof showToast === 'function') showToast('צור תיק, ואז הוסף את מניות הסל', 'info'); return; }
+    if (typeof openMgmtModal === 'function') openMgmtModal('addHolding', client);
+    const first = String(b.symbols[0]).replace(/\.TA$/, '');
+    setTimeout(() => { if (typeof selectSearchResult === 'function') selectSearchResult(first, '', 'USD', 'NASDAQ'); }, 140);
+    if (typeof showToast === 'function') showToast('נפתחה הוספת נכס — הוסף כל מניה מהסל בתורה', 'info');
 }
 
 // ── Watchlist signals — anything MATERIAL about a watched name, shown next to it ──
@@ -752,7 +821,9 @@ function _wlSuggest(q) {
 }
 if (typeof window !== 'undefined') {
     window.openWatchlistModal = openWatchlistModal; window.closeWatchlistModal = closeWatchlistModal;
-    window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest; window._wlRemoveGroup = _wlRemoveGroup;
+    window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest;
+    window._wlLoadBaskets = _wlLoadBaskets; window.openBasketDetail = openBasketDetail; window.closeBasketDetail = closeBasketDetail;
+    window._wlBasketRemoveSym = _wlBasketRemoveSym; window._wlDeleteBasket = _wlDeleteBasket; window._wlBasketBuy = _wlBasketBuy;
 }
 
 // ══ EARNINGS WINDOWS — "דוחות קרובים" + "דיווחו לאחרונה" (index-strip buttons) ══

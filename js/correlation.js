@@ -786,22 +786,28 @@ function _corrShowMatrixModal() {
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 function _corrCloseMatrix() { const ov = document.getElementById('corrMatrixOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
-// Add the whole basket to the watchlist under a user-named custom-ETF group label.
+// Save the whole basket as a self-contained custom-ETF list (watchlist_baskets). Unlike the old
+// per-symbol watchlist, this keeps ALL the basket's assets even if some are already watched or
+// appear in another list (no unique-symbol constraint) — fixing the "missing assets" problem.
 async function _corrBasketToWatchlist() {
-    if (!_corrSug || typeof _repAddWatchGroup !== 'function') { if (typeof showToast === 'function') showToast('בנה קודם סל מוצע', 'info'); return; }
+    if (!_corrSug) { if (typeof showToast === 'function') showToast('בנה קודם סל מוצע', 'info'); return; }
     const inp = document.getElementById('corrWatchName');
-    const label = ((inp && inp.value.trim()) || 'תעודת סל בהתאמה אישית').slice(0, 40);
+    const name = ((inp && inp.value.trim()) || 'תעודת סל בהתאמה אישית').slice(0, 40);
     const btn = document.getElementById('corrWatchBtn');
     const orig = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'שומר…'; }
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) {
+        if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.', 'error');
+        if (btn) { btn.textContent = orig; btn.disabled = false; } return;
+    }
     try {
-        const r = await _repAddWatchGroup(_corrSug.chosen, label);
-        if (typeof showToast === 'function') {
-            if (r.added) showToast(`✅ ${r.added} נכסים נשמרו לרשימת המעקב תחת "${label}"`, 'success');
-            else showToast('כל נכסי הסל כבר קיימים במעקב (או שאינך מחובר)', 'info');
-        }
-        if (btn) { btn.textContent = r.added ? '✓ נשמר למעקב' : orig; setTimeout(() => { if (btn) { btn.textContent = orig; btn.disabled = false; } }, r.added ? 1600 : 0); if (!r.added) btn.disabled = false; }
-        if (inp && r.added) inp.value = '';
+        const symbols = [...new Set(_corrSug.chosen.map(s => String(s).toUpperCase()))];
+        const { error } = await supabaseClient.from('watchlist_baskets').insert({ name, symbols });
+        if (error) throw error;
+        if (typeof showToast === 'function') showToast(`✅ הסל "${name}" (${symbols.length} נכסים) נשמר לרשימת המעקב`, 'success');
+        if (btn) { btn.textContent = '✓ נשמר למעקב'; setTimeout(() => { if (btn) { btn.textContent = orig; btn.disabled = false; } }, 1600); }
+        if (inp) inp.value = '';
+        if (typeof _wlLoadBaskets === 'function') _wlLoadBaskets(); // keep the watchlist modal fresh
     } catch (e) {
         if (typeof showToast === 'function') showToast('שמירה לרשימת המעקב נכשלה', 'error');
         if (btn) { btn.textContent = orig; btn.disabled = false; }

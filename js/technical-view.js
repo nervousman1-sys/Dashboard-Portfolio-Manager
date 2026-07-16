@@ -398,9 +398,8 @@ function _techRender() {
         <tr data-sym="${t}">
             <td class="risk-td-name">
                 <div class="tech-name-cell">
-                    <span>${disp}</span>
+                    <span class="tech-name-row"><span class="tech-tk">${disp}</span><button class="gold-bell-btn" onclick="if(typeof openCreateAlert==='function')openCreateAlert('${t}','${_techMarket}')" title="קבע התראה על מחיר/אינדיקטור" aria-label="קבע התראה"><svg class="gb-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2a2 2 0 0 0-2 2v.29A7 7 0 0 0 5 11v3.28l-1.55 2.33A1 1 0 0 0 4.28 18h15.44a1 1 0 0 0 .83-1.39L19 14.28V11a7 7 0 0 0-5-6.71V4a2 2 0 0 0-2-2z"/><path d="M10 20a2 2 0 0 0 4 0z"/></svg></button></span>
                     <a class="tech-tv" href="${_techTvUrl(tvSym, v)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView עם האינדיקטורים הרלוונטיים">TradingView ↗</a>
-                    <button class="gold-bell-btn" onclick="if(typeof openCreateAlert==='function')openCreateAlert('${t}','${_techMarket}')" title="קבע התראה על מחיר/אינדיקטור" aria-label="קבע התראה"><svg class="gb-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2a2 2 0 0 0-2 2v.29A7 7 0 0 0 5 11v3.28l-1.55 2.33A1 1 0 0 0 4.28 18h15.44a1 1 0 0 0 .83-1.39L19 14.28V11a7 7 0 0 0-5-6.71V4a2 2 0 0 0-2-2z"/><path d="M10 20a2 2 0 0 0 4 0z"/></svg></button>
                 </div>
             </td>
             <td>${curSym}${(v.price ?? 0).toLocaleString('en-US')}</td>

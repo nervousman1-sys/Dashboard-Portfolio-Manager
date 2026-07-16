@@ -18,6 +18,12 @@ const _SA_KINDS = {
     rsi_w: { he: 'RSI שבועי', unit: '' },
     ma200: { he: 'ממוצע 200 יום', unit: '' },
     ma300: { he: 'ממוצע 300 יום', unit: '' },
+    ma_w200: { he: 'ממוצע 200 שבועות', unit: '' },
+    ma_w300: { he: 'ממוצע 300 שבועות', unit: '' },
+    fvg_m: { he: 'FVG חודשי', unit: '' },
+    fvg_q: { he: 'FVG רבעוני', unit: '' },
+    atr: { he: 'ATR יומי', unit: '%' },
+    vol: { he: 'נפח חריג', unit: '×' },
     earnings: { he: 'פרסום דוח כספי', unit: '' },
 };
 function _saEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
@@ -49,11 +55,17 @@ function openCreateAlert(sym, market) {
                     <option value="price">מחיר מגיע ל…</option>
                     <option value="rsi_d">RSI יומי מגיע ל…</option>
                     <option value="rsi_w">RSI שבועי מגיע ל…</option>
-                    <option value="ma200">המחיר חוצה את ממוצע 200 יום</option>
-                    <option value="ma300">המחיר חוצה את ממוצע 300 יום</option>
+                    <option value="ma200">המחיר חוצה ממוצע 200 יום</option>
+                    <option value="ma300">המחיר חוצה ממוצע 300 יום</option>
+                    <option value="ma_w200">המחיר חוצה ממוצע 200 שבועות</option>
+                    <option value="ma_w300">המחיר חוצה ממוצע 300 שבועות</option>
+                    <option value="fvg_m">המחיר נכנס ל-FVG חודשי</option>
+                    <option value="fvg_q">המחיר נכנס ל-FVG רבעוני</option>
+                    <option value="atr">ATR יומי (%) מגיע ל…</option>
+                    <option value="vol">נפח חריג (× מהממוצע)</option>
                 </select>
             </div>
-            <div class="sa-field"><label>כיוון</label>
+            <div class="sa-field" id="saDirWrap"><label>כיוון</label>
                 <select id="saDir" class="st-pf-select">
                     <option value="above">מעל / חוצה כלפי מעלה</option>
                     <option value="below">מתחת / חוצה כלפי מטה</option>
@@ -62,7 +74,7 @@ function openCreateAlert(sym, market) {
             <div class="sa-field" id="saThreshWrap"><label id="saThreshLbl">מחיר יעד ($)</label>
                 <input type="number" id="saThresh" class="corr-input" step="any" value="${price}" placeholder="ערך יעד" />
             </div>
-            <div class="sa-cur" id="saCur">${cur ? `כרגע: מחיר $${price} · RSI יומי ${rsiD} · RSI שבועי ${rsiW}${cur.ma && cur.ma.d200 != null ? ' · ממוצע 200: $' + (+cur.ma.d200).toFixed(2) : ''}` : 'הנתונים הנוכחיים ייטענו מהסריקה הטכנית'}</div>
+            <div class="sa-cur" id="saCur">${cur ? `כרגע: מחיר $${price} · RSI יומי ${rsiD} · RSI שבועי ${rsiW}${cur.ma && cur.ma.d200 != null ? ' · ממ׳ 200 יום $' + (+cur.ma.d200).toFixed(2) : ''}${cur.ma && cur.ma.w200 != null ? ' · ממ׳ 200 שב׳ $' + (+cur.ma.w200).toFixed(2) : ''}${cur.atrPct != null ? ' · ATR ' + cur.atrPct + '%' : ''}${(cur.fvgM && cur.fvgM.inside) ? ' · בתוך FVG חודשי' : ''}` : 'הנתונים הנוכחיים ייטענו מהסריקה הטכנית'}</div>
         </div>
         <div class="sa-actions">
             <button class="corr-run-btn corr-run-primary" onclick="_saSave('${_saEsc(sym)}','${market || (typeof _techMarket!=='undefined'?_techMarket:'sp500')}')">קבע התראה</button>
@@ -74,20 +86,29 @@ function openCreateAlert(sym, market) {
     _saKindChanged();
 }
 function closeCreateAlert() { const ov = document.getElementById('saOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
-// MA-cross alerts need no threshold (the level is the moving MA itself).
+// Kinds whose "level" is a moving indicator / a state → no manual threshold needed.
+const _SA_NO_THRESH = ['ma200', 'ma300', 'ma_w200', 'ma_w300', 'fvg_m', 'fvg_q'];
+const _SA_NO_DIR = ['fvg_m', 'fvg_q']; // FVG = "price enters the gap", direction is irrelevant
 function _saKindChanged() {
     const kind = (document.getElementById('saKind') || {}).value;
     const wrap = document.getElementById('saThreshWrap');
     const lbl = document.getElementById('saThreshLbl');
+    const dirWrap = document.getElementById('saDirWrap');
+    if (dirWrap) dirWrap.style.display = _SA_NO_DIR.includes(kind) ? 'none' : '';
     if (!wrap) return;
-    if (kind === 'ma200' || kind === 'ma300') { wrap.style.display = 'none'; }
-    else { wrap.style.display = ''; lbl.textContent = kind === 'price' ? 'מחיר יעד ($)' : 'ערך RSI יעד (0–100)'; }
+    if (_SA_NO_THRESH.includes(kind)) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    lbl.textContent = kind === 'price' ? 'מחיר יעד ($)'
+        : (kind === 'rsi_d' || kind === 'rsi_w') ? 'ערך RSI יעד (0–100)'
+            : kind === 'atr' ? 'ATR יומי יעד (%)'
+                : kind === 'vol' ? 'מכפיל נפח מול הממוצע (למשל 2)'
+                    : 'ערך יעד';
 }
 async function _saSave(sym, market) {
     if (typeof ensureSupabaseReady !== 'function' || !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.', 'error'); return; }
     const kind = document.getElementById('saKind').value;
-    const direction = document.getElementById('saDir').value;
-    const needThresh = kind !== 'ma200' && kind !== 'ma300';
+    const direction = _SA_NO_DIR.includes(kind) ? 'above' : document.getElementById('saDir').value;
+    const needThresh = !_SA_NO_THRESH.includes(kind);
     const threshold = needThresh ? parseFloat(document.getElementById('saThresh').value) : null;
     if (needThresh && (!isFinite(threshold))) { if (typeof showToast === 'function') showToast('הזן ערך יעד תקין', 'error'); return; }
     try {
@@ -125,6 +146,12 @@ function _saConditionMet(a, cur) {
     if (a.kind === 'rsi_w' && cur.rsiW != null) return cmp(cur.rsiW, a.threshold) ? cur.rsiW : null;
     if (a.kind === 'ma200' && cur.ma && cur.ma.d200 != null && cur.price != null) return cmp(cur.price, cur.ma.d200) ? cur.price : null;
     if (a.kind === 'ma300' && cur.ma && cur.ma.d300 != null && cur.price != null) return cmp(cur.price, cur.ma.d300) ? cur.price : null;
+    if (a.kind === 'ma_w200' && cur.ma && cur.ma.w200 != null && cur.price != null) return cmp(cur.price, cur.ma.w200) ? cur.price : null;
+    if (a.kind === 'ma_w300' && cur.ma && cur.ma.w300 != null && cur.price != null) return cmp(cur.price, cur.ma.w300) ? cur.price : null;
+    if (a.kind === 'fvg_m') return (cur.fvgM && cur.fvgM.inside && cur.price != null) ? cur.price : null;
+    if (a.kind === 'fvg_q') return (cur.fvgQ && cur.fvgQ.inside && cur.price != null) ? cur.price : null;
+    if (a.kind === 'atr' && cur.atrPct != null) return cmp(cur.atrPct, a.threshold) ? cur.atrPct : null;
+    if (a.kind === 'vol' && cur.vol != null && cur.volAvg > 0) { const ratio = cur.vol / cur.volAvg; return cmp(ratio, a.threshold) ? +ratio.toFixed(2) : null; }
     return null;
 }
 // Earnings alert: released when the latest reported quarter reaches (within a few days of) the
@@ -198,9 +225,13 @@ function openAlertsPanel() {
     const pending = _saAlerts.filter(a => a.active && !a.triggered_at);
     const kindTxt = (a) => {
         const k = _SA_KINDS[a.kind] ? _SA_KINDS[a.kind].he : a.kind;
+        const dir = a.direction === 'above' ? 'מעל' : 'מתחת ל';
         if (a.kind === 'earnings') return `📊 ${k}${a.note ? ' · צפוי ' + _saHeDate(a.note) : ''}`;
-        if (a.kind === 'ma200' || a.kind === 'ma300') return `המחיר ${a.direction === 'above' ? 'מעל' : 'מתחת ל'}${k}`;
-        return `${k} ${a.direction === 'above' ? 'מעל' : 'מתחת ל'} ${a.kind === 'price' ? '$' : ''}${a.threshold}`;
+        if (a.kind === 'fvg_m' || a.kind === 'fvg_q') return `המחיר נכנס ל-${k}`;
+        if (a.kind === 'ma200' || a.kind === 'ma300' || a.kind === 'ma_w200' || a.kind === 'ma_w300') return `המחיר ${dir}${k}`;
+        if (a.kind === 'atr') return `ATR יומי ${dir} ${a.threshold}%`;
+        if (a.kind === 'vol') return `נפח ${a.threshold}× מהממוצע ומעלה`;
+        return `${k} ${dir} ${a.kind === 'price' ? '$' : ''}${a.threshold}`;
     };
     const doneChip = (a) => {
         if (a.kind === 'earnings') {

@@ -246,6 +246,19 @@ html.day-mode .wl-etf-details { background: #f3efe2; border-color: rgba(176,124,
 .wl-etf-del:hover { opacity: 1; }
 .wl-etf-body { padding: 4px 10px 8px; border-top: 1px solid rgba(250,204,21,0.18); }
 html.day-mode .wl-etf-body { border-top-color: rgba(176,124,0,0.2); }
+/* Custom-ETF basket row (click → detail window) */
+.wl-basket-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: right; font-family: inherit; cursor: pointer;
+    border: 1px solid rgba(250,204,21,0.28); border-radius: 11px; margin: 8px 0; padding: 13px 14px; background: rgba(250,204,21,0.05); transition: background .12s, border-color .12s; }
+.wl-basket-row:hover { background: rgba(250,204,21,0.1); border-color: var(--accent-yellow); }
+html.day-mode .wl-basket-row { background: #f3efe2; border-color: rgba(176,124,0,0.28); }
+html.day-mode .wl-basket-row:hover { background: #ede6d2; }
+.wl-basket-row .wl-etf-name { flex: 1; color: var(--text-primary); font-size: 14px; font-weight: 800; }
+.wl-basket-open { font-size: 12px; font-weight: 800; color: var(--accent-yellow); white-space: nowrap; }
+html.day-mode .wl-basket-open { color: #9a6f00; }
+.wl-basket-actions { display: flex; gap: 10px; padding: 12px 16px 4px; flex-wrap: wrap; }
+.wl-basket-actions .corr-run-btn { flex: 1; }
+.wl-basket-del { color: var(--accent-red, #ff5a6e); border-color: rgba(255,77,77,0.3); white-space: nowrap; }
+.wl-basket-del:hover { background: rgba(255,77,77,0.12); }
 .corr-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin: 8px 0; }
 .corr-legend .corr-cell { min-width: 0; padding: 3px 8px; }
 html.day-mode .corr-cell-hi  { background: #e05252; color: #fff; }
@@ -10353,6 +10366,10 @@ html.day-mode .wl-search { background: #e9e3d3; }
 .gold-bell-btn:hover .gb-ico { fill: #ffcf1a; }
 html.day-mode .gold-bell-btn .gb-ico { fill: #b8860b; filter: none; }
 html.day-mode .gold-bell-btn:hover .gb-ico { fill: #9a6f00; }
+/* Technical table: bell sits right next to the ticker symbol */
+.tech-name-row { display: flex; align-items: center; gap: 5px; }
+.tech-name-row .tech-tk { font-weight: 800; }
+.tech-name-row .gold-bell-btn { margin-inline-start: 1px; }
 
 /* ── Stock alerts (🔔) — create-alert button on the technical table + bell panel ── */
 .tech-alert-btn {
@@ -10365,9 +10382,11 @@ html.day-mode .tech-alert-btn { background: rgba(176,124,0,0.12); border-color: 
 .sa-box { max-width: 440px; }
 .sa-form { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
 .sa-field { display: flex; flex-direction: column; gap: 5px; }
-.sa-field label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
-.sa-field select, .sa-field input { width: 100%; }
-.sa-cur { font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.03); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+/* All create-alert text is bright/readable (night = white via --text-primary; day override below) */
+.sa-field label { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.sa-field select, .sa-field input { width: 100%; color: var(--text-primary); }
+.sa-cur { font-size: 12px; color: var(--text-primary); background: rgba(255,255,255,0.05); border: 1px solid var(--border-color, rgba(255,255,255,0.12)); border-radius: 8px; padding: 8px 10px; line-height: 1.6; font-weight: 600; }
+html.day-mode .sa-field label, html.day-mode .sa-field select, html.day-mode .sa-field input, html.day-mode .sa-cur { color: #191612; }
 html.day-mode .sa-cur { background: rgba(58,50,36,0.05); }
 .sa-actions { display: flex; gap: 10px; padding: 0 16px 16px; }
 .sa-actions .corr-run-btn { flex: 1; }
