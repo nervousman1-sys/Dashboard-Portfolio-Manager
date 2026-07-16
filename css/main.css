@@ -189,6 +189,15 @@ html.day-mode .corr-sec-chip.on { background: #bfe0f2; border-color: #2f7fb8; co
 html.day-mode .corr-mini-btn { background: #f3efe2; border-color: rgba(58,50,36,0.3); color: #1e293b; }
 html.day-mode .corr-mini-btn.corr-buy { color: #0f7a4d; border-color: rgba(15,122,77,0.4); }
 .corr-basket-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+/* Reset button (בין נכסים) — clears all chosen assets + the computed matrix */
+.corr-reset-btn {
+    background: rgba(255,77,77,0.08); color: var(--accent-red); border: 1px solid rgba(255,77,77,0.3);
+    border-radius: 8px; padding: 8px 16px; font-family: inherit; font-size: 0.88rem; font-weight: 800; cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.corr-reset-btn:hover { background: rgba(255,77,77,0.16); border-color: var(--accent-red); }
+html.day-mode .corr-reset-btn { background: rgba(200,30,30,0.07); color: #c81e1e; border-color: rgba(200,30,30,0.35); }
+html.day-mode .corr-reset-btn:hover { background: rgba(200,30,30,0.14); border-color: #c81e1e; }
 /* Search box in Mode 2 */
 .corr-search-wrap { display: flex; align-items: center; gap: 12px; margin: 4px 0; }
 .corr-search-wrap .st-pf-label { flex: 0 0 auto; }

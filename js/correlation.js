@@ -362,6 +362,7 @@ function _corrAssetsBodyHtml() {
         <div class="corr-chips">${chips || '<span class="corr-chip-empty">אין נכסים עדיין — הוסף לפחות שניים.</span>'}</div>
         <div class="st-portfolio-row" style="margin-top:6px">
             <button class="corr-run-btn corr-run-primary" id="corrMatrixBtn" onclick="_corrRunMatrix()" ${_corrAssets.length < 2 ? 'disabled' : ''}>חשב מטריצת קורלציה</button>
+            <button class="corr-reset-btn" onclick="_corrResetAssets()">✕ איפוס</button>
         </div>
         <div id="corrAssetsResult"></div>`;
 }
@@ -410,6 +411,12 @@ function _corrPickSearch(sym) {
     _corrAddAsset(sym);
     const dd = document.getElementById('corrTickerDropdown'); if (dd) { dd.innerHTML = ''; dd.style.display = 'none'; }
     const inp = document.getElementById('corrTickerSearch'); if (inp) inp.value = '';
+}
+// One-click reset: clear all chosen assets AND the computed matrix/summary.
+function _corrResetAssets() {
+    _corrAssets = [];
+    const host = document.getElementById('corrModeBody'); if (host) host.innerHTML = _corrAssetsBodyHtml();
+    const inp = document.getElementById('corrTickerSearch'); if (inp) inp.focus();
 }
 function _corrAddAsset(v) {
     const sym = String(v || '').trim().toUpperCase();
@@ -815,7 +822,7 @@ if (typeof window !== 'undefined') {
     window._corrMountInModal = _corrMountInModal;
     window._corrSetMode = _corrSetMode;
     window._corrAddAsset = _corrAddAsset; window._corrRemoveAsset = _corrRemoveAsset; window._corrRunMatrix = _corrRunMatrix;
-    window._corrTickerSearch = _corrTickerSearch; window._corrPickSearch = _corrPickSearch;
+    window._corrTickerSearch = _corrTickerSearch; window._corrPickSearch = _corrPickSearch; window._corrResetAssets = _corrResetAssets;
     window._corrRunSuggest = _corrRunSuggest; window._corrToggleSector = _corrToggleSector;
     window._corrSwapAsset = _corrSwapAsset; window._corrPickAlternative = _corrPickAlternative; window._corrCloseAlts = _corrCloseAlts;
     window._corrBuyAsset = _corrBuyAsset;
