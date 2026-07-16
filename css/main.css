@@ -10285,6 +10285,8 @@ html.day-mode .er-beat-no { color: #c81e1e; border-color: rgba(200, 30, 30, 0.4)
 .wl-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .wl-tk { font-size: 14px; font-weight: 800; color: var(--text-primary); }
 .wl-co { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Correlation basket: the company/sector/momentum line must be fully readable (bright, wraps, no emoji) */
+#corrSuggestResult .wl-co { color: var(--text-primary); font-size: 12px; font-weight: 600; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.45; opacity: .95; }
 .wl-priceblock { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 74px; }
 .wl-price { font-size: 14px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .wl-price.wl-dim { color: var(--text-muted); }
@@ -10307,6 +10309,32 @@ html.day-mode .wl-search { background: #e9e3d3; }
     .wl-box { max-width: 100%; border-radius: 18px 18px 0 0; max-height: 92vh; display: flex; flex-direction: column; }
     .wl-list { max-height: none; flex: 1; }
 }
+
+/* ── Stock alerts (🔔) — create-alert button on the technical table + bell panel ── */
+.tech-alert-btn {
+    background: rgba(255,193,7,0.12); border: 1px solid rgba(255,193,7,0.34); color: #ffca28;
+    border-radius: 7px; padding: 3px 9px; font-size: 11px; font-weight: 700; cursor: pointer;
+    font-family: inherit; white-space: nowrap; margin-inline-start: 8px; transition: background .12s;
+}
+.tech-alert-btn:hover { background: rgba(255,193,7,0.22); }
+html.day-mode .tech-alert-btn { background: rgba(176,124,0,0.12); border-color: rgba(176,124,0,0.4); color: #7a5600; }
+.sa-box { max-width: 440px; }
+.sa-form { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.sa-field { display: flex; flex-direction: column; gap: 5px; }
+.sa-field label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.sa-field select, .sa-field input { width: 100%; }
+.sa-cur { font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.03); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+html.day-mode .sa-cur { background: rgba(58,50,36,0.05); }
+.sa-actions { display: flex; gap: 10px; padding: 0 16px 16px; }
+.sa-actions .corr-run-btn { flex: 1; }
+.wl-close-btn { background: rgba(255,255,255,0.05); border: 1px solid var(--border-color, rgba(255,255,255,0.12)); color: var(--text-primary); border-radius: 9px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.wl-close-btn:hover { background: rgba(255,255,255,0.1); }
+html.day-mode .wl-close-btn { background: rgba(58,50,36,0.06); }
+.sa-alert-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+.sa-alert-row.sa-done { background: rgba(0,229,150,0.06); border-radius: 8px; }
+.sa-del { color: var(--accent-red, #ff5a6e); font-size: 15px; }
+.sa-hit { font-size: 12px; font-weight: 800; color: var(--accent-green, #00e596); white-space: nowrap; }
+.sa-pending { font-size: 12px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 
 /* ── Detail header ── */
 .rep-detail-top { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

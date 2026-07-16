@@ -400,6 +400,7 @@ function _techRender() {
                 <div class="tech-name-cell">
                     <span>${disp}</span>
                     <a class="tech-tv" href="${_techTvUrl(tvSym, v)}" target="_blank" rel="noopener" title="פתח גרף ב-TradingView עם האינדיקטורים הרלוונטיים">TradingView ↗</a>
+                    <button class="tech-alert-btn" onclick="if(typeof openCreateAlert==='function')openCreateAlert('${t}','${_techMarket}')" title="קבע התראה על מחיר/אינדיקטור">🔔 התראה</button>
                 </div>
             </td>
             <td>${curSym}${(v.price ?? 0).toLocaleString('en-US')}</td>

@@ -721,7 +721,7 @@ function _corrRenderBasket() {
         if (m.kind === 'gold') return 'זהב · גידור אינפלציה/משבר';
         const sec = _corrHeSector(m.sector);
         const rel = mom && m.sector != null ? mom[m.sector] : null;
-        const tag = rel != null ? (rel > 0.005 ? ' · 📈 מומנטום חיובי' : rel < -0.005 ? ' · 📉 מומנטום שלילי' : '') : '';
+        const tag = rel != null ? (rel > 0.005 ? ' · מומנטום חיובי' : rel < -0.005 ? ' · מומנטום שלילי' : '') : '';
         return `מניה${sec ? ' · ' + sec : ''} · ציון ${m.score}${tag}`;
     };
     const pfList = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients : [];
