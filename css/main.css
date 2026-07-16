@@ -9584,7 +9584,7 @@ html.day-mode .macro-yield-card .macro-yield-note b { color: #0369a1 !important;
 .tech-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #0ea5e9, #00e5ff); border-radius: 5px; transition: width .4s; }
 .tech-progress span, .tech-progress #techProgressTxt { font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
 .tech-table td, .tech-table th { white-space: nowrap; font-size: 12.5px; }
-.tech-name-cell { display: flex; flex-direction: column; gap: 3px; }
+.tech-name-cell { display: inline-flex; flex-direction: column; gap: 3px; }
 .tech-name-cell span { font-weight: 800; }
 .tech-tv {
     font-size: 10px; font-weight: 700; color: #8ab4f8; text-decoration: none; width: fit-content;
@@ -10366,10 +10366,11 @@ html.day-mode .wl-search { background: #e9e3d3; }
 .gold-bell-btn:hover .gb-ico { fill: #ffcf1a; }
 html.day-mode .gold-bell-btn .gb-ico { fill: #b8860b; filter: none; }
 html.day-mode .gold-bell-btn:hover .gb-ico { fill: #9a6f00; }
-/* Technical table: bell sits right next to the ticker symbol */
-.tech-name-row { display: flex; align-items: center; gap: 5px; }
+/* Technical table: ticker on the right, bell pushed to the LEFT edge so every bell lines up
+   in one straight column directly above the left edge of the TradingView button below it. */
+.tech-name-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; }
 .tech-name-row .tech-tk { font-weight: 800; }
-.tech-name-row .gold-bell-btn { margin-inline-start: 1px; }
+.tech-name-row .gold-bell-btn { margin: 0; flex: 0 0 auto; }
 
 /* ── Stock alerts (🔔) — create-alert button on the technical table + bell panel ── */
 .tech-alert-btn {

@@ -103,10 +103,6 @@ function openTechnicalPage() {
     <div dir="rtl">
         <div class="macro-page-header">
             <h1 class="macro-main-title">ניתוח טכני למניות</h1>
-            <div style="display:flex;gap:8px;align-items:center">
-                <button class="macro-back-btn" onclick="_techRescan()">סרוק מחדש</button>
-                <button class="macro-back-btn" onclick="closeTechnicalPage()">חזור לדשבורד</button>
-            </div>
         </div>
         <div class="macro-content">
             <div class="risk-table-card glass-card">

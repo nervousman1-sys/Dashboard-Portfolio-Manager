@@ -12,7 +12,11 @@ function syncBodyScrollLock() {
         .some(id => {
             const el = document.getElementById(id);
             return el && el.classList.contains('active');
-        });
+        })
+        // Watchlist / create-alert / bell-panel / basket-detail / earnings / correlation-matrix
+        // modals all render as `.wl-overlay`. Without this they never locked body scroll, so opening
+        // them let the page behind scroll and jump (sometimes dismissing the modal). Cover them all.
+        || !!document.querySelector('.wl-overlay.active');
     // The page scrolls on the <html> element (html has overflow-x:hidden, which makes
     // IT the scroll container — body{overflow:hidden} alone does NOT stop wheel
     // scrolling). Lock BOTH html and body.

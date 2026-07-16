@@ -167,7 +167,6 @@ function _repRenderShell() {
             <h1 class="macro-main-title">ניתוח דוחות כספיים</h1>
             <div class="macro-header-actions">
                 <button class="macro-watch-btn" onclick="openWatchlistModal()" title="רשימת מעקב">⭐ רשימת מעקב</button>
-                <button class="macro-back-btn" onclick="closeReportsPage()">חזור לדשבורד</button>
             </div>
         </div>
         <div class="macro-content">
