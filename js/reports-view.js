@@ -777,22 +777,68 @@ async function openUpcomingEarningsModal() {
             const when = d === 0 ? 'היום' : d === 1 ? 'מחר' : `בעוד ${d} ימים`;
             const cls = d <= 3 ? 'warn' : d <= 10 ? 'info' : 'dim';
             const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
-            return `<div class="wl-row"><div class="wl-main">
+            const cname = _repEscape(r.company_name || '');
+            return `<div class="wl-row" data-er-sym="${sym}"><div class="wl-main">
                 <div class="wl-id">
                     <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}</span>
-                    <span class="wl-co">${_repEscape(r.company_name || '')}</span>
+                    <span class="wl-co">${cname}</span>
                 </div>
                 <div class="wl-priceblock">
                     <span class="wl-price">${_repHeDate(r.next_earnings)}</span>
-                    <span class="er-when er-${cls}">${when}</span>
+                    <span class="er-when er-${cls}" id="erWhen-${disp}">${when}</span>
                 </div>
                 ${sc}
-                <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erUpcoming');">📊 דוח</button>
+                <div class="er-row-actions">
+                    <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erUpcoming');">📊 דוח</button>
+                    <button class="tech-alert-btn er-alert-btn" onclick="if(typeof createEarningsAlert==='function')createEarningsAlert('${sym}','${r.next_earnings}')" title="קבל התראה בפעמון כשהדוח מתפרסם">🔔 התראת דוח</button>
+                </div>
             </div></div>`;
         }).join('');
+        // Real-time overlay: for imminent names, ask Yahoo LIVE whether the report is already out
+        // (independent of the 24/7 agent) and mark "✓ התקבל הדוח" + beat/miss the moment it lands.
+        const imm = rows.filter(r => days(r.next_earnings) <= 3).map(r => String(r.symbol).toUpperCase());
+        if (imm.length) _erCheckReleased(imm, rows, () => document.getElementById('erUpcomingList') === el);
     } catch (e) {
         el.innerHTML = '<div class="wl-empty">טעינת המועדים נכשלה — נסה שוב בעוד רגע.</div>';
     }
+}
+
+// LIVE check (real-time): which imminent reports are already OUT. Overlays "✓ התקבל הדוח" and a
+// beat/miss line onto the matching rows — real Yahoo actual-vs-estimate EPS, no agent dependency.
+async function _erCheckReleased(syms, rows, stillOpen) {
+    try {
+        const r = await fetch(`/api/technicals?mode=earnings&symbols=${encodeURIComponent(syms.slice(0, 24).join(','))}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const results = (j && j.results) || {};
+        if (typeof stillOpen === 'function' && !stillOpen()) return;
+        const rowBy = {}; rows.forEach(x => { rowBy[String(x.symbol).toUpperCase()] = x; });
+        for (const sym of syms) {
+            const info = results[sym]; const row = rowBy[sym];
+            if (!info || !row) continue;
+            const sched = String(row.next_earnings).slice(0, 10);
+            const released = info.reportedDate && ((new Date(info.reportedDate) - new Date(sched)) / 86400e3 >= -4);
+            if (!released) continue;
+            const disp = sym.replace(/\.TA$/, '');
+            const whenEl = document.getElementById('erWhen-' + disp);
+            if (!whenEl) continue;
+            whenEl.className = 'er-when er-received';
+            whenEl.textContent = '✓ התקבל הדוח';
+            const rowEl = whenEl.closest('.wl-row');
+            if (rowEl && !rowEl.querySelector('.er-beatline')) {
+                const beat = (info.epsActual != null && info.epsEstimate != null) ? (info.epsActual >= info.epsEstimate)
+                    : (info.surprisePct != null ? info.surprisePct >= 0 : null);
+                const sp = info.surprisePct != null ? `${info.surprisePct >= 0 ? '+' : ''}${info.surprisePct}%` : '';
+                const beatTxt = beat === true ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>`
+                    : beat === false ? `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`
+                        : `<span class="er-beat">הדוח התפרסם</span>`;
+                const eps = (info.epsActual != null && info.epsEstimate != null)
+                    ? ` <span class="er-eps">EPS $${info.epsActual} מול צפי $${info.epsEstimate}</span>` : '';
+                const line = document.createElement('div'); line.className = 'wl-sig er-beatline';
+                line.innerHTML = beatTxt + eps;
+                rowEl.appendChild(line);
+            }
+        }
+    } catch (e) { /* best-effort real-time overlay */ }
 }
 
 // ── 🆕 Recently reported — what came out: score, beat-vs-YoY, market reaction, material news ──

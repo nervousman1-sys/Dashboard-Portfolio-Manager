@@ -409,6 +409,22 @@ module.exports = async (req, res) => {
             return;
         }
 
+        // mode=earnings — LIVE earnings status (batch): latest reported quarter actual-vs-estimate
+        // (beat/miss) + upcoming consensus. Real-time "התקבל הדוח" + earnings alerts, independent of
+        // the 24/7 reports agent. Delegated to the shared lib to stay under the 12-serverless-fn cap.
+        if (mode === 'earnings') {
+            const { fetchYahooEarnings } = require('../lib/reports-data.js');
+            const syms = String(req.query.symbols || req.query.symbol || '')
+                .split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 24);
+            if (!syms.length) { res.status(400).json({ error: 'symbols required' }); return; }
+            const settled = await Promise.allSettled(syms.map(s => fetchYahooEarnings(s)));
+            const results = {};
+            settled.forEach((s, i) => { if (s.status === 'fulfilled' && s.value) results[syms[i]] = s.value; });
+            res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+            res.status(200).json({ results });
+            return;
+        }
+
         // mode=peers — sector peer-multiples comparison (Yahoo quoteSummary per symbol).
         // The client passes same-sector tickers via &peers=A,B,C; we fetch the base + peers in
         // parallel, keep those with usable multiples, and return the largest by market cap.

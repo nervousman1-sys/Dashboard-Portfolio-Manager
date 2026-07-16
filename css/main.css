@@ -10203,6 +10203,13 @@ html.day-mode .er-held { color: #0369a1; background: rgba(3, 105, 161, 0.1); bor
 html.day-mode .er-beat-yes { color: #0f7a4d; border-color: rgba(15, 122, 77, 0.4); background: rgba(15, 122, 77, 0.08); }
 html.day-mode .er-beat-no { color: #c81e1e; border-color: rgba(200, 30, 30, 0.4); background: rgba(200, 30, 30, 0.07); }
 .er-news:empty { display: none; }
+/* Live "report received" overlay + beat/miss line in the upcoming-earnings modal */
+.er-when.er-received { color: var(--accent-green); font-weight: 800; }
+html.day-mode .er-when.er-received { color: #0f7a4d; }
+.er-beatline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.er-eps { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
+.er-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.er-alert-btn { padding: 5px 9px; }
 /* Reports board: the same two windows reachable from the board's intel strip */
 .rep-earn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }
 @media (max-width: 768px) { .rep-earn-actions .qw-earn-btn { display: inline-block; } }
@@ -10334,6 +10341,7 @@ html.day-mode .wl-close-btn { background: rgba(58,50,36,0.06); }
 .sa-alert-row.sa-done { background: rgba(0,229,150,0.06); border-radius: 8px; }
 .sa-del { color: var(--accent-red, #ff5a6e); font-size: 15px; }
 .sa-hit { font-size: 12px; font-weight: 800; color: var(--accent-green, #00e596); white-space: nowrap; }
+.sa-hit.sa-hit-miss { color: var(--accent-red, #ff5a6e); }
 .sa-pending { font-size: 12px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 
 /* ── Detail header ── */
