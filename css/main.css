@@ -217,6 +217,9 @@ html.day-mode .corr-alt-row:hover { background: #ece8db; }
 .corr-alt-tk { font-weight: 800; color: var(--text-primary); min-width: 60px; }
 .corr-alt-co { flex: 1; font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .corr-alt-rho { font-weight: 800; direction: ltr; font-variant-numeric: tabular-nums; min-width: 56px; text-align: left; }
+/* Watchlist group header (custom-ETF basket) */
+.wl-group-head { font-size: 12px; font-weight: 800; color: var(--accent-blue); margin: 12px 4px 4px; padding: 6px 10px; border-radius: 8px; background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.2); }
+html.day-mode .wl-group-head { color: #0369a1; background: #e9e3d3; border-color: rgba(58,50,36,0.22); }
 .corr-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin: 8px 0; }
 .corr-legend .corr-cell { min-width: 0; padding: 3px 8px; }
 html.day-mode .corr-cell-hi  { background: #e05252; color: #fff; }

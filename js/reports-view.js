@@ -430,15 +430,17 @@ async function _repLoadIntel() {
 // ── Watchlist (per-user, Supabase `watchlist` with RLS) ─────────────────────────────────────────
 let _repWatch = new Set();        // watched symbols (UPPER)
 let _repWatchMkt = {};            // symbol → market
+let _repWatchGroup = {};          // symbol → group_label (e.g. "תעודת סל בהתאמה אישית")
 function _repIsWatched(sym) { return _repWatch.has(String(sym).toUpperCase()); }
 
 async function _repLoadWatch() {
     if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
     try {
-        const { data, error } = await supabaseClient.from('watchlist').select('symbol,market').order('created_at', { ascending: true });
+        const { data, error } = await supabaseClient.from('watchlist').select('symbol,market,group_label').order('created_at', { ascending: true });
         if (error) return;
         _repWatch = new Set((data || []).map(r => String(r.symbol).toUpperCase()));
-        _repWatchMkt = {}; (data || []).forEach(r => { _repWatchMkt[String(r.symbol).toUpperCase()] = r.market || 'us'; });
+        _repWatchMkt = {}; _repWatchGroup = {};
+        (data || []).forEach(r => { const k = String(r.symbol).toUpperCase(); _repWatchMkt[k] = r.market || 'us'; if (r.group_label) _repWatchGroup[k] = r.group_label; });
         _repRenderWatchBar();
         _repRefreshStars();
     } catch (e) { /* not logged in / offline — fine */ }
@@ -479,7 +481,27 @@ async function _repToggleWatch(symbol) {
 function _repRefreshStars() {
     document.querySelectorAll('[data-rep-star]').forEach(el => el.classList.toggle('on', _repWatch.has(el.getAttribute('data-rep-star'))));
 }
-if (typeof window !== 'undefined') { window._repToggleWatch = _repToggleWatch; window._repLoadWatch = _repLoadWatch; }
+// Add several symbols to the watchlist at once under a GROUP label (e.g. a custom-ETF
+// basket from the correlation builder). Skips already-watched names. Real Supabase insert.
+async function _repAddWatchGroup(symbols, groupLabel) {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) return { added: 0 };
+    const rows = [];
+    for (const raw of (symbols || [])) {
+        const symbol = String(raw || '').toUpperCase().trim();
+        if (!symbol || _repWatch.has(symbol)) continue;
+        const mkt = /\.TA$/.test(symbol) ? 'il' : 'us';
+        rows.push({ symbol, market: mkt, group_label: groupLabel || null });
+    }
+    if (!rows.length) return { added: 0 };
+    try {
+        const { error } = await supabaseClient.from('watchlist').insert(rows);
+        if (error) throw error;
+        rows.forEach(r => { _repWatch.add(r.symbol); _repWatchMkt[r.symbol] = r.market; if (r.group_label) _repWatchGroup[r.symbol] = r.group_label; });
+        _repRefreshStars();
+        return { added: rows.length };
+    } catch (e) { return { added: 0, error: e.message }; }
+}
+if (typeof window !== 'undefined') { window._repToggleWatch = _repToggleWatch; window._repLoadWatch = _repLoadWatch; window._repAddWatchGroup = _repAddWatchGroup; }
 
 // ══ Watchlist MODAL — shared window (dashboard button + reports button + mobile nav) ══
 // Shows each watched stock with its live price + a link to its report, plus a search
@@ -564,7 +586,8 @@ async function _wlRenderList() {
     } catch (e) { }
     const prices = await _wlFetchPrices(syms);
     if (document.getElementById('wlList') !== el) return;
-    el.innerHTML = syms.map(s => {
+    // Group labeled baskets (e.g. "תעודת סל בהתאמה אישית") under a header; ungrouped first.
+    const rowHtml = (s) => {
         const r = info[s] || {};
         const disp = String(s).replace(/\.TA$/, '');
         const q = prices[s] || prices[disp] || {};
@@ -587,7 +610,15 @@ async function _wlRenderList() {
             </div>
             <div class="wl-sig" id="wlSig-${disp}">${_wlReportSignals(r).join('')}</div>
         </div>`;
-    }).join('');
+    };
+    const ungrouped = syms.filter(s => !_repWatchGroup[s]);
+    const groups = {};
+    syms.filter(s => _repWatchGroup[s]).forEach(s => { (groups[_repWatchGroup[s]] = groups[_repWatchGroup[s]] || []).push(s); });
+    let html = ungrouped.map(rowHtml).join('');
+    for (const [label, gsyms] of Object.entries(groups)) {
+        html += `<div class="wl-group-head">📦 ${_repEscape(label)}</div>` + gsyms.map(rowHtml).join('');
+    }
+    el.innerHTML = html;
     // Significant signals (technical extremes + fresh company news) load async and patch in.
     _wlLoadSignals(syms);
 }
