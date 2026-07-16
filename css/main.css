@@ -164,6 +164,28 @@ body {
 .corr-cell-lo  { background: #a9e5c9; }
 .corr-cell-neg { background: #4ade80; }         /* negative → true diversifier */
 .corr-cell-x   { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+/* Autocomplete dropdown (בין נכסים) */
+.corr-suggest { position: absolute; top: 100%; right: 84px; z-index: 30; display: none; flex-wrap: wrap; gap: 5px; margin-top: 4px; background: var(--bg-surface); border: 1px solid var(--border-hover); border-radius: 10px; padding: 8px; box-shadow: 0 12px 30px rgba(0,0,0,0.4); max-width: 420px; }
+.corr-sg-item { background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.22); color: var(--accent-blue); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.corr-sg-item:hover { background: rgba(0,229,255,0.16); }
+html.day-mode .corr-suggest { background: #f6f2e6; }
+html.day-mode .corr-sg-item { background: #e9e3d3; border-color: rgba(58,50,36,0.3); color: #0369a1; }
+/* Sector multi-select (הצעות פיזור) */
+.corr-sec-row { margin: 10px 0 2px; }
+.corr-sec-sel { color: var(--accent-blue); font-weight: 700; }
+.corr-sec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.corr-sec-chip { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .12s; }
+.corr-sec-chip:hover { border-color: var(--accent-blue); }
+.corr-sec-chip.on { background: rgba(0,229,255,0.14); border-color: var(--accent-blue); color: var(--accent-blue); }
+html.day-mode .corr-sec-chip.on { background: #bfe0f2; border-color: #2f7fb8; color: #0f2f45; }
+/* Basket mini actions + buy row */
+.corr-mini-btn { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.corr-mini-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+.corr-mini-btn.corr-buy { color: var(--accent-green); border-color: rgba(0,255,148,0.3); }
+.corr-mini-btn.corr-buy:hover { background: rgba(0,255,148,0.1); border-color: var(--accent-green); }
+html.day-mode .corr-mini-btn { background: #f3efe2; border-color: rgba(58,50,36,0.3); color: #1e293b; }
+html.day-mode .corr-mini-btn.corr-buy { color: #0f7a4d; border-color: rgba(15,122,77,0.4); }
+.corr-basket-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
 .corr-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin: 8px 0; }
 .corr-legend .corr-cell { min-width: 0; padding: 3px 8px; }
 html.day-mode .corr-cell-hi  { background: #e05252; color: #fff; }
