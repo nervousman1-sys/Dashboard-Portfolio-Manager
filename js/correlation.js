@@ -747,15 +747,27 @@ function _corrRenderBasket() {
                 <button class="corr-mini-btn" onclick="_corrSwapAsset('${s}')" title="הצג עד 10 חלופות">🔄 החלף</button>
                 <button class="wl-report" onclick="if(typeof openReportForTicker==='function'){openReportForTicker('${s}');}">📊 דוח</button>
                 <button class="corr-mini-btn corr-buy" onclick="_corrBuyAsset('${s}')" title="הוסף לתיק / קנה">➕ קנה</button>
+                <button class="corr-mini-btn corr-remove" onclick="_corrRemoveFromBasket('${s}')" title="הסר מהסל">✕ הסר</button>
             </div><div id="corrAlts-${disp}" class="corr-alts"></div></div>`;
     }).join('')}</div>
+        <div class="corr-basket-add">
+            <label class="st-pf-label">➕ הוסף מניה לסל:</label>
+            <div class="ticker-search-wrapper" style="flex:1;position:relative;min-width:200px">
+                <input type="text" id="corrBasketAdd" class="corr-input" style="width:100%" autocomplete="off" placeholder="חפש והוסף מניה לסל המוצע…" oninput="_corrBasketAddSearch()" />
+                <div id="corrBasketAddDD" class="ticker-search-dropdown"></div>
+            </div>
+        </div>
         <div class="corr-basket-actions">
-            <label class="st-pf-label">בנה תיק מההצעה:</label>
+            <label class="st-pf-label">קנה את כל הסל:</label>
             ${pfOpts ? `<select class="st-pf-select" id="corrBuyPf" style="min-width:180px">${pfOpts}</select>
-            <button class="corr-run-btn" onclick="_corrAddBasketToPortfolio()">הוסף את כל הסל לתיק</button>` : ''}
-            <button class="corr-run-btn corr-run-primary" onclick="_corrCreatePortfolio()">➕ צור תיק חדש מהסל</button>
-            <button class="corr-run-btn" onclick="_corrBasketToWatchlist()">⭐ הוסף למעקב (תעודת סל בהתאמה אישית)</button>
+            <button class="corr-run-btn" onclick="_corrAddBasketToPortfolio()">🛒 קנה הכל לתיק שנבחר</button>` : ''}
+            <button class="corr-run-btn corr-run-primary" onclick="_corrCreatePortfolio()">➕ פתח תיק חדש עם הסל</button>
             <button class="corr-run-btn" onclick="_corrShowMatrixModal()">📊 הצג מטריצת קורלציה</button>
+        </div>
+        <div class="corr-basket-actions corr-watch-row">
+            <label class="st-pf-label">⭐ שמור כתעודת סל בהתאמה אישית:</label>
+            <input type="text" id="corrWatchName" class="corr-input" style="min-width:200px" maxlength="40" placeholder="תן שם לרשימה (למשל: סל פיזור יולי)" />
+            <button class="corr-run-btn" id="corrWatchBtn" onclick="_corrBasketToWatchlist()">⭐ הוסף לרשימת המעקב</button>
         </div>
         <div class="corr-note">תנאי הסינון: מניות בציון דוחות ≥ ${CORR_MIN_SCORE} ומובילות בסקטור שלהן · עוגני הגנה בדירוג מעל A (אג"ח ממשלת ארה"ב AAA) + זהב · אחוזי חשיפה = risk-parity ${anyMom ? '× מומנטום סקטורים (21 יום מול S&P)' : ''} · מתאמים ומחירים אמיתיים על 365 ימי מסחר. ההצעה אינה ייעוץ השקעות.</div>`;
     _corrLoadBasketPrices();
@@ -774,15 +786,76 @@ function _corrShowMatrixModal() {
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 function _corrCloseMatrix() { const ov = document.getElementById('corrMatrixOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
-// Add the whole basket to the watchlist under a custom-ETF group label.
+// Add the whole basket to the watchlist under a user-named custom-ETF group label.
 async function _corrBasketToWatchlist() {
-    if (!_corrSug || typeof _repAddWatchGroup !== 'function') return;
-    const label = 'תעודת סל בהתאמה אישית';
-    const r = await _repAddWatchGroup(_corrSug.chosen, label);
-    if (typeof showToast === 'function') {
-        if (r.added) showToast(`${r.added} נכסים נוספו לרשימת המעקב כ"${label}"`, 'success');
-        else showToast('הנכסים כבר במעקב (או שאינך מחובר)', 'info');
+    if (!_corrSug || typeof _repAddWatchGroup !== 'function') { if (typeof showToast === 'function') showToast('בנה קודם סל מוצע', 'info'); return; }
+    const inp = document.getElementById('corrWatchName');
+    const label = ((inp && inp.value.trim()) || 'תעודת סל בהתאמה אישית').slice(0, 40);
+    const btn = document.getElementById('corrWatchBtn');
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'שומר…'; }
+    try {
+        const r = await _repAddWatchGroup(_corrSug.chosen, label);
+        if (typeof showToast === 'function') {
+            if (r.added) showToast(`✅ ${r.added} נכסים נשמרו לרשימת המעקב תחת "${label}"`, 'success');
+            else showToast('כל נכסי הסל כבר קיימים במעקב (או שאינך מחובר)', 'info');
+        }
+        if (btn) { btn.textContent = r.added ? '✓ נשמר למעקב' : orig; setTimeout(() => { if (btn) { btn.textContent = orig; btn.disabled = false; } }, r.added ? 1600 : 0); if (!r.added) btn.disabled = false; }
+        if (inp && r.added) inp.value = '';
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('שמירה לרשימת המעקב נכשלה', 'error');
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
     }
+}
+// Remove one asset from the suggested basket, then recompute the matrix/weights.
+function _corrRemoveFromBasket(sym) {
+    if (!_corrSug) return;
+    if (_corrSug.chosen.length <= 2) { if (typeof showToast === 'function') showToast('נדרשים לפחות 2 נכסים בסל', 'info'); return; }
+    _corrSug.chosen = _corrSug.chosen.filter(x => x !== String(sym));
+    _corrRecomputeBasket();
+}
+// Add-to-basket search (after a suggestion is built) — reuses the app search infra.
+let _corrBasketAddTimer = null;
+function _corrBasketAddSearch() {
+    clearTimeout(_corrBasketAddTimer);
+    const q = (document.getElementById('corrBasketAdd') || {}).value?.trim();
+    const dd = document.getElementById('corrBasketAddDD');
+    if (!dd) return;
+    if (!q || q.length < 1) { dd.innerHTML = ''; dd.style.display = 'none'; return; }
+    const local = (typeof _sortSearchResults === 'function') ? _sortSearchResults([...(typeof searchHebrewNames === 'function' ? searchHebrewNames(q) : []), ...(typeof searchLocalBonds === 'function' ? searchLocalBonds(q) : [])], q) : [];
+    dd.style.display = 'block';
+    if (local.length) _corrRenderBasketAddSearch(local, dd); else dd.innerHTML = '<div class="ticker-search-loading">מחפש…</div>';
+    _corrBasketAddTimer = setTimeout(async () => {
+        try { const api = (typeof searchTwelveDataSymbols === 'function') ? await searchTwelveDataSymbols(q) : []; _corrRenderBasketAddSearch(_sortSearchResults(_mergeLocalAndApiResults(local, api), q), dd); }
+        catch (e) { if (!local.length) dd.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>'; }
+    }, 300);
+}
+function _corrRenderBasketAddSearch(results, dd) {
+    if (!results.length) { dd.innerHTML = '<div class="ticker-search-empty">לא נמצאו תוצאות</div>'; return; }
+    dd.innerHTML = results.slice(0, 8).map((r, i) => {
+        const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
+        const isBond = r.type === 'Bond';
+        const primary = isBond ? (r.name || r.symbol) : (heName || r.name || r.symbol);
+        const disp = (r.exchange === 'TASE' && !String(r.symbol).includes('.TA')) ? r.symbol + '.TA' : r.symbol;
+        return `<div class="ticker-search-item" onclick="_corrBasketPick('${String(disp).replace(/'/g, "\\'")}')">
+            <div class="search-row-grid"><div class="search-col-name"><span class="search-name-primary">${isBond ? '<span class="search-bond-tag">אג"ח</span>' : ''}${primary}</span></div>
+            <div class="search-col-ticker">${disp}</div><div class="search-col-exchange">${r.exchange || ''}</div>
+            <div class="search-col-price" id="slp_corradd_${i}"><span class="price-loading">···</span></div></div></div>`;
+    }).join('');
+    if (typeof _fetchSearchResultPrices === 'function') _fetchSearchResultPrices(results.slice(0, 8), 'corradd');
+}
+function _corrBasketPick(sym) {
+    const s = String(sym).toUpperCase();
+    const dd = document.getElementById('corrBasketAddDD'); if (dd) { dd.innerHTML = ''; dd.style.display = 'none'; }
+    const inp = document.getElementById('corrBasketAdd'); if (inp) inp.value = '';
+    if (!_corrSug) return;
+    if (_corrSug.chosen.includes(s)) { if (typeof showToast === 'function') showToast('הנכס כבר בסל', 'info'); return; }
+    if (_corrSug.chosen.length >= 20) { if (typeof showToast === 'function') showToast('הסל הגיע ל-20 נכסים', 'info'); return; }
+    // Minimal meta; _corrRecomputeBasket() fills score/name/sector from company_reports and refetches histories.
+    _corrSug.meta[s] = _corrSug.meta[s] || { name: s.replace(/\.TA$/, ''), score: null, kind: 'stock', sector: null };
+    _corrSug.chosen.push(s);
+    if (typeof showToast === 'function') showToast(`מוסיף את ${s.replace(/\.TA$/, '')} לסל…`, 'info');
+    _corrRecomputeBasket();
 }
 // Live price per basket asset (real quote), patched into each row.
 async function _corrLoadBasketPrices() {
@@ -927,4 +1000,5 @@ if (typeof window !== 'undefined') {
     window._corrAddBasketToPortfolio = _corrAddBasketToPortfolio; window._corrCreatePortfolio = _corrCreatePortfolio;
     window._corrPinSearch = _corrPinSearch; window._corrPin = _corrPin; window._corrUnpin = _corrUnpin; window._corrResetSuggest = _corrResetSuggest;
     window._corrShowMatrixModal = _corrShowMatrixModal; window._corrCloseMatrix = _corrCloseMatrix; window._corrBasketToWatchlist = _corrBasketToWatchlist;
+    window._corrRemoveFromBasket = _corrRemoveFromBasket; window._corrBasketAddSearch = _corrBasketAddSearch; window._corrBasketPick = _corrBasketPick;
 }

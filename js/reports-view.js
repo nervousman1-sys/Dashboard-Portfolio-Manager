@@ -611,16 +611,50 @@ async function _wlRenderList() {
             <div class="wl-sig" id="wlSig-${disp}">${_wlReportSignals(r).join('')}</div>
         </div>`;
     };
+    // Two categories: (1) stocks & other assets (ungrouped), (2) custom-ETF lists (grouped by
+    // the label the user gave the basket). Each custom-ETF list COLLAPSES to its name — click to
+    // expand its holdings — so many baskets don't flood the view.
     const ungrouped = syms.filter(s => !_repWatchGroup[s]);
     const groups = {};
     syms.filter(s => _repWatchGroup[s]).forEach(s => { (groups[_repWatchGroup[s]] = groups[_repWatchGroup[s]] || []).push(s); });
-    let html = ungrouped.map(rowHtml).join('');
-    for (const [label, gsyms] of Object.entries(groups)) {
-        html += `<div class="wl-group-head">📦 ${_repEscape(label)}</div>` + gsyms.map(rowHtml).join('');
+    const groupEntries = Object.entries(groups);
+    _wlGroupLabels = groupEntries.map(e => e[0]);
+    let html = '';
+    if (ungrouped.length) {
+        html += `<div class="wl-cat-head">📈 מניות ונכסים <span class="wl-cat-count">${ungrouped.length}</span></div>`;
+        html += ungrouped.map(rowHtml).join('');
     }
-    el.innerHTML = html;
+    if (groupEntries.length) {
+        html += `<div class="wl-cat-head wl-cat-etf">📦 תעודות סל בהתאמה אישית <span class="wl-cat-count">${groupEntries.length}</span></div>`;
+        html += groupEntries.map(([label, gsyms], idx) => `<details class="wl-etf-details">
+            <summary class="wl-etf-summary">
+                <span class="wl-etf-chevron">▸</span>
+                <span class="wl-etf-name">${_repEscape(label)}</span>
+                <span class="wl-etf-count">${gsyms.length} נכסים</span>
+                <button class="wl-etf-del" onclick="event.preventDefault();event.stopPropagation();_wlRemoveGroup(${idx})" title="הסר את כל הרשימה">🗑</button>
+            </summary>
+            <div class="wl-etf-body">${gsyms.map(rowHtml).join('')}</div>
+        </details>`).join('');
+    }
+    el.innerHTML = html || '<div class="wl-empty">אין מניות במעקב עדיין. חפש מניה למעלה כדי להוסיף, או הוסף מכוכב ★ בעמוד הדוח.</div>';
     // Significant signals (technical extremes + fresh company news) load async and patch in.
     _wlLoadSignals(syms);
+}
+// Remove a whole custom-ETF list (all its symbols) by its index in the last render.
+let _wlGroupLabels = [];
+async function _wlRemoveGroup(idx) {
+    const label = _wlGroupLabels[idx];
+    if (!label) return;
+    const gsyms = [..._repWatch].filter(s => _repWatchGroup[s] === label);
+    if (!gsyms.length) return;
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת', 'error'); return; }
+    try {
+        const { error } = await supabaseClient.from('watchlist').delete().in('symbol', gsyms);
+        if (error) throw error;
+        gsyms.forEach(s => { _repWatch.delete(s); delete _repWatchGroup[s]; delete _repWatchMkt[s]; });
+        if (typeof showToast === 'function') showToast(`הרשימה "${label}" הוסרה מהמעקב`, 'success');
+        _wlRenderList(); _repRefreshStars();
+    } catch (e) { if (typeof showToast === 'function') showToast('הסרת הרשימה נכשלה', 'error'); }
 }
 
 // ── Watchlist signals — anything MATERIAL about a watched name, shown next to it ──
@@ -718,7 +752,7 @@ function _wlSuggest(q) {
 }
 if (typeof window !== 'undefined') {
     window.openWatchlistModal = openWatchlistModal; window.closeWatchlistModal = closeWatchlistModal;
-    window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest;
+    window._wlRemove = _wlRemove; window._wlAddFromSearch = _wlAddFromSearch; window._wlSuggest = _wlSuggest; window._wlRemoveGroup = _wlRemoveGroup;
 }
 
 // ══ EARNINGS WINDOWS — "דוחות קרובים" + "דיווחו לאחרונה" (index-strip buttons) ══
@@ -754,9 +788,28 @@ function _erClose(id) {
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
 
-// ── 📅 Upcoming earnings — every scheduled next-report date, soonest first ──
+// Small gold bell (icon only) reused for the earnings-alert button.
+const _ER_GOLD_BELL = '<svg class="gb-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2a2 2 0 0 0-2 2v.29A7 7 0 0 0 5 11v3.28l-1.55 2.33A1 1 0 0 0 4.28 18h15.44a1 1 0 0 0 .83-1.39L19 14.28V11a7 7 0 0 0-5-6.71V4a2 2 0 0 0-2-2z"/><path d="M10 20a2 2 0 0 0 4 0z"/></svg>';
+
+// Which modal to reopen after the user views a company report and comes back (Back / חזור).
+let _erReturnModal = null;
+function _erOpenReport(sym, modalId) {
+    _erReturnModal = modalId || null;
+    _erClose(modalId);
+    if (typeof openReportForTicker === 'function') openReportForTicker(sym);
+}
+function _erReopenAfterReport() {
+    if (!_erReturnModal) return;
+    const m = _erReturnModal; _erReturnModal = null;
+    setTimeout(() => {
+        if (m === 'erUpcoming' && typeof openUpcomingEarningsModal === 'function') openUpcomingEarningsModal();
+        else if (m === 'erRecent' && typeof openRecentEarningsModal === 'function') openRecentEarningsModal();
+    }, 80);
+}
+
+// ── 📅 Upcoming earnings — received reports first, then today, then soonest ──
 async function openUpcomingEarningsModal() {
-    _erShell('erUpcoming', '📅 דוחות קרובים', 'כל מועדי הדוחות הבאים לפי סדר · האחזקות שלך מסומנות');
+    _erShell('erUpcoming', '📅 דוחות קרובים', 'דוחות שכבר התקבלו מוצגים ראשונים · אחריהם לפי המועד הקרוב ביותר');
     const el = document.getElementById('erUpcomingList');
     if (!el) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -769,8 +822,28 @@ async function openUpcomingEarningsModal() {
         if (!rows.length) { el.innerHTML = '<div class="wl-empty">אין מועדי דוחות עתידיים ידועים כרגע.</div>'; return; }
         const held = _erHeldSet();
         const days = (d) => Math.round((new Date(d) - new Date(today)) / 86400e3);
-        // Holdings first, then by date — the manager's own names lead.
-        rows.sort((a, b) => (held.has(b.symbol.toUpperCase()) - held.has(a.symbol.toUpperCase())) || a.next_earnings.localeCompare(b.next_earnings));
+        // Live earnings for imminent names → detect which reports are ALREADY OUT (received),
+        // so they can be shown first with beat/miss — real Yahoo actual-vs-estimate, no agent lag.
+        const imm = rows.filter(r => days(r.next_earnings) <= 3).map(r => String(r.symbol).toUpperCase());
+        let erInfo = {};
+        if (imm.length) {
+            try {
+                const rr = await fetch(`/api/technicals?mode=earnings&symbols=${encodeURIComponent(imm.slice(0, 24).join(','))}`, { headers: { Accept: 'application/json' } });
+                const jj = await rr.json(); erInfo = (jj && jj.results) || {};
+            } catch (e) { }
+            if (document.getElementById('erUpcomingList') !== el) return;
+        }
+        const relOf = (r) => {
+            const info = erInfo[String(r.symbol).toUpperCase()];
+            if (!info || !info.reportedDate) return null;
+            const sched = String(r.next_earnings).slice(0, 10);
+            return ((new Date(info.reportedDate) - new Date(sched)) / 86400e3 >= -4) ? info : null;
+        };
+        // Order: received (tier −1) → today/soonest by days ascending. Held is a tiebreaker within a tier.
+        const tier = (r) => relOf(r) ? -1 : days(r.next_earnings);
+        rows.sort((a, b) => tier(a) - tier(b)
+            || (held.has(b.symbol.toUpperCase()) - held.has(a.symbol.toUpperCase()))
+            || a.next_earnings.localeCompare(b.next_earnings));
         el.innerHTML = rows.map(r => {
             const sym = String(r.symbol).toUpperCase(), disp = sym.replace(/\.TA$/, '');
             const d = days(r.next_earnings);
@@ -778,6 +851,21 @@ async function openUpcomingEarningsModal() {
             const cls = d <= 3 ? 'warn' : d <= 10 ? 'info' : 'dim';
             const sc = (r.score != null) ? `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>` : '';
             const cname = _repEscape(r.company_name || '');
+            const info = relOf(r);
+            let whenHtml, beatLine = '';
+            if (info) {
+                const beat = (info.epsActual != null && info.epsEstimate != null) ? (info.epsActual >= info.epsEstimate)
+                    : (info.surprisePct != null ? info.surprisePct >= 0 : null);
+                const sp = info.surprisePct != null ? `${info.surprisePct >= 0 ? '+' : ''}${info.surprisePct}%` : '';
+                const beatTxt = beat === true ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>`
+                    : beat === false ? `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`
+                        : `<span class="er-beat">הדוח התפרסם</span>`;
+                const eps = (info.epsActual != null && info.epsEstimate != null) ? ` <span class="er-eps">EPS $${info.epsActual} מול צפי $${info.epsEstimate}</span>` : '';
+                whenHtml = `<span class="er-when er-received">✓ התקבל הדוח</span>`;
+                beatLine = `<div class="wl-sig er-beatline">${beatTxt}${eps}</div>`;
+            } else {
+                whenHtml = `<span class="er-when er-${cls}">${when}</span>`;
+            }
             return `<div class="wl-row" data-er-sym="${sym}"><div class="wl-main">
                 <div class="wl-id">
                     <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}</span>
@@ -785,60 +873,18 @@ async function openUpcomingEarningsModal() {
                 </div>
                 <div class="wl-priceblock">
                     <span class="wl-price">${_repHeDate(r.next_earnings)}</span>
-                    <span class="er-when er-${cls}" id="erWhen-${disp}">${when}</span>
+                    ${whenHtml}
                 </div>
                 ${sc}
                 <div class="er-row-actions">
-                    <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erUpcoming');">📊 דוח</button>
-                    <button class="tech-alert-btn er-alert-btn" onclick="if(typeof createEarningsAlert==='function')createEarningsAlert('${sym}','${r.next_earnings}')" title="קבל התראה בפעמון כשהדוח מתפרסם">🔔 התראת דוח</button>
+                    <button class="wl-report" onclick="_erOpenReport('${sym}','erUpcoming')">📊 דוח</button>
+                    <button class="gold-bell-btn" onclick="if(typeof createEarningsAlert==='function')createEarningsAlert('${sym}','${r.next_earnings}')" title="קבל התראה בפעמון כשהדוח מתפרסם" aria-label="התראת דוח">${_ER_GOLD_BELL}</button>
                 </div>
-            </div></div>`;
+            </div>${beatLine}</div>`;
         }).join('');
-        // Real-time overlay: for imminent names, ask Yahoo LIVE whether the report is already out
-        // (independent of the 24/7 agent) and mark "✓ התקבל הדוח" + beat/miss the moment it lands.
-        const imm = rows.filter(r => days(r.next_earnings) <= 3).map(r => String(r.symbol).toUpperCase());
-        if (imm.length) _erCheckReleased(imm, rows, () => document.getElementById('erUpcomingList') === el);
     } catch (e) {
         el.innerHTML = '<div class="wl-empty">טעינת המועדים נכשלה — נסה שוב בעוד רגע.</div>';
     }
-}
-
-// LIVE check (real-time): which imminent reports are already OUT. Overlays "✓ התקבל הדוח" and a
-// beat/miss line onto the matching rows — real Yahoo actual-vs-estimate EPS, no agent dependency.
-async function _erCheckReleased(syms, rows, stillOpen) {
-    try {
-        const r = await fetch(`/api/technicals?mode=earnings&symbols=${encodeURIComponent(syms.slice(0, 24).join(','))}`, { headers: { Accept: 'application/json' } });
-        const j = await r.json();
-        const results = (j && j.results) || {};
-        if (typeof stillOpen === 'function' && !stillOpen()) return;
-        const rowBy = {}; rows.forEach(x => { rowBy[String(x.symbol).toUpperCase()] = x; });
-        for (const sym of syms) {
-            const info = results[sym]; const row = rowBy[sym];
-            if (!info || !row) continue;
-            const sched = String(row.next_earnings).slice(0, 10);
-            const released = info.reportedDate && ((new Date(info.reportedDate) - new Date(sched)) / 86400e3 >= -4);
-            if (!released) continue;
-            const disp = sym.replace(/\.TA$/, '');
-            const whenEl = document.getElementById('erWhen-' + disp);
-            if (!whenEl) continue;
-            whenEl.className = 'er-when er-received';
-            whenEl.textContent = '✓ התקבל הדוח';
-            const rowEl = whenEl.closest('.wl-row');
-            if (rowEl && !rowEl.querySelector('.er-beatline')) {
-                const beat = (info.epsActual != null && info.epsEstimate != null) ? (info.epsActual >= info.epsEstimate)
-                    : (info.surprisePct != null ? info.surprisePct >= 0 : null);
-                const sp = info.surprisePct != null ? `${info.surprisePct >= 0 ? '+' : ''}${info.surprisePct}%` : '';
-                const beatTxt = beat === true ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>`
-                    : beat === false ? `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`
-                        : `<span class="er-beat">הדוח התפרסם</span>`;
-                const eps = (info.epsActual != null && info.epsEstimate != null)
-                    ? ` <span class="er-eps">EPS $${info.epsActual} מול צפי $${info.epsEstimate}</span>` : '';
-                const line = document.createElement('div'); line.className = 'wl-sig er-beatline';
-                line.innerHTML = beatTxt + eps;
-                rowEl.appendChild(line);
-            }
-        }
-    } catch (e) { /* best-effort real-time overlay */ }
 }
 
 // ── 🆕 Recently reported — what came out: score, beat-vs-YoY, market reaction, material news ──
@@ -868,7 +914,7 @@ async function openRecentEarningsModal() {
                     </div>
                     <div class="wl-priceblock" id="erPx-${disp}"><span class="wl-price wl-dim">—</span></div>
                     ${sc}
-                    <button class="wl-report" onclick="openReportForTicker('${sym}'); _erClose('erRecent');">📊 דוח</button>
+                    <button class="wl-report" onclick="_erOpenReport('${sym}','erRecent')">📊 דוח</button>
                 </div>
                 <div class="wl-sig">${beat}<span class="er-news" id="erNews-${disp}"></span></div>
             </div>`;
@@ -923,7 +969,7 @@ async function _erLoadReactions(syms) {
 if (typeof window !== 'undefined') {
     window.openUpcomingEarningsModal = openUpcomingEarningsModal;
     window.openRecentEarningsModal = openRecentEarningsModal;
-    window._erClose = _erClose;
+    window._erClose = _erClose; window._erOpenReport = _erOpenReport;
 }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the
@@ -1043,6 +1089,7 @@ function backToReportsList() {
     _repDestroyCharts();
     if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym: null });
     _repRenderList();
+    if (typeof _erReopenAfterReport === 'function') _erReopenAfterReport(); // reopen the earnings modal if we came from it
 }
 
 // Open the financial-reports analysis for a specific ticker from anywhere (e.g. the

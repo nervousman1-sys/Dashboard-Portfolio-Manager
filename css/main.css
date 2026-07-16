@@ -220,6 +220,32 @@ html.day-mode .corr-alt-row:hover { background: #ece8db; }
 /* Watchlist group header (custom-ETF basket) */
 .wl-group-head { font-size: 12px; font-weight: 800; color: var(--accent-blue); margin: 12px 4px 4px; padding: 6px 10px; border-radius: 8px; background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.2); }
 html.day-mode .wl-group-head { color: #0369a1; background: #e9e3d3; border-color: rgba(58,50,36,0.22); }
+/* Suggested-basket: remove asset + add-asset search */
+.corr-mini-btn.corr-remove { color: var(--accent-red); border-color: rgba(255,77,77,0.3); }
+.corr-mini-btn.corr-remove:hover { background: rgba(255,77,77,0.12); border-color: var(--accent-red); color: var(--accent-red); }
+html.day-mode .corr-mini-btn.corr-remove { color: #c81e1e; border-color: rgba(200,30,30,0.35); }
+.corr-basket-add { display: flex; align-items: center; gap: 12px; margin: 10px 0 2px; flex-wrap: wrap; }
+.corr-basket-add .st-pf-label { flex: 0 0 auto; }
+.corr-watch-row { background: rgba(250,204,21,0.05); border-color: rgba(250,204,21,0.25); }
+html.day-mode .corr-watch-row { background: #f1ead6; border-color: rgba(176,124,0,0.3); }
+/* Watchlist CATEGORIES + collapsible custom-ETF lists */
+.wl-cat-head { font-size: 13px; font-weight: 900; color: var(--text-primary); margin: 14px 2px 8px; padding: 7px 4px; border-bottom: 2px solid var(--accent-blue); display: flex; align-items: center; gap: 8px; }
+.wl-cat-head.wl-cat-etf { border-bottom-color: var(--accent-yellow); }
+.wl-cat-count { font-size: 11px; font-weight: 800; color: var(--text-muted); background: rgba(255,255,255,0.06); border-radius: 999px; padding: 1px 9px; }
+html.day-mode .wl-cat-count { background: rgba(58,50,36,0.08); }
+.wl-etf-details { border: 1px solid rgba(250,204,21,0.28); border-radius: 11px; margin: 8px 0; overflow: hidden; background: rgba(250,204,21,0.04); }
+html.day-mode .wl-etf-details { background: #f3efe2; border-color: rgba(176,124,0,0.28); }
+.wl-etf-summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; user-select: none; font-weight: 800; }
+.wl-etf-summary::-webkit-details-marker { display: none; }
+.wl-etf-summary:hover { background: rgba(250,204,21,0.07); }
+.wl-etf-chevron { color: var(--accent-yellow); font-size: 13px; transition: transform .15s; display: inline-block; }
+.wl-etf-details[open] .wl-etf-chevron { transform: rotate(90deg); }
+.wl-etf-name { flex: 1; color: var(--text-primary); font-size: 14px; }
+.wl-etf-count { font-size: 11px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.wl-etf-del { background: none; border: none; cursor: pointer; font-size: 14px; opacity: .7; padding: 2px 4px; }
+.wl-etf-del:hover { opacity: 1; }
+.wl-etf-body { padding: 4px 10px 8px; border-top: 1px solid rgba(250,204,21,0.18); }
+html.day-mode .wl-etf-body { border-top-color: rgba(176,124,0,0.2); }
 .corr-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin: 8px 0; }
 .corr-legend .corr-cell { min-width: 0; padding: 3px 8px; }
 html.day-mode .corr-cell-hi  { background: #e05252; color: #fff; }
@@ -10208,8 +10234,7 @@ html.day-mode .er-beat-no { color: #c81e1e; border-color: rgba(200, 30, 30, 0.4)
 html.day-mode .er-when.er-received { color: #0f7a4d; }
 .er-beatline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .er-eps { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
-.er-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
-.er-alert-btn { padding: 5px 9px; }
+.er-row-actions { display: flex; flex-direction: row; gap: 6px; align-items: center; }
 /* Reports board: the same two windows reachable from the board's intel strip */
 .rep-earn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }
 @media (max-width: 768px) { .rep-earn-actions .qw-earn-btn { display: inline-block; } }
@@ -10316,6 +10341,18 @@ html.day-mode .wl-search { background: #e9e3d3; }
     .wl-box { max-width: 100%; border-radius: 18px 18px 0 0; max-height: 92vh; display: flex; flex-direction: column; }
     .wl-list { max-height: none; flex: 1; }
 }
+
+/* Gold bell — compact alert icon (technical table + earnings modal), just the bell, no label */
+.gold-bell-btn {
+    background: none; border: none; padding: 2px; margin-inline-start: 6px; cursor: pointer;
+    line-height: 0; display: inline-flex; align-items: center; border-radius: 6px;
+    transition: transform .12s, filter .12s; vertical-align: middle;
+}
+.gold-bell-btn .gb-ico { fill: #e6b800; filter: drop-shadow(0 0 2px rgba(230,184,0,0.45)); }
+.gold-bell-btn:hover { transform: scale(1.18); }
+.gold-bell-btn:hover .gb-ico { fill: #ffcf1a; }
+html.day-mode .gold-bell-btn .gb-ico { fill: #b8860b; filter: none; }
+html.day-mode .gold-bell-btn:hover .gb-ico { fill: #9a6f00; }
 
 /* ── Stock alerts (🔔) — create-alert button on the technical table + bell panel ── */
 .tech-alert-btn {
