@@ -15,6 +15,8 @@
 
 let _corrPortfolioId = null;
 let _corrBusy = false;
+let _corrMode = 'portfolio';        // 'portfolio' | 'assets' | 'suggest'
+let _corrAssets = [];               // asset-list mode: the symbols being compared
 
 // ── Routed page (mirrors the stress-test page) ────────────────────────────────
 function openCorrelationPage() {
@@ -85,18 +87,38 @@ function _corrBodyHtml(withSelect) {
 function _corrRenderShell() {
     const page = document.getElementById('correlationPage');
     if (!page) return;
+    const tab = (m, label) => `<button class="tech-mkt-btn ${_corrMode === m ? 'active' : ''}" onclick="_corrSetMode('${m}')">${label}</button>`;
     page.innerHTML = `
     <div dir="rtl">
         <div class="macro-page-header">
-            <h1 class="macro-main-title">מחשבון קורלציה לתיק</h1>
+            <h1 class="macro-main-title">מחשבון קורלציה</h1>
             <button class="macro-back-btn" onclick="closeCorrelationPage()">חזור לדשבורד</button>
         </div>
         <div class="macro-content">
             <div class="risk-table-card glass-card" style="padding:18px">
-                ${_corrBodyHtml(true)}
+                <div class="tech-mkt corr-modes">
+                    ${tab('portfolio', '🎯 מול תיק')}
+                    ${tab('assets', '🔗 בין נכסים')}
+                    ${tab('suggest', '🛡️ הצעות פיזור')}
+                </div>
+                <div id="corrModeBody">${_corrModeBodyHtml()}</div>
             </div>
         </div>
     </div>`;
+}
+
+function _corrSetMode(m) {
+    if (_corrMode === m) return;
+    _corrMode = m;
+    document.querySelectorAll('.corr-modes .tech-mkt-btn').forEach(b => b.classList.toggle('active', b.textContent.includes({ portfolio: 'מול תיק', assets: 'בין נכסים', suggest: 'הצעות פיזור' }[m])));
+    const host = document.getElementById('corrModeBody');
+    if (host) host.innerHTML = _corrModeBodyHtml();
+}
+
+function _corrModeBodyHtml() {
+    if (_corrMode === 'assets') return _corrAssetsBodyHtml();
+    if (_corrMode === 'suggest') return _corrSuggestBodyHtml();
+    return _corrBodyHtml(true);
 }
 
 // Mount inside the portfolio modal's "קורלציה" tab — the portfolio is the open client.
@@ -260,9 +282,273 @@ async function _corrRun() {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SHARED ENGINE — real 365d daily returns → correlation matrix (Yahoo /api/history)
+// ════════════════════════════════════════════════════════════════════════════
+// Fetch closes for a symbol list, align to a common trading calendar (the intersection
+// of dates where every symbol has data), and return { syms, dates, levels{sym:[...] } }.
+async function _corrFetchAligned(symbols) {
+    const uniq = [...new Set(symbols.map(s => String(s).toUpperCase().trim()).filter(Boolean))].slice(0, 40);
+    const r = await fetch(`/api/history?symbols=${encodeURIComponent(uniq.join(','))}&range=1y`, { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('history HTTP ' + r.status);
+    const hist = await r.json();
+    // Resolve TASE fallback (.TA) and keep only symbols with a real series.
+    const resolved = {};
+    for (const s of uniq) {
+        if (Array.isArray(hist[s]) && hist[s].length >= 120) resolved[s] = hist[s];
+        else if (Array.isArray(hist[s + '.TA']) && hist[s + '.TA'].length >= 120) resolved[s] = hist[s + '.TA'];
+    }
+    const syms = Object.keys(resolved);
+    if (syms.length < 2) return { syms, dates: [], levels: {} };
+    // Common date set = intersection across all series.
+    const maps = {}; syms.forEach(s => { maps[s] = {}; resolved[s].forEach(pt => maps[s][pt.date] = pt.close); });
+    let dates = Object.keys(maps[syms[0]]);
+    for (let i = 1; i < syms.length; i++) dates = dates.filter(d => maps[syms[i]][d] > 0);
+    dates.sort();
+    const levels = {}; syms.forEach(s => levels[s] = dates.map(d => maps[s][d]));
+    return { syms, dates, levels };
+}
+// Pearson ρ between two return arrays (uses the existing _corrStats).
+function _corrRho(ra, rb) { const s = _corrStats(ra, rb); return s ? s.rho : null; }
+// NxN correlation matrix + each symbol's annualized σ, from aligned levels.
+function _corrMatrix(aligned) {
+    const { syms, levels } = aligned;
+    const rets = {}; syms.forEach(s => rets[s] = _corrReturns(levels[s]));
+    const M = {}, sig = {};
+    syms.forEach(a => {
+        M[a] = {};
+        const st = _corrStats(rets[a], rets[a]);
+        sig[a] = st ? st.sigA : null;
+        syms.forEach(b => { M[a][b] = a === b ? 1 : _corrRho(rets[a], rets[b]); });
+    });
+    return { syms, M, sig, rets };
+}
+function _corrCellCls(r) { return r == null ? 'x' : r >= 0.6 ? 'hi' : r >= 0.3 ? 'mid' : r > -0.15 ? 'lo' : 'neg'; }
+function _corrMatrixHtml(mat) {
+    const { syms, M } = mat;
+    const disp = s => _corrEsc(String(s).replace(/\.TA$/, ''));
+    const head = `<tr><th></th>${syms.map(s => `<th>${disp(s)}</th>`).join('')}</tr>`;
+    const rows = syms.map(a => `<tr><th>${disp(a)}</th>${syms.map(b => {
+        const r = M[a][b];
+        return `<td class="corr-cell corr-cell-${_corrCellCls(r)}">${r == null ? '—' : (a === b ? '1.00' : (r >= 0 ? '+' : '') + r.toFixed(2))}</td>`;
+    }).join('')}</tr>`).join('');
+    return `<div class="corr-matrix-wrap"><table class="corr-matrix">${head}${rows}</table></div>`;
+}
+// Best diversifier pairs = the most-negative / lowest ρ off-diagonal pairs.
+function _corrBestPairs(mat, n) {
+    const { syms, M } = mat; const out = [];
+    for (let i = 0; i < syms.length; i++) for (let j = i + 1; j < syms.length; j++) {
+        const r = M[syms[i]][syms[j]];
+        if (r != null) out.push({ a: syms[i], b: syms[j], rho: r });
+    }
+    return out.sort((x, y) => x.rho - y.rho).slice(0, n || 6);
+}
+// ════════════════════ MODE 2 — בין נכסים (asset-vs-asset matrix + sim) ════════════════════
+function _corrAssetsBodyHtml() {
+    const chips = _corrAssets.map(s => `<span class="corr-chip-tag">${_corrEsc(s)}<button onclick="_corrRemoveAsset('${s}')" aria-label="הסר">✕</button></span>`).join('');
+    return `
+        <div class="corr-note">בדיקת קורלציה בין נכסים — ללא קשר לתיק קיים. הוסף 2–10 סימבולים (מניות, אג"ח, זהב…), קבל מטריצת מתאם וסימולציית תיק שווה-משקל שמראה את תועלת הפיזור.</div>
+        <div class="st-portfolio-row">
+            <label class="st-pf-label">הוסף נכס:</label>
+            <input type="text" id="corrAssetInput" class="corr-input" autocomplete="off" placeholder="למשל: NVDA, GLD, TLT, XOM…"
+                onkeydown="if(event.key==='Enter'){_corrAddAsset(this.value); this.value='';}" />
+            <button class="corr-run-btn" onclick="_corrAddAsset(document.getElementById('corrAssetInput').value); document.getElementById('corrAssetInput').value='';">הוסף</button>
+        </div>
+        <div class="corr-chips">${chips || '<span class="corr-chip-empty">אין נכסים עדיין — הוסף לפחות שניים.</span>'}</div>
+        <div class="st-portfolio-row" style="margin-top:6px">
+            <button class="corr-run-btn corr-run-primary" id="corrMatrixBtn" onclick="_corrRunMatrix()" ${_corrAssets.length < 2 ? 'disabled' : ''}>חשב מטריצת קורלציה</button>
+        </div>
+        <div id="corrAssetsResult"></div>`;
+}
+function _corrAddAsset(v) {
+    const sym = String(v || '').trim().toUpperCase();
+    if (!sym || /^\d+$/.test(sym) || _corrAssets.includes(sym) || _corrAssets.length >= 10) return;
+    _corrAssets.push(sym);
+    const host = document.getElementById('corrModeBody'); if (host) host.innerHTML = _corrAssetsBodyHtml();
+    const inp = document.getElementById('corrAssetInput'); if (inp) inp.focus();
+}
+function _corrRemoveAsset(s) {
+    _corrAssets = _corrAssets.filter(x => x !== s);
+    const host = document.getElementById('corrModeBody'); if (host) host.innerHTML = _corrAssetsBodyHtml();
+}
+async function _corrRunMatrix() {
+    if (_corrBusy || _corrAssets.length < 2) return;
+    const res = document.getElementById('corrAssetsResult');
+    if (!res) return;
+    _corrBusy = true;
+    const btn = document.getElementById('corrMatrixBtn'); if (btn) { btn.disabled = true; btn.textContent = 'מחשב…'; }
+    res.innerHTML = '<div class="rep-loading"><div class="rep-spinner"></div>מושך 365 ימי מחירים אמיתיים לכל הנכסים…</div>';
+    try {
+        const aligned = await _corrFetchAligned(_corrAssets);
+        if (aligned.syms.length < 2 || aligned.dates.length < 40) {
+            res.innerHTML = '<div class="st-empty">אין מספיק נתונים חופפים — ודא שלכל הסימבולים יש היסטוריית מחירים של שנה.</div>'; return;
+        }
+        const mat = _corrMatrix(aligned);
+        const pairs = _corrBestPairs(mat, 6);
+        // Equal-weight portfolio simulation: risk of the basket vs the naive weighted-avg risk.
+        const n = mat.syms.length;
+        const combo = aligned.dates.map((_, t) => mat.syms.reduce((s, sym) => s + (aligned.levels[sym][t] / aligned.levels[sym][0]) / n, 0));
+        const comboSig = (_corrStats(_corrReturns(combo), _corrReturns(combo)) || {}).sigA || 0;
+        const avgSig = mat.syms.reduce((s, sym) => s + (mat.sig[sym] || 0), 0) / n;
+        const cut = avgSig > 0 ? (1 - comboSig / avgSig) * 100 : 0;
+        const pct = x => (x * 100).toFixed(1) + '%';
+        res.innerHTML = `
+            <div class="st-section-title">מטריצת קורלציה (ρ על תשואות יומיות)</div>
+            ${_corrMatrixHtml(mat)}
+            <div class="corr-legend"><span class="corr-cell corr-cell-neg">שלילי</span> מפזר · <span class="corr-cell corr-cell-lo">≈0</span> · <span class="corr-cell corr-cell-mid">בינוני</span> · <span class="corr-cell corr-cell-hi">גבוה</span> ריכוזיות</div>
+            <div class="st-section-title">הזוגות בעלי הפיזור הטוב ביותר</div>
+            <div class="corr-holds">${pairs.map(p => {
+            const c = _corrClass(p.rho);
+            return `<div class="corr-hold-row">
+                    <span class="corr-hold-tk">${_corrEsc(p.a.replace(/\.TA$/, ''))} ↔ ${_corrEsc(p.b.replace(/\.TA$/, ''))}</span>
+                    <div class="corr-hold-bar"><span class="corr-hold-fill ${p.rho >= 0 ? 'p' : 'n'}" style="width:${Math.min(100, Math.abs(p.rho) * 100).toFixed(0)}%"></span></div>
+                    <span class="corr-hold-rho corr-t-${c.cls}">${(p.rho >= 0 ? '+' : '') + p.rho.toFixed(2)}</span>
+                </div>`;
+        }).join('')}</div>
+            <div class="st-section-title">סימולציית תיק שווה-משקל (${n} נכסים)</div>
+            <div class="corr-metrics">
+                <div class="corr-m"><span class="corr-m-l">סטיית תקן ממוצעת של הנכסים</span><b>${pct(avgSig)}</b></div>
+                <div class="corr-m"><span class="corr-m-l">סטיית תקן התיק המשולב</span><b>${pct(comboSig)}</b></div>
+                <div class="corr-m corr-m-hl"><span class="corr-m-l">הפחתת סיכון מפיזור</span><b>${cut > 0 ? '−' + cut.toFixed(1) + '%' : '≈0'}</b></div>
+            </div>
+            <div class="corr-note">ככל שהמתאם בין הנכסים נמוך/שלילי — תנודתיות התיק המשולב נמוכה מהממוצע הפשוט של הנכסים. זהו בדיוק "הצ'ופר החינמי" של הפיזור. חלון: ${_corrEsc(aligned.dates[0])} → ${_corrEsc(aligned.dates[aligned.dates.length - 1])}.</div>`;
+    } catch (e) {
+        res.innerHTML = '<div class="st-empty">החישוב נכשל — נסה שוב בעוד רגע.</div>';
+    } finally {
+        _corrBusy = false;
+        const b = document.getElementById('corrMatrixBtn'); if (b) { b.disabled = _corrAssets.length < 2; b.textContent = 'חשב מטריצת קורלציה'; }
+    }
+}
+
+// ════════════════════ MODE 3 — הצעות פיזור (diversification suggestions) ════════════════════
+// High-grade defensive anchors (rating ABOVE A — the user's bond condition). US Treasuries
+// are AAA/AA; gold is the classic negative-correlation diversifier (not a bond, labeled so).
+const CORR_ANCHORS = [
+    { sym: 'TLT', name: 'אג"ח ממשלת ארה"ב 20+ שנה', grade: 'AAA', kind: 'bond' },
+    { sym: 'IEF', name: 'אג"ח ממשלת ארה"ב 7–10 שנה', grade: 'AAA', kind: 'bond' },
+    { sym: 'GOVT', name: 'אג"ח ממשלת ארה"ב (כל הטווחים)', grade: 'AAA', kind: 'bond' },
+    { sym: 'GLD', name: 'זהב (SPDR Gold)', grade: '—', kind: 'gold' },
+];
+const CORR_MIN_SCORE = 68;   // "דוחות טובים" gate
+function _corrSuggestBodyHtml() {
+    return `
+        <div class="corr-note">בונה הצעה לתיק מפוזר: מניות מובילות בסקטור שלהן עם <b>דוחות טובים (ציון ≥ ${CORR_MIN_SCORE})</b>, בשילוב עוגני הגנה בדירוג <b>מעל A</b> (אג"ח ממשלתי AAA) וזהב — ובוחר את הסל שבו המתאם ההדדי הנמוך ביותר, כך שהנכסים מקזזים סיכון זה של זה.</div>
+        <div class="st-portfolio-row" style="margin-top:4px">
+            <label class="st-pf-label">גודל הסל:</label>
+            <select class="st-pf-select" id="corrBasketN" style="min-width:120px">
+                <option value="5">5 נכסים</option><option value="6" selected>6 נכסים</option><option value="7">7 נכסים</option>
+            </select>
+            <button class="corr-run-btn corr-run-primary" id="corrSuggestBtn" onclick="_corrRunSuggest()">בנה הצעת פיזור</button>
+        </div>
+        <div id="corrSuggestResult"></div>`;
+}
+async function _corrRunSuggest() {
+    if (_corrBusy) return;
+    const res = document.getElementById('corrSuggestResult');
+    if (!res || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    _corrBusy = true;
+    const btn = document.getElementById('corrSuggestBtn'); if (btn) { btn.disabled = true; btn.textContent = 'בונה…'; }
+    const targetN = parseInt((document.getElementById('corrBasketN') || {}).value, 10) || 6;
+    res.innerHTML = '<div class="rep-loading"><div class="rep-spinner"></div>בוחר מניות איכותיות מובילות-סקטור ומחשב מתאמים אמיתיים…</div>';
+    try {
+        // 1) Sector-leading quality stocks: top scorers per sector (good reports + sector standing).
+        const { data } = await supabaseClient.from('company_reports')
+            .select('symbol,company_name,score,sector')
+            .eq('market', 'us').gte('score', CORR_MIN_SCORE)
+            .order('score', { ascending: false }).limit(400);
+        const bySector = {};
+        (data || []).forEach(r => {
+            const sec = r.sector || 'Other';
+            if (!bySector[sec]) bySector[sec] = [];
+            if (bySector[sec].length < 2) bySector[sec].push(r);   // up to 2 leaders per sector
+        });
+        const stockCands = Object.values(bySector).flat();
+        if (stockCands.length < 3) { res.innerHTML = '<div class="st-empty">אין כרגע מספיק מניות בציון גבוה לבניית הצעה — נסה שוב מאוחר יותר.</div>'; return; }
+        // 2) Candidate universe = quality stocks + defensive anchors.
+        const anchors = CORR_ANCHORS;
+        const universe = [...stockCands.map(s => s.symbol.toUpperCase()), ...anchors.map(a => a.sym)];
+        const aligned = await _corrFetchAligned(universe);
+        if (aligned.syms.length < 4) { res.innerHTML = '<div class="st-empty">משיכת המחירים נכשלה — נסה שוב בעוד רגע.</div>'; return; }
+        const mat = _corrMatrix(aligned);
+        const meta = {};
+        stockCands.forEach(s => meta[s.symbol.toUpperCase()] = { name: s.company_name, score: s.score, sector: s.sector, kind: 'stock' });
+        anchors.forEach(a => meta[a.sym] = { name: a.name, grade: a.grade, kind: a.kind });
+        const avail = mat.syms.filter(s => meta[s]);
+
+        // 3) Greedy diversification: seed with the top-scored stock, then repeatedly add the
+        //    candidate with the LOWEST average correlation to the already-chosen set. Force at
+        //    least one defensive anchor and avoid doubling a sector, for real diversification.
+        const chosen = [];
+        const seed = avail.filter(s => meta[s].kind === 'stock').sort((a, b) => meta[b].score - meta[a].score)[0];
+        if (seed) chosen.push(seed);
+        const usedSectors = new Set(seed ? [meta[seed].sector] : []);
+        while (chosen.length < targetN) {
+            let best = null, bestAvg = 2;
+            const needAnchor = chosen.length === targetN - 1 && !chosen.some(s => meta[s].kind !== 'stock');
+            for (const s of avail) {
+                if (chosen.includes(s)) continue;
+                if (needAnchor && meta[s].kind === 'stock') continue;                 // last slot reserved for a hedge
+                if (meta[s].kind === 'stock' && usedSectors.has(meta[s].sector)) continue; // one leader per sector
+                const avg = chosen.reduce((acc, c) => acc + (mat.M[s][c] ?? 0), 0) / chosen.length;
+                if (avg < bestAvg) { bestAvg = avg; best = s; }
+            }
+            if (!best) {                                                             // relax the sector rule if stuck
+                for (const s of avail) { if (chosen.includes(s)) continue; const avg = chosen.reduce((acc, c) => acc + (mat.M[s][c] ?? 0), 0) / chosen.length; if (avg < bestAvg) { bestAvg = avg; best = s; } }
+            }
+            if (!best) break;
+            chosen.push(best); if (meta[best].kind === 'stock') usedSectors.add(meta[best].sector);
+        }
+
+        // Resulting basket quality: average pairwise correlation (lower = better diversified).
+        let sum = 0, cnt = 0;
+        for (let i = 0; i < chosen.length; i++) for (let j = i + 1; j < chosen.length; j++) { sum += mat.M[chosen[i]][chosen[j]] ?? 0; cnt++; }
+        const avgPair = cnt ? sum / cnt : 0;
+        const roleOf = (s) => {
+            const m = meta[s];
+            if (m.kind === 'bond') return `אג"ח ${m.grade} · עוגן הגנה`;
+            if (m.kind === 'gold') return 'זהב · גידור אינפלציה/משבר';
+            const sec = _corrHeSector(m.sector);
+            return `מניה${sec ? ' · ' + sec : ''} · ציון ${m.score}`;
+        };
+        res.innerHTML = `
+            <div class="corr-verdict corr-pos">
+                <div class="corr-verdict-head">
+                    <span class="corr-rho">מתאם הדדי ממוצע: ${(avgPair >= 0 ? '+' : '') + avgPair.toFixed(2)}</span>
+                    <span class="corr-chip">🛡️ סל מפוזר</span>
+                </div>
+                <p class="corr-verdict-txt">כל נכס נבחר כי הוא מקזז את התנועה של האחרים (מתאם נמוך/שלילי). ככל שהמתאם ההדדי הממוצע נמוך יותר — הפיזור טוב יותר.</p>
+            </div>
+            <div class="st-section-title">הסל המוצע (${chosen.length} נכסים)</div>
+            <div class="corr-holds">${chosen.map(s => {
+            const m = meta[s];
+            const scoreChip = m.kind === 'stock' ? `<span class="rep-card-score ${typeof _repScoreClass === 'function' ? _repScoreClass(m.score) : ''}">${m.score}</span>` : `<span class="er-beat er-beat-yes" style="border:none;background:none">${m.grade || ''}</span>`;
+            return `<div class="wl-row"><div class="wl-main">
+                    <div class="wl-id"><span class="wl-tk">${_corrEsc(s.replace(/\.TA$/, ''))}</span><span class="wl-co">${_corrEsc(m.name || '')} · ${roleOf(s)}</span></div>
+                    ${scoreChip}
+                    <button class="wl-report" onclick="if(typeof openReportForTicker==='function'){openReportForTicker('${s}');}">📊 דוח</button>
+                </div></div>`;
+        }).join('')}</div>
+            <div class="st-section-title">מטריצת הקורלציה של הסל</div>
+            ${_corrMatrixHtml({ syms: chosen, M: mat.M })}
+            <div class="corr-note">תנאי הסינון: מניות בציון דוחות ≥ ${CORR_MIN_SCORE} ומובילות בסקטור שלהן · עוגני הגנה בדירוג מעל A (אג"ח ממשלת ארה"ב AAA) + זהב · מתאמים אמיתיים על 365 ימי מסחר. ההצעה אינה ייעוץ השקעות.</div>`;
+    } catch (e) {
+        res.innerHTML = '<div class="st-empty">בניית ההצעה נכשלה — נסה שוב בעוד רגע.</div>';
+    } finally {
+        _corrBusy = false;
+        const b = document.getElementById('corrSuggestBtn'); if (b) { b.disabled = false; b.textContent = 'בנה הצעת פיזור'; }
+    }
+}
+function _corrHeSector(s) {
+    const M = { 'Information Technology': 'טכנולוגיה', 'Financials': 'פיננסים', 'Health Care': 'בריאות', 'Consumer Discretionary': 'צריכה מחזורית', 'Consumer Staples': 'צריכה בסיסית', 'Energy': 'אנרגיה', 'Industrials': 'תעשייה', 'Materials': 'חומרים', 'Utilities': 'תשתיות', 'Real Estate': 'נדל"ן', 'Communication Services': 'תקשורת', 'Crypto': 'קריפטו' };
+    return M[s] || s || '';
+}
+
 if (typeof window !== 'undefined') {
     window.openCorrelationPage = openCorrelationPage;
     window.closeCorrelationPage = closeCorrelationPage;
     window._corrRun = _corrRun;
     window._corrMountInModal = _corrMountInModal;
+    window._corrSetMode = _corrSetMode;
+    window._corrAddAsset = _corrAddAsset; window._corrRemoveAsset = _corrRemoveAsset; window._corrRunMatrix = _corrRunMatrix;
+    window._corrRunSuggest = _corrRunSuggest;
 }

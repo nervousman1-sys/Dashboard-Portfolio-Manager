@@ -138,9 +138,42 @@ body {
 .corr-hold-rho { min-width: 52px; font-weight: 800; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
 .corr-t-pos { color: var(--accent-green); } .corr-t-info { color: var(--accent-blue); }
 .corr-t-warn { color: var(--accent-orange); } .corr-t-neg { color: var(--accent-red); }
+/* ── Mode tabs + asset chips + correlation matrix ── */
+.corr-modes { margin-bottom: 14px; }
+.corr-run-primary { font-size: 0.9rem; padding: 9px 20px; }
+.corr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; min-height: 26px; }
+.corr-chip-tag {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700;
+    color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-hover);
+    border-radius: 8px; padding: 4px 6px 4px 10px; direction: ltr;
+}
+.corr-chip-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.corr-chip-tag button:hover { color: var(--accent-red); }
+.corr-chip-empty { font-size: 12px; color: var(--text-muted); }
+.corr-m-hl { border-color: rgba(0,255,148,0.4); }
+.corr-m-hl b { color: var(--accent-green); }
+.corr-matrix-wrap { overflow-x: auto; margin: 4px 0 2px; }
+.corr-matrix { border-collapse: separate; border-spacing: 3px; direction: ltr; margin: 0 auto; }
+.corr-matrix th { font-size: 11px; font-weight: 800; color: var(--text-secondary); padding: 3px 6px; white-space: nowrap; }
+.corr-cell {
+    font-size: 11.5px; font-weight: 700; text-align: center; min-width: 46px; padding: 7px 6px;
+    border-radius: 6px; font-variant-numeric: tabular-nums; color: #0b0b0f;
+}
+.corr-cell-hi  { background: #ff6b6b; }         /* high positive → concentration risk */
+.corr-cell-mid { background: #ffd166; }
+.corr-cell-lo  { background: #a9e5c9; }
+.corr-cell-neg { background: #4ade80; }         /* negative → true diversifier */
+.corr-cell-x   { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+.corr-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin: 8px 0; }
+.corr-legend .corr-cell { min-width: 0; padding: 3px 8px; }
+html.day-mode .corr-cell-hi  { background: #e05252; color: #fff; }
+html.day-mode .corr-cell-mid { background: #d99a2b; color: #fff; }
+html.day-mode .corr-cell-lo  { background: #7fc9a5; color: #14261d; }
+html.day-mode .corr-cell-neg { background: #2fa866; color: #fff; }
 @media (max-width: 768px) {
     .corr-input { min-width: 0; flex: 1; }
     .corr-metrics { grid-template-columns: repeat(2, 1fr); }
+    .corr-cell { min-width: 38px; padding: 6px 4px; font-size: 10.5px; }
 }
 
 /* ── Native <select> dropdown lists — SOLID dark options everywhere ──
