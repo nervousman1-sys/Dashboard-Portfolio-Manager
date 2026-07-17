@@ -985,30 +985,78 @@ async function openUpcomingEarningsModal() {
 }
 
 // ── 🆕 Recently reported — what came out: score, beat-vs-YoY, market reaction, material news ──
+// Recency label from a report date ("היום"/"אתמול"/"לפני N ימים").
+function _erRecencyLabel(d) {
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const days = Math.round((today - new Date(String(d).slice(0, 10))) / 86400e3);
+    if (days <= 0) return 'היום';
+    if (days === 1) return 'אתמול';
+    return `לפני ${days} ימים`;
+}
 async function openRecentEarningsModal() {
-    _erShell('erRecent', '🆕 דיווחו לאחרונה', 'תוצאות אחרונות · הכאה מול הרבעון המקביל · תגובת השוק וחדשות מהותיות');
+    _erShell('erRecent', '🆕 דיווחו לאחרונה', 'לפי מועד הפרסום — החדשים ביותר ראשונים · הכאת תחזיות (EPS בפועל מול צפי) · תגובת השוק');
     const el = document.getElementById('erRecentList');
     if (!el) return;
+    const dayMinus = (n) => new Date(Date.now() - n * 86400e3).toISOString().slice(0, 10);
+    const CUTOFF = dayMinus(35); // "recently" = reported within ~5 weeks
     try {
-        const { data } = await supabaseClient.from('company_reports')
-            .select('symbol,company_name,score,improved,as_of,market')
-            .order('as_of', { ascending: false }).limit(40);
+        // Candidate pool of RECENT reporters. The agent updates a company right after it reports —
+        // clearing next_earnings (the next date isn't scheduled yet) — so "next_earnings IS NULL &&
+        // recently updated" reliably flags fresh reporters even before the full financials (as_of)
+        // catch up. Also include anyone whose full financials just posted (recent as_of).
+        const [qNull, qAsOf] = await Promise.all([
+            supabaseClient.from('company_reports').select('symbol,company_name,score,improved,as_of')
+                .is('next_earnings', null).gte('updated_at', dayMinus(4)).not('score', 'is', null)
+                .order('updated_at', { ascending: false }).limit(48),
+            supabaseClient.from('company_reports').select('symbol,company_name,score,improved,as_of')
+                .gte('as_of', CUTOFF).not('score', 'is', null).order('as_of', { ascending: false }).limit(48),
+        ]);
         if (document.getElementById('erRecentList') !== el) return;
-        const rows = (data || []).filter(r => r && r.as_of && r.score != null);
-        if (!rows.length) { el.innerHTML = '<div class="wl-empty">אין דוחות אחרונים להצגה.</div>'; return; }
+        const pool = {};
+        [...(qNull.data || []), ...(qAsOf.data || [])].forEach(r => { if (r && r.symbol) { const k = String(r.symbol).toUpperCase(); if (!pool[k]) pool[k] = r; } });
+        const candidates = Object.keys(pool);
+        if (!candidates.length) { el.innerHTML = '<div class="wl-empty">אין דוחות אחרונים להצגה.</div>'; return; }
+        // LIVE earnings (real reportedDate + EPS beat/miss) for the candidates — the moment a report
+        // is out Yahoo has it, independent of the agent's slower full-financials refresh.
+        const live = {};
+        for (let i = 0; i < candidates.length && i < 48; i += 24) {
+            try {
+                const r = await fetch(`/api/technicals?mode=earnings&symbols=${encodeURIComponent(candidates.slice(i, i + 24).join(','))}`, { headers: { Accept: 'application/json' } });
+                const j = await r.json(); Object.assign(live, (j && j.results) || {});
+            } catch (e) { }
+        }
+        if (document.getElementById('erRecentList') !== el) return;
+        // Effective report date = live reportedDate (if newer & recent) else the agent's as_of.
+        const entries = candidates.map(sym => {
+            const r = pool[sym], info = live[sym];
+            let repDate = r.as_of, epsA = null, epsE = null, surprise = null, fresh = false;
+            if (info && info.reportedDate && info.reportedDate >= CUTOFF && info.reportedDate >= (r.as_of || '')) {
+                repDate = info.reportedDate; epsA = info.epsActual; epsE = info.epsEstimate; surprise = info.surprisePct; fresh = true;
+            }
+            return { sym, r, repDate, epsA, epsE, surprise, fresh };
+        }).filter(e => e.repDate && e.repDate >= CUTOFF)
+            .sort((a, b) => String(b.repDate).localeCompare(String(a.repDate)) || (b.r.score - a.r.score));
+        if (!entries.length) { el.innerHTML = '<div class="wl-empty">אין דוחות שפורסמו בחמשת השבועות האחרונים.</div>'; return; }
         const held = _erHeldSet();
-        const syms = rows.map(r => String(r.symbol).toUpperCase());
-        el.innerHTML = rows.map(r => {
-            const sym = String(r.symbol).toUpperCase(), disp = sym.replace(/\.TA$/, '');
-            const beat = r.improved
-                ? '<span class="er-beat er-beat-yes">▲ היכתה — שיפור מול המקביל</span>'
-                : '<span class="er-beat er-beat-no">▼ לא היכתה מול המקביל</span>';
+        const top = entries.slice(0, 40);
+        el.innerHTML = top.map(e => {
+            const r = e.r, sym = e.sym, disp = sym.replace(/\.TA$/, '');
+            let beat;
+            if (e.surprise != null || (e.epsA != null && e.epsE != null)) {
+                const b = e.surprise != null ? e.surprise >= 0 : e.epsA >= e.epsE;
+                const sp = e.surprise != null ? `${e.surprise >= 0 ? '+' : ''}${e.surprise}%` : '';
+                const eps = (e.epsA != null && e.epsE != null) ? ` <span class="er-eps">EPS $${e.epsA} מול צפי $${e.epsE}</span>` : '';
+                beat = (b ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>` : `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`) + eps;
+            } else {
+                beat = r.improved ? '<span class="er-beat er-beat-yes">▲ שיפור מול הרבעון המקביל</span>' : '<span class="er-beat er-beat-no">▼ ללא שיפור מול המקביל</span>';
+            }
             const sc = `<span class="rep-card-score ${_repScoreClass(r.score)}">${r.score}</span>`;
             return `<div class="wl-row" data-er-row="${disp}"><div class="wl-main">
                     <div class="wl-id">
-                        <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}</span>
-                        <span class="wl-co">${_repEscape(r.company_name || '')} · דוח ${_repHeDate(r.as_of)}</span>
+                        <span class="wl-tk">${disp}${held.has(sym) ? ' <span class="er-held">בתיק</span>' : ''}${e.fresh ? ' <span class="er-fresh">🆕</span>' : ''}</span>
+                        <span class="wl-co">${_repEscape(r.company_name || '')}</span>
                     </div>
+                    <div class="er-date-block"><span class="er-date-big">${_repHeDate(e.repDate)}</span><span class="er-date-when">${_erRecencyLabel(e.repDate)}</span></div>
                     <div class="wl-priceblock" id="erPx-${disp}"><span class="wl-price wl-dim">—</span></div>
                     ${sc}
                     <button class="wl-report" onclick="_erOpenReport('${sym}','erRecent')">📊 דוח</button>
@@ -1016,7 +1064,7 @@ async function openRecentEarningsModal() {
                 <div class="wl-sig">${beat}<span class="er-news" id="erNews-${disp}"></span></div>
             </div>`;
         }).join('');
-        _erLoadReactions(syms);
+        _erLoadReactions(top.map(e => e.sym));
     } catch (e) {
         el.innerHTML = '<div class="wl-empty">טעינת הדוחות נכשלה — נסה שוב בעוד רגע.</div>';
     }

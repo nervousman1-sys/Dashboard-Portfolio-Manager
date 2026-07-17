@@ -1033,19 +1033,6 @@ function _renderMacroPage() {
     mp.innerHTML = `
         <div class="macro-page-header">
             <h1 class="macro-main-title">אינדיקטורים כלכליים</h1>
-            <div style="display:flex;gap:8px;align-items:center">
-                <button class="macro-back-btn" onclick="_refreshMacroData()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">
-                        <polyline points="23 4 23 10 17 10"/>
-                        <polyline points="1 20 1 14 7 14"/>
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                    </svg>
-                    רענן נתונים
-                </button>
-                <button class="macro-back-btn" onclick="markAllRead()">סמן הכל כנקרא</button>
-                <button class="macro-back-btn" onclick="closeMacroPage()">חזור לדשבורד</button>
-            </div>
         </div>
         <div class="macro-content">
             <div id="geoMacroSection" class="geo-macro-section"></div>

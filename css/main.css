@@ -10242,6 +10242,12 @@ html.day-mode .er-held { color: #0369a1; background: rgba(3, 105, 161, 0.1); bor
 html.day-mode .er-beat-yes { color: #0f7a4d; border-color: rgba(15, 122, 77, 0.4); background: rgba(15, 122, 77, 0.08); }
 html.day-mode .er-beat-no { color: #c81e1e; border-color: rgba(200, 30, 30, 0.4); background: rgba(200, 30, 30, 0.07); }
 .er-news:empty { display: none; }
+/* Recently-reported: prominent report date + recency label */
+.er-date-block { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 86px; }
+.er-date-big { font-size: 14.5px; font-weight: 900; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: .2px; }
+.er-date-when { font-size: 10.5px; font-weight: 800; color: var(--accent-green); white-space: nowrap; }
+html.day-mode .er-date-when { color: #0f7a4d; }
+.er-fresh { font-size: 12px; }
 /* Live "report received" overlay + beat/miss line in the upcoming-earnings modal */
 .er-when.er-received { color: var(--accent-green); font-weight: 800; }
 html.day-mode .er-when.er-received { color: #0f7a4d; }

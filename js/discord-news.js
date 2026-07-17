@@ -90,7 +90,6 @@ function openDiscordNews() {
             <h1 class="macro-main-title">חדשות כלכלה ושוק ההון</h1>
             <div style="display:flex;gap:8px;align-items:center">
                 <span class="dn-live" id="dnLive"><span class="dn-live-dot"></span> עדכון חי</span>
-                <button class="macro-back-btn" onclick="closeDiscordNews()">חזור לדשבורד</button>
             </div>
         </div>
         <div class="macro-content">

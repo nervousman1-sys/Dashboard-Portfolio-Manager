@@ -67,7 +67,6 @@ function _lheRenderShell() {
     <div dir="rtl">
         <div class="macro-page-header">
             <h1 class="macro-main-title">מנוע הנזילות ההידרודינמי</h1>
-            <button class="macro-back-btn" onclick="closeLHEPage()">חזור לדשבורד</button>
         </div>
         <div class="macro-content">
             <div class="lhe-intro">
