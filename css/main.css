@@ -1198,10 +1198,14 @@ html.day-mode select option {
 }
 
 /* ══ Top Fold Spacer ══
-   Fixed-basis spacer above .exposure-section — pushes charts toward fold center
-   without growing. Increase flex-basis to push charts lower. */
+   Grows ABOVE .exposure-section, mirroring the .fold-spacer below it, so the exposure
+   overview is vertically CENTERED in the fold (equal empty space above and below) instead
+   of sitting at the top. The summary-bar (above) and bottom-fold-group (below) stay put —
+   only the overview shifts down. Hidden on mobile (see the max-width media query). */
 .top-fold-spacer {
-    display: none;
+    display: block;
+    flex: 1 1 auto;
+    min-height: 12px;
 }
 
 /* ══ Flexible Spacer ══
