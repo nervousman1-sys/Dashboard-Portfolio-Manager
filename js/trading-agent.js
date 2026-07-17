@@ -48,6 +48,7 @@
  */
 
 let _taStrategies = [];         // cached rows
+let _taBrokers = [];            // cached broker_connections rows
 let _taPendingRule = null;      // the just-parsed rule awaiting confirmation
 let _taChecking = false;
 const _taEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -71,6 +72,7 @@ function openTradingAgentPage() {
     if (typeof _setActiveNav === 'function') _setActiveNav('tradingagent');
     if (typeof updateURLState === 'function') updateURLState({ view: 'tradingagent' });
     _taRenderShell();
+    _taLoadBrokers();
     _taLoadStrategies();
     window.scrollTo(0, 0);
 }
@@ -99,11 +101,13 @@ function _taRenderShell() {
                 <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — הסוכן יתרגם אותה לחוקים ויציג לך כרטיס לאישור</div>
                 <div class="ta-chat-row">
                     <textarea id="taInput" class="ta-input" rows="2" placeholder="למשל: אם ה-RSI של NVDA עולה מעל 80 — מכור 50% מהאחזקה…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){_taParse();}"></textarea>
-                    <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">✨ פענח אסטרטגיה</button>
+                    <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">⚡ בצע אסטרטגיה</button>
                 </div>
                 <div class="ta-examples">${_TA_EXAMPLES.map(e => `<button class="ta-example" onclick="document.getElementById('taInput').value=this.textContent;_taParse()">${_taEsc(e)}</button>`).join('')}</div>
                 <div id="taCard"></div>
             </div>
+            <div class="ta-list-head">🔗 חיבור לברוקר <span class="ta-broker-sub">תשתית להרצה אמיתית</span> <button class="ta-broker-add" onclick="_taOpenBrokerForm()">+ הוסף חיבור</button></div>
+            <div id="taBrokerCard" class="risk-table-card glass-card" style="padding:10px 14px"><div class="wl-empty"><div class="rep-spinner"></div>טוען…</div></div>
             <div class="ta-list-head">האסטרטגיות שלי <span id="taCount" class="wl-cat-count">0</span></div>
             <div id="taList" class="risk-table-card glass-card" style="padding:10px 14px"><div class="wl-empty"><div class="rep-spinner"></div>טוען…</div></div>
         </div>
@@ -130,14 +134,22 @@ async function _taParse() {
 
 // ── The visual "Strategy Card": trigger → action → risk, with Enable/Disable ──
 function _taStrategyCardHtml(rule, summaryHe, source) {
+    const connBrokers = (_taBrokers || []).filter(b => b.status === 'CONNECTED');
     const trigHe = { NEWS_SENTIMENT: '📰 חדשות/סנטימנט', MACRO_EVENT: '🌍 אירוע מאקרו', PRICE_LEVEL: '💲 רמת מחיר', EARNINGS_BEAT: '📊 הפתעת דוחות', TECHNICAL_INDICATOR: '📈 אינדיקטור טכני' };
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
+    const tfHe = { weekly: 'שבועי', daily: 'יומי', '4h': '4 שעות', '1h': 'שעתי' };
     const conds = (rule.conditions || []).map(c => {
         const subj = c.subject ? ` <b>${_taEsc(c.subject)}</b>` : '';
-        const body = c.factor === 'news'
-            ? `אזכור בחדשות: <b>${_taEsc(c.keyword || c.subject || '')}</b>`
-            : `${facHe[c.factor] || c.factor}${subj} ${opHe[c.operator] || c.operator} <b>${_taEsc(c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : '')}</b>${c.timeframe ? ` <span class="ta-tf">[${_taEsc(c.timeframe)}]</span>` : ''}`;
+        let body;
+        if (c.factor === 'news') {
+            body = `אזכור בחדשות: <b>${_taEsc(c.keyword || c.subject || '')}</b>`;
+        } else if (c.factor === 'ma') {
+            const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
+            body = `מחיר${subj} ${opHe[c.operator] || c.operator} ממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`;
+        } else {
+            body = `${facHe[c.factor] || c.factor}${subj} ${opHe[c.operator] || c.operator} <b>${_taEsc(c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : '')}</b>${c.timeframe ? ` <span class="ta-tf">[${_taEsc(tfHe[c.timeframe] || c.timeframe)}]</span>` : ''}`;
+        }
         return `<li class="ta-cond">${body}</li>`;
     }).join('');
     const actCls = rule.action === 'BUY' ? 'ta-buy' : rule.action === 'SELL' ? 'ta-sell' : 'ta-alert';
@@ -156,8 +168,11 @@ function _taStrategyCardHtml(rule, summaryHe, source) {
         </div>
         <div class="ta-card-actions">
             <label class="ta-mode-lbl">אופן הפעלה:
-                <select id="taMode" class="st-pf-select"><option value="PAPER">מסחר מדומה (Paper)</option><option value="ALERT">התראה בלבד</option></select>
+                <select id="taMode" class="st-pf-select" onchange="_taOnModeChange()"><option value="PAPER">מסחר מדומה (Paper)</option><option value="ALERT">התראה בלבד</option>${connBrokers.length ? '<option value="LIVE">מסחר אמיתי (Live)</option>' : '<option value="LIVE" disabled>מסחר אמיתי (Live) — דרוש חיבור ברוקר</option>'}</select>
             </label>
+            <span class="ta-mode-lbl" id="taBrokerPick" style="display:none">דרך:
+                <select id="taBrokerSel" class="st-pf-select">${connBrokers.map(b => `<option value="${b.id}">${_taEsc(b.label || b.broker)}</option>`).join('')}</select>
+            </span>
             <button class="corr-run-btn corr-run-primary" onclick="_taEnable()">▶ הפעל אסטרטגיה</button>
             <button class="wl-close-btn" onclick="_taCancelCard()">בטל</button>
         </div>
@@ -168,10 +183,17 @@ function _taStrategyCardHtml(rule, summaryHe, source) {
 async function _taEnable() {
     if (!_taPendingRule) return;
     if (typeof ensureSupabaseReady !== 'function' || !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.', 'error'); return; }
-    const mode = (document.getElementById('taMode') || {}).value === 'ALERT' ? 'ALERT' : 'PAPER';
+    const modeSel = (document.getElementById('taMode') || {}).value;
+    const mode = modeSel === 'ALERT' ? 'ALERT' : modeSel === 'LIVE' ? 'LIVE' : 'PAPER';
+    let brokerId = null;
+    if (mode === 'LIVE') {
+        brokerId = +(((document.getElementById('taBrokerSel') || {}).value) || 0) || null;
+        if (!brokerId) { if (typeof showToast === 'function') showToast('בחר חיבור ברוקר פעיל למצב אמיתי', 'error'); return; }
+    }
+    const modeHe = mode === 'PAPER' ? 'סימולציה' : mode === 'LIVE' ? 'אמיתי (Live)' : 'התראה';
     try {
         const { data, error } = await supabaseClient.from('automated_strategies')
-            .insert({ name: _taPendingRule.name || 'אסטרטגיה', status: 'ACTIVE', mode, parsed_rule: _taPendingRule, execution_logs: [{ ts: new Date().toISOString(), kind: 'created', message: `האסטרטגיה נוצרה והופעלה במצב ${mode === 'PAPER' ? 'סימולציה' : 'התראה'}` }] })
+            .insert({ name: _taPendingRule.name || 'אסטרטגיה', status: 'ACTIVE', mode, broker_connection_id: brokerId, parsed_rule: _taPendingRule, execution_logs: [{ ts: new Date().toISOString(), kind: 'created', message: `האסטרטגיה נוצרה והופעלה במצב ${modeHe}` }] })
             .select().single();
         if (error) throw error;
         if (typeof showToast === 'function') showToast('✅ האסטרטגיה הופעלה — הסוכן מנטר את התנאים', 'success');
@@ -205,7 +227,7 @@ function _taRenderList() {
         const summary = _taEsc((typeof _taRuleSummary === 'function') ? _taRuleSummary(s.parsed_rule) : (s.parsed_rule && s.parsed_rule.name) || '');
         const logs = Array.isArray(s.execution_logs) ? s.execution_logs : [];
         const last = logs.length ? logs[logs.length - 1] : null;
-        const modeHe = s.mode === 'ALERT' ? '🔔 התראה' : '🧪 סימולציה';
+        const modeHe = s.mode === 'ALERT' ? '🔔 התראה' : s.mode === 'LIVE' ? '🟢 אמיתי' : '🧪 סימולציה';
         return `<div class="ta-strat" data-ta-id="${s.id}">
             <div class="ta-strat-main">
                 <div class="ta-strat-id"><span class="ta-strat-name">${_taEsc(s.name)}</span><span class="ta-strat-sum">${summary}</span></div>
@@ -223,7 +245,11 @@ function _taRuleSummary(rule) {
     // Mirror the server _strategySummaryHe for the list (kept in sync).
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
-    const conds = (rule.conditions || []).map(c => c.factor === 'news' ? `אזכור "${c.keyword || c.subject}"` : `${facHe[c.factor] || c.factor}${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ${c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : ''}`.trim());
+    const conds = (rule.conditions || []).map(c => {
+        if (c.factor === 'news') return `אזכור "${c.keyword || c.subject}"`;
+        if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; return `מחיר${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ממוצע ${c.period || 200}${unit}`.trim(); }
+        return `${facHe[c.factor] || c.factor}${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ${c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : ''}`.trim();
+    });
     const act = rule.action === 'BUY' ? 'קנייה' : rule.action === 'SELL' ? 'מכירה' : 'התראה';
     const amt = rule.action === 'ALERT_ONLY' ? '' : (rule.amount.type === 'SHARES' ? ` ${rule.amount.value} מניות` : rule.amount.type === 'PORTFOLIO_PCT' ? ` ${rule.amount.value}%` : ` $${rule.amount.value}`);
     return `אם ${conds.join(rule.logic === 'ALL' ? ' וגם ' : ' או ')} ← ${act}${amt}${rule.target_asset ? ' ' + rule.target_asset : ''}`;
@@ -239,6 +265,132 @@ async function _taToggle(id) {
 async function _taDelete(id) {
     if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) return;
     try { await supabaseClient.from('automated_strategies').delete().eq('id', id); _taStrategies = _taStrategies.filter(x => x.id !== id); _taRenderList(); } catch (e) { }
+}
+
+// ══════════════ BROKER CONNECTION INFRASTRUCTURE ══════════════
+// A broker adapter is the seam between a fired strategy and order execution. Every strategy runs
+// through an adapter: the built-in PAPER simulator (always available, never real money) or a real
+// broker (IBKR/Alpaca). Real adapters are INFRASTRUCTURE ONLY — they require a secure server-side
+// proxy (OAuth + a hosted IB Gateway) and, until that exists, they FAIL SAFE: no live order is sent.
+const _TA_BROKER_DEFS = {
+    PAPER: { label: 'סימולטור (Paper)', icon: '🧪', instant: true, real: false, note: 'חשבון מסחר מדומה מובנה — אין כסף אמיתי, מתחבר מיידית.' },
+    IBKR: { label: 'Interactive Brokers', icon: '🟥', instant: false, real: true, note: 'דורש OAuth + IB Gateway מתארח בצד השרת. הסודות לעולם אינם נשמרים בצד הלקוח.' },
+    ALPACA: { label: 'Alpaca', icon: '🦙', instant: false, real: true, note: 'דורש מפתחות API בצד השרת (proxy מאובטח). הסודות לעולם אינם נשמרים בצד הלקוח.' },
+};
+// Return an adapter object for a broker_connections row. { broker, real, connect(), placeOrder(order) }.
+function _taBrokerAdapter(conn) {
+    const broker = (conn && conn.broker) || 'PAPER';
+    if (broker === 'PAPER') {
+        return {
+            broker, real: false,
+            async connect() { return { ok: true, status: 'CONNECTED', message: 'חשבון סימולציה מחובר' }; },
+            async placeOrder(o) { return { ok: true, real: false, message: `סימולציה דרך הברוקר: ${o.side} ${o.qtyLabel} ${o.symbol}${o.price != null ? ` @ ~$${(+o.price).toFixed(2)}` : ''}` }; },
+        };
+    }
+    // Real broker — the terminal is a deliberate safe stub until the server proxy is wired.
+    return {
+        broker, real: true,
+        async connect() { return { ok: false, status: 'PENDING', message: `חיבור ${broker} דורש שרת proxy מאובטח (OAuth + Gateway). ההגדרה טרם הושלמה בצד השרת — החיבור נשמר כ"ממתין".` }; },
+        async placeOrder(o) { return { ok: false, real: false, message: `❌ ${broker}: ה-Gateway אינו מוגדר — לא נשלחה פקודת אמת (${o.side} ${o.qtyLabel} ${o.symbol}).` }; },
+    };
+}
+
+async function _taLoadBrokers() {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    try {
+        const { data, error } = await supabaseClient.from('broker_connections').select('*').order('created_at', { ascending: false });
+        if (error) return;
+        _taBrokers = data || [];
+        _taRenderBrokers();
+    } catch (e) { }
+}
+function _taRenderBrokers() {
+    const el = document.getElementById('taBrokerCard');
+    if (!el) return;
+    const stHe = { CONNECTED: ['מחובר', 'ta-bk-on'], PENDING: ['ממתין להגדרה', 'ta-bk-pend'], DISCONNECTED: ['מנותק', 'ta-bk-off'], ERROR: ['שגיאה', 'ta-bk-err'] };
+    const rows = _taBrokers.map(b => {
+        const def = _TA_BROKER_DEFS[b.broker] || { label: b.broker, icon: '🏦' };
+        const st = stHe[b.status] || [b.status, ''];
+        const modeHe = b.account_mode === 'LIVE' ? 'אמיתי' : 'מדומה';
+        const cfg = b.config || {};
+        const meta = [cfg.account_id ? `חשבון ${_taEsc(cfg.account_id)}` : '', cfg.gateway_url ? _taEsc(cfg.gateway_url) : ''].filter(Boolean).join(' · ');
+        return `<div class="ta-bk-row">
+            <span class="ta-bk-ic">${def.icon}</span>
+            <div class="ta-bk-id"><span class="ta-bk-name">${_taEsc(b.label || def.label)}</span><span class="ta-bk-meta">${_taEsc(def.label)}${meta ? ' · ' + meta : ''} · ${modeHe}</span></div>
+            <span class="ta-bk-badge ${st[1]}">${st[0]}</span>
+            ${b.status !== 'CONNECTED' ? `<button class="ta-mini ta-mini-on" onclick="_taConnectBroker(${b.id})">🔌 חבר</button>` : `<button class="ta-mini" onclick="_taConnectBroker(${b.id})">בדוק</button>`}
+            <button class="ta-mini ta-mini-del" onclick="_taDeleteBroker(${b.id})" title="מחק">🗑</button>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div id="taBrokerForm"></div>${_taBrokers.length ? rows : '<div class="wl-empty">אין חיבורי ברוקר. הוסף חיבור כדי לאפשר מצב הרצה אמיתי (Live). מצב סימולציה והתראה עובדים גם בלי חיבור.</div>'}`;
+}
+function _taOpenBrokerForm() {
+    const holder = document.getElementById('taBrokerForm');
+    if (!holder) return;
+    if (holder.dataset.open === '1') { holder.innerHTML = ''; holder.dataset.open = ''; return; }
+    holder.dataset.open = '1';
+    const opts = Object.keys(_TA_BROKER_DEFS).map(k => `<option value="${k}">${_TA_BROKER_DEFS[k].icon} ${_taEsc(_TA_BROKER_DEFS[k].label)}</option>`).join('');
+    holder.innerHTML = `<div class="ta-bk-form">
+        <div class="ta-bk-form-grid">
+            <label>ברוקר<select id="taBkType" onchange="_taBrokerFormNote()">${opts}</select></label>
+            <label>כינוי<input id="taBkLabel" placeholder="למשל: חשבון ראשי"></label>
+            <label>מצב חשבון<select id="taBkMode"><option value="PAPER">מדומה (Paper)</option><option value="LIVE">אמיתי (Live)</option></select></label>
+            <label>מזהה חשבון<input id="taBkAccount" placeholder="לא סודי — למשל U1234567"></label>
+            <label>כתובת Gateway<input id="taBkGateway" placeholder="https://… (אופציונלי)"></label>
+        </div>
+        <div class="ta-bk-note" id="taBkNote">${_taEsc(_TA_BROKER_DEFS.PAPER.note)}</div>
+        <div class="ta-bk-secnote">🔒 סיסמאות ומפתחות API לעולם אינם נשמרים כאן. חיבור אמיתי מתבצע דרך שרת proxy מאובטח בלבד.</div>
+        <div class="ta-bk-form-actions">
+            <button class="corr-run-btn corr-run-primary" onclick="_taSaveBroker()">שמור חיבור</button>
+            <button class="wl-close-btn" onclick="_taOpenBrokerForm()">בטל</button>
+        </div>
+    </div>`;
+}
+function _taBrokerFormNote() {
+    const t = (document.getElementById('taBkType') || {}).value;
+    const n = document.getElementById('taBkNote');
+    if (n && _TA_BROKER_DEFS[t]) n.textContent = _TA_BROKER_DEFS[t].note;
+}
+async function _taSaveBroker() {
+    if (typeof ensureSupabaseReady !== 'function' || !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.', 'error'); return; }
+    const broker = (document.getElementById('taBkType') || {}).value || 'PAPER';
+    const label = ((document.getElementById('taBkLabel') || {}).value || '').trim() || (_TA_BROKER_DEFS[broker] || {}).label || broker;
+    const account_mode = (document.getElementById('taBkMode') || {}).value === 'LIVE' ? 'LIVE' : 'PAPER';
+    const config = { account_id: ((document.getElementById('taBkAccount') || {}).value || '').trim() || null, gateway_url: ((document.getElementById('taBkGateway') || {}).value || '').trim() || null };
+    const def = _TA_BROKER_DEFS[broker] || {};
+    // Paper connects instantly; real brokers start PENDING (need the server-side proxy).
+    const status = def.instant ? 'CONNECTED' : 'PENDING';
+    try {
+        const { error } = await supabaseClient.from('broker_connections').insert({ broker, label, status, account_mode, config, last_check: new Date().toISOString() });
+        if (error) throw error;
+        if (typeof showToast === 'function') showToast(def.instant ? '✅ חשבון הסימולציה חובר' : '📎 החיבור נשמר במצב "ממתין" — נדרשת הגדרת שרת', 'success');
+        const holder = document.getElementById('taBrokerForm'); if (holder) { holder.innerHTML = ''; holder.dataset.open = ''; }
+        await _taLoadBrokers();
+    } catch (e) { if (typeof showToast === 'function') showToast('שמירת החיבור נכשלה', 'error'); }
+}
+async function _taConnectBroker(id) {
+    const b = _taBrokers.find(x => x.id === id); if (!b) return;
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) return;
+    const res = await _taBrokerAdapter(b).connect();
+    try {
+        await supabaseClient.from('broker_connections').update({ status: res.status || (res.ok ? 'CONNECTED' : 'PENDING'), last_check: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
+    } catch (e) { }
+    if (typeof showToast === 'function') showToast(res.message, res.ok ? 'success' : 'error');
+    await _taLoadBrokers();
+}
+async function _taDeleteBroker(id) {
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) return;
+    try { await supabaseClient.from('broker_connections').delete().eq('id', id); _taBrokers = _taBrokers.filter(x => x.id !== id); _taRenderBrokers(); } catch (e) { }
+}
+async function _taGetBrokerConn(id) {
+    if (!id) return null;
+    const cached = _taBrokers.find(x => x.id === id); if (cached) return cached;
+    try { const { data } = await supabaseClient.from('broker_connections').select('*').eq('id', id).single(); return data || null; } catch (e) { return null; }
+}
+function _taOnModeChange() {
+    const mode = (document.getElementById('taMode') || {}).value;
+    const pick = document.getElementById('taBrokerPick');
+    if (pick) pick.style.display = mode === 'LIVE' ? 'inline-flex' : 'none';
 }
 
 // ══ DRY-RUN EVALUATION ENGINE — checks ACTIVE strategies against REAL live data ══
@@ -266,9 +418,51 @@ async function _taRsiValue(sym, tf) {
         return _taRSI(closes, 14);
     } catch (e) { return null; }
 }
+// Entity → tradeable Yahoo symbol (mirrors the server _STRAT_TICKERS so the client can monitor the
+// SAME real series the parser resolved: "ביטקוין"→BTC-USD, "נפט"→USO, …).
+const _TA_TICKERS = {
+    bitcoin: 'BTC-USD', 'ביטקוין': 'BTC-USD', btc: 'BTC-USD', ethereum: 'ETH-USD', 'אתריום': 'ETH-USD', 'את׳ריום': 'ETH-USD', eth: 'ETH-USD',
+    gold: 'GLD', 'זהב': 'GLD', oil: 'USO', 'נפט': 'USO', crude: 'USO', silver: 'SLV', 'כסף': 'SLV',
+    nasdaq: 'QQQ', 'נאסדק': 'QQQ', 'sp500': 'SPY', 'ספ500': 'SPY', dow: 'DIA', 'דאו': 'DIA', vix: '^VIX',
+};
+function _taResolveTicker(s) {
+    if (s == null) return null;
+    const k = String(s).trim().toLowerCase().replace(/["״׳'`\s]/g, '');
+    if (_TA_TICKERS[k]) return _TA_TICKERS[k];
+    const up = String(s).trim().toUpperCase();
+    if (/^[A-Z]{1,6}(-USD|\.TA)?$/.test(up) || /^\^[A-Z]+$/.test(up)) return up;
+    return null;
+}
+// Fetch a plain closes[] array for a symbol at an interval/range.
+async function _taCloses(sym, interval, range) {
+    try {
+        const r = await fetch(`/api/history?symbol=${encodeURIComponent(sym)}&range=${range}&interval=${interval}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        return ((j && j.points) || []).map(p => p.close).filter(x => x != null && isFinite(x));
+    } catch (e) { return null; }
+}
+// Simple moving average over the LAST `period` closes.
+function _taSma(closes, period) {
+    if (!Array.isArray(closes) || closes.length < period || period < 1) return null;
+    let sum = 0; for (let i = closes.length - period; i < closes.length; i++) sum += closes[i];
+    return sum / period;
+}
+// Pick a Yahoo interval+range that yields at least `period` bars at the requested timeframe.
+function _taMaParams(tf, period) {
+    if (tf === 'weekly' || tf === '1wk' || tf === '1w') {
+        const w = period + 10;
+        const range = w <= 52 ? '1y' : w <= 104 ? '2y' : w <= 260 ? '5y' : 'max';
+        return { interval: '1wk', range };
+    }
+    const d = period + 20;
+    const range = d <= 130 ? '6mo' : d <= 260 ? '1y' : d <= 520 ? '2y' : d <= 1300 ? '5y' : 'max';
+    return { interval: '1d', range };
+}
 // Evaluate ONE condition → { met:boolean, value:string } (value for the log). Real data only.
 async function _taEvalCondition(c, rule) {
-    const sym = (c.subject && /^[A-Za-z.\-]{1,6}$/.test(c.subject) ? c.subject : rule.target_asset || '').toUpperCase();
+    // Resolve the MONITORED symbol from the condition subject (may differ from target_asset — e.g.
+    // monitor BTC-USD, trade MSTR). Fall back to target_asset when the subject isn't a symbol.
+    const sym = (_taResolveTicker(c.subject) || String(rule.target_asset || '').toUpperCase());
     const cmp = (v, th) => {
         const op = c.operator;
         if (op === 'ABOVE' || op === 'GTE' || op === 'CROSSES_ABOVE') return v >= th;
@@ -289,11 +483,20 @@ async function _taEvalCondition(c, rule) {
             if (rsi == null) return { met: false, value: 'אין RSI' };
             return { met: cmp(rsi, +c.threshold), value: `RSI ${sym} ${rsi.toFixed(1)}${c.timeframe ? ' (' + c.timeframe + ')' : ''}` };
         }
-        if (c.factor === 'ma' && sym && c.threshold != null) {
-            const r = await fetch(`/api/technicals?mode=scan&symbols=${encodeURIComponent(sym)}&v=2`, { headers: { Accept: 'application/json' } });
-            const j = await r.json(); const t = (j.results || {})[sym] || {};
-            const dist = t.ma && t.ma.d200dist; if (dist == null) return { met: false, value: 'אין ממוצע' };
-            return { met: cmp(t.price, +c.threshold), value: `מחיר מול ממוצע 200: ${dist}%` };
+        if (c.factor === 'ma' && sym) {
+            // The MA "level" is the moving average itself — compute the real SMA of the monitored
+            // asset over `period` bars at the requested timeframe, then compare price vs that MA.
+            const period = c.period || (typeof c.threshold === 'number' ? Math.round(c.threshold) : 200);
+            const tf = (c.timeframe || 'daily').toLowerCase();
+            const { interval, range } = _taMaParams(tf, period);
+            const closes = await _taCloses(sym, interval, range);
+            if (!closes || closes.length < period + 1) return { met: false, value: `אין מספיק היסטוריה ל-${sym} (נדרש ${period} ${tf === 'weekly' ? 'שבועות' : 'ימים'})` };
+            const ma = _taSma(closes, period);
+            const price = closes[closes.length - 1];
+            if (ma == null || price == null) return { met: false, value: 'אין ממוצע' };
+            const distPct = ((price - ma) / ma) * 100;
+            const unit = tf === 'weekly' ? ' שבועות' : tf === 'daily' ? ' ימים' : '';
+            return { met: cmp(price, ma), value: `${sym} $${(+price).toFixed(2)} מול ממוצע ${period}${unit} $${(+ma).toFixed(2)} (${distPct >= 0 ? '+' : ''}${distPct.toFixed(1)}%)` };
         }
         if (c.factor === 'eps_surprise' && c.threshold != null) {
             const t = sym || rule.target_asset; if (!t) return { met: false, value: 'נדרש טיקר לדוח' };
@@ -335,12 +538,21 @@ async function _taCheckStrategies(force) {
                 if (rule.action === 'ALERT_ONLY' || s.mode === 'ALERT') {
                     msg = `🔔 טריגר התקיים — ${detail}`;
                 } else {
-                    // PAPER: simulate the fill at the current price.
+                    // Get the current price of the traded asset for the (simulated or routed) fill.
                     let px = null;
                     try { if (rule.target_asset) { const r = await fetch(`/api/quote?symbols=${encodeURIComponent(rule.target_asset)}`); const jj = await r.json(); const q = jj[rule.target_asset] || (jj.quotes && jj.quotes[rule.target_asset]) || {}; px = q.price != null ? q.price : q.regularMarketPrice; } } catch (e) { }
                     const actHe = rule.action === 'BUY' ? 'קנייה' : 'מכירה';
                     const amtHe = rule.amount.type === 'SHARES' ? `${rule.amount.value} מניות` : rule.amount.type === 'PORTFOLIO_PCT' ? `${rule.amount.value}% מהאחזקה` : `$${rule.amount.value}`;
-                    msg = `🧪 סימולציה: בוצעה ${actHe} של ${amtHe} ${rule.target_asset || ''}${px != null ? ` במחיר ~$${(+px).toFixed(2)}` : ''} — ${detail}`;
+                    if (s.mode === 'LIVE') {
+                        // Route the order through the broker adapter. Real brokers fail safe (no live order).
+                        const conn = await _taGetBrokerConn(s.broker_connection_id);
+                        const order = { side: rule.action === 'BUY' ? 'BUY' : 'SELL', symbol: rule.target_asset || '', qtyLabel: amtHe, price: px };
+                        const res = await _taBrokerAdapter(conn).placeOrder(order);
+                        msg = res.ok ? `${res.real ? '✅ בוצעה פקודת אמת' : '🧪'} ${res.message} — ${detail}` : `⚠️ מצב Live נחסם — ${res.message} · ${detail}`;
+                    } else {
+                        // PAPER: simulate the fill at the current price.
+                        msg = `🧪 סימולציה: בוצעה ${actHe} של ${amtHe} ${rule.target_asset || ''}${px != null ? ` במחיר ~$${(+px).toFixed(2)}` : ''} — ${detail}`;
+                    }
                 }
                 logs.push({ ts: new Date().toISOString(), kind: 'triggered', message: msg });
                 try {
@@ -364,6 +576,9 @@ if (typeof window !== 'undefined') {
     window.openTradingAgentPage = openTradingAgentPage; window.closeTradingAgentPage = closeTradingAgentPage;
     window._taParse = _taParse; window._taEnable = _taEnable; window._taToggle = _taToggle; window._taDelete = _taDelete;
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; };
+    window._taOnModeChange = _taOnModeChange;
+    window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;
+    window._taConnectBroker = _taConnectBroker; window._taDeleteBroker = _taDeleteBroker;
     window._taCheckStrategies = _taCheckStrategies; window._taPendingRule = _taPendingRule;
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(_taInit, 6000));
     else setTimeout(_taInit, 6000);

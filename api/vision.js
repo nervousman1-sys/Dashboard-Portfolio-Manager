@@ -190,6 +190,20 @@ function _reactionFallback(nm, epsA, epsE, sp, move, news) {
 
 // ── AI Trading Agent — natural-language → structured StrategyRule ─────────────────────────────
 const _STRAT_TRIGGERS = ['NEWS_SENTIMENT', 'MACRO_EVENT', 'PRICE_LEVEL', 'EARNINGS_BEAT', 'TECHNICAL_INDICATOR'];
+// Entity → tradeable Yahoo symbol, so "Bitcoin"/"נפט"/"זהב" resolve to real series the engine can read.
+const _STRAT_TICKERS = {
+    bitcoin: 'BTC-USD', 'ביטקוין': 'BTC-USD', btc: 'BTC-USD', ethereum: 'ETH-USD', 'אתריום': 'ETH-USD', 'את׳ריום': 'ETH-USD', eth: 'ETH-USD',
+    gold: 'GLD', 'זהב': 'GLD', oil: 'USO', 'נפט': 'USO', crude: 'USO', 'ברנט': 'BNO', silver: 'SLV', 'כסף': 'SLV',
+    nasdaq: 'QQQ', 'נאסדק': 'QQQ', 'נאסדק100': 'QQQ', 'sp500': 'SPY', 'ספ500': 'SPY', 'sandp': 'SPY', dow: 'DIA', 'דאו': 'DIA', vix: '^VIX', 'תנודתיות': '^VIX',
+};
+function _resolveTicker(s) {
+    if (s == null) return s;
+    const k = String(s).trim().toLowerCase().replace(/["״׳'`\s]/g, '');
+    if (_STRAT_TICKERS[k]) return _STRAT_TICKERS[k];
+    const up = String(s).trim().toUpperCase();
+    if (/^[A-Z]{1,6}(-USD|\.TA)?$/.test(up) || /^\^[A-Z]+$/.test(up)) return up;
+    return s; // leave as-is (e.g. a news entity like "Iran")
+}
 const _STRAT_ACTIONS = ['BUY', 'SELL', 'ALERT_ONLY'];
 const _STRAT_OPS = ['ABOVE', 'BELOW', 'CROSSES_ABOVE', 'CROSSES_BELOW', 'GTE', 'LTE', 'EQUALS', 'CONTAINS'];
 const _STRAT_AMT = ['SHARES', 'CASH_USD', 'PORTFOLIO_PCT'];
@@ -201,17 +215,18 @@ function _strategyPrompt(text) {
         '  "name": "שם קצר בעברית לאסטרטגיה",',
         '  "trigger_type": "אחד מ: NEWS_SENTIMENT | MACRO_EVENT | PRICE_LEVEL | EARNINGS_BEAT | TECHNICAL_INDICATOR (הסוג הדומיננטי)",',
         '  "logic": "ANY אם מספיק שתנאי אחד יתקיים (או/OR), ALL אם צריך שכולם יתקיימו (וגם/AND)",',
-        '  "conditions": [ { "factor": "price|rsi|ma|eps_surprise|news|macro", "subject": "טיקר או ישות/מדד (USO, NVDA, נפט, Iran, Trump)", "keyword": "מילות מפתח לחדשות מופרדות בפסיק, או null", "operator": "אחד מ: ABOVE|BELOW|CROSSES_ABOVE|CROSSES_BELOW|GTE|LTE|EQUALS|CONTAINS", "threshold": מספר או null, "timeframe": "4h|daily|weekly או null" } ],',
+        '  "conditions": [ { "factor": "price|rsi|ma|eps_surprise|news|macro", "subject": "הטיקר לניטור. המר ישות לטיקר Yahoo: ביטקוין/Bitcoin→BTC-USD, את׳ריום→ETH-USD, נפט→USO, זהב→GLD, כסף→SLV, נאסדק→QQQ, S&P→SPY. עבור factor=news השאר את שם הישות (Iran, Trump).", "keyword": "מילות מפתח לחדשות מופרדות בפסיק, או null", "operator": "ABOVE|BELOW|CROSSES_ABOVE|CROSSES_BELOW|GTE|LTE|EQUALS|CONTAINS", "threshold": "ערך יעד מספרי (מחיר/RSI/אחוז הפתעה). עבור factor=ma השאר null — הרמה היא הממוצע עצמו.", "period": "רק ל-factor=ma: אורך הממוצע הנע (למשל 200), אחרת null", "timeframe": "4h|daily|weekly או null" } ],',
         '  "action": "BUY | SELL | ALERT_ONLY",',
-        '  "target_asset": "הטיקר לפעולה, למשל USO או NVDA",',
+        '  "target_asset": "הטיקר שעליו מבצעים את הפעולה, למשל USO או NVDA או MSTR",',
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז מהתיק ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) אם אין target_asset מפורש אך יש טיקר בתנאי — השתמש בו. (7) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY.',
         'דוגמאות:',
         'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
-        'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"period":null,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "קנה 200 מניות MSTR אם הביטקוין חוצה מעלה את ממוצע 200 השבועות" → {"name":"MSTR על ממוצע 200 שבועות של ביטקוין","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"ma","subject":"BTC-USD","keyword":null,"operator":"CROSSES_ABOVE","threshold":null,"period":200,"timeframe":"weekly"}],"action":"BUY","target_asset":"MSTR","amount":{"type":"SHARES","value":200},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         '',
         `ההוראה לפענוח: "${text}"`,
     ].join('\n');
@@ -222,14 +237,30 @@ function _normalizeStrategy(r) {
     const up = (s) => String(s || '').trim().toUpperCase();
     const trigger = _STRAT_TRIGGERS.includes(up(r.trigger_type)) ? up(r.trigger_type) : null;
     let conditions = Array.isArray(r.conditions) ? r.conditions : [];
-    conditions = conditions.map(c => c && typeof c === 'object' ? {
-        factor: String(c.factor || '').toLowerCase().trim() || 'price',
-        subject: c.subject != null ? String(c.subject).trim() : null,
-        keyword: c.keyword != null && c.keyword !== '' ? String(c.keyword).trim() : null,
-        operator: _STRAT_OPS.includes(up(c.operator)) ? up(c.operator) : (c.keyword ? 'CONTAINS' : 'BELOW'),
-        threshold: (c.threshold != null && c.threshold !== '' && isFinite(+c.threshold)) ? +c.threshold : (c.threshold != null ? String(c.threshold) : null),
-        timeframe: c.timeframe ? String(c.timeframe).toLowerCase().trim() : null,
-    } : null).filter(Boolean);
+    conditions = conditions.map(c => {
+        if (!c || typeof c !== 'object') return null;
+        const factor = String(c.factor || '').toLowerCase().trim() || 'price';
+        // News/macro keep the raw entity (e.g. "Iran"); price/rsi/ma/eps resolve to a tradeable ticker.
+        const rawSubj = c.subject != null ? String(c.subject).trim() : null;
+        const subject = (factor === 'news' || factor === 'macro') ? rawSubj : (rawSubj ? _resolveTicker(rawSubj) : null);
+        let threshold = (c.threshold != null && c.threshold !== '' && isFinite(+c.threshold)) ? +c.threshold : (c.threshold != null && c.threshold !== '' ? String(c.threshold) : null);
+        let period = (c.period != null && c.period !== '' && isFinite(+c.period)) ? Math.round(+c.period) : null;
+        // For a moving-average condition the number is the MA length, not a price. If the model put it
+        // in threshold (legacy shape), move it to period so the engine computes the real SMA.
+        if (factor === 'ma') {
+            if (period == null && typeof threshold === 'number') { period = Math.round(threshold); threshold = null; }
+            if (period == null) period = 200;
+        }
+        return {
+            factor,
+            subject,
+            keyword: c.keyword != null && c.keyword !== '' ? String(c.keyword).trim() : null,
+            operator: _STRAT_OPS.includes(up(c.operator)) ? up(c.operator) : (c.keyword ? 'CONTAINS' : 'BELOW'),
+            threshold,
+            period,
+            timeframe: c.timeframe ? String(c.timeframe).toLowerCase().trim() : null,
+        };
+    }).filter(Boolean);
     if (!conditions.length) return null;
     const action = _STRAT_ACTIONS.includes(up(r.action)) ? up(r.action) : 'ALERT_ONLY';
     const amt = (r.amount && typeof r.amount === 'object') ? r.amount : {};
@@ -252,15 +283,27 @@ function _normalizeStrategy(r) {
 // is flagged needs_review so the user can confirm/adjust in the Strategy Card.
 function _strategyFallback(text) {
     const t = ' ' + String(text || '') + ' ';
-    const tickers = (t.match(/\b(USO|NVDA|SPY|QQQ|GLD|TLT|IEF|AAPL|MSFT|AMD|META|TSLA|AMZN|GOOGL|NFLX)\b/gi) || []).map(s => s.toUpperCase());
+    const tickers = (t.match(/\b(USO|NVDA|SPY|QQQ|GLD|TLT|IEF|AAPL|MSFT|AMD|META|TSLA|AMZN|GOOGL|NFLX|MSTR|COIN)\b/gi) || []).map(s => s.toUpperCase());
+    // Resolve any named entity (ביטקוין/זהב/נפט…) that appears in the text to its tradeable ticker.
+    let entityTicker = null;
+    for (const k of Object.keys(_STRAT_TICKERS)) { if (t.toLowerCase().includes(k)) { entityTicker = _STRAT_TICKERS[k]; break; } }
     const conditions = [];
     let mPrice = t.match(/(?:מתחת|below|under|קטן).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i) || t.match(/\$\s*(\d+(?:\.\d+)?)/);
     let mAbovePrice = t.match(/(?:מעל|above|over|גדול).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i);
     const mRsi = t.match(/rsi.{0,18}?(\d{1,3})|(\d{1,3}).{0,10}?rsi/i);
     const mEps = t.match(/(?:eps|רווח|הפתעה).{0,20}?(\d{1,3})\s*%|(\d{1,3})\s*%.{0,14}?(?:eps|רווח|הפתעה)/i);
-    if (mRsi) conditions.push({ factor: 'rsi', subject: tickers[0] || null, keyword: null, operator: /מעל|above|over/i.test(t) ? 'ABOVE' : 'BELOW', threshold: +(mRsi[1] || mRsi[2]), timeframe: (t.match(/(\d+)\s*(?:h|hour|שע)/i) ? (t.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : null) });
+    // Moving average: "ממוצע 200", "ממוצע נע 200", "200 שבועות", "MA200", "200-day MA"…
+    const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day|תקופ|period)/i);
+    if (mMa) {
+        const weekly = /שבוע|week/i.test(t);
+        const opMa = /(?:חוצה\s*מעלה|crosses?\s*above|breaks?\s*above)/i.test(t) ? 'CROSSES_ABOVE'
+            : /(?:חוצה\s*מטה|crosses?\s*below|breaks?\s*below)/i.test(t) ? 'CROSSES_BELOW'
+            : /מעל|above|over/i.test(t) ? 'ABOVE' : /מתחת|below|under/i.test(t) ? 'BELOW' : 'CROSSES_ABOVE';
+        conditions.push({ factor: 'ma', subject: entityTicker || tickers[0] || null, keyword: null, operator: opMa, threshold: null, period: +mMa[1], timeframe: weekly ? 'weekly' : 'daily' });
+    }
+    if (mRsi) conditions.push({ factor: 'rsi', subject: entityTicker || tickers[0] || null, keyword: null, operator: /מעל|above|over/i.test(t) ? 'ABOVE' : 'BELOW', threshold: +(mRsi[1] || mRsi[2]), timeframe: (t.match(/(\d+)\s*(?:h|hour|שע)/i) ? (t.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : null) });
     if (mEps) conditions.push({ factor: 'eps_surprise', subject: null, keyword: null, operator: 'ABOVE', threshold: +(mEps[1] || mEps[2]), timeframe: null });
-    if (mPrice && !mRsi && !mEps) conditions.push({ factor: 'price', subject: tickers[0] || null, keyword: null, operator: mAbovePrice ? 'ABOVE' : 'BELOW', threshold: +(mAbovePrice ? mAbovePrice[1] : mPrice[1]), timeframe: null });
+    if (mPrice && !mRsi && !mEps && !mMa) conditions.push({ factor: 'price', subject: entityTicker || tickers[0] || null, keyword: null, operator: mAbovePrice ? 'ABOVE' : 'BELOW', threshold: +(mAbovePrice ? mAbovePrice[1] : mPrice[1]), timeframe: null });
     // \b doesn't work around Hebrew — match the words directly (Hebrew has no ASCII word boundary).
     const kw = (t.match(/(Iran|Trump|Israel|Fed|Powell|OPEC|איראן|טראמפ|ישראל|הפד|אופ"ק|נפט|ריבית)/gi) || []);
     if (kw.length) conditions.push({ factor: 'news', subject: kw[0], keyword: [...new Set(kw.map(k => k.trim()))].join(','), operator: 'CONTAINS', threshold: null, timeframe: null });
@@ -282,11 +325,18 @@ function _strategySummaryHe(r) {
     if (!r) return '';
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל', CROSSES_ABOVE: 'חוצה מעלה את', CROSSES_BELOW: 'חוצה מטה את', GTE: '≥', LTE: '≤', EQUALS: 'שווה ל', CONTAINS: 'מזכיר' };
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'אירוע מאקרו' };
+    const tfHe = { weekly: 'שבועי', daily: 'יומי', '4h': '4 שעות', '1h': 'שעתי' };
     const conds = (r.conditions || []).map(c => {
         const subj = c.subject ? ` (${c.subject})` : '';
         if (c.factor === 'news') return `אזכור בחדשות של "${c.keyword || c.subject}"`;
+        if (c.factor === 'ma') {
+            const per = c.period || 200;
+            const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
+            const op = opHe[c.operator] || c.operator;
+            return `מחיר${subj} ${op} ממוצע ${per}${unit}`;
+        }
         const th = c.threshold != null ? ` ${opHe[c.operator] || c.operator} ${c.threshold}${c.factor === 'eps_surprise' ? '%' : ''}` : '';
-        const tf = c.timeframe ? ` [${c.timeframe}]` : '';
+        const tf = c.timeframe ? ` [${tfHe[c.timeframe] || c.timeframe}]` : '';
         return `${facHe[c.factor] || c.factor}${subj}${th}${tf}`;
     });
     const join = conds.join(r.logic === 'ALL' ? ' וגם ' : ' או ');
