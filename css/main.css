@@ -9756,28 +9756,41 @@ html.day-mode .row-date-pop .row-buydate { color: var(--text-primary); color-sch
     .tech-mkt-btn { padding: 3px 7px; font-size: 9.5px; }
 }
 
-/* Indicator filters — ALL on ONE row (its own full-width line under the market selector).
-   Slightly smaller but SHARP text so every "ממוצע X" / "RSI" chip stays readable and fits. */
-.tech-toolbar { flex-wrap: wrap; align-items: center; }
-.tech-chips {
-    flex: 1 1 100%;            /* break to its own row, span the full card width */
-    flex-wrap: nowrap;         /* never split the indicators across two rows */
-    overflow-x: auto;          /* safe fallback on narrow desktops — still one line */
-    gap: 4px; padding-bottom: 2px;
+/* Toolbar = ONE single row: search + market tabs (S&P/נאסד"ק/ראסל/ת"א) + ALL indicator chips
+   together. Small but SHARP text; if it exceeds the card it scrolls horizontally as one unit
+   (contained in the frame), never wrapping to a second row. */
+.tech-toolbar {
+    flex-wrap: nowrap;         /* keep everything on a single line */
+    align-items: center;
+    overflow-x: auto;          /* the WHOLE toolbar scrolls together if it overflows */
+    overflow-y: hidden;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
 }
-.tech-chips::-webkit-scrollbar { height: 0; display: none; }
+.tech-toolbar::-webkit-scrollbar { height: 0; display: none; }
+.tech-toolbar > * { flex-shrink: 0; }
+.tech-toolbar { gap: 4px; }
+.tech-chips {
+    flex: 0 0 auto;            /* flow inline next to the market tabs — do NOT break to its own row */
+    flex-wrap: nowrap;
+    overflow: visible;         /* single scroll lives on .tech-toolbar, not here (no nested scroll) */
+    gap: 3px;
+}
 .tech-chips .dn-tab {
     flex-shrink: 0;
-    font-size: 9.5px; font-weight: 800; letter-spacing: 0.005em;
-    padding: 4px 7px; white-space: nowrap; color: #fff;
+    font-size: 8.5px; font-weight: 800; letter-spacing: 0;
+    padding: 4px 6px; white-space: nowrap; color: #fff;
     -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
-.tech-chips .dn-tab .dn-tab-n { font-size: 8.5px; font-weight: 800; font-variant-numeric: tabular-nums; opacity: 0.95; }
+.tech-chips .dn-tab .dn-tab-n { font-size: 7.5px; font-weight: 800; font-variant-numeric: tabular-nums; padding: 1px 4px; opacity: 0.95; }
+.tech-mkt-btn { padding: 5px 8px; font-size: 10px; }
+.tech-toolbar .tech-search { min-width: 128px; max-width: 148px; font-size: 11px; padding: 6px 9px; }
 html.day-mode .tech-chips .dn-tab { color: var(--text-primary); }
 @media (max-width: 1280px) {
-    .tech-chips .dn-tab { font-size: 9px; padding: 3px 6px; }
-    .tech-chips .dn-tab .dn-tab-n { font-size: 8px; }
+    .tech-chips .dn-tab { font-size: 8px; padding: 3px 5px; }
+    .tech-chips .dn-tab .dn-tab-n { font-size: 7px; }
+    .tech-mkt-btn { padding: 4px 7px; font-size: 9.5px; }
+    .tech-toolbar .tech-search { min-width: 110px; max-width: 128px; }
 }
 
 /* Date popover — confirm/clear buttons */
