@@ -1424,17 +1424,23 @@ function _renderGeoMacro() {
     const el = document.getElementById('geoMacroSection');
     if (!el) return;
     const items = _geoMacroItems || [];
-    const rows = items.map(n => {
+    const rows = items.map((n, i) => {
         const tagCls = _GEO_MACRO_TAG_CLS[n.tag] || 'gm-tag-mkt';
         const he = _macroEscape(n.he || n.en || '');
         const src = _macroEscape(n.source || '');
         const date = n.date ? _macroEscape(String(n.date).split('-').reverse().join('.')) : '';
-        const link = n.url ? `href="${_macroEscape(n.url)}" target="_blank" rel="noopener"` : '';
-        return `<a class="gm-item" ${link}>
-            <span class="gm-tag ${tagCls}">${_macroEscape(n.tag || 'מאקרו')}</span>
-            <span class="gm-text">${he}</span>
-            <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
-        </a>`;
+        const textEl = n.url
+            ? `<a class="gm-text" href="${_macroEscape(n.url)}" target="_blank" rel="noopener">${he}</a>`
+            : `<span class="gm-text">${he}</span>`;
+        return `<div class="gm-item" data-gm-idx="${i}">
+            <div class="gm-item-row">
+                <span class="gm-tag ${tagCls}">${_macroEscape(n.tag || 'מאקרו')}</span>
+                ${textEl}
+                <span class="gm-meta">${src}${src && date ? ' · ' : ''}${date}</span>
+                <button type="button" class="gm-detail-btn" onclick="gmDetail(${i})" title="פירוט הכתבה בעברית">📖 פירוט</button>
+            </div>
+            <div class="gm-detail" id="gmDetail-${i}"></div>
+        </div>`;
     }).join('');
     // Two REAL buttons, each with its own direct onclick — no <details>, no nested-click quirks.
     // Collapse hides the list via inline display (CSS-independent); refresh re-fetches.
@@ -1461,13 +1467,39 @@ function gmToggleCollapse() {
     if (sec) sec.classList.toggle('gm-collapsed', _gmCollapsed);
 }
 function gmRefresh() { _loadGeoMacroNews(true); }
+// "פירוט" — AI (Gemini, Google-grounded) briefing of a headline in Hebrew: what it's about + the
+// takeaway. Toggles open/closed; result is memoized server-side so re-opening is instant.
+async function gmDetail(idx) {
+    const n = (_geoMacroItems || [])[idx];
+    const box = document.getElementById('gmDetail-' + idx);
+    if (!n || !box) return;
+    if (box.dataset.open === '1') { box.innerHTML = ''; box.dataset.open = ''; return; } // toggle closed
+    box.dataset.open = '1';
+    box.innerHTML = '<div class="gm-detail-load"><span class="gm-detail-spin"></span>מסכם את הכתבה בעברית…</div>';
+    try {
+        const r = await fetch('/api/vision?mode=news-summary', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ headline: n.he || n.en, headline_en: n.en, source: n.source, url: n.url, date: n.date }),
+        });
+        const j = await r.json();
+        if (!r.ok || j.error || (!j.summary_he && !j.conclusion_he)) throw new Error(j.message || 'failed');
+        box.innerHTML = `<div class="gm-detail-inner">
+            ${j.summary_he ? `<div class="gm-detail-sum">${_macroEscape(j.summary_he)}</div>` : ''}
+            ${j.conclusion_he ? `<div class="gm-detail-concl"><span class="gm-detail-lbl">מסקנה:</span> ${_macroEscape(j.conclusion_he)}</div>` : ''}
+            <div class="gm-detail-foot">פירוט AI מבוסס על הכותרת — לא תחליף לקריאת הכתבה המלאה</div>
+        </div>`;
+    } catch (e) {
+        box.innerHTML = '<div class="gm-detail-err">לא ניתן להפיק פירוט כרגע (ייתכן עומס זמני על מנוע ה-AI). נסה שוב בעוד רגע.</div>';
+        box.dataset.open = '';
+    }
+}
 // Aliases so any cached HTML calling the old names still works.
 function toggleGmCollapse() { gmToggleCollapse(); }
 function _gmToggleCollapse() { gmToggleCollapse(); }
 function _gmOnToggle() { /* no-op (old <details> handler) */ }
 if (typeof window !== 'undefined') {
     window._loadGeoMacroNews = _loadGeoMacroNews; window._renderGeoMacro = _renderGeoMacro;
-    window.gmToggleCollapse = gmToggleCollapse; window.gmRefresh = gmRefresh;
+    window.gmToggleCollapse = gmToggleCollapse; window.gmRefresh = gmRefresh; window.gmDetail = gmDetail;
     window.toggleGmCollapse = toggleGmCollapse; window._gmToggleCollapse = _gmToggleCollapse; window._gmOnToggle = _gmOnToggle;
 }
 

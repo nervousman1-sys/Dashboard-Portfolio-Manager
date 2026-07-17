@@ -1039,6 +1039,9 @@ async function openRecentEarningsModal() {
         if (!entries.length) { el.innerHTML = '<div class="wl-empty">אין דוחות שפורסמו בחמשת השבועות האחרונים.</div>'; return; }
         const held = _erHeldSet();
         const top = entries.slice(0, 40);
+        // Stash each row's facts so the "למה זזה?" reaction button can pass them to the AI.
+        _erReactData = {};
+        top.forEach(e => { _erReactData[e.sym] = { company: (e.r.company_name || ''), epsA: e.epsA, epsE: e.epsE, surprise: e.surprise, repDate: e.repDate }; });
         el.innerHTML = top.map(e => {
             const r = e.r, sym = e.sym, disp = sym.replace(/\.TA$/, '');
             let beat;
@@ -1059,14 +1062,49 @@ async function openRecentEarningsModal() {
                     <div class="er-date-block"><span class="er-date-big">${_repHeDate(e.repDate)}</span><span class="er-date-when">${_erRecencyLabel(e.repDate)}</span></div>
                     <div class="wl-priceblock" id="erPx-${disp}"><span class="wl-price wl-dim">—</span></div>
                     ${sc}
-                    <button class="wl-report" onclick="_erOpenReport('${sym}','erRecent')">📊 דוח</button>
+                    <div class="er-row-actions">
+                        <button class="wl-report" onclick="_erOpenReport('${sym}','erRecent')">📊 דוח</button>
+                        <button class="er-why-btn" onclick="_erReaction('${sym}')" title="למה המניה זזה אחרי הדוח — מסחר מאוחר, תחזיות וסנטימנט">📖 למה זזה?</button>
+                    </div>
                 </div>
                 <div class="wl-sig">${beat}<span class="er-news" id="erNews-${disp}"></span></div>
+                <div class="er-reaction" id="erReact-${disp}"></div>
             </div>`;
         }).join('');
         _erLoadReactions(top.map(e => e.sym));
     } catch (e) {
         el.innerHTML = '<div class="wl-empty">טעינת הדוחות נכשלה — נסה שוב בעוד רגע.</div>';
+    }
+}
+
+// "למה זזה?" — AI (Gemini, Google-grounded) explanation of the post-earnings move: the
+// after-hours/pre-market reaction %, WHY it moved (guidance / results / call), and the investor
+// sentiment. Real/current — grounded, not the model's stale knowledge. Toggles open/closed.
+let _erReactData = {};
+async function _erReaction(sym) {
+    const disp = String(sym).replace(/\.TA$/, '');
+    const box = document.getElementById('erReact-' + disp);
+    const d = _erReactData[sym] || {};
+    if (!box) return;
+    if (box.dataset.open === '1') { box.innerHTML = ''; box.dataset.open = ''; return; } // toggle closed
+    box.dataset.open = '1';
+    box.innerHTML = '<div class="er-react-load"><div class="rep-spinner"></div>מנתח את תגובת השוק לדוח…</div>';
+    try {
+        const r = await fetch('/api/vision?mode=reaction', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker: sym, company: d.company, epsActual: d.epsA, epsEstimate: d.epsE, surprisePct: d.surprise, reportDate: d.repDate }),
+        });
+        const j = await r.json();
+        if (!r.ok || j.error || (!j.why_he && !j.move_he)) throw new Error(j.message || 'failed');
+        box.innerHTML = `<div class="er-react-inner">
+            ${j.move_he ? `<div class="er-react-move">📉 <b>תנועת המניה:</b> ${_repEscape(j.move_he)}</div>` : ''}
+            ${j.why_he ? `<div class="er-react-why"><b>הסיבה:</b> ${_repEscape(j.why_he)}</div>` : ''}
+            ${j.sentiment_he ? `<div class="er-react-sent"><b>סנטימנט המשקיעים:</b> ${_repEscape(j.sentiment_he)}</div>` : ''}
+            <div class="er-react-foot">ניתוח AI מבוסס חיפוש חי · אינו ייעוץ השקעות</div>
+        </div>`;
+    } catch (e) {
+        box.innerHTML = '<div class="er-react-err">לא ניתן להפיק ניתוח כרגע (ייתכן עומס זמני על מנוע ה-AI). נסה שוב בעוד רגע.</div>';
+        box.dataset.open = '';
     }
 }
 
@@ -1114,7 +1152,7 @@ async function _erLoadReactions(syms) {
 if (typeof window !== 'undefined') {
     window.openUpcomingEarningsModal = openUpcomingEarningsModal;
     window.openRecentEarningsModal = openRecentEarningsModal;
-    window._erClose = _erClose; window._erOpenReport = _erOpenReport;
+    window._erClose = _erClose; window._erOpenReport = _erOpenReport; window._erReaction = _erReaction;
 }
 
 // ── Background score fill — fetch reports for un-scored tickers (throttled), so the

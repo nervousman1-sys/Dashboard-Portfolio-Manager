@@ -55,6 +55,72 @@ function fixHebrew(text) {
 
 const _memo = new Map();
 
+// Shared text→JSON Gemini call with optional Google-Search grounding (for real/current facts).
+// Grounding can't be combined with responseMimeType:json, so we ask for JSON in the prompt and
+// extract the first {...}. Multi-model fallback dodges single-model 429s.
+async function _geminiGroundedJson(prompt, key, models, grounded, temperature) {
+    const base = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: (temperature != null ? temperature : 0.3), maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } },
+    };
+    if (grounded) base.tools = [{ google_search: {} }];
+    const payload = JSON.stringify(base);
+    let lastErr = '';
+    for (const model of models) {
+        try {
+            const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
+            });
+            if (!gr.ok) { lastErr = `gemini(${model}) ${gr.status}`; continue; }
+            const gj = await gr.json();
+            let txt = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('').trim() || '';
+            txt = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const mm = txt.match(/\{[\s\S]*\}/);
+            if (mm) { try { return JSON.parse(mm[0]); } catch (e) { lastErr = 'parse'; } }
+            else lastErr = `empty ${model}`;
+        } catch (e) { lastErr = e.message; }
+    }
+    throw new Error(lastErr || 'no_model');
+}
+
+// Recent REAL English news headlines for a ticker (Finnhub company-news → Yahoo search fallback).
+// This is the factual grounding the earnings-reaction analysis reasons over (Google-Search
+// grounding isn't available on this key, so we feed the model real sources instead).
+async function _recentNews(ticker, n) {
+    const FH = process.env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01qkvh5q0aag';
+    const ymd = d => new Date(d).toISOString().slice(0, 10);
+    try {
+        const to = Date.now(), from = to - 12 * 86400000;
+        const r = await fetch(`https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(ticker)}&from=${ymd(from)}&to=${ymd(to)}&token=${FH}`, { headers: { Accept: 'application/json' } });
+        if (r.ok) { const arr = await r.json(); if (Array.isArray(arr) && arr.length) { arr.sort((a, b) => (b.datetime || 0) - (a.datetime || 0)); const out = arr.filter(x => x && x.headline).slice(0, n).map(x => `${ymd((x.datetime || 0) * 1000)}: ${x.headline}`); if (out.length) return out; } }
+    } catch (e) { }
+    try {
+        const r = await fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&newsCount=${n}&quotesCount=0`, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+        if (r.ok) { const j = await r.json(); const a = (j && j.news) || []; return a.filter(x => x && x.title).slice(0, n).map(x => `${x.providerPublishTime ? ymd(x.providerPublishTime * 1000) : ''}: ${x.title}`); }
+    } catch (e) { }
+    return [];
+}
+// The REAL price move since the report date (daily closes) — the reaction magnitude.
+async function _priceMoveSince(ticker, reportDate) {
+    try {
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1mo&interval=1d`, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const res = j && j.chart && j.chart.result && j.chart.result[0];
+        if (!res) return null;
+        const ts = res.timestamp || [], cl = (res.indicators && res.indicators.quote && res.indicators.quote[0] && res.indicators.quote[0].close) || [];
+        const pts = ts.map((t, i) => ({ d: new Date(t * 1000).toISOString().slice(0, 10), c: cl[i] })).filter(p => p.c != null);
+        if (pts.length < 2) return null;
+        const latest = pts[pts.length - 1];
+        let base = null; const rd = String(reportDate || '').slice(0, 10);
+        for (const p of pts) { if (rd && p.d <= rd) base = p; }
+        if (!base) base = pts[Math.max(0, pts.length - 2)];
+        if (base.c === latest.c) return null;
+        const pct = (latest.c - base.c) / base.c * 100;
+        return { basePrice: +base.c.toFixed(2), latestPrice: +latest.c.toFixed(2), pct: +pct.toFixed(2), baseDate: base.d, latestDate: latest.d };
+    } catch (e) { return null; }
+}
+
 function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -160,6 +226,99 @@ module.exports = async (req, res) => {
                 points_he: Array.isArray(out.points_he) ? out.points_he.map(s => String(s).trim()).filter(Boolean).slice(0, 6) : [],
                 implications_he: String(out.implications_he || '').trim(),
             };
+            _memo.set(memoKey, result);
+            res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+            res.status(200).json(result);
+        } catch (e) {
+            res.setHeader('Cache-Control', 's-maxage=60');
+            res.status(502).json({ error: 'ai_failed', message: e.message });
+        }
+        return;
+    }
+
+    // mode=reaction — WHY a stock moved after its earnings report + investor sentiment. Uses Gemini
+    // with Google-Search grounding so the "why" is REAL/current (guidance, results, call, sentiment),
+    // not the model's stale training. POST { ticker, company, epsActual, epsEstimate, surprisePct, reportDate }.
+    if (req.query.mode === 'reaction') {
+        try {
+            let d = {};
+            if (req.method === 'POST') d = (typeof req.body === 'object' && req.body) ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch (e) { return {}; } })();
+            else d = { ticker: req.query.ticker, company: req.query.company, epsActual: req.query.epsActual, epsEstimate: req.query.epsEstimate, surprisePct: req.query.surprisePct, reportDate: req.query.reportDate };
+            const ticker = String(d.ticker || '').trim().toUpperCase();
+            if (!ticker) { res.status(400).json({ error: 'ticker required' }); return; }
+            const memoKey = `reaction:${ticker}:${String(d.reportDate || '')}`;
+            if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
+            const epsA = d.epsActual != null && d.epsActual !== '' ? Number(d.epsActual) : null;
+            const epsE = d.epsEstimate != null && d.epsEstimate !== '' ? Number(d.epsEstimate) : null;
+            const sp = d.surprisePct != null && d.surprisePct !== '' ? Number(d.surprisePct) : null;
+            const beatTxt = (sp != null) ? (sp >= 0 ? `היכתה את תחזית הרווח ב-${sp.toFixed(2)}%` : `פספסה את תחזית הרווח ב-${Math.abs(sp).toFixed(2)}%`) : 'פרסמה דוח';
+            // Ground the analysis in REAL data: recent headlines + the actual price move since the report.
+            const [news, move] = await Promise.all([
+                _recentNews(ticker, 9),
+                d.reportDate ? _priceMoveSince(ticker, d.reportDate) : Promise.resolve(null),
+            ]);
+            const facts = [
+                (epsA != null && epsE != null) ? `רווח למניה (EPS) בפועל: $${epsA} מול צפי $${epsE} — ${beatTxt}.` : beatTxt + '.',
+                move ? `שינוי מחיר בפועל מתאריך הדוח (${move.baseDate}) ועד היום (${move.latestDate}): ${move.pct >= 0 ? '+' : ''}${move.pct}% — מ-$${move.basePrice} ל-$${move.latestPrice}.` : '',
+                news.length ? ('כותרות חדשות אמיתיות סביב הדוח (מקורות: Finnhub/Yahoo):\n' + news.map(h => '• ' + h).join('\n')) : '',
+            ].filter(Boolean).join('\n');
+            const prompt = [
+                `אתה אנליסט אקוויטי בכיר. לפניך נתונים אמיתיים על ${String(d.company || ticker)} (${ticker}) שפרסמה דוח רבעוני${d.reportDate ? ' בתאריך ' + d.reportDate : ' לאחרונה'}:`,
+                facts,
+                '',
+                'נתח אך ורק על סמך הנתונים והכותרות שלמעלה. ענה בעברית מקצועית וברורה והחזר JSON בלבד (ללא ``` וללא טקסט נוסף):',
+                '{',
+                '  "move_he": "משפט אחד: תנועת המחיר בפועל (מהנתון שלמעלה) והכיוון; אם הכותרות מזכירות מסחר מאוחר/מוקדם (after-hours/pre-market) — ציין זאת.",',
+                '  "why_he": "2-4 משפטים: הסיבה לתנועה לפי הכותרות והתוצאות — תחזית קדימה (guidance), הכנסות/מרווחים/מנויים, שיחת המשקיעים או גורם אחר. צטט/הישען על הכותרות והיה ספציפי.",',
+                '  "sentiment_he": "1-2 משפטים: הסנטימנט של המשקיעים והדעה הרווחת הנגזרים מהכותרות ומכיוון התנועה."',
+                '}',
+                'אם עקפה את הרווח אך המניה ירדה — הסבר את הפער (למשל תחזית מאכזבת). בסס אך ורק על הנתונים והכותרות שסופקו; אל תמציא מספרים או עובדות. אם חסר מידע לסעיף — כתוב זאת בקצרה.',
+            ].join('\n');
+            let out = await _geminiGroundedJson(prompt, KEY, MODELS, false);
+            if (!out || typeof out !== 'object') throw new Error('no_model_returned');
+            const result = { move_he: fixHebrew(String(out.move_he || '').trim()), why_he: fixHebrew(String(out.why_he || '').trim()), sentiment_he: fixHebrew(String(out.sentiment_he || '').trim()) };
+            _memo.set(memoKey, result);
+            res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+            res.status(200).json(result);
+        } catch (e) {
+            res.setHeader('Cache-Control', 's-maxage=60');
+            res.status(502).json({ error: 'ai_failed', message: e.message });
+        }
+        return;
+    }
+
+    // mode=news-summary — take a macro/geopolitics headline and return a short Hebrew briefing:
+    // what the article is about + the takeaway. Google-Search grounded so it reflects the real story.
+    // POST { headline, headline_en, source, url, date }.
+    if (req.query.mode === 'news-summary') {
+        try {
+            let d = {};
+            if (req.method === 'POST') d = (typeof req.body === 'object' && req.body) ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch (e) { return {}; } })();
+            else d = { headline: req.query.headline, source: req.query.source, url: req.query.url, date: req.query.date };
+            const headline = String(d.headline || d.headline_en || '').trim();
+            if (!headline) { res.status(400).json({ error: 'headline required' }); return; }
+            const memoKey = `news:${headline.slice(0, 90)}`;
+            if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
+            const prompt = [
+                'אתה עורך חדשות כלכלי-פיננסי ישראלי בכיר. משימתך: להסביר בעברית את הכותרת שלפניך — ורק אותה.',
+                `הכותרת (עברית): "${headline}"`,
+                d.headline_en ? `הכותרת (אנגלית, המקור המדויק): "${String(d.headline_en).trim()}"` : '',
+                `${d.source ? 'מקור: ' + String(d.source).trim() : ''}${d.date ? ' · תאריך: ' + String(d.date).trim() : ''}`,
+                '',
+                'הוראות מחייבות:',
+                '1. קרא את הכותרת מילה-במילה. ההסבר חייב לעסוק בדיוק בנושא, בגופים, במדינות ובמספרים שמופיעים בכותרת — אין להחליף נושא, אין להוסיף אירוע שאינו בכותרת, ואין "לנחש" סיפור אחר.',
+                '2. אם בכותרת מופיע מונח (למשל "יסודות נדירים", "תשואות אג\\"ח", "ריבית הפד") — הסבר את המונח הזה עצמו ואת הרקע שלו, לא מונח אחר.',
+                '3. אל תמציא מספרים, תאריכים או שמות שאינם בכותרת.',
+                '4. אם הכותרת עמומה, ראשי-תיבות אינם חד-משמעיים, או אינך בטוח במשמעות — ציין זאת במפורש ("הכותרת אינה חד-משמעית לגבי…") במקום לנחש סיפור אחר.',
+                'החזר JSON בלבד (ללא ``` וללא טקסט נוסף):',
+                '{',
+                '  "summary_he": "2-3 משפטים המסבירים בדיוק את הכותרת: מה נטען בה, רקע קצר על המונחים/הגופים שבה, וההקשר הכלכלי.",',
+                '  "conclusion_he": "משפט אחד: ההשלכה — למה זה חשוב ומה המשמעות לשווקים/למשקיעים."',
+                '}',
+            ].filter(Boolean).join('\n');
+            let out = await _geminiGroundedJson(prompt, KEY, MODELS, false, 0.12);
+            if (!out || typeof out !== 'object') throw new Error('no_model_returned');
+            const result = { summary_he: fixHebrew(String(out.summary_he || '').trim()), conclusion_he: fixHebrew(String(out.conclusion_he || '').trim()) };
             _memo.set(memoKey, result);
             res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
             res.status(200).json(result);
