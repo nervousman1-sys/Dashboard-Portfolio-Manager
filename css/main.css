@@ -9756,6 +9756,30 @@ html.day-mode .row-date-pop .row-buydate { color: var(--text-primary); color-sch
     .tech-mkt-btn { padding: 3px 7px; font-size: 9.5px; }
 }
 
+/* Indicator filters — ALL on ONE row (its own full-width line under the market selector).
+   Slightly smaller but SHARP text so every "ממוצע X" / "RSI" chip stays readable and fits. */
+.tech-toolbar { flex-wrap: wrap; align-items: center; }
+.tech-chips {
+    flex: 1 1 100%;            /* break to its own row, span the full card width */
+    flex-wrap: nowrap;         /* never split the indicators across two rows */
+    overflow-x: auto;          /* safe fallback on narrow desktops — still one line */
+    gap: 4px; padding-bottom: 2px;
+    scrollbar-width: none;
+}
+.tech-chips::-webkit-scrollbar { height: 0; display: none; }
+.tech-chips .dn-tab {
+    flex-shrink: 0;
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.005em;
+    padding: 4px 7px; white-space: nowrap; color: #fff;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+.tech-chips .dn-tab .dn-tab-n { font-size: 8.5px; font-weight: 800; font-variant-numeric: tabular-nums; opacity: 0.95; }
+html.day-mode .tech-chips .dn-tab { color: var(--text-primary); }
+@media (max-width: 1280px) {
+    .tech-chips .dn-tab { font-size: 9px; padding: 3px 6px; }
+    .tech-chips .dn-tab .dn-tab-n { font-size: 8px; }
+}
+
 /* Date popover — confirm/clear buttons */
 .row-date-btns { display: flex; gap: 10px; align-items: center; }
 .row-date-pop .row-date-ok {
