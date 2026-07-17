@@ -1877,7 +1877,9 @@ body.filter-modal-open::after {
     display: grid;
     grid-template-columns: 1fr auto 1fr auto 1fr;
     gap: 0;
-    align-items: start;
+    /* Center each panel vertically so the shorter columns (currency, asset bars) sit in the
+       middle like the taller sector donut — the whole overview reads as centered in the box. */
+    align-items: center;
     min-height: 200px;
 }
 
