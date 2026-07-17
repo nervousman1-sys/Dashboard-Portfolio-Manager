@@ -1483,10 +1483,13 @@ async function gmDetail(idx) {
         });
         const j = await r.json();
         if (!r.ok || j.error || (!j.summary_he && !j.conclusion_he)) throw new Error(j.message || 'failed');
+        const paras = String(j.summary_he || '').split(/\n\s*\n|\n/).map(s => s.trim()).filter(Boolean);
+        const sumHtml = paras.length ? paras.map(p => `<p class="gm-detail-p">${_macroEscape(p)}</p>`).join('') : '';
+        const foot = j.fromArticle ? '📰 פירוט AI מבוסס על תוכן הכתבה' : 'פירוט AI מבוסס על הכותרת וההקשר — לא תחליף לקריאת הכתבה המלאה';
         box.innerHTML = `<div class="gm-detail-inner">
-            ${j.summary_he ? `<div class="gm-detail-sum">${_macroEscape(j.summary_he)}</div>` : ''}
+            ${sumHtml}
             ${j.conclusion_he ? `<div class="gm-detail-concl"><span class="gm-detail-lbl">מסקנה:</span> ${_macroEscape(j.conclusion_he)}</div>` : ''}
-            <div class="gm-detail-foot">פירוט AI מבוסס על הכותרת — לא תחליף לקריאת הכתבה המלאה</div>
+            <div class="gm-detail-foot">${foot}</div>
         </div>`;
     } catch (e) {
         box.innerHTML = '<div class="gm-detail-err">לא ניתן להפיק פירוט כרגע (ייתכן עומס זמני על מנוע ה-AI). נסה שוב בעוד רגע.</div>';

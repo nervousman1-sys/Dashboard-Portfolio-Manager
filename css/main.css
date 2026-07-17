@@ -9649,10 +9649,10 @@ html.day-mode .tech-table th { color: var(--text-primary) !important; }
 html.day-mode .tech-table .tech-yes { color: #047857 !important; }
 html.day-mode .tech-table .tech-no { color: rgba(58, 50, 36,0.4) !important; }
 
-/* Scanner toolbar: search + ALL filter chips on ONE row (compact, white, clear) */
-.tech-toolbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+/* Scanner toolbar: search + filter chips WRAP onto as many rows as needed (no side-scroll). */
+.tech-toolbar { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
 .tech-toolbar .tech-search { min-width: 170px; max-width: 190px; flex-shrink: 0; padding: 7px 12px; font-size: 12.5px; }
-.tech-chips { flex-wrap: nowrap; gap: 6px; }
+.tech-chips { flex-wrap: wrap; gap: 6px; }
 .tech-chips .dn-tab {
     font-size: 11px; font-weight: 800; padding: 5px 10px; white-space: nowrap;
     color: #fff;
@@ -9727,11 +9727,7 @@ html.day-mode .row-date-pop .row-buydate { color: var(--text-primary); color-sch
    tabs (S&P 500 | נאסד"ק | ראסל | ת"א) the row can exceed the card width — it must
    scroll horizontally WITHIN the frame, never spill past the card border (RTL spill
    pushed chips out of the viewport's left edge). */
-.tech-toolbar { gap: 6px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: rgba(0,229,255,0.35) transparent; }
-.tech-toolbar::-webkit-scrollbar { height: 5px; }
-.tech-toolbar::-webkit-scrollbar-track { background: transparent; }
-.tech-toolbar::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.28); border-radius: 999px; }
-.tech-toolbar::-webkit-scrollbar-thumb:hover { background: rgba(0,229,255,0.5); }
+.tech-toolbar { gap: 6px; overflow-x: visible; overflow-y: visible; padding-bottom: 0; row-gap: 8px; }
 .tech-toolbar > * { flex-shrink: 0; }
 .tech-toolbar .tech-search { min-width: 110px; max-width: 140px; padding: 5px 9px; font-size: 11.5px; }
 .tech-chips { gap: 4px; }
@@ -9744,7 +9740,7 @@ html.day-mode .row-date-pop .row-buydate { color: var(--text-primary); color-sch
     .tech-mkt-btn { padding: 4px 8px; font-size: 10px; }
 }
 @media (max-width: 900px) {
-    .tech-toolbar { overflow-x: auto; padding-bottom: 4px; } /* phones: scroll is unavoidable */
+    .tech-toolbar { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; } /* wrap instead of side-scroll */
 }
 
 /* Tech toolbar — full "ממוצע X" labels still on one row: tighter, but crisp */
@@ -10748,6 +10744,8 @@ html.day-mode .gm-detail-btn { background: rgba(3,105,161,0.08); border-color: r
 .gm-detail-spin { width: 13px; height: 13px; border: 2px solid rgba(0,229,255,0.25); border-top-color: var(--accent-blue); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; }
 .gm-detail-inner { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.65; color: var(--text-primary); text-align: right; }
 .gm-detail-sum { color: var(--text-primary); }
+.gm-detail-p { color: var(--text-primary); margin: 0 0 8px; line-height: 1.7; }
+.gm-detail-p:last-of-type { margin-bottom: 0; }
 .gm-detail-concl { margin-top: 8px; color: var(--text-secondary); }
 .gm-detail-lbl { color: var(--accent-blue); font-weight: 800; }
 html.day-mode .gm-detail-lbl { color: #0369a1; }

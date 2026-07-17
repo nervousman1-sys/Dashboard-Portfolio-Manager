@@ -58,27 +58,36 @@ const _memo = new Map();
 // Shared text→JSON Gemini call with optional Google-Search grounding (for real/current facts).
 // Grounding can't be combined with responseMimeType:json, so we ask for JSON in the prompt and
 // extract the first {...}. Multi-model fallback dodges single-model 429s.
-async function _geminiGroundedJson(prompt, key, models, grounded, temperature) {
+async function _geminiGroundedJson(prompt, key, models, grounded, temperature, maxTokens) {
     const base = {
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: (temperature != null ? temperature : 0.3), maxOutputTokens: 1400, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { temperature: (temperature != null ? temperature : 0.3), maxOutputTokens: (maxTokens || 1400), thinkingConfig: { thinkingBudget: 0 } },
     };
     if (grounded) base.tools = [{ google_search: {} }];
     const payload = JSON.stringify(base);
-    let lastErr = '';
+    let lastErr = '', quotaHit = false;
     for (const model of models) {
-        try {
-            const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
-            });
-            if (!gr.ok) { lastErr = `gemini(${model}) ${gr.status}`; continue; }
-            const gj = await gr.json();
-            let txt = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('').trim() || '';
-            txt = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-            const mm = txt.match(/\{[\s\S]*\}/);
-            if (mm) { try { return JSON.parse(mm[0]); } catch (e) { lastErr = 'parse'; } }
-            else lastErr = `empty ${model}`;
-        } catch (e) { lastErr = e.message; }
+        if (quotaHit) break; // 429 = shared free-tier quota is out; more requests just waste it
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
+                });
+                if (!gr.ok) {
+                    lastErr = `gemini(${model}) ${gr.status}`;
+                    if (gr.status === 429) { quotaHit = true; break; }          // quota — stop entirely
+                    if (gr.status === 503 && attempt === 0) { await new Promise(r => setTimeout(r, 700)); continue; } // transient — retry once
+                    break;                                                       // other error — next model
+                }
+                const gj = await gr.json();
+                let txt = (((gj.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text).join('').trim() || '';
+                txt = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const mm = txt.match(/\{[\s\S]*\}/);
+                if (mm) { try { return JSON.parse(mm[0]); } catch (e) { lastErr = 'parse'; } }
+                else lastErr = `empty ${model}`;
+                break;
+            } catch (e) { lastErr = e.message; break; }
+        }
     }
     throw new Error(lastErr || 'no_model');
 }
@@ -119,6 +128,39 @@ async function _priceMoveSince(ticker, reportDate) {
         const pct = (latest.c - base.c) / base.c * 100;
         return { basePrice: +base.c.toFixed(2), latestPrice: +latest.c.toFixed(2), pct: +pct.toFixed(2), baseDate: base.d, latestDate: latest.d };
     } catch (e) { return null; }
+}
+
+// Best-effort fetch of an article's readable text (og/meta description + paragraphs) so the
+// "פירוט" summary is of the ARTICLE, not just the headline. Google-News links point to a heavy
+// JS viewer that hides the source; we try to pull the real article URL out of it and fetch that.
+// Returns '' when nothing usable is found (the caller then falls back to a headline briefing).
+async function _fetchArticleText(url) {
+    if (!url) return '';
+    const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36', 'Accept-Language': 'en,he;q=0.8' };
+    const extract = (html) => {
+        if (!html) return '';
+        const meta = (re) => { const m = html.match(re); return m ? m[1] : ''; };
+        const og = meta(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']{40,})["']/i)
+            || meta(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{40,})["']/i)
+            || meta(/<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']{40,})["']/i);
+        const ps = [...html.matchAll(/<p[^>]*>([\s\S]{40,}?)<\/p>/gi)]
+            .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/&#?[a-z0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim())
+            .filter(t => t.length > 60 && /[A-Za-z֐-׿]/.test(t) && !/cookie|subscribe|sign in|advertisement|©|all rights reserved/i.test(t));
+        return [og, ps.slice(0, 14).join('\n')].filter(Boolean).join('\n').slice(0, 4200);
+    };
+    const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 8000);
+    try {
+        const r = await fetch(url, { headers: UA, redirect: 'follow', signal: ac.signal });
+        const html = await r.text();
+        if (/news\.google\.com/.test(r.url || url)) {
+            const cand = [...html.matchAll(/https?:\/\/[^"'\\ )]+/g)].map(m => m[0])
+                .filter(u => !/google|gstatic|ggpht|schema\.org|w3\.org|youtube|googleapis|googleusercontent/i.test(u) && /\.[a-z]{2,6}\//.test(u) && u.length < 300);
+            const real = cand.find(u => /\/(20\d\d|news|article|story|world|business|politics|market|econom|opinion)/i.test(u)) || cand[0];
+            if (real) { try { const r2 = await fetch(real, { headers: UA, redirect: 'follow', signal: ac.signal }); const t2 = extract(await r2.text()); if (t2.length > 220) return t2; } catch (e) { } }
+            return extract(html);
+        }
+        return extract(html);
+    } catch (e) { return ''; } finally { clearTimeout(timer); }
 }
 
 // Deterministic reaction analysis from the REAL facts (price move + beat/miss + headlines).
@@ -330,28 +372,37 @@ module.exports = async (req, res) => {
             else d = { headline: req.query.headline, source: req.query.source, url: req.query.url, date: req.query.date };
             const headline = String(d.headline || d.headline_en || '').trim();
             if (!headline) { res.status(400).json({ error: 'headline required' }); return; }
-            const memoKey = `news:${headline.slice(0, 90)}`;
+            const memoKey = `news2:${headline.slice(0, 90)}`;
             if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
-            const prompt = [
-                'אתה עורך חדשות כלכלי-פיננסי ישראלי בכיר. משימתך: להסביר בעברית את הכותרת שלפניך — ורק אותה.',
-                `הכותרת (עברית): "${headline}"`,
-                d.headline_en ? `הכותרת (אנגלית, המקור המדויק): "${String(d.headline_en).trim()}"` : '',
-                `${d.source ? 'מקור: ' + String(d.source).trim() : ''}${d.date ? ' · תאריך: ' + String(d.date).trim() : ''}`,
-                '',
-                'הוראות מחייבות:',
-                '1. קרא את הכותרת מילה-במילה. ההסבר חייב לעסוק בדיוק בנושא, בגופים, במדינות ובמספרים שמופיעים בכותרת — אין להחליף נושא, אין להוסיף אירוע שאינו בכותרת, ואין "לנחש" סיפור אחר.',
-                '2. אם בכותרת מופיע מונח (למשל "יסודות נדירים", "תשואות אג\\"ח", "ריבית הפד") — הסבר את המונח הזה עצמו ואת הרקע שלו, לא מונח אחר.',
-                '3. אל תמציא מספרים, תאריכים או שמות שאינם בכותרת.',
-                '4. אם הכותרת עמומה, ראשי-תיבות אינם חד-משמעיים, או אינך בטוח במשמעות — ציין זאת במפורש ("הכותרת אינה חד-משמעית לגבי…") במקום לנחש סיפור אחר.',
-                'החזר JSON בלבד (ללא ``` וללא טקסט נוסף):',
-                '{',
-                '  "summary_he": "2-3 משפטים המסבירים בדיוק את הכותרת: מה נטען בה, רקע קצר על המונחים/הגופים שבה, וההקשר הכלכלי.",',
-                '  "conclusion_he": "משפט אחד: ההשלכה — למה זה חשוב ומה המשמעות לשווקים/למשקיעים."',
-                '}',
-            ].filter(Boolean).join('\n');
-            let out = await _geminiGroundedJson(prompt, KEY, MODELS, false, 0.12);
+            // Try to read the ACTUAL article so we summarize its content, not just the headline.
+            const article = await _fetchArticleText(d.url);
+            const haveArticle = article && article.length > 240;
+            let prompt;
+            if (haveArticle) {
+                prompt = [
+                    'אתה עורך חדשות כלכלי-פיננסי ישראלי בכיר. לפניך תוכן/תמצית של כתבה. סכם את הכתבה בעברית עיתונאית ברורה וזורמת, ב-2 עד 4 פסקאות קצרות:',
+                    'פסקה 1 — מה קרה (העיקר). פסקה 2 — הרקע וההקשר / הנתונים המרכזיים. פסקה 3 (אם יש) — התגובות/ההשלכות. הסתמך אך ורק על התוכן שסופק, אל תמציא מספרים או שמות.',
+                    `כותרת: "${headline}"`,
+                    d.source ? `מקור: ${String(d.source).trim()}` : '',
+                    'תוכן הכתבה:',
+                    article,
+                    '',
+                    'החזר JSON בלבד (ללא ``` וללא טקסט נוסף): { "summary_he": "2-4 פסקאות, מופרדות בשורה ריקה בין פסקה לפסקה", "conclusion_he": "משפט אחד — ההשלכה למשקיעים/לשווקים" }',
+                ].filter(Boolean).join('\n');
+            } else {
+                // Article not reachable (Google-News link / paywall) → a fuller, clear briefing on the topic.
+                prompt = [
+                    'אתה עורך חדשות כלכלי-פיננסי ישראלי בכיר. הסבר בעברית ברורה ומקיפה את הידיעה שלפניך, ב-2 עד 3 פסקאות: פסקה על מה קרה לפי הכותרת, פסקה על הרקע וההקשר הכלכלי של הנושא/הגופים/המונחים, ופסקה על ההשלכות.',
+                    `הכותרת (עברית): "${headline}"`,
+                    d.headline_en ? `הכותרת (אנגלית, המקור): "${String(d.headline_en).trim()}"` : '',
+                    d.source ? `מקור: ${String(d.source).trim()}` : '',
+                    'הישאר צמוד לנושא הכותרת; אל תחליף נושא ואל תמציא מספרים/שמות שאינם בה. אם ראשי-תיבות בכותרת אינם חד-משמעיים — ציין זאת במקום לנחש.',
+                    'החזר JSON בלבד (ללא ``` וללא טקסט נוסף): { "summary_he": "2-3 פסקאות, מופרדות בשורה ריקה", "conclusion_he": "משפט אחד — ההשלכה למשקיעים/לשווקים" }',
+                ].filter(Boolean).join('\n');
+            }
+            let out = await _geminiGroundedJson(prompt, KEY, MODELS, false, haveArticle ? 0.25 : 0.12, 1900);
             if (!out || typeof out !== 'object') throw new Error('no_model_returned');
-            const result = { summary_he: fixHebrew(String(out.summary_he || '').trim()), conclusion_he: fixHebrew(String(out.conclusion_he || '').trim()) };
+            const result = { summary_he: fixHebrew(String(out.summary_he || '').trim()), conclusion_he: fixHebrew(String(out.conclusion_he || '').trim()), fromArticle: !!haveArticle };
             _memo.set(memoKey, result);
             res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
             res.status(200).json(result);
