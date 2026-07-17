@@ -1863,6 +1863,10 @@ body.filter-modal-open::after {
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    /* Center the overview content vertically inside the (taller) outer box. */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .exposure-wrapper .section-title {
@@ -7717,13 +7721,20 @@ body.full-list-open { overflow: hidden; }
 
 /* Tables (portfolio + recommendations) */
 .risk-table-card { padding: 18px 20px; margin-bottom: 22px; }
-.risk-table-scroll { overflow-x: auto; }
+.risk-table-scroll { overflow: auto; }
+/* Desktop: bound the height so the table body scrolls INSIDE the container and the header
+   row can freeze at the top (sticky needs a scrolling ancestor). Mobile keeps page scroll. */
+@media (min-width: 769px) { .risk-table-scroll { max-height: calc(100vh - 210px); } }
 .risk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .risk-table thead th {
     text-align: right; padding: 10px 12px; color: var(--text-muted);
-    font-weight: 700; font-size: 11px; border-bottom: 1px solid var(--border);
+    font-weight: 700; font-size: 11px;
     white-space: nowrap;
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg-primary);
+    box-shadow: inset 0 -1px 0 var(--border);
 }
+html.day-mode .risk-table thead th { background: #f6f2e6; }
 .risk-table tbody td {
     padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.04);
     color: var(--text-secondary); white-space: nowrap;
@@ -10252,7 +10263,8 @@ html.day-mode .er-date-when { color: #0f7a4d; }
 .er-when.er-received { color: var(--accent-green); font-weight: 800; }
 html.day-mode .er-when.er-received { color: #0f7a4d; }
 .er-beatline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-.er-eps { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
+.er-eps { font-size: 10.5px; color: var(--text-primary); font-weight: 600; }
+html.day-mode .er-eps { color: #191612; }
 .er-row-actions { display: flex; flex-direction: row; gap: 6px; align-items: center; }
 /* Reports board: the same two windows reachable from the board's intel strip */
 .rep-earn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-inline-start: auto; }

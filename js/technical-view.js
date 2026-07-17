@@ -122,7 +122,7 @@ function openTechnicalPage() {
                     <div class="tech-progress-track"><div class="tech-progress-fill" id="techProgressFill"></div></div>
                     <span id="techProgressTxt">מתחיל סריקה…</span>
                 </div>
-                <div class="risk-table-scroll" style="max-height:none">
+                <div class="risk-table-scroll">
                     <div id="techTable"><div class="adv-empty">טוען נתוני סריקה…</div></div>
                 </div>
                 <div class="tech-foot">RSI(14) · ממוצעים 200/300 יום ו-200/300 שבועות (✓ = בטווח ±${_TECH_NEAR_PCT}% מהממוצע) · FVG = פער שווי הוגן פתוח בנרות חודשיים/רבעוניים · נתוני סגירה, נסרק יומית</div>

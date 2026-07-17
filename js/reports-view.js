@@ -957,7 +957,7 @@ async function openUpcomingEarningsModal() {
                 const beatTxt = beat === true ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>`
                     : beat === false ? `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`
                         : `<span class="er-beat">הדוח התפרסם</span>`;
-                const eps = (info.epsActual != null && info.epsEstimate != null) ? ` <span class="er-eps">EPS $${info.epsActual} מול צפי $${info.epsEstimate}</span>` : '';
+                const eps = (info.epsActual != null && info.epsEstimate != null) ? ` <span class="er-eps">EPS $${(+info.epsActual).toFixed(2)} מול צפי $${(+info.epsEstimate).toFixed(2)}</span>` : '';
                 whenHtml = `<span class="er-when er-received">✓ התקבל הדוח</span>`;
                 beatLine = `<div class="wl-sig er-beatline">${beatTxt}${eps}</div>`;
             } else {
@@ -1045,7 +1045,7 @@ async function openRecentEarningsModal() {
             if (e.surprise != null || (e.epsA != null && e.epsE != null)) {
                 const b = e.surprise != null ? e.surprise >= 0 : e.epsA >= e.epsE;
                 const sp = e.surprise != null ? `${e.surprise >= 0 ? '+' : ''}${e.surprise}%` : '';
-                const eps = (e.epsA != null && e.epsE != null) ? ` <span class="er-eps">EPS $${e.epsA} מול צפי $${e.epsE}</span>` : '';
+                const eps = (e.epsA != null && e.epsE != null) ? ` <span class="er-eps">EPS $${(+e.epsA).toFixed(2)} מול צפי $${(+e.epsE).toFixed(2)}</span>` : '';
                 beat = (b ? `<span class="er-beat er-beat-yes">▲ היכתה את התחזיות${sp ? ' · ' + sp : ''}</span>` : `<span class="er-beat er-beat-no">▼ פספסה את התחזיות${sp ? ' · ' + sp : ''}</span>`) + eps;
             } else {
                 beat = r.improved ? '<span class="er-beat er-beat-yes">▲ שיפור מול הרבעון המקביל</span>' : '<span class="er-beat er-beat-no">▼ ללא שיפור מול המקביל</span>';
@@ -1466,7 +1466,7 @@ function _repSegTable(title, segs, cur) {
     }).join('');
     return `<div class="rep-seg-block">
         <div class="rep-seg-title">${_repEscape(title)}</div>
-        <div class="risk-table-scroll" style="max-height:none">
+        <div class="risk-table-scroll">
         <table class="risk-table rep-table rep-seg-tbl">
             <thead><tr><th class="rep-metric-name">סגמנט</th>${head}</tr></thead>
             <tbody>${rows}</tbody>
@@ -1632,7 +1632,7 @@ function _repRenderDetail(m) {
         </div>` : ''}
 
         <div class="rep-section-title">פרמטרים מרכזיים — עד 4 רבעונים</div>
-        <div class="risk-table-scroll" style="max-height:none">
+        <div class="risk-table-scroll">
         <table class="risk-table rep-table">
             <thead><tr><th class="rep-metric-name">פרמטר</th>${qHead}</tr></thead>
             <tbody>
@@ -1772,7 +1772,7 @@ function _repRenderPeers(data, m) {
         <td>${fCap(s.marketCap)}</td></tr>`;
     panel.innerHTML = `
         <div class="rep-peers-head">השוואת מכפילים מול ${peers.length} חברות בסקטור${m && m.sector ? ' · ' + _repEsc(m.sector) : ''} · מקור: Yahoo</div>
-        <div class="risk-table-scroll" style="max-height:none">
+        <div class="risk-table-scroll">
         <table class="risk-table rep-peers-table">
             <thead><tr><th>חברה</th><th>P/E</th><th>P/B</th><th>P/S</th><th>EV/EBITDA</th><th>ROE</th><th>שווי שוק</th></tr></thead>
             <tbody>
