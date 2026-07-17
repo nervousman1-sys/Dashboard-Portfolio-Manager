@@ -1064,7 +1064,7 @@ async function openRecentEarningsModal() {
                     ${sc}
                     <div class="er-row-actions">
                         <button class="wl-report" onclick="_erOpenReport('${sym}','erRecent')">📊 דוח</button>
-                        <button class="er-why-btn" onclick="_erReaction('${sym}')" title="למה המניה זזה אחרי הדוח — מסחר מאוחר, תחזיות וסנטימנט">📖 למה זזה?</button>
+                        <button class="er-why-btn" onclick="_erReaction('${sym}')" title="סנטימנט המשקיעים אחרי הדוח — הסיבה לתנועה, תחזיות ותגובת השוק">📖 סנטימנט משקיעים</button>
                     </div>
                 </div>
                 <div class="wl-sig">${beat}<span class="er-news" id="erNews-${disp}"></span></div>
@@ -1100,7 +1100,7 @@ async function _erReaction(sym) {
             ${j.move_he ? `<div class="er-react-move">📉 <b>תנועת המניה:</b> ${_repEscape(j.move_he)}</div>` : ''}
             ${j.why_he ? `<div class="er-react-why"><b>הסיבה:</b> ${_repEscape(j.why_he)}</div>` : ''}
             ${j.sentiment_he ? `<div class="er-react-sent"><b>סנטימנט המשקיעים:</b> ${_repEscape(j.sentiment_he)}</div>` : ''}
-            <div class="er-react-foot">ניתוח AI מבוסס חיפוש חי · אינו ייעוץ השקעות</div>
+            <div class="er-react-foot">ניתוח AI מבוסס נתוני מחיר וכותרות חדשות אמיתיים · אינו ייעוץ השקעות</div>
         </div>`;
     } catch (e) {
         box.innerHTML = '<div class="er-react-err">לא ניתן להפיק ניתוח כרגע (ייתכן עומס זמני על מנוע ה-AI). נסה שוב בעוד רגע.</div>';
@@ -1108,11 +1108,16 @@ async function _erReaction(sym) {
     }
 }
 
-// Market reaction (live price + daily move) and any MATERIAL press item near the report —
-// both real: /api/quote for the move, portfolio_alerts (24/7 SEC press agent) for the news.
+// Market reaction: the REAL price move SINCE the report (not just today's tick) — so a stock
+// that beat EPS but sold off after the report shows the actual drop, not a misleading "all green".
+// Move = latest close vs the close on the report date (the pre-report level). Plus any MATERIAL
+// press item near the report (portfolio_alerts — the 24/7 SEC press agent).
 async function _erLoadReactions(syms) {
     try {
-        const prices = await _wlFetchPrices(syms.slice(0, 60));
+        const [prices, hist] = await Promise.all([
+            _wlFetchPrices(syms.slice(0, 60)),
+            (async () => { try { const r = await fetch(`/api/history?symbols=${encodeURIComponent(syms.slice(0, 40).join(','))}&range=2mo&interval=1d`, { headers: { Accept: 'application/json' } }); return await r.json() || {}; } catch (e) { return {}; } })(),
+        ]);
         for (const s of syms) {
             const disp = s.replace(/\.TA$/, '');
             const q = prices[s] || prices[disp] || {};
@@ -1122,8 +1127,21 @@ async function _erLoadReactions(syms) {
             const box = document.getElementById('erPx-' + disp);
             if (!box || price == null) continue;
             const cur = /\.TA$/.test(s) ? '₪' : '$';
-            box.innerHTML = `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`
-                + (chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}" title="תגובת השוק היום">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '');
+            // Reaction since the report date (pre-report close → latest close).
+            let reactPct = null;
+            const pts = hist[s] || hist[disp];
+            const rd = (_erReactData[s] && _erReactData[s].repDate) ? String(_erReactData[s].repDate).slice(0, 10) : null;
+            if (Array.isArray(pts) && pts.length >= 2 && rd) {
+                let base = null; for (const p of pts) { if (p.date <= rd) base = p; }
+                if (!base) base = pts[0];
+                const latest = pts[pts.length - 1];
+                if (base && latest && base.close && base.close !== latest.close) reactPct = (latest.close - base.close) / base.close * 100;
+            }
+            const priceHtml = `<span class="wl-price">${cur}${Number(price).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`;
+            const moveHtml = reactPct != null
+                ? `<span class="wl-chg ${reactPct >= 0 ? 'pos' : 'neg'}" title="תגובת המניה מאז פרסום הדוח">מאז הדוח ${reactPct >= 0 ? '+' : ''}${reactPct.toFixed(1)}%</span>`
+                : (chg != null ? `<span class="wl-chg ${chg >= 0 ? 'pos' : 'neg'}" title="שינוי היום">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '');
+            box.innerHTML = priceHtml + moveHtml;
         }
     } catch (e) { /* prices are best-effort */ }
     // Material company news from the press agent (user's own alerts — RLS scoped).
