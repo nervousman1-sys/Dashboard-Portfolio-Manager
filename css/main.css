@@ -10782,6 +10782,34 @@ html.day-mode .gm-detail-lbl { color: #0369a1; }
 .ta-safety b { color: var(--accent-yellow); }
 html.day-mode .ta-safety { background: #f3ead2; border-color: rgba(176,124,0,0.3); color: #4a3f24; }
 html.day-mode .ta-safety b { color: #9a6f00; }
+/* Live-monitoring status bar */
+.ta-monitor-bar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 16px; font-size: 12.5px; color: var(--text-secondary);
+    background: rgba(0,255,148,0.05); border: 1px solid rgba(0,255,148,0.22); border-radius: 12px; padding: 9px 14px; }
+.ta-mon-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 0 0 rgba(0,255,148,0.5); animation: taPulse 2s infinite; flex-shrink: 0; }
+@keyframes taPulse { 0% { box-shadow: 0 0 0 0 rgba(0,255,148,0.45); } 70% { box-shadow: 0 0 0 7px rgba(0,255,148,0); } 100% { box-shadow: 0 0 0 0 rgba(0,255,148,0); } }
+.ta-mon-txt { font-weight: 700; color: var(--text-primary); }
+.ta-mon-last { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ta-monitor-bar .ta-mini { margin-inline-start: auto; }
+html.day-mode .ta-monitor-bar { background: rgba(4,120,87,0.06); border-color: rgba(4,120,87,0.25); }
+/* Advisory (open-ended market question) card */
+.ta-advice { margin-top: 14px; border: 1px solid rgba(139,180,248,0.3); border-radius: 14px; padding: 16px 18px; background: rgba(139,180,248,0.05); }
+html.day-mode .ta-advice { background: rgba(3,105,161,0.05); border-color: rgba(3,105,161,0.28); }
+.ta-adv-body { margin: 10px 0 4px; }
+.ta-adv-p { font-size: 13.5px; line-height: 1.75; color: var(--text-primary); margin: 0 0 10px; }
+.ta-adv-ideas-lbl { font-size: 12px; font-weight: 900; color: var(--text-secondary); margin: 12px 0 8px; }
+.ta-adv-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.ta-idea { border: 1px solid var(--border); border-radius: 11px; padding: 11px 12px; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: 6px; }
+html.day-mode .ta-idea { background: rgba(58,50,36,0.04); }
+.ta-idea-head { display: flex; align-items: baseline; gap: 8px; }
+.ta-idea-tk { font-size: 14px; font-weight: 900; color: var(--accent-blue); font-variant-numeric: tabular-nums; }
+.ta-idea-name { font-size: 11px; color: var(--text-muted); }
+.ta-idea-why { font-size: 12px; line-height: 1.55; color: var(--text-secondary); }
+.ta-idea .ta-mini { align-self: flex-start; margin-top: 2px; }
+.ta-adv-strat { margin-top: 14px; font-size: 12.5px; color: var(--text-primary); background: rgba(255,255,255,0.03); border: 1px dashed var(--border); border-radius: 10px; padding: 9px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ta-adv-strat b { color: var(--accent-blue); }
+.ta-adv-disc { margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--accent-yellow, #f0b400); }
+html.day-mode .ta-adv-disc { color: #9a6f00; }
+.ta-amt-input { max-width: 100px; direction: ltr; text-align: left; }
 .ta-chat-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; }
 .ta-chat-row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
 .ta-input { flex: 1; min-width: 260px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px;

@@ -55,8 +55,8 @@ const _taEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(
 
 const _TA_EXAMPLES = [
     'אם הנפט יורד מתחת ל-$70 או שיש אזכור של איראן/טראמפ בחדשות, תקנה USO ב-500 דולר',
-    'כשחברה מפרסמת דוח עם הפתעת EPS מעל 10%, בצע קניית שוק של 5 מניות',
     'מכור 50% מהאחזקה ב-NVDA אם ה-RSI עולה מעל 80',
+    'אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו-כלכלה, מצב עולמי ופריצות דרך טכנולוגיות?',
 ];
 
 // ── Routed page (mirrors the correlation/stress-test page pattern) ──
@@ -72,6 +72,7 @@ function openTradingAgentPage() {
     if (typeof _setActiveNav === 'function') _setActiveNav('tradingagent');
     if (typeof updateURLState === 'function') updateURLState({ view: 'tradingagent' });
     _taRenderShell();
+    _taUpdateMonitorBar();
     _taLoadBrokers();
     _taLoadStrategies();
     window.scrollTo(0, 0);
@@ -96,11 +97,17 @@ function _taRenderShell() {
     <div dir="rtl">
         <div class="macro-page-header"><h1 class="macro-main-title">🤖 סוכן מסחר AI</h1></div>
         <div class="macro-content">
-            <div class="ta-safety">🛡️ <b>מצב סימולציה בלבד</b> — הסוכן מנטר את התנאים על נתונים אמיתיים ומבצע עסקאות <b>מדומות (Paper)</b> או שולח <b>התראה</b>. אין חיבור לברוקר ולא מבוצעות עסקאות כסף אמיתי. תיאור האסטרטגיה אינו ייעוץ השקעות.</div>
+            <div class="ta-safety">🛡️ <b>נתונים אמיתיים · ביצוע מבוקר</b> — הסוכן מנטר את התנאים על נתוני שוק אמיתיים. כל אסטרטגיה מקושרת ל<b>תיק בפלטפורמה</b> (מבצע בתיק הנייר) או ל<b>ברוקר חיצוני</b> (מצב Live), או שולח <b>התראה בלבד</b>. אין זה ייעוץ השקעות.</div>
+            <div class="ta-monitor-bar" id="taMonBar">
+                <span class="ta-mon-dot"></span>
+                <span class="ta-mon-txt" id="taMonTxt">הסוכן פעיל — מנטר את האסטרטגיות כל 5 דקות כל עוד האתר פתוח</span>
+                <span class="ta-mon-last" id="taMonLast"></span>
+                <button class="ta-mini ta-mini-on" onclick="_taCheckStrategies(true)">🔄 בדוק עכשיו</button>
+            </div>
             <div class="risk-table-card glass-card" style="padding:18px">
-                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — הסוכן יתרגם אותה לחוקים ויציג לך כרטיס לאישור</div>
+                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — או שאל שאלת שוק פתוחה. הסוכן יבין, יארגן את הנתונים בפלטפורמה ומחוצה לה, ויחזיר כרטיס אסטרטגיה או ניתוח עם רעיונות.</div>
                 <div class="ta-chat-row">
-                    <textarea id="taInput" class="ta-input" rows="2" placeholder="למשל: אם ה-RSI של NVDA עולה מעל 80 — מכור 50% מהאחזקה…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){_taParse();}"></textarea>
+                    <textarea id="taInput" class="ta-input" rows="2" placeholder="למשל: מכור 50% מ-NVDA אם ה-RSI מעל 80 · או: אילו מניות מתאימות לתקופה הקרובה?" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){_taParse();}"></textarea>
                     <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">⚡ בצע אסטרטגיה</button>
                 </div>
                 <div class="ta-examples">${_TA_EXAMPLES.map(e => `<button class="ta-example" onclick="document.getElementById('taInput').value=this.textContent;_taParse()">${_taEsc(e)}</button>`).join('')}</div>
@@ -124,7 +131,8 @@ async function _taParse() {
     try {
         const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
         const j = await r.json();
-        if (!r.ok || j.error || !j.rule) { box.innerHTML = `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי לפענח את ההוראה. נסה לנסח בצורה ברורה יותר (טריגר, פעולה, נכס וסכום).')}</div>`; return; }
+        if (j && j.advice) { _taPendingRule = null; box.innerHTML = _taAdviceCardHtml(j.advice); return; }
+        if (!r.ok || j.error || !j.rule) { box.innerHTML = `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי להבין את הבקשה. נסה לתאר אסטרטגיה (טריגר → פעולה → נכס) או לשאול שאלת שוק.')}</div>`; return; }
         _taPendingRule = j.rule;
         box.innerHTML = _taStrategyCardHtml(j.rule, j.summary_he, j.source);
     } catch (e) {
@@ -132,9 +140,41 @@ async function _taParse() {
     }
 }
 
+// ── Advisory card — for open-ended market questions ("which stocks fit the coming period?") ──
+let _taSuggestion = null;
+function _taAdviceCardHtml(a) {
+    _taSuggestion = a && a.suggested_strategy_he ? a.suggested_strategy_he : null;
+    const paras = String(a.answer_he || '').split(/\n\s*\n/).filter(Boolean).map(p => `<p class="ta-adv-p">${_taEsc(p)}</p>`).join('');
+    const ideas = (a.ideas || []).map(i => `
+        <div class="ta-idea">
+            <div class="ta-idea-head"><span class="ta-idea-tk">${_taEsc(i.ticker)}</span>${i.name ? `<span class="ta-idea-name">${_taEsc(i.name)}</span>` : ''}</div>
+            ${i.why ? `<div class="ta-idea-why">${_taEsc(i.why)}</div>` : ''}
+            <button class="ta-mini ta-mini-on" onclick="_taIdeaToStrategy('${_taEsc(i.ticker)}')">＋ בנה אסטרטגיה</button>
+        </div>`).join('');
+    return `<div class="ta-advice">
+        <div class="ta-card-top"><span class="ta-card-name">💡 ${_taEsc(a.title || 'ניתוח והמלצות')}</span><span class="ta-trig">אנליסט AI</span></div>
+        <div class="ta-adv-body">${paras}</div>
+        ${ideas ? `<div class="ta-adv-ideas-lbl">רעיונות רלוונטיים</div><div class="ta-adv-ideas">${ideas}</div>` : ''}
+        ${_taSuggestion ? `<div class="ta-adv-strat">💭 אסטרטגיה מוצעת: <b>${_taEsc(_taSuggestion)}</b> <button class="ta-mini ta-mini-on" onclick="_taUseSuggestion()">נסח אותה</button></div>` : ''}
+        <div class="ta-adv-disc">⚠️ ניתוח AI למטרות מידע בלבד — אינו ייעוץ השקעות. אמת את הנתונים לפני פעולה.</div>
+    </div>`;
+}
+function _taIdeaToStrategy(tk) {
+    const i = document.getElementById('taInput');
+    if (i) { i.value = `קנה ${tk} ב-1000 דולר אם ה-RSI היומי יורד מתחת ל-35`; i.focus(); _taParse(); }
+}
+function _taUseSuggestion() {
+    const i = document.getElementById('taInput');
+    if (i && _taSuggestion) { i.value = _taSuggestion; i.focus(); _taParse(); }
+}
+
 // ── The visual "Strategy Card": trigger → action → risk, with Enable/Disable ──
 function _taStrategyCardHtml(rule, summaryHe, source) {
     const connBrokers = (_taBrokers || []).filter(b => b.status === 'CONNECTED');
+    const isTrade = rule.action === 'BUY' || rule.action === 'SELL';
+    const portfolios = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients : [];
+    const amtType = (rule.amount && rule.amount.type) || 'CASH_USD';
+    const amtVal = (rule.amount && rule.amount.value) || 0;
     const trigHe = { NEWS_SENTIMENT: '📰 חדשות/סנטימנט', MACRO_EVENT: '🌍 אירוע מאקרו', PRICE_LEVEL: '💲 רמת מחיר', EARNINGS_BEAT: '📊 הפתעת דוחות', TECHNICAL_INDICATOR: '📈 אינדיקטור טכני' };
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
@@ -167,12 +207,28 @@ function _taStrategyCardHtml(rule, summaryHe, source) {
             <div class="ta-flow-col"><span class="ta-flow-lbl">🛡️ ניהול סיכון</span><div class="ta-risk">${riskBits.length ? riskBits.map(b => `<span class="ta-risk-chip">${_taEsc(b)}</span>`).join('') : '<span class="ta-risk-none">לא הוגדרו מגבלות</span>'}</div></div>
         </div>
         <div class="ta-card-actions">
-            <label class="ta-mode-lbl">אופן הפעלה:
-                <select id="taMode" class="st-pf-select" onchange="_taOnModeChange()"><option value="PAPER">מסחר מדומה (Paper)</option><option value="ALERT">התראה בלבד</option>${connBrokers.length ? '<option value="LIVE">מסחר אמיתי (Live)</option>' : '<option value="LIVE" disabled>מסחר אמיתי (Live) — דרוש חיבור ברוקר</option>'}</select>
+            ${isTrade ? `<label class="ta-mode-lbl">סכום:
+                <input id="taAmtVal" type="number" min="0" step="any" value="${amtVal}" class="st-pf-select ta-amt-input">
+                <select id="taAmtType" class="st-pf-select">
+                    <option value="CASH_USD" ${amtType === 'CASH_USD' ? 'selected' : ''}>$ מזומן</option>
+                    <option value="SHARES" ${amtType === 'SHARES' ? 'selected' : ''}>מניות</option>
+                    <option value="PORTFOLIO_PCT" ${amtType === 'PORTFOLIO_PCT' ? 'selected' : ''}>% מהתיק</option>
+                </select>
+            </label>` : ''}
+            <label class="ta-mode-lbl">אופן:
+                <select id="taMode" class="st-pf-select" onchange="_taOnModeChange()">
+                    ${isTrade ? '<option value="PAPER">בצע בתיק (Paper)</option>' : ''}
+                    <option value="ALERT" ${!isTrade ? 'selected' : ''}>התראה בלבד</option>
+                    ${isTrade && connBrokers.length ? '<option value="LIVE">בצע בברוקר (Live)</option>' : ''}
+                    ${isTrade && !connBrokers.length ? '<option value="LIVE" disabled>Live — דרוש חיבור ברוקר</option>' : ''}
+                </select>
             </label>
-            <span class="ta-mode-lbl" id="taBrokerPick" style="display:none">דרך:
+            ${isTrade ? `<span class="ta-mode-lbl" id="taPortfolioPick">תיק יעד:
+                <select id="taPortfolioSel" class="st-pf-select">${portfolios.length ? portfolios.map(p => `<option value="${p.id}">${_taEsc(p.name)}</option>`).join('') : '<option value="">אין תיקים — צור תיק בדף הבית</option>'}</select>
+            </span>` : ''}
+            ${isTrade ? `<span class="ta-mode-lbl" id="taBrokerPick" style="display:none">ברוקר:
                 <select id="taBrokerSel" class="st-pf-select">${connBrokers.map(b => `<option value="${b.id}">${_taEsc(b.label || b.broker)}</option>`).join('')}</select>
-            </span>
+            </span>` : ''}
             <button class="corr-run-btn corr-run-primary" onclick="_taEnable()">▶ הפעל אסטרטגיה</button>
             <button class="wl-close-btn" onclick="_taCancelCard()">בטל</button>
         </div>
@@ -185,15 +241,27 @@ async function _taEnable() {
     if (typeof ensureSupabaseReady !== 'function' || !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין כרגע חיבור לשרת. נסה שוב בעוד רגע.', 'error'); return; }
     const modeSel = (document.getElementById('taMode') || {}).value;
     const mode = modeSel === 'ALERT' ? 'ALERT' : modeSel === 'LIVE' ? 'LIVE' : 'PAPER';
-    let brokerId = null;
+    const isTrade = _taPendingRule.action === 'BUY' || _taPendingRule.action === 'SELL';
+    // Let the user override the parsed amount (request: user supplies the amount for buy/sell).
+    if (isTrade) {
+        const v = parseFloat((document.getElementById('taAmtVal') || {}).value);
+        const t = (document.getElementById('taAmtType') || {}).value;
+        if (isFinite(v) && v > 0) _taPendingRule.amount = { type: (['CASH_USD', 'SHARES', 'PORTFOLIO_PCT'].includes(t) ? t : 'CASH_USD'), value: v };
+    }
+    let brokerId = null, portfolioId = null;
+    if (isTrade && mode === 'PAPER') {
+        portfolioId = +(((document.getElementById('taPortfolioSel') || {}).value) || 0) || null;
+        if (!portfolioId) { if (typeof showToast === 'function') showToast('בחר תיק בפלטפורמה לביצוע — או צור תיק בדף הבית', 'error'); return; }
+    }
     if (mode === 'LIVE') {
         brokerId = +(((document.getElementById('taBrokerSel') || {}).value) || 0) || null;
         if (!brokerId) { if (typeof showToast === 'function') showToast('בחר חיבור ברוקר פעיל למצב אמיתי', 'error'); return; }
     }
-    const modeHe = mode === 'PAPER' ? 'סימולציה' : mode === 'LIVE' ? 'אמיתי (Live)' : 'התראה';
+    const pfName = portfolioId && typeof clients !== 'undefined' ? (clients.find(c => c.id === portfolioId) || {}).name : null;
+    const modeHe = mode === 'PAPER' ? (pfName ? `ביצוע בתיק «${pfName}»` : 'סימולציה') : mode === 'LIVE' ? 'אמיתי (Live)' : 'התראה';
     try {
         const { data, error } = await supabaseClient.from('automated_strategies')
-            .insert({ name: _taPendingRule.name || 'אסטרטגיה', status: 'ACTIVE', mode, broker_connection_id: brokerId, parsed_rule: _taPendingRule, execution_logs: [{ ts: new Date().toISOString(), kind: 'created', message: `האסטרטגיה נוצרה והופעלה במצב ${modeHe}` }] })
+            .insert({ name: _taPendingRule.name || 'אסטרטגיה', status: 'ACTIVE', mode, broker_connection_id: brokerId, portfolio_id: portfolioId, parsed_rule: _taPendingRule, execution_logs: [{ ts: new Date().toISOString(), kind: 'created', message: `האסטרטגיה נוצרה והופעלה — ${modeHe}` }] })
             .select().single();
         if (error) throw error;
         if (typeof showToast === 'function') showToast('✅ האסטרטגיה הופעלה — הסוכן מנטר את התנאים', 'success');
@@ -227,7 +295,11 @@ function _taRenderList() {
         const summary = _taEsc((typeof _taRuleSummary === 'function') ? _taRuleSummary(s.parsed_rule) : (s.parsed_rule && s.parsed_rule.name) || '');
         const logs = Array.isArray(s.execution_logs) ? s.execution_logs : [];
         const last = logs.length ? logs[logs.length - 1] : null;
-        const modeHe = s.mode === 'ALERT' ? '🔔 התראה' : s.mode === 'LIVE' ? '🟢 אמיתי' : '🧪 סימולציה';
+        // Destination label — which portfolio / broker the strategy acts on.
+        let dest = '';
+        if (s.portfolio_id && typeof clients !== 'undefined' && Array.isArray(clients)) { const c = clients.find(x => x.id === s.portfolio_id); if (c) dest = ` · תיק «${_taEsc(c.name)}»`; }
+        else if (s.broker_connection_id && Array.isArray(_taBrokers)) { const b = _taBrokers.find(x => x.id === s.broker_connection_id); if (b) dest = ` · ${_taEsc(b.label || b.broker)}`; }
+        const modeHe = (s.mode === 'ALERT' ? '🔔 התראה' : s.mode === 'LIVE' ? '🟢 אמיתי' : '🧪 בתיק') + dest;
         return `<div class="ta-strat" data-ta-id="${s.id}">
             <div class="ta-strat-main">
                 <div class="ta-strat-id"><span class="ta-strat-name">${_taEsc(s.name)}</span><span class="ta-strat-sum">${summary}</span></div>
@@ -389,8 +461,10 @@ async function _taGetBrokerConn(id) {
 }
 function _taOnModeChange() {
     const mode = (document.getElementById('taMode') || {}).value;
-    const pick = document.getElementById('taBrokerPick');
-    if (pick) pick.style.display = mode === 'LIVE' ? 'inline-flex' : 'none';
+    const pf = document.getElementById('taPortfolioPick');
+    const bk = document.getElementById('taBrokerPick');
+    if (pf) pf.style.display = mode === 'PAPER' ? 'inline-flex' : 'none';
+    if (bk) bk.style.display = mode === 'LIVE' ? 'inline-flex' : 'none';
 }
 
 // ══ DRY-RUN EVALUATION ENGINE — checks ACTIVE strategies against REAL live data ══
@@ -517,7 +591,51 @@ async function _taEvalCondition(c, rule) {
     } catch (e) { }
     return { met: false, value: 'לא ניתן להעריך' };
 }
-// Evaluate all ACTIVE strategies; on a fire, log + PAPER-execute (simulate) / ALERT (notify).
+// Reflect a portfolio change into the app's global `clients` cache + re-render the dashboard.
+function _taSyncClient(id, updated) {
+    try {
+        if (typeof clients !== 'undefined' && Array.isArray(clients)) { const i = clients.findIndex(c => c.id === id); if (i !== -1 && updated) clients[i] = updated; }
+        if (typeof refreshDashboard === 'function') refreshDashboard();
+    } catch (e) { }
+}
+// Execute a fired BUY/SELL FOR REAL against a linked in-platform (paper) portfolio, via the existing
+// buy/sell engine. Returns { ok, message }. Fails safe: on any guard/failure it does NOT trade.
+async function _taExecutePaperTrade(portfolioId, rule, px) {
+    if (typeof portfolioBuyAsset !== 'function' || typeof portfolioSellAsset !== 'function') return { ok: false, message: 'מנוע התיקים אינו זמין' };
+    const sym = String(rule.target_asset || '').toUpperCase();
+    if (!sym) return { ok: false, message: 'אין נכס יעד לפעולה' };
+    if (px == null || !(+px > 0)) return { ok: false, message: `אין מחיר שוק זמין ל-${sym}` };
+    const client = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients.find(c => c.id === portfolioId) : null;
+    const pname = client ? client.name : ('#' + portfolioId);
+    const amt = rule.amount || { type: 'CASH_USD', value: 0 };
+    try {
+        if (rule.action === 'BUY') {
+            let qty;
+            if (amt.type === 'SHARES') qty = Math.floor(amt.value);
+            else if (amt.type === 'PORTFOLIO_PCT') { const cashUsd = client ? ((client.cash && client.cash.usd) || 0) : 0; qty = Math.floor((cashUsd * (amt.value / 100)) / px); }
+            else qty = Math.floor(amt.value / px); // CASH_USD
+            if (!qty || qty < 1) return { ok: false, message: `הסכום אינו מספיק ליחידה אחת של ${sym} (~$${(+px).toFixed(2)})` };
+            const updated = await portfolioBuyAsset(portfolioId, { type: 'stock', ticker: sym, stockName: sym, price: +px, quantity: qty, currency: 'USD' });
+            if (!updated || updated.error) return { ok: false, message: (updated && updated.error === 'insufficient_cash') ? `אין מספיק מזומן בתיק «${pname}»` : `הקנייה נכשלה (${(updated && updated.error) || 'שגיאה'})` };
+            _taSyncClient(portfolioId, updated);
+            return { ok: true, message: `בוצעה קנייה בתיק «${pname}»: ${qty} מניות ${sym} @ ~$${(+px).toFixed(2)}` };
+        } else { // SELL
+            if (!client) return { ok: false, message: `התיק «${pname}» לא נמצא במטמון` };
+            const h = (client.holdings || []).find(x => String(x.ticker || '').toUpperCase() === sym);
+            if (!h) return { ok: false, message: `אין אחזקה ב-${sym} בתיק «${pname}» למכירה` };
+            let qty;
+            if (amt.type === 'SHARES') qty = Math.min(Math.floor(amt.value), h.shares);
+            else if (amt.type === 'PORTFOLIO_PCT') qty = Math.floor(h.shares * (amt.value / 100));
+            else qty = Math.min(Math.floor(amt.value / px), h.shares); // CASH_USD → shares worth that cash
+            if (!qty || qty < 1) return { ok: false, message: `כמות המכירה שחושבה קטנה מדי ב-${sym}` };
+            const res = await portfolioSellAsset(portfolioId, h.id, qty);
+            if (!res) return { ok: false, message: `המכירה נכשלה ב-${sym}` };
+            if (typeof supaFetchClient === 'function') { const fresh = await supaFetchClient(portfolioId); if (fresh) _taSyncClient(portfolioId, fresh); }
+            return { ok: true, message: `בוצעה מכירה בתיק «${pname}»: ${qty} מניות ${sym} @ ~$${(+px).toFixed(2)}` };
+        }
+    } catch (e) { return { ok: false, message: 'שגיאה בביצוע בתיק' }; }
+}
+// Evaluate all ACTIVE strategies; on a fire, log + execute (paper-portfolio / broker) / notify.
 async function _taCheckStrategies(force) {
     if (_taChecking) return;
     if (typeof ensureSupabaseReady !== 'function' || !(await ensureSupabaseReady())) return;
@@ -549,8 +667,12 @@ async function _taCheckStrategies(force) {
                         const order = { side: rule.action === 'BUY' ? 'BUY' : 'SELL', symbol: rule.target_asset || '', qtyLabel: amtHe, price: px };
                         const res = await _taBrokerAdapter(conn).placeOrder(order);
                         msg = res.ok ? `${res.real ? '✅ בוצעה פקודת אמת' : '🧪'} ${res.message} — ${detail}` : `⚠️ מצב Live נחסם — ${res.message} · ${detail}`;
+                    } else if (s.mode === 'PAPER' && s.portfolio_id) {
+                        // Execute the trade FOR REAL in the linked paper portfolio (deduct cash / add-remove position).
+                        const exec = await _taExecutePaperTrade(s.portfolio_id, rule, px);
+                        msg = exec.ok ? `✅ ${exec.message} — ${detail}` : `⚠️ לא בוצע בתיק — ${exec.message} · ${detail}`;
                     } else {
-                        // PAPER: simulate the fill at the current price.
+                        // Legacy PAPER without a linked portfolio → simulate + log only.
                         msg = `🧪 סימולציה: בוצעה ${actHe} של ${amtHe} ${rule.target_asset || ''}${px != null ? ` במחיר ~$${(+px).toFixed(2)}` : ''} — ${detail}`;
                     }
                 }
@@ -567,7 +689,19 @@ async function _taCheckStrategies(force) {
         }
         if (document.getElementById('taList')) _taLoadStrategies();
     } catch (e) { }
+    window._taLastRun = Date.now();
+    _taUpdateMonitorBar();
     _taChecking = false;
+}
+// Show the user that monitoring is live: "נבדק לאחרונה HH:MM · בדיקה הבאה בעוד ~N דק".
+function _taUpdateMonitorBar() {
+    const el = document.getElementById('taMonLast');
+    if (!el) return;
+    const last = window._taLastRun;
+    if (!last) { el.textContent = ''; return; }
+    const hhmm = new Date(last).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const nextMin = Math.max(1, Math.round((5 * 60 * 1000 - (Date.now() - last)) / 60000));
+    el.textContent = `· נבדק לאחרונה ${hhmm} · בדיקה הבאה בעוד ~${nextMin} דק'`;
 }
 
 // ── Init: monitor strategies while the app is open (every 5 min) ──
@@ -577,6 +711,7 @@ if (typeof window !== 'undefined') {
     window._taParse = _taParse; window._taEnable = _taEnable; window._taToggle = _taToggle; window._taDelete = _taDelete;
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; };
     window._taOnModeChange = _taOnModeChange;
+    window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;
     window._taConnectBroker = _taConnectBroker; window._taDeleteBroker = _taDeleteBroker;
     window._taCheckStrategies = _taCheckStrategies; window._taPendingRule = _taPendingRule;

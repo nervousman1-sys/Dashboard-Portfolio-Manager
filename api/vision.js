@@ -346,6 +346,44 @@ function _strategySummaryHe(r) {
     return `אם ${join} → ${actHe}${amtHe ? ' ' + amtHe : ''}${tgt}`;
 }
 
+// ── Market-advisor path — for OPEN-ENDED requests that aren't a concrete rule
+// ("bring me relevant stocks for the coming period based on macro/geo/tech"). Returns a
+// written analysis + real tickers as ideas. Framed as AI opinion, never fabricated data.
+function _advicePrompt(text, headlines) {
+    const ctx = (Array.isArray(headlines) && headlines.length)
+        ? '\nכותרות שוק עדכניות (למידע בלבד, התייחס אליהן אם רלוונטי):\n- ' + headlines.slice(0, 8).map(h => String(h).slice(0, 140)).join('\n- ')
+        : '';
+    return [
+        'אתה אנליסט שווקים בכיר. המשתמש מבקש רעיונות השקעה או שואל שאלת שוק פתוחה. החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף):',
+        '{',
+        '  "title": "כותרת קצרה בעברית",',
+        '  "answer_he": "ניתוח מקצועי בעברית, 2-4 פסקאות, המשלב לפי הצורך מאקרו-כלכלה, מצב גאופוליטי עולמי ופריצות דרך טכנולוגיות. הפרד פסקאות בשורה ריקה (\\n\\n).",',
+        '  "ideas": [ { "ticker": "SYMBOL", "name": "שם החברה", "why": "משפט קצר בעברית — מדוע רלוונטי לתקופה הקרובה" } ],',
+        '  "suggested_strategy_he": "משפט אחד המתאר אסטרטגיה אוטומטית קונקרטית שאפשר להפעיל (טריגר→פעולה→נכס), או null"',
+        '}',
+        'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים הנסחרים בבורסה (למשל NVDA, ASML, LMT). (2) התבסס על הידע העדכני שלך והכותרות; אל תמציא מספרים ספציפיים (מחירים/יעדי מחיר) — דבר במונחים איכותיים. (3) עברית מקצועית וברורה. (4) אם השאלה כללית, בחר את הפרשנות הסבירה ביותר וספק ערך אמיתי.',
+        ctx,
+        '',
+        'בקשת המשתמש: ' + JSON.stringify(String(text || '').slice(0, 600)),
+    ].join('\n');
+}
+function _normalizeAdvice(r) {
+    if (!r || typeof r !== 'object') return null;
+    const answer = r.answer_he || r.answer || '';
+    const ideas = (Array.isArray(r.ideas) ? r.ideas : []).slice(0, 6).map(i => ({
+        ticker: String((i && (i.ticker || i.symbol)) || '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 8),
+        name: i && i.name ? String(i.name).slice(0, 60) : '',
+        why: i && i.why ? String(i.why).slice(0, 240) : '',
+    })).filter(i => i.ticker);
+    if (!answer && !ideas.length) return null;
+    return {
+        title: r.title ? String(r.title).slice(0, 80) : 'ניתוח והמלצות',
+        answer_he: String(answer).slice(0, 2200),
+        ideas,
+        suggested_strategy_he: (r.suggested_strategy_he && r.suggested_strategy_he !== 'null') ? String(r.suggested_strategy_he).slice(0, 200) : null,
+    };
+}
+
 function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -589,7 +627,20 @@ module.exports = async (req, res) => {
             let source = 'ai';
             if (!rule) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
             if (rule && rule._src) { source = rule._src; delete rule._src; }
-            if (!rule) { res.setHeader('Cache-Control', 's-maxage=60'); res.status(200).json({ error: 'unparsed', message: 'לא הצלחתי לפענח את ההוראה לאסטרטגיה. נסה לנסח בצורה ברורה יותר (טריגר, פעולה, נכס וסכום).' }); return; }
+            if (!rule) {
+                // Not a concrete rule → treat as an open-ended market question and answer as an advisor.
+                let advice = null;
+                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text), KEY, MODELS, false, 0.55, 1500)); } catch (e) { advice = null; }
+                if (advice) {
+                    const aResult = { advice, source: 'ai' };
+                    _memo.set(memoKey, aResult);
+                    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+                    res.status(200).json(aResult); return;
+                }
+                res.setHeader('Cache-Control', 's-maxage=60');
+                res.status(200).json({ error: 'unparsed', message: 'לא הצלחתי להבין את הבקשה כרגע. אפשר לתאר אסטרטגיה (טריגר → פעולה → נכס), או לשאול שאלת שוק פתוחה. אם מנוע ה-AI עמוס — נסה שוב בעוד רגע.' });
+                return;
+            }
             const result = { rule, summary_he: _strategySummaryHe(rule), source };
             _memo.set(memoKey, result);
             res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
