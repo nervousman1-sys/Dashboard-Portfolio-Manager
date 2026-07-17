@@ -894,6 +894,7 @@ const _VIEW_PAGES = [
     { view: 'scanneragent', id: 'scannerPage', open: () => typeof openScannerAgentPage === 'function' && openScannerAgentPage(), close: () => typeof closeScannerAgentPage === 'function' && closeScannerAgentPage() },
     { view: 'stresstest', id: 'stressTestPage', open: () => typeof openStressTestPage === 'function' && openStressTestPage(), close: () => typeof closeStressTestPage === 'function' && closeStressTestPage() },
     { view: 'correlation', id: 'correlationPage', open: () => typeof openCorrelationPage === 'function' && openCorrelationPage(), close: () => typeof closeCorrelationPage === 'function' && closeCorrelationPage() },
+    { view: 'tradingagent', id: 'tradingAgentPage', open: () => typeof openTradingAgentPage === 'function' && openTradingAgentPage(), close: () => typeof closeTradingAgentPage === 'function' && closeTradingAgentPage() },
 ];
 const _isPageOpen = (id) => !!document.getElementById(id)?.classList.contains('active');
 

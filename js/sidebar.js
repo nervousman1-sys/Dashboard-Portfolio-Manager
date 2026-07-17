@@ -67,6 +67,7 @@ function navigateTo(section) {
     if (section !== 'lhe') { const _lp = document.getElementById('lhePage'); if (_lp && _lp.classList.contains('active') && typeof closeLHEPage === 'function') closeLHEPage(); }
     if (section !== 'stresstest') { const _st = document.getElementById('stressTestPage'); if (_st && _st.classList.contains('active') && typeof closeStressTestPage === 'function') closeStressTestPage(); }
     if (section !== 'correlation') { const _cp = document.getElementById('correlationPage'); if (_cp && _cp.classList.contains('active') && typeof closeCorrelationPage === 'function') closeCorrelationPage(); }
+    if (section !== 'tradingagent') { const _ta = document.getElementById('tradingAgentPage'); if (_ta && _ta.classList.contains('active') && typeof closeTradingAgentPage === 'function') closeTradingAgentPage(); }
 
     // Determine if we need to close overlay pages first
     const macroPage = document.getElementById('macroPage');
@@ -249,6 +250,17 @@ function navigateTo(section) {
             closeTechIfOpen();
             closeRepIfOpen();
             if (typeof openCorrelationPage === 'function') openCorrelationPage();
+            break;
+
+        case 'tradingagent':
+            // Open the AI Trading Agent page
+            if (macroIsActive && typeof closeMacroPage === 'function') closeMacroPage();
+            if (riskIsActive && typeof closeRiskAnalysis === 'function') closeRiskAnalysis();
+            closeBulkIfOpen();
+            closeDnIfOpen();
+            closeTechIfOpen();
+            closeRepIfOpen();
+            if (typeof openTradingAgentPage === 'function') openTradingAgentPage();
             break;
 
         default:

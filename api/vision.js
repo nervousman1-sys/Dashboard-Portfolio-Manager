@@ -188,6 +188,114 @@ function _reactionFallback(nm, epsA, epsE, sp, move, news) {
     return { move_he, why_he: why_he || 'ראה את תנועת המחיר והכותרות למעלה.', sentiment_he };
 }
 
+// ── AI Trading Agent — natural-language → structured StrategyRule ─────────────────────────────
+const _STRAT_TRIGGERS = ['NEWS_SENTIMENT', 'MACRO_EVENT', 'PRICE_LEVEL', 'EARNINGS_BEAT', 'TECHNICAL_INDICATOR'];
+const _STRAT_ACTIONS = ['BUY', 'SELL', 'ALERT_ONLY'];
+const _STRAT_OPS = ['ABOVE', 'BELOW', 'CROSSES_ABOVE', 'CROSSES_BELOW', 'GTE', 'LTE', 'EQUALS', 'CONTAINS'];
+const _STRAT_AMT = ['SHARES', 'CASH_USD', 'PORTFOLIO_PCT'];
+
+function _strategyPrompt(text) {
+    return [
+        'אתה מנוע פענוח אסטרטגיות מסחר. קבל הוראת מסחר בשפה טבעית (עברית או אנגלית) והחזר אך ורק אובייקט JSON תקין (ללא ``` וללא טקסט נוסף) לפי הסכמה הבאה:',
+        '{',
+        '  "name": "שם קצר בעברית לאסטרטגיה",',
+        '  "trigger_type": "אחד מ: NEWS_SENTIMENT | MACRO_EVENT | PRICE_LEVEL | EARNINGS_BEAT | TECHNICAL_INDICATOR (הסוג הדומיננטי)",',
+        '  "logic": "ANY אם מספיק שתנאי אחד יתקיים (או/OR), ALL אם צריך שכולם יתקיימו (וגם/AND)",',
+        '  "conditions": [ { "factor": "price|rsi|ma|eps_surprise|news|macro", "subject": "טיקר או ישות/מדד (USO, NVDA, נפט, Iran, Trump)", "keyword": "מילות מפתח לחדשות מופרדות בפסיק, או null", "operator": "אחד מ: ABOVE|BELOW|CROSSES_ABOVE|CROSSES_BELOW|GTE|LTE|EQUALS|CONTAINS", "threshold": מספר או null, "timeframe": "4h|daily|weekly או null" } ],',
+        '  "action": "BUY | SELL | ALERT_ONLY",',
+        '  "target_asset": "הטיקר לפעולה, למשל USO או NVDA",',
+        '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
+        '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
+        '}',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז מהתיק ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) אם אין target_asset מפורש אך יש טיקר בתנאי — השתמש בו. (7) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY.',
+        'דוגמאות:',
+        'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        '',
+        `ההוראה לפענוח: "${text}"`,
+    ].join('\n');
+}
+
+function _normalizeStrategy(r) {
+    if (!r || typeof r !== 'object') return null;
+    const up = (s) => String(s || '').trim().toUpperCase();
+    const trigger = _STRAT_TRIGGERS.includes(up(r.trigger_type)) ? up(r.trigger_type) : null;
+    let conditions = Array.isArray(r.conditions) ? r.conditions : [];
+    conditions = conditions.map(c => c && typeof c === 'object' ? {
+        factor: String(c.factor || '').toLowerCase().trim() || 'price',
+        subject: c.subject != null ? String(c.subject).trim() : null,
+        keyword: c.keyword != null && c.keyword !== '' ? String(c.keyword).trim() : null,
+        operator: _STRAT_OPS.includes(up(c.operator)) ? up(c.operator) : (c.keyword ? 'CONTAINS' : 'BELOW'),
+        threshold: (c.threshold != null && c.threshold !== '' && isFinite(+c.threshold)) ? +c.threshold : (c.threshold != null ? String(c.threshold) : null),
+        timeframe: c.timeframe ? String(c.timeframe).toLowerCase().trim() : null,
+    } : null).filter(Boolean);
+    if (!conditions.length) return null;
+    const action = _STRAT_ACTIONS.includes(up(r.action)) ? up(r.action) : 'ALERT_ONLY';
+    const amt = (r.amount && typeof r.amount === 'object') ? r.amount : {};
+    const amount = { type: _STRAT_AMT.includes(up(amt.type)) ? up(amt.type) : 'CASH_USD', value: isFinite(+amt.value) ? +amt.value : 0 };
+    const rl = (r.risk_limits && typeof r.risk_limits === 'object') ? r.risk_limits : {};
+    const num = (v) => (v != null && v !== '' && isFinite(+v)) ? +v : null;
+    // target_asset: explicit, else the first condition subject that looks like a ticker
+    let target = r.target_asset ? up(r.target_asset).replace(/[^A-Z0-9.\-]/g, '') : '';
+    if (!target) { const t = conditions.find(c => c.subject && /^[A-Za-z.\-]{1,6}$/.test(c.subject)); if (t) target = up(t.subject); }
+    return {
+        name: (r.name ? String(r.name).trim() : '') || 'אסטרטגיה',
+        trigger_type: trigger || (conditions.some(c => c.factor === 'rsi' || c.factor === 'ma') ? 'TECHNICAL_INDICATOR' : conditions.some(c => c.factor === 'eps_surprise') ? 'EARNINGS_BEAT' : conditions.some(c => c.factor === 'news') ? 'NEWS_SENTIMENT' : 'PRICE_LEVEL'),
+        logic: up(r.logic) === 'ALL' ? 'ALL' : 'ANY',
+        conditions, action, target_asset: target || null, amount,
+        risk_limits: { stop_loss_pct: num(rl.stop_loss_pct), max_slippage_pct: num(rl.max_slippage_pct), max_portfolio_pct: num(rl.max_portfolio_pct) },
+    };
+}
+
+// Deterministic heuristic parser — used when Gemini is unavailable (429). Best-effort; the rule
+// is flagged needs_review so the user can confirm/adjust in the Strategy Card.
+function _strategyFallback(text) {
+    const t = ' ' + String(text || '') + ' ';
+    const tickers = (t.match(/\b(USO|NVDA|SPY|QQQ|GLD|TLT|IEF|AAPL|MSFT|AMD|META|TSLA|AMZN|GOOGL|NFLX)\b/gi) || []).map(s => s.toUpperCase());
+    const conditions = [];
+    let mPrice = t.match(/(?:מתחת|below|under|קטן).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i) || t.match(/\$\s*(\d+(?:\.\d+)?)/);
+    let mAbovePrice = t.match(/(?:מעל|above|over|גדול).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i);
+    const mRsi = t.match(/rsi.{0,18}?(\d{1,3})|(\d{1,3}).{0,10}?rsi/i);
+    const mEps = t.match(/(?:eps|רווח|הפתעה).{0,20}?(\d{1,3})\s*%|(\d{1,3})\s*%.{0,14}?(?:eps|רווח|הפתעה)/i);
+    if (mRsi) conditions.push({ factor: 'rsi', subject: tickers[0] || null, keyword: null, operator: /מעל|above|over/i.test(t) ? 'ABOVE' : 'BELOW', threshold: +(mRsi[1] || mRsi[2]), timeframe: (t.match(/(\d+)\s*(?:h|hour|שע)/i) ? (t.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : null) });
+    if (mEps) conditions.push({ factor: 'eps_surprise', subject: null, keyword: null, operator: 'ABOVE', threshold: +(mEps[1] || mEps[2]), timeframe: null });
+    if (mPrice && !mRsi && !mEps) conditions.push({ factor: 'price', subject: tickers[0] || null, keyword: null, operator: mAbovePrice ? 'ABOVE' : 'BELOW', threshold: +(mAbovePrice ? mAbovePrice[1] : mPrice[1]), timeframe: null });
+    // \b doesn't work around Hebrew — match the words directly (Hebrew has no ASCII word boundary).
+    const kw = (t.match(/(Iran|Trump|Israel|Fed|Powell|OPEC|איראן|טראמפ|ישראל|הפד|אופ"ק|נפט|ריבית)/gi) || []);
+    if (kw.length) conditions.push({ factor: 'news', subject: kw[0], keyword: [...new Set(kw.map(k => k.trim()))].join(','), operator: 'CONTAINS', threshold: null, timeframe: null });
+    if (!conditions.length) return null;
+    const action = /(sell|מכור|מכיר|למכור)/i.test(t) ? 'SELL' : /(buy|תקנה|לקנות|קנה|קניי?[הת]|קניה)/i.test(t) ? 'BUY' : 'ALERT_ONLY';
+    let amount = { type: 'CASH_USD', value: 0 };
+    const mCash = t.match(/\$?\s*(\d+(?:,\d{3})*)\s*(?:דולר|usd|\$)/i);
+    const mShares = t.match(/(\d+)\s*(?:מניות|מניה|shares?)/i);
+    const mPct = t.match(/(\d{1,3})\s*%/);
+    if (mShares) amount = { type: 'SHARES', value: +mShares[1] };
+    else if (mPct && action === 'SELL') amount = { type: 'PORTFOLIO_PCT', value: +mPct[1] };
+    else if (mCash) amount = { type: 'CASH_USD', value: +mCash[1].replace(/,/g, '') };
+    const r = _normalizeStrategy({ name: 'אסטרטגיה (טיוטה)', trigger_type: null, logic: 'ANY', conditions, action, target_asset: tickers[0] || null, amount, risk_limits: {} });
+    if (r) r._src = 'fallback';
+    return r;
+}
+
+function _strategySummaryHe(r) {
+    if (!r) return '';
+    const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל', CROSSES_ABOVE: 'חוצה מעלה את', CROSSES_BELOW: 'חוצה מטה את', GTE: '≥', LTE: '≤', EQUALS: 'שווה ל', CONTAINS: 'מזכיר' };
+    const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'אירוע מאקרו' };
+    const conds = (r.conditions || []).map(c => {
+        const subj = c.subject ? ` (${c.subject})` : '';
+        if (c.factor === 'news') return `אזכור בחדשות של "${c.keyword || c.subject}"`;
+        const th = c.threshold != null ? ` ${opHe[c.operator] || c.operator} ${c.threshold}${c.factor === 'eps_surprise' ? '%' : ''}` : '';
+        const tf = c.timeframe ? ` [${c.timeframe}]` : '';
+        return `${facHe[c.factor] || c.factor}${subj}${th}${tf}`;
+    });
+    const join = conds.join(r.logic === 'ALL' ? ' וגם ' : ' או ');
+    const actHe = r.action === 'BUY' ? 'קנייה' : r.action === 'SELL' ? 'מכירה' : 'התראה בלבד';
+    const amtHe = r.action === 'ALERT_ONLY' ? '' : (r.amount.type === 'SHARES' ? `${r.amount.value} מניות` : r.amount.type === 'PORTFOLIO_PCT' ? `${r.amount.value}% מהאחזקה` : `$${r.amount.value}`);
+    const tgt = r.target_asset ? ` ${r.target_asset}` : '';
+    return `אם ${join} → ${actHe}${amtHe ? ' ' + amtHe : ''}${tgt}`;
+}
+
 function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -409,6 +517,36 @@ module.exports = async (req, res) => {
         } catch (e) {
             res.setHeader('Cache-Control', 's-maxage=60');
             res.status(502).json({ error: 'ai_failed', message: e.message });
+        }
+        return;
+    }
+
+    // mode=strategy — AI Trading Agent: natural-language instruction → structured StrategyRule.
+    // Gemini-first with a deterministic heuristic fallback (so it works even when quota is out).
+    // POST { text }. Returns { rule, summary_he, source }. NEVER executes anything — parse only.
+    if (req.query.mode === 'strategy') {
+        try {
+            let d = {};
+            if (req.method === 'POST') d = (typeof req.body === 'object' && req.body) ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch (e) { return {}; } })();
+            else d = { text: req.query.text };
+            const text = String(d.text || '').trim();
+            if (!text) { res.status(400).json({ error: 'text_required' }); return; }
+            if (text.length > 600) { res.status(400).json({ error: 'text_too_long' }); return; }
+            const memoKey = `strategy:${text.slice(0, 180)}`;
+            if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=3600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
+            let rule = null;
+            try { rule = _normalizeStrategy(await _geminiGroundedJson(_strategyPrompt(text), KEY, MODELS, false, 0.1, 1200)); } catch (e) { rule = null; }
+            let source = 'ai';
+            if (!rule) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
+            if (rule && rule._src) { source = rule._src; delete rule._src; }
+            if (!rule) { res.setHeader('Cache-Control', 's-maxage=60'); res.status(200).json({ error: 'unparsed', message: 'לא הצלחתי לפענח את ההוראה לאסטרטגיה. נסה לנסח בצורה ברורה יותר (טריגר, פעולה, נכס וסכום).' }); return; }
+            const result = { rule, summary_he: _strategySummaryHe(rule), source };
+            _memo.set(memoKey, result);
+            res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+            res.status(200).json(result);
+        } catch (e) {
+            res.setHeader('Cache-Control', 's-maxage=60');
+            res.status(502).json({ error: 'parse_failed', message: e.message });
         }
         return;
     }
