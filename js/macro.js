@@ -1792,7 +1792,7 @@ function _paintYieldCurves(data) {
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y.toFixed(2)}%` } } },
             scales: {
                 x: { ticks: { color: tickColor, font: { size: 11, weight: '700' } }, grid: { color: gridColor } },
-                y: { ticks: { color: tickColor, font: { size: 11 }, callback: (v) => v + '%' }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor, font: { size: 11 }, callback: (v) => (+v).toFixed(2) + '%' }, grid: { color: gridColor } },
             },
         },
     });

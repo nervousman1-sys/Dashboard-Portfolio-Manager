@@ -11,6 +11,11 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <title>Finextium — Portfolio Intelligence</title>
+    <!-- Warm the critical connections early: the CDN (Supabase SDK + Chart.js) and the Supabase
+         backend (auth/data) — saves the DNS+TLS round-trips before the deferred scripts run. -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://jdebxhxaiwbtgweruznd.supabase.co" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
     <!-- Critical: Supabase must load before app scripts -->
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <!-- Chart.js can defer — charts render after DOM is ready -->
@@ -24,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=191.1">
+    <link rel="stylesheet" href="css/main.css?v=192.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -687,23 +692,23 @@
     <script defer src="js/file-parser.js?v=482"></script>
     <script defer src="js/modals.js?v=485"></script>
     <script defer src="js/portfolio.js?v=482"></script>
-    <script defer src="js/macro.js?v=490"></script>
+    <script defer src="js/macro.js?v=491"></script>
     <script defer src="js/risk-analysis-view.js?v=483"></script>
     <script defer src="js/bulk-actions.js?v=482"></script>
     <script defer src="js/discord-news.js?v=483"></script>
     <script defer src="js/technical-view.js?v=487"></script>
     <script defer src="js/reports-engine.js?v=482"></script>
-    <script defer src="js/reports-view.js?v=494"></script>
+    <script defer src="js/reports-view.js?v=495"></script>
     <script defer src="js/scanner-agent.js?v=482"></script>
     <script defer src="js/lhe-view.js?v=482"></script>
     <script defer src="js/press-alerts.js?v=482"></script>
     <script defer src="js/stress-test.js?v=482"></script>
-    <script defer src="js/correlation.js?v=11"></script>
+    <script defer src="js/correlation.js?v=12"></script>
     <script defer src="js/stock-alerts.js?v=3"></script>
     <script defer src="js/sidebar.js?v=483"></script>
     <script defer src="js/auth.js?v=482"></script>
     <script defer src="js/mobile-sheets.js?v=2"></script>
-    <script defer src="js/init.js?v=485"></script>
+    <script defer src="js/init.js?v=486"></script>
 
 </body>
 

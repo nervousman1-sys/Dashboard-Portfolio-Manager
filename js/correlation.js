@@ -745,7 +745,7 @@ function _corrRenderBasket() {
                 <span class="wl-priceblock" id="corrPx-${disp}"><span class="wl-price wl-dim">—</span></span>
                 ${scoreChip}
                 <button class="corr-mini-btn" onclick="_corrSwapAsset('${s}')" title="הצג עד 10 חלופות">🔄 החלף</button>
-                <button class="wl-report" onclick="if(typeof openReportForTicker==='function'){openReportForTicker('${s}');}">📊 דוח</button>
+                ${((m.kind && m.kind !== 'stock') || (typeof assetHasNoReport === 'function' && assetHasNoReport(s))) ? '' : `<button class="wl-report" onclick="if(typeof openReportForTicker==='function'){openReportForTicker('${s}');}">📊 דוח</button>`}
                 <button class="corr-mini-btn corr-buy" onclick="_corrBuyAsset('${s}')" title="הוסף לתיק / קנה">➕ קנה</button>
                 <button class="corr-mini-btn corr-remove" onclick="_corrRemoveFromBasket('${s}')" title="הסר מהסל">✕ הסר</button>
             </div><div id="corrAlts-${disp}" class="corr-alts"></div></div>`;
@@ -766,7 +766,7 @@ function _corrRenderBasket() {
         </div>
         <div class="corr-basket-actions corr-watch-row">
             <label class="st-pf-label">⭐ שמור כתעודת סל בהתאמה אישית:</label>
-            <input type="text" id="corrWatchName" class="corr-input" style="min-width:200px" maxlength="40" placeholder="תן שם לרשימה (למשל: סל פיזור יולי)" />
+            <input type="text" id="corrWatchName" class="corr-input" style="min-width:200px" maxlength="40" placeholder="שם לתעודה" />
             <button class="corr-run-btn" id="corrWatchBtn" onclick="_corrBasketToWatchlist()">⭐ הוסף לרשימת המעקב</button>
         </div>
         <div class="corr-note">תנאי הסינון: מניות בציון דוחות ≥ ${CORR_MIN_SCORE} ומובילות בסקטור שלהן · עוגני הגנה בדירוג מעל A (אג"ח ממשלת ארה"ב AAA) + זהב · אחוזי חשיפה = risk-parity ${anyMom ? '× מומנטום סקטורים (21 יום מול S&P)' : ''} · מתאמים ומחירים אמיתיים על 365 ימי מסחר. ההצעה אינה ייעוץ השקעות.</div>`;

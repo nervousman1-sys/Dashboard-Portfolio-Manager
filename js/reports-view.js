@@ -432,6 +432,33 @@ let _repWatchMkt = {};            // symbol → market
 let _repWatchGroup = {};          // symbol → group_label (e.g. "תעודת סל בהתאמה אישית")
 function _repIsWatched(sym) { return _repWatch.has(String(sym).toUpperCase()); }
 
+// True for instruments that TRACK a commodity/index/bond (ETFs, gold, government bonds, crypto)
+// — they have no company fundamentals, so the "📊 דוח" button must be hidden for them everywhere.
+function assetHasNoReport(sym) {
+    const raw = String(sym || '');
+    const t = raw.replace(/\.TA$/i, '').toUpperCase();
+    if (!t) return false;
+    if (/-USD$/i.test(raw)) return true;                            // crypto pairs (BTC-USD…)
+    if (typeof isUsEtf === 'function' && isUsEtf(t)) return true;   // US ETFs: index/bond/commodity/sector
+    if (/^\d+$/.test(t)) return true;                              // numeric Israeli fund ids
+    if (typeof window !== 'undefined' && window._ilFundInfo && window._ilFundInfo[t]) return true; // IL funds
+    return false;
+}
+// Open a company report FROM the watchlist and remember to reopen the watchlist (and, if opened
+// from a basket, that basket) when the user comes Back — instead of being dropped on the home page.
+// The current history entry is tagged; the popstate handler in init.js restores it.
+function _wlOpenReport(sym, basketId) {
+    if (assetHasNoReport(sym)) return; // no fundamentals report for trackers
+    try {
+        const cur = (typeof history !== 'undefined' && history.state) ? history.state : {};
+        history.replaceState(Object.assign({}, cur, { wlReopen: true, wlBasket: (basketId != null ? basketId : null) }), '', window.location.href);
+    } catch (e) { }
+    if (typeof closeBasketDetail === 'function') closeBasketDetail();
+    closeWatchlistModal();
+    if (typeof openReportForTicker === 'function') openReportForTicker(sym);
+}
+if (typeof window !== 'undefined') { window.assetHasNoReport = assetHasNoReport; window._wlOpenReport = _wlOpenReport; }
+
 async function _repLoadWatch() {
     if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
     try {
@@ -605,7 +632,7 @@ async function _wlRenderList() {
                 <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
                 <div class="wl-priceblock">${priceHtml}</div>
                 ${sc}
-                <button class="wl-report" onclick="openReportForTicker('${s}'); closeWatchlistModal();" title="ניתוח דוחות כספיים">📊 דוח</button>
+                ${assetHasNoReport(s) ? '' : `<button class="wl-report" onclick="_wlOpenReport('${s}')" title="ניתוח דוחות כספיים">📊 דוח</button>`}
                 <button class="wl-report wl-tech" onclick="if(typeof openTechnicalForTicker==='function'){openTechnicalForTicker('${s}'); closeWatchlistModal();}" title="ניתוח טכני">📈 טכני</button>
             </div>
             <div class="wl-sig" id="wlSig-${disp}">${_wlReportSignals(r).join('')}</div>
@@ -687,7 +714,7 @@ async function _wlRenderBasketDetail(b) {
             <div class="wl-id"><span class="wl-tk">${disp}</span><span class="wl-co">${_repEscape(r.company_name || '')}</span></div>
             <div class="wl-priceblock">${priceHtml}</div>
             ${sc}
-            <button class="wl-report" onclick="openReportForTicker('${s}'); ${close2}">📊 דוח</button>
+            ${assetHasNoReport(s) ? '' : `<button class="wl-report" onclick="_wlOpenReport('${s}',${b.id})">📊 דוח</button>`}
             <button class="wl-report wl-tech" onclick="if(typeof openTechnicalForTicker==='function'){openTechnicalForTicker('${s}'); ${close2}}">📈 טכני</button>
         </div></div>`;
     }).join('');

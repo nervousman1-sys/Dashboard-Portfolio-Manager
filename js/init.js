@@ -1006,6 +1006,19 @@ window.addEventListener('popstate', function (e) {
         }
     }
 
+    // Landing BACK on an entry where the watchlist was open (user opened a company report from the
+    // watchlist / a custom-ETF basket) → restore the underlying page, then reopen the watchlist
+    // (and the basket) — instead of dropping the user on the home page.
+    if (e.state && e.state.wlReopen) {
+        syncViewToURL();
+        if (typeof openWatchlistModal === 'function') {
+            Promise.resolve(openWatchlistModal()).then(() => {
+                if (e.state.wlBasket != null && typeof openBasketDetail === 'function') setTimeout(() => openBasketDetail(e.state.wlBasket), 240);
+            });
+        }
+        return;
+    }
+
     // Lightweight popups FIRST: back closes the topmost open popup (these push a
     // same-URL history entry when opened, so popping it just closes the popup).
     const popupClosers = [
