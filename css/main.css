@@ -10202,7 +10202,11 @@ html.day-mode .dn-mover-dest { color: #334155; background: rgba(8,145,178,0.06);
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
 }
 .rep-card:hover { background: var(--bg-card-hover); border-color: rgba(0, 229, 255, 0.35); transform: translateY(-1px); }
-.rep-card-ticker { font-size: 14px; font-weight: 800; color: var(--text-primary); letter-spacing: 0.02em; display: flex; align-items: center; gap: 5px; }
+.rep-card-ticker { font-size: 14px; font-weight: 800; color: var(--text-primary); letter-spacing: 0.02em; display: flex; align-items: center; gap: 5px; min-width: 0; }
+/* Score + beat-arrow grouped as ONE fixed block, so the ▲ always sits right beside the number
+   (aligned across every card) instead of floating next to the variable-width ticker. */
+.rep-card-scoreblock { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.rep-card-beat-slot:empty { display: none; }
 .rep-card-beat { color: var(--accent-green); font-size: 10px; }
 .rep-card-score {
     font-size: 13px; font-weight: 800; min-width: 30px; text-align: center;

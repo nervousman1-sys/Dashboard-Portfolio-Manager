@@ -302,8 +302,8 @@ function _repRenderList() {
         const beat = (s && s.improved) ? '<span class="rep-card-beat" title="שיפור מול תקופה קודמת">▲</span>' : '';
         return `<button class="rep-card" onclick="openReportDetail('${t}')">
             <span class="rep-star ${_repWatch.has(t) ? 'on' : ''}" data-rep-star="${t}" onclick="event.stopPropagation(); _repToggleWatch('${t}')" title="הוסף / הסר ממעקב">★</span>
-            <span class="rep-card-ticker">${disp}<span class="rep-card-beat-slot" data-rep-beat="${t}">${beat}</span></span>
-            ${chip}
+            <span class="rep-card-ticker">${disp}</span>
+            <span class="rep-card-scoreblock"><span class="rep-card-beat-slot" data-rep-beat="${t}">${beat}</span>${chip}</span>
         </button>`;
     };
 
