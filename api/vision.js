@@ -121,6 +121,31 @@ async function _priceMoveSince(ticker, reportDate) {
     } catch (e) { return null; }
 }
 
+// Deterministic reaction analysis from the REAL facts (price move + beat/miss + headlines).
+// Used when Gemini is unavailable (429/503) so the panel ALWAYS shows a useful, honest analysis
+// instead of an error — the user asked that the analysis always appear.
+function _reactionFallback(nm, epsA, epsE, sp, move, news) {
+    const hasEps = epsA != null && epsE != null;
+    const dir = move ? (move.pct >= 0 ? 'עלתה' : 'ירדה') : null;
+    const move_he = move
+        ? `מניית ${nm} ${dir} ב-${Math.abs(move.pct).toFixed(1)}% מאז פרסום הדוח (מ-$${move.basePrice} ל-$${move.latestPrice}).`
+        : 'תנועת המחיר המדויקת אינה זמינה כרגע.';
+    let why_he = '';
+    if (move && sp != null) {
+        if (sp >= 0 && move.pct < 0) why_he = `למרות ש${nm} היכתה את תחזית הרווח${hasEps ? ` (EPS $${epsA} מול צפי $${epsE})` : ''}, המניה ירדה — סימן שהשוק הגיב לגורם מעבר לשורת הרווח, ככל הנראה התחזית קדימה (guidance) או מדדים תפעוליים בדוח ובשיחת המשקיעים.`;
+        else if (sp < 0 && move.pct < 0) why_he = `${nm} פספסה את תחזית הרווח${hasEps ? ` (EPS $${epsA} מול צפי $${epsE})` : ''}, והמניה ירדה בהתאם.`;
+        else if (move.pct >= 0) why_he = `${nm} ${sp >= 0 ? 'היכתה את תחזית הרווח' : 'פרסמה דוח'}, והמניה הגיבה בעלייה — השוק קיבל את התוצאות בחיוב.`;
+    } else if (move) { why_he = `${nm} ${dir} לאחר פרסום הדוח.`; }
+    if (news && news.length) {
+        const heads = news.slice(0, 3).map(h => h.replace(/^\d{4}-\d{2}-\d{2}:\s*/, '').trim()).filter(Boolean);
+        if (heads.length) why_he += (why_he ? ' ' : '') + 'כותרות אחרונות סביב הדוח: ' + heads.join(' · ') + '.';
+    }
+    const sentiment_he = move
+        ? (move.pct >= 0 ? 'הסנטימנט חיובי — השוק תגמל את התוצאות.' : 'הסנטימנט שלילי — המשקיעים הגיבו בירידה למרות/בעקבות הדוח.')
+        : '';
+    return { move_he, why_he: why_he || 'ראה את תנועת המחיר והכותרות למעלה.', sentiment_he };
+}
+
 function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -274,11 +299,19 @@ module.exports = async (req, res) => {
                 '}',
                 'אם עקפה את הרווח אך המניה ירדה — הסבר את הפער (למשל תחזית מאכזבת). בסס אך ורק על הנתונים והכותרות שסופקו; אל תמציא מספרים או עובדות. אם חסר מידע לסעיף — כתוב זאת בקצרה.',
             ].join('\n');
-            let out = await _geminiGroundedJson(prompt, KEY, MODELS, false);
-            if (!out || typeof out !== 'object') throw new Error('no_model_returned');
+            let out = null, usedFallback = false;
+            try { out = await _geminiGroundedJson(prompt, KEY, MODELS, false); } catch (e) { out = null; }
+            if (!out || typeof out !== 'object' || (!out.why_he && !out.move_he)) {
+                out = _reactionFallback(String(d.company || ticker), epsA, epsE, sp, move, news);
+                usedFallback = true;
+            }
             const result = { move_he: fixHebrew(String(out.move_he || '').trim()), why_he: fixHebrew(String(out.why_he || '').trim()), sentiment_he: fixHebrew(String(out.sentiment_he || '').trim()) };
-            _memo.set(memoKey, result);
-            res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+            if (!usedFallback) {
+                _memo.set(memoKey, result); // cache only genuine AI results — a fallback should retry Gemini next time
+                res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+            } else {
+                res.setHeader('Cache-Control', 's-maxage=60'); // short → the next click can reach a recovered Gemini
+            }
             res.status(200).json(result);
         } catch (e) {
             res.setHeader('Cache-Control', 's-maxage=60');
