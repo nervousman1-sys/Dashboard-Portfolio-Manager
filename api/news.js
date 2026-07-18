@@ -283,35 +283,66 @@ function _cleanTweetText(t) {
         .trim();
 }
 
-// Fetch one user's latest tweets from the RapidAPI provider. Defensive parsing so it survives the
-// slightly different response shapes across popular providers (twitter-api45 / Y2S / etc.).
+// Provider-agnostic tweet extractor: recursively walk ANY response and pull tweet-like objects.
+// Handles both FLAT providers (twitter-api45: {timeline:[{tweet_id,text,created_at}]}) and the
+// nested Twitter GraphQL shape (twitter241: instructions→entries→tweet_results→result.legacy).
+function _extractTweetsDeep(root, fallbackUser, limit) {
+    const out = []; const seen = new Set(); const stack = [root]; let guard = 0;
+    while (stack.length && out.length < limit && guard < 40000) {
+        guard++;
+        const node = stack.pop();
+        if (!node || typeof node !== 'object') continue;
+        const legacy = (node.legacy && typeof node.legacy === 'object') ? node.legacy : null;
+        const txt = (legacy && (legacy.full_text || legacy.text)) || node.full_text || node.text || node.content;
+        const created = (legacy && legacy.created_at) || node.created_at || node.date || node.time;
+        const id = (legacy && legacy.id_str) || node.tweet_id || node.id_str || node.rest_id || node.id;
+        if (txt && created && id && !seen.has(String(id))) {
+            seen.add(String(id));
+            let uname = fallbackUser;
+            try {
+                uname = (node.core && node.core.user_results && node.core.user_results.result && node.core.user_results.result.legacy && node.core.user_results.result.legacy.screen_name)
+                    || (legacy && legacy.screen_name) || node.screen_name || (node.author && node.author.screen_name)
+                    || (node.user && (node.user.screen_name || node.user.username)) || fallbackUser;
+            } catch (e) { }
+            let date = null; const d = new Date(created); if (!isNaN(d)) date = d.toISOString();
+            const clean = _cleanTweetText(txt);
+            if (clean && clean.length > 1) out.push({ id: String(id), user: uname, date, text: clean });
+        }
+        for (const k in node) { const v = node[k]; if (v && typeof v === 'object') stack.push(v); }
+    }
+    return out;
+}
+
+// Fetch one user's latest tweets from the RapidAPI provider.
+//   • twitter241-style → two-step: resolve username → rest_id, then /user-tweets?user=<id>.
+//   • generic single-GET providers (twitter-api45, etc.) → RAPIDAPI_TWITTER_PATH ({user} substituted).
+// Both are parsed by _extractTweetsDeep, so the response shape doesn't matter.
 async function _fetchUserTweets(user, host, key, limit) {
-    // Default path targets twitter-api45 (GET /timeline.php?screenname=USER). Override with
-    // RAPIDAPI_TWITTER_PATH if your provider differs — {user} is substituted, else appended.
+    const headers = { 'x-rapidapi-key': key, 'x-rapidapi-host': host, Accept: 'application/json' };
+    const get = async (path) => {
+        try {
+            const r = await fetch(`https://${host}${path}`, { headers });
+            if (!r.ok) { let m = ''; try { const b = await r.json(); m = b && b.message; } catch (e) { } return { ok: false, status: r.status, message: m || ('HTTP ' + r.status) }; }
+            return { ok: true, json: await r.json() };
+        } catch (e) { return { ok: false, status: 0, message: e.message }; }
+    };
+
+    if (/twitter241/i.test(host)) {
+        const u1 = await get(`/user?username=${encodeURIComponent(user)}`);
+        if (!u1.ok) return { items: [], err: { status: u1.status, message: u1.message } };
+        let restId = null;
+        (function find(o) { if (restId || !o || typeof o !== 'object') return; if (o.rest_id && /^\d+$/.test(String(o.rest_id))) { restId = String(o.rest_id); return; } for (const k in o) find(o[k]); })(u1.json);
+        if (!restId) return { items: [], err: { status: 0, message: 'user id not found for @' + user } };
+        const t1 = await get(`/user-tweets?user=${restId}&count=${Math.min(limit * 2, 20)}`);
+        if (!t1.ok) return { items: [], err: { status: t1.status, message: t1.message } };
+        return { items: _extractTweetsDeep(t1.json, user, limit), err: null };
+    }
+
     const tmpl = process.env.RAPIDAPI_TWITTER_PATH || '/timeline.php?screenname={user}';
     const path = tmpl.includes('{user}') ? tmpl.replace('{user}', encodeURIComponent(user)) : tmpl + encodeURIComponent(user);
-    const url = `https://${host}${path}`;
-    let j = null;
-    try {
-        const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host, Accept: 'application/json' } });
-        if (!r.ok) { let msg = ''; try { const b = await r.json(); msg = b && b.message; } catch (e) { } return { items: [], err: { status: r.status, message: msg || ('HTTP ' + r.status) } }; }
-        j = await r.json();
-    } catch (e) { return { items: [], err: { status: 0, message: e.message } }; }
-    // Common array locations across providers:
-    const arr = (j && (j.timeline || j.tweets || j.results || (j.data && (j.data.tweets || j.data)) || (Array.isArray(j) ? j : []))) || [];
-    const out = [];
-    for (const it of (Array.isArray(arr) ? arr : [])) {
-        if (!it || typeof it !== 'object') continue;
-        const src = it.tweet && typeof it.tweet === 'object' ? it.tweet : it;
-        const id = String(src.tweet_id || src.id_str || src.rest_id || src.id || '');
-        const text = _cleanTweetText(src.text || src.full_text || src.content || '');
-        const dateRaw = src.created_at || src.date || src.time || null;
-        let date = null; if (dateRaw) { const d = new Date(dateRaw); if (!isNaN(d)) date = d.toISOString(); }
-        const uname = src.screen_name || (src.author && src.author.screen_name) || (src.user && (src.user.screen_name || src.user.username)) || user;
-        if (id && text && text.length > 1) out.push({ id, user: uname, date, text });
-        if (out.length >= limit) break;
-    }
-    return { items: out, err: null };
+    const r = await get(path);
+    if (!r.ok) return { items: [], err: { status: r.status, message: r.message } };
+    return { items: _extractTweetsDeep(r.json, user, limit), err: null };
 }
 
 module.exports = async (req, res) => {
