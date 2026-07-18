@@ -213,7 +213,9 @@ function _taStrategyCardHtml(rule, summaryHe, source, existing) {
             body = `אזכור בחדשות: <b>${_taEsc(c.keyword || c.subject || '')}</b>`;
         } else if (c.factor === 'ma') {
             const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
-            body = `מחיר${subj} ${opHe[c.operator] || c.operator} ממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`;
+            body = c.operator === 'EQUALS'
+                ? `מחיר${subj} נוגע בממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`
+                : `מחיר${subj} ${opHe[c.operator] || c.operator} ממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`;
         } else {
             body = `${facHe[c.factor] || c.factor}${subj} ${opHe[c.operator] || c.operator} <b>${_taEsc(c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : '')}</b>${c.timeframe ? ` <span class="ta-tf">[${_taEsc(tfHe[c.timeframe] || c.timeframe)}]</span>` : ''}`;
         }
@@ -274,6 +276,11 @@ async function _taEnable() {
         const v = _taNum((document.getElementById('taAmtVal') || {}).value);
         const t = (document.getElementById('taAmtType') || {}).value;
         if (isFinite(v) && v > 0) _taPendingRule.amount = { type: (['CASH_USD', 'SHARES', 'PORTFOLIO_PCT'].includes(t) ? t : 'CASH_USD'), value: v };
+        if (!(_taPendingRule.amount && _taPendingRule.amount.value > 0)) {
+            if (typeof showToast === 'function') showToast('הזן סכום לפעולה (גדול מ-0)', 'error');
+            const el = document.getElementById('taAmtVal'); if (el) el.focus();
+            return;
+        }
     }
     let brokerId = null, portfolioId = null;
     if (isTrade && mode === 'PAPER') {
@@ -360,7 +367,7 @@ function _taStructureHtml(s) {
     const conds = (rule.conditions || []).map(c => {
         let body;
         if (c.factor === 'news') body = `אזכור בחדשות: "${_taEsc(c.keyword || c.subject || '')}"`;
-        else if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; body = `מחיר${c.subject ? ' ' + _taEsc(c.subject) : ''} ${opHe[c.operator] || c.operator} ממוצע ${c.period || 200}${unit}`; }
+        else if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; const op = c.operator === 'EQUALS' ? 'נוגע בממוצע' : (opHe[c.operator] || c.operator) + ' ממוצע'; body = `מחיר${c.subject ? ' ' + _taEsc(c.subject) : ''} ${op} ${c.period || 200}${unit}`; }
         else body = `${facHe[c.factor] || c.factor}${c.subject ? ' ' + _taEsc(c.subject) : ''} ${opHe[c.operator] || c.operator} ${c.threshold != null ? _taEsc(c.threshold) + (c.factor === 'eps_surprise' ? '%' : '') : ''}${c.timeframe && c.factor !== 'ma' ? ' [' + _taEsc(c.timeframe) + ']' : ''}`;
         return `<li>${body}</li>`;
     }).join('');
@@ -404,7 +411,7 @@ function _taRuleSummary(rule) {
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
     const conds = (rule.conditions || []).map(c => {
         if (c.factor === 'news') return `אזכור "${c.keyword || c.subject}"`;
-        if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; return `מחיר${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ממוצע ${c.period || 200}${unit}`.trim(); }
+        if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; const op = c.operator === 'EQUALS' ? 'נוגע בממוצע' : (opHe[c.operator] || '') + ' ממוצע'; return `מחיר${c.subject ? ' ' + c.subject : ''} ${op} ${c.period || 200}${unit}`.trim(); }
         return `${facHe[c.factor] || c.factor}${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ${c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : ''}`.trim();
     });
     const act = rule.action === 'BUY' ? 'קנייה' : rule.action === 'SELL' ? 'מכירה' : 'התראה';
@@ -654,7 +661,10 @@ async function _taEvalCondition(c, rule) {
             if (ma == null || price == null) return { met: false, value: 'אין ממוצע' };
             const distPct = ((price - ma) / ma) * 100;
             const unit = tf === 'weekly' ? ' שבועות' : tf === 'daily' ? ' ימים' : '';
-            return { met: cmp(price, ma), value: `${sym} $${(+price).toFixed(2)} מול ממוצע ${period}${unit} $${(+ma).toFixed(2)} (${distPct >= 0 ? '+' : ''}${distPct.toFixed(1)}%)` };
+            // "Touches" the MA (operator EQUALS): met when price is within a small band of the average.
+            const met = c.operator === 'EQUALS' ? Math.abs(distPct) <= 2.5 : cmp(price, ma);
+            const near = c.operator === 'EQUALS' ? (Math.abs(distPct) <= 2.5 ? ' — נוגע' : ' — לא נוגע') : '';
+            return { met, value: `${sym} $${(+price).toFixed(2)} מול ממוצע ${period}${unit} $${(+ma).toFixed(2)} (${distPct >= 0 ? '+' : ''}${distPct.toFixed(1)}%)${near}` };
         }
         if (c.factor === 'eps_surprise' && c.threshold != null) {
             const t = sym || rule.target_asset; if (!t) return { met: false, value: 'נדרש טיקר לדוח' };

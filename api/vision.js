@@ -221,8 +221,10 @@ function _strategyPrompt(text) {
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה.',
         'דוגמאות:',
+        'קלט: "אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו, מצב עולמי ופריצות טכנולוגיות?" → {"advice": true}',
+        'קלט: "קנה לי את מניית ORCL כשה-RSI השבועי מתחת ל-30 וגם מחיר המניה נוגע בממוצע 300 השבועות" → {"name":"קניית ORCL על RSI וממוצע","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"ORCL","keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"},{"factor":"ma","subject":"ORCL","keyword":null,"operator":"EQUALS","threshold":null,"period":300,"timeframe":"weekly"}],"action":"BUY","target_asset":"ORCL","amount":{"type":"CASH_USD","value":0},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"period":null,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
@@ -282,41 +284,59 @@ function _normalizeStrategy(r) {
 // Deterministic heuristic parser — used when Gemini is unavailable (429). Best-effort; the rule
 // is flagged needs_review so the user can confirm/adjust in the Strategy Card.
 function _strategyFallback(text) {
-    const t = ' ' + String(text || '') + ' ';
-    const tickers = (t.match(/\b(USO|NVDA|SPY|QQQ|GLD|TLT|IEF|AAPL|MSFT|AMD|META|TSLA|AMZN|GOOGL|NFLX|MSTR|COIN)\b/gi) || []).map(s => s.toUpperCase());
-    // Resolve any named entity (ביטקוין/זהב/נפט…) that appears in the text to its tradeable ticker.
+    const raw = String(text || '');
+    const t = ' ' + raw + ' ';
+    const low = t.toLowerCase();
+    // ── Ticker extraction: named entities (ביטקוין→BTC-USD) + a known list + ANY standalone
+    //    uppercase 2-5 letter token that isn't a reserved word (so ORCL/INTC/etc. are caught too).
+    const RESERVED = new Set(['RSI', 'EPS', 'MA', 'SMA', 'EMA', 'USD', 'ILS', 'AI', 'ETF', 'CEO', 'IPO', 'GDP', 'CPI', 'FED', 'ECB', 'BOJ', 'OPEC', 'ALL', 'ANY', 'AND', 'OR', 'BUY', 'SELL', 'USA', 'UK', 'EU', 'PE', 'PM', 'ATH', 'YOY', 'QOQ']);
+    const known = (t.match(/\b(USO|NVDA|SPY|QQQ|DIA|GLD|SLV|TLT|IEF|AAPL|MSFT|AMD|META|TSLA|AMZN|GOOGL|GOOG|NFLX|MSTR|COIN|ORCL|INTC|CRM|ADBE|PYPL|BABA|BA|LMT|XOM|CVX|JPM|V|MA)\b/g) || []);
+    const generic = (raw.match(/\b[A-Z]{2,5}\b/g) || []).filter(s => !RESERVED.has(s));
     let entityTicker = null;
-    for (const k of Object.keys(_STRAT_TICKERS)) { if (t.toLowerCase().includes(k)) { entityTicker = _STRAT_TICKERS[k]; break; } }
+    for (const k of Object.keys(_STRAT_TICKERS)) { if (low.includes(k)) { entityTicker = _STRAT_TICKERS[k]; break; } }
+    const tickers = [...new Set([...known, ...generic])];
+    // subject of a MONITORED condition prefers a named entity (ביטקוין→BTC-USD); the TRADED
+    // target prefers the explicit stock ticker — so "monitor BTC-USD, trade MSTR" stays correct.
+    const primary = entityTicker || tickers[0] || null;
+    const target = tickers[0] || entityTicker || null;
+    // Local text window around the first match of `re` (so an operator belongs to ITS OWN condition,
+    // not another clause — fixes "RSI מתחת" leaking into the MA operator).
+    const around = (re, span = 24) => { const m = t.match(re); if (!m) return ''; const i = m.index; return t.slice(Math.max(0, i - span), i + m[0].length + span); };
+    const rsiOp = (w) => /(?:מעל|above|over|גדול)/i.test(w) ? 'ABOVE' : 'BELOW';
+    const maOp = (w) => /(?:נוג[עת]|נגע|touch|tests?|בדיוק על|על הממוצע|at the)/i.test(w) ? 'EQUALS'
+        : /(?:חוצה\s*מעלה|crosses?\s*above|breaks?\s*above|פורץ)/i.test(w) ? 'CROSSES_ABOVE'
+        : /(?:חוצה\s*מטה|crosses?\s*below|breaks?\s*below|שובר)/i.test(w) ? 'CROSSES_BELOW'
+        : /(?:מעל|above|over)/i.test(w) ? 'ABOVE' : /(?:מתחת|below|under)/i.test(w) ? 'BELOW' : 'EQUALS';
+    const tfOf = (w) => /(?:שבוע|weekly|1w)/i.test(w) ? 'weekly' : (w.match(/(\d+)\s*(?:h|hour|שע)/i) ? (w.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : (/(?:יומי|daily|1d)/i.test(w) ? 'daily' : null));
     const conditions = [];
-    let mPrice = t.match(/(?:מתחת|below|under|קטן).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i) || t.match(/\$\s*(\d+(?:\.\d+)?)/);
-    let mAbovePrice = t.match(/(?:מעל|above|over|גדול).{0,12}?\$?\s*(\d+(?:\.\d+)?)/i);
-    const mRsi = t.match(/rsi.{0,18}?(\d{1,3})|(\d{1,3}).{0,10}?rsi/i);
-    const mEps = t.match(/(?:eps|רווח|הפתעה).{0,20}?(\d{1,3})\s*%|(\d{1,3})\s*%.{0,14}?(?:eps|רווח|הפתעה)/i);
-    // Moving average: "ממוצע 200", "ממוצע נע 200", "200 שבועות", "MA200", "200-day MA"…
-    const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day|תקופ|period)/i);
-    if (mMa) {
-        const weekly = /שבוע|week/i.test(t);
-        const opMa = /(?:חוצה\s*מעלה|crosses?\s*above|breaks?\s*above)/i.test(t) ? 'CROSSES_ABOVE'
-            : /(?:חוצה\s*מטה|crosses?\s*below|breaks?\s*below)/i.test(t) ? 'CROSSES_BELOW'
-            : /מעל|above|over/i.test(t) ? 'ABOVE' : /מתחת|below|under/i.test(t) ? 'BELOW' : 'CROSSES_ABOVE';
-        conditions.push({ factor: 'ma', subject: entityTicker || tickers[0] || null, keyword: null, operator: opMa, threshold: null, period: +mMa[1], timeframe: weekly ? 'weekly' : 'daily' });
-    }
-    if (mRsi) conditions.push({ factor: 'rsi', subject: entityTicker || tickers[0] || null, keyword: null, operator: /מעל|above|over/i.test(t) ? 'ABOVE' : 'BELOW', threshold: +(mRsi[1] || mRsi[2]), timeframe: (t.match(/(\d+)\s*(?:h|hour|שע)/i) ? (t.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : null) });
+    // RSI (operator + timeframe from its LOCAL window)
+    const mRsi = t.match(/rsi[^\d]{0,18}(\d{1,3})|(\d{1,3})[^\d]{0,10}rsi/i);
+    if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +(mRsi[1] || mRsi[2]), timeframe: tfOf(w) }); }
+    // Moving average ("ממוצע 300", "300 שבועות", "MA200"…) — operator (incl. "touch"→EQUALS) from its window
+    const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day)/i);
+    if (mMa) { const w = around(/ממוצע|moving\s*average|\bma\b|\bsma\b/i, 28) || t; const weekly = /שבוע|week/i.test(w) || (!/יום|day/i.test(w) && /שבוע|week/i.test(t)); conditions.push({ factor: 'ma', subject: primary, keyword: null, operator: maOp(w), threshold: null, period: +mMa[1], timeframe: weekly ? 'weekly' : 'daily' }); }
+    const mEps = t.match(/(?:eps|רווח|הפתעה)[^\d]{0,20}(\d{1,3})\s*%|(\d{1,3})\s*%[^\d]{0,14}(?:eps|רווח|הפתעה)/i);
     if (mEps) conditions.push({ factor: 'eps_surprise', subject: null, keyword: null, operator: 'ABOVE', threshold: +(mEps[1] || mEps[2]), timeframe: null });
-    if (mPrice && !mRsi && !mEps && !mMa) conditions.push({ factor: 'price', subject: entityTicker || tickers[0] || null, keyword: null, operator: mAbovePrice ? 'ABOVE' : 'BELOW', threshold: +(mAbovePrice ? mAbovePrice[1] : mPrice[1]), timeframe: null });
+    // Price level (only when no rsi/ma/eps condition already covers the number)
+    const mBelow = t.match(/(?:מתחת|below|under|קטן)[^\d$]{0,12}\$?\s*(\d+(?:\.\d+)?)/i);
+    const mAbove = t.match(/(?:מעל|above|over|גדול)[^\d$]{0,12}\$?\s*(\d+(?:\.\d+)?)/i);
+    const mDollar = t.match(/\$\s*(\d+(?:\.\d+)?)/);
+    if (!mRsi && !mMa && !mEps && (mBelow || mAbove || mDollar)) conditions.push({ factor: 'price', subject: primary, keyword: null, operator: mAbove ? 'ABOVE' : 'BELOW', threshold: +((mAbove || mBelow || mDollar)[1]), timeframe: null });
     // \b doesn't work around Hebrew — match the words directly (Hebrew has no ASCII word boundary).
     const kw = (t.match(/(Iran|Trump|Israel|Fed|Powell|OPEC|איראן|טראמפ|ישראל|הפד|אופ"ק|נפט|ריבית)/gi) || []);
     if (kw.length) conditions.push({ factor: 'news', subject: kw[0], keyword: [...new Set(kw.map(k => k.trim()))].join(','), operator: 'CONTAINS', threshold: null, timeframe: null });
     if (!conditions.length) return null;
     const action = /(sell|מכור|מכיר|למכור)/i.test(t) ? 'SELL' : /(buy|תקנה|לקנות|קנה|קניי?[הת]|קניה)/i.test(t) ? 'BUY' : 'ALERT_ONLY';
+    // Logic: explicit "או/or" → ANY; otherwise multiple conditions are treated as ALL (compound "and").
+    const logic = (/\sאו\s/.test(t) || /[^א-ת\w]or[^א-ת\w]/i.test(t)) ? 'ANY' : (conditions.length > 1 ? 'ALL' : 'ANY');
     let amount = { type: 'CASH_USD', value: 0 };
-    const mCash = t.match(/\$?\s*(\d+(?:,\d{3})*)\s*(?:דולר|usd|\$)/i);
-    const mShares = t.match(/(\d+)\s*(?:מניות|מניה|shares?)/i);
+    const mCash = t.match(/\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:דולר|usd|\$)/i);
+    const mShares = t.match(/(\d+(?:,\d{3})*)\s*(?:מניות|מניה|shares?)/i);
     const mPct = t.match(/(\d{1,3})\s*%/);
-    if (mShares) amount = { type: 'SHARES', value: +mShares[1] };
+    if (mShares) amount = { type: 'SHARES', value: +mShares[1].replace(/,/g, '') };
     else if (mPct && action === 'SELL') amount = { type: 'PORTFOLIO_PCT', value: +mPct[1] };
     else if (mCash) amount = { type: 'CASH_USD', value: +mCash[1].replace(/,/g, '') };
-    const r = _normalizeStrategy({ name: 'אסטרטגיה (טיוטה)', trigger_type: null, logic: 'ANY', conditions, action, target_asset: tickers[0] || null, amount, risk_limits: {} });
+    const r = _normalizeStrategy({ name: 'אסטרטגיה (טיוטה)', trigger_type: null, logic, conditions, action, target_asset: target, amount, risk_limits: {} });
     if (r) r._src = 'fallback';
     return r;
 }
@@ -332,8 +352,8 @@ function _strategySummaryHe(r) {
         if (c.factor === 'ma') {
             const per = c.period || 200;
             const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
-            const op = opHe[c.operator] || c.operator;
-            return `מחיר${subj} ${op} ממוצע ${per}${unit}`;
+            if (c.operator === 'EQUALS') return `מחיר${subj} נוגע בממוצע ${per}${unit}`;
+            return `מחיר${subj} ${opHe[c.operator] || c.operator} ממוצע ${per}${unit}`;
         }
         const th = c.threshold != null ? ` ${opHe[c.operator] || c.operator} ${c.threshold}${c.factor === 'eps_surprise' ? '%' : ''}` : '';
         const tf = c.timeframe ? ` [${tfHe[c.timeframe] || c.timeframe}]` : '';
@@ -382,6 +402,30 @@ function _normalizeAdvice(r) {
         ideas,
         suggested_strategy_he: (r.suggested_strategy_he && r.suggested_strategy_he !== 'null') ? String(r.suggested_strategy_he).slice(0, 200) : null,
     };
+}
+
+// Optional RELIABLE-LLM fallback via Vercel AI Gateway (OpenAI-compatible). Used when the free-tier
+// Gemini key is exhausted (429). No-op unless AI_GATEWAY_API_KEY is set — then complex parsing AND
+// open-ended advice work reliably (default model configurable via AI_GATEWAY_MODEL).
+async function _aiGatewayJson(prompt, temperature, maxTokens) {
+    const key = process.env.AI_GATEWAY_API_KEY;
+    if (!key) return null;
+    const model = process.env.AI_GATEWAY_MODEL || 'anthropic/claude-sonnet-4.6';
+    try {
+        const r = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, temperature: temperature == null ? 0.2 : temperature, max_tokens: maxTokens || 1200, messages: [{ role: 'user', content: prompt + '\n\nהחזר אך ורק אובייקט JSON תקין, ללא טקסט נוסף.' }] }),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        let txt = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+        if (!txt) return null;
+        txt = String(txt).replace(/```json|```/g, '').trim();
+        const s = txt.indexOf('{'), e = txt.lastIndexOf('}');
+        if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
+        return JSON.parse(txt);
+    } catch (err) { return null; }
 }
 
 function setCors(res) {
@@ -622,15 +666,18 @@ module.exports = async (req, res) => {
             if (text.length > 600) { res.status(400).json({ error: 'text_too_long' }); return; }
             const memoKey = `strategy:${text.slice(0, 180)}`;
             if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=3600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
-            let rule = null;
-            try { rule = _normalizeStrategy(await _geminiGroundedJson(_strategyPrompt(text), KEY, MODELS, false, 0.1, 1200)); } catch (e) { rule = null; }
+            let rule = null, wantAdvice = false;
+            // The model classifies: a concrete rule → JSON rule; an open-ended question → {"advice":true}.
+            try { const g = await _geminiGroundedJson(_strategyPrompt(text), KEY, MODELS, false, 0.1, 1200); if (g && g.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g); } catch (e) { rule = null; }
+            if (!rule && !wantAdvice) { try { const g2 = await _aiGatewayJson(_strategyPrompt(text), 0.1, 1300); if (g2 && g2.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g2); } catch (e) { rule = null; } }
             let source = 'ai';
-            if (!rule) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
+            if (!rule && !wantAdvice) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
             if (rule && rule._src) { source = rule._src; delete rule._src; }
             if (!rule) {
                 // Not a concrete rule → treat as an open-ended market question and answer as an advisor.
                 let advice = null;
                 try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text), KEY, MODELS, false, 0.55, 1500)); } catch (e) { advice = null; }
+                if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text), 0.55, 1600)); } catch (e) { advice = null; } }
                 if (advice) {
                     const aResult = { advice, source: 'ai' };
                     _memo.set(memoKey, aResult);
