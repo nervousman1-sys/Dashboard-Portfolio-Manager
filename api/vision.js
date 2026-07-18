@@ -324,9 +324,10 @@ function _strategyFallback(text) {
         : /(?:מעל|above|over)/i.test(w) ? 'ABOVE' : /(?:מתחת|below|under)/i.test(w) ? 'BELOW' : 'EQUALS';
     const tfOf = (w) => /(?:שבוע|weekly|1w)/i.test(w) ? 'weekly' : (w.match(/(\d+)\s*(?:h|hour|שע)/i) ? (w.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : (/(?:יומי|daily|1d)/i.test(w) ? 'daily' : null));
     const conditions = [];
-    // RSI (operator + timeframe from its LOCAL window)
+    // RSI (operator + timeframe from its LOCAL window; timeframe also checked over the WHOLE text so
+    // "שבועי"/"weekly" is captured even when it sits a few words away from "RSI").
     const mRsi = t.match(/rsi[^\d]{0,30}(\d{1,3})|(\d{1,3})[^\d]{0,12}rsi/i);
-    if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +(mRsi[1] || mRsi[2]), timeframe: tfOf(w) }); }
+    if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +(mRsi[1] || mRsi[2]), timeframe: tfOf(w) || tfOf(t) }); }
     // Moving average ("ממוצע 300", "300 שבועות", "MA200"…) — operator (incl. "touch"→EQUALS) from its window
     const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day)/i);
     if (mMa) { const w = around(/ממוצע|moving\s*average|\bma\b|\bsma\b/i, 28) || t; const weekly = /שבוע|week/i.test(w) || (!/יום|day/i.test(w) && /שבוע|week/i.test(t)); conditions.push({ factor: 'ma', subject: primary, keyword: null, operator: maOp(w), threshold: null, period: +mMa[1], timeframe: weekly ? 'weekly' : 'daily' }); }
@@ -368,10 +369,12 @@ function _strategyFallback(text) {
         const perRe = /(?:לכל\s+מני[הת]|כל\s+מני[הת]|per\s*stock|each|לכל\s+אחת)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$|₪)?/i;
         const totRe = /(?:כולל|סה["׳]?כ|total|תקציב)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$|₪)?/i;
         let per = amtNear(perRe), tot = amtNear(totRe);
-        // All money amounts in the text (require a currency/thousand marker → excludes RSI numbers).
-        const money = [...t.matchAll(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$)/gi)]
-            .map(m => { let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; }).filter(v => v >= 100);
-        const uniq = [...new Set(money)].sort((a, b) => a - b);
+        // All money amounts: "N אלף/k" (thousand → ×1000) OR "$N" / "N דולר/usd". A bare RSI number
+        // like "30" (no thousand/currency marker) is excluded. "10 אלף לכל מניה" IS captured (via אלף).
+        const money = [];
+        for (const m of t.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:אלף|k|thousand)/gi)) money.push(parseFloat(String(m[1]).replace(/,/g, '')) * 1000);
+        for (const m of t.matchAll(/\$\s*(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s*(?:דולר|usd)/gi)) { const raw = m[1] || m[2]; if (raw) money.push(parseFloat(String(raw).replace(/,/g, ''))); }
+        const uniq = [...new Set(money.filter(v => v >= 100))].sort((a, b) => a - b);
         const equalSplit = /(חלוק[הת]\s*שוו|חלק\s*שוו|מחולק\s*שוו|בחלוקה\s*שוו|שווה\s*בין|split\s*equal|equal\s*split|divide\s*equally)/i.test(t);
         if (equalSplit && !per) {           // equal split: the amount is the TOTAL budget, no per-stock
             if (!tot) tot = uniq.length ? uniq[uniq.length - 1] : 0;

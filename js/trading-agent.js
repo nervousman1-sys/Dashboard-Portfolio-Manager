@@ -303,6 +303,16 @@ function _taScrMatchStock(row, rule) {
     const conds = rule.conditions || [];
     return rule.logic === 'ALL' ? conds.every(c => _taScrRowMatch(row, c)) : conds.some(c => _taScrRowMatch(row, c));
 }
+// The metric text for the row — MUST reflect the condition's actual timeframe (weekly→rsiW, daily→rsiD),
+// so a stock that matched on daily RSI never displays its (different) weekly value.
+function _taScrMetric(row, rule) {
+    const c = (rule.conditions || []).find(x => ['rsi', 'ma', 'price'].includes(x.factor)) || (rule.conditions || [])[0] || {};
+    if (!row) return '';
+    if (c.factor === 'rsi') { const wk = c.timeframe === 'weekly'; const v = wk ? row.rsiW : row.rsiD; return `RSI ${wk ? 'שבועי' : 'יומי'} ${v != null ? (+v).toFixed(1) : '—'}`; }
+    if (c.factor === 'ma') { const k = (c.timeframe === 'weekly' ? 'w' : 'd') + (c.period || 200); const dist = (row.ma || {})[k + 'dist']; return `מרחק מממוצע ${c.period || 200} ${dist != null ? (dist >= 0 ? '+' : '') + (+dist).toFixed(1) + '%' : '—'}`; }
+    if (c.factor === 'price') { return `מחיר $${row.price != null ? (+row.price).toFixed(2) : '—'}`; }
+    return '';
+}
 function _taScrModeChange() {
     const mode = (document.getElementById('taScrMode') || {}).value;
     const perWrap = document.getElementById('taScrPerWrap');
@@ -341,8 +351,7 @@ async function _taRunScreenerPreview() {
     }
     const totalAlloc = allocated.reduce((s, m) => s + (m.amt || 0), 0);
     const rows = allocated.map(m => {
-        const rsiw = (m.row && m.row.rsiW != null) ? m.row.rsiW.toFixed(1) : '—';
-        return `<div class="ta-scr-row"><span class="ta-scr-tk">${_taEsc(m.ticker)}</span><span class="ta-scr-metric">RSI שבועי ${rsiw}</span><span class="ta-scr-amt">$${_taFmtNum(m.amt)}</span></div>`;
+        return `<div class="ta-scr-row"><span class="ta-scr-tk">${_taEsc(m.ticker)}</span><span class="ta-scr-metric">${_taEsc(_taScrMetric(m.row, rule))}</span><span class="ta-scr-amt">$${_taFmtNum(m.amt)}</span></div>`;
     }).join('');
     el.innerHTML = `<div class="ta-scr-prev-head">חלוקה צפויה עכשיו — ${allocated.length} מניות</div>${note}<div class="ta-scr-list">${rows}</div><div class="ta-scr-total">סה"כ מוקצב עכשיו: <b>$${_taFmtNum(totalAlloc)}</b>${budget > 0 ? ` מתוך תקציב $${_taFmtNum(budget)}` : ''}</div>`;
 }
