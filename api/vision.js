@@ -208,7 +208,32 @@ const _STRAT_ACTIONS = ['BUY', 'SELL', 'ALERT_ONLY'];
 const _STRAT_OPS = ['ABOVE', 'BELOW', 'CROSSES_ABOVE', 'CROSSES_BELOW', 'GTE', 'LTE', 'EQUALS', 'CONTAINS'];
 const _STRAT_AMT = ['SHARES', 'CASH_USD', 'PORTFOLIO_PCT'];
 
-function _strategyPrompt(text) {
+// Turn the client's compact platform snapshot into a short Hebrew context block for the LLM, so the
+// agent's chat reasons with the SAME real data the user sees (reports, sectors, catalysts, tweets,
+// liquidity engine, macro, technicals, and the user's own portfolios). Everything is size-capped.
+function _ctxBlockHe(context) {
+    if (!context || typeof context !== 'object') return '';
+    const L = [];
+    const arr = (x) => Array.isArray(x) ? x : [];
+    try {
+        if (arr(context.portfolios).length) L.push('התיקים של המשתמש: ' + context.portfolios.map(p => `«${p.name}» (${arr(p.holdings).join(', ') || 'ריק'})`).join(' · '));
+        if (arr(context.holdings_reports).length) L.push('ציוני דוחות לאחזקות: ' + context.holdings_reports.map(r => `${r.t} ${r.score}${r.up ? '↑' : ''}`).join(', '));
+        if (arr(context.technicals).length) L.push('טכני חי לאחזקות (RSI יומי/שבועי, מחיר): ' + context.technicals.map(t => `${t.t} ${t.rsiD ?? '—'}/${t.rsiW ?? '—'} $${t.px ?? '—'}`).join(' · '));
+        if (arr(context.top_reports).length) L.push('חברות מובילות לפי דוח (score): ' + context.top_reports.map(r => `${r.t} ${r.score}${r.up ? '↑' : ''}`).join(', '));
+        if (arr(context.sectors).length) L.push('חוזק סקטורים (ממוצע score): ' + context.sectors.map(s => `${s.sector} ${s.avg}`).join(' · '));
+        if (arr(context.liquidity).length) L.push('מנוע נזילות (LHE) — הטיה/משטר/קונפלואנס: ' + context.liquidity.map(r => `${r.t} ${r.bias}/${r.regime}/${r.conf}`).join(' · '));
+        if (arr(context.catalysts).length) L.push('קטליסטים (Early-Alpha): ' + context.catalysts.map(c => `[${c.sector}${c.tickers && c.tickers.length ? ' · ' + c.tickers.join(',') : ''}] ${c.thesis}`).join(' | '));
+        if (arr(context.macro).length) L.push('אינדיקטורים מאקרו (ארה"ב): ' + context.macro.map(m => `${m.k}=${m.v}`).join(', '));
+        if (arr(context.macro_news).length) L.push('כותרות מאקרו/גאופוליטיקה:\n- ' + context.macro_news.map(h => String(h).slice(0, 140)).join('\n- '));
+        if (arr(context.tweets).length) L.push('ציוצים אחרונים ממעקב טוויטר: ' + context.tweets.map(t => `@${t.u}: ${t.txt}`).join(' | '));
+    } catch (e) { }
+    if (!L.length) return '';
+    let block = L.join('\n');
+    if (block.length > 5000) block = block.slice(0, 5000);
+    return '\n\n== נתוני הפלטפורמה (אמת, עדכני — השתמש בהם כשהם רלוונטיים לבקשה; אל תמציא נתונים שאינם כאן) ==\n' + block + '\n== סוף נתוני הפלטפורמה ==\n';
+}
+
+function _strategyPrompt(text, ctxBlock) {
     return [
         'אתה מנוע פענוח אסטרטגיות מסחר. קבל הוראת מסחר בשפה טבעית (עברית או אנגלית) והחזר אך ורק אובייקט JSON תקין (ללא ``` וללא טקסט נוסף) לפי הסכמה הבאה:',
         '{',
@@ -231,6 +256,8 @@ function _strategyPrompt(text) {
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"period":null,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה 200 מניות MSTR אם הביטקוין חוצה מעלה את ממוצע 200 השבועות" → {"name":"MSTR על ממוצע 200 שבועות של ביטקוין","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"ma","subject":"BTC-USD","keyword":null,"operator":"CROSSES_ABOVE","threshold":null,"period":200,"timeframe":"weekly"}],"action":"BUY","target_asset":"MSTR","amount":{"type":"SHARES","value":200},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        '(14) כשהמשתמש מתייחס לנתוני הפלטפורמה — "האחזקה הכי חלשה שלי", "המניה עם הדוח הכי טוב", "לפי מנוע הנזילות", "הסקטור החזק ביותר" — היעזר בבלוק "נתוני הפלטפורמה" שבהמשך כדי לזהות את הטיקר/הערך המדויק, ובנה את האסטרטגיה עליו.',
+        ctxBlock || '',
         '',
         `ההוראה לפענוח: "${text}"`,
     ].join('\n');
@@ -416,7 +443,11 @@ function _strategyFallback(text) {
             if (action === 'ALERT_ONLY') action = 'BUY';
         }
     }
-    const r = _normalizeStrategy({ name: screener ? 'סורק מדד' : 'אסטרטגיה (טיוטה)', trigger_type: null, logic, conditions, action, target_asset: target2, amount, screener, risk_limits: {} });
+    // A real, clean name (no "(טיוטה)") — the draft state is conveyed by the card chip, not the name.
+    const actNameHe = action === 'BUY' ? 'קנייה' : action === 'SELL' ? 'מכירה' : 'התראה';
+    const nameSubj = target2 || (conditions.find(c => c.subject) || {}).subject || null;
+    const autoName = screener ? 'סורק מדד' : (nameSubj ? `${actNameHe} ${nameSubj}` : `${actNameHe} — אסטרטגיה`);
+    const r = _normalizeStrategy({ name: autoName, trigger_type: null, logic, conditions, action, target_asset: target2, amount, screener, risk_limits: {} });
     if (r) r._src = 'fallback';
     return r;
 }
@@ -454,20 +485,21 @@ function _strategySummaryHe(r) {
 // ── Market-advisor path — for OPEN-ENDED requests that aren't a concrete rule
 // ("bring me relevant stocks for the coming period based on macro/geo/tech"). Returns a
 // written analysis + real tickers as ideas. Framed as AI opinion, never fabricated data.
-function _advicePrompt(text, headlines) {
+function _advicePrompt(text, headlines, ctxBlock) {
     const ctx = (Array.isArray(headlines) && headlines.length)
         ? '\nכותרות שוק עדכניות (למידע בלבד, התייחס אליהן אם רלוונטי):\n- ' + headlines.slice(0, 8).map(h => String(h).slice(0, 140)).join('\n- ')
         : '';
     return [
-        'אתה אנליסט שווקים בכיר. המשתמש מבקש רעיונות השקעה או שואל שאלת שוק פתוחה. החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף):',
+        'אתה אנליסט שווקים בכיר בפלטפורמת Finextium. המשתמש מבקש רעיונות השקעה או שואל שאלת שוק פתוחה. יש לך גישה לנתוני אמת של הפלטפורמה (דוחות פונדמנטליים, חוזק סקטורים, קטליסטים, מנוע נזילות, מאקרו, טכני חי, והתיקים של המשתמש). בסס את הניתוח על נתונים אלה כשהם רלוונטיים, וציין מהם. החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף):',
         '{',
         '  "title": "כותרת קצרה בעברית",',
         '  "answer_he": "ניתוח מקצועי בעברית, 2-4 פסקאות, המשלב לפי הצורך מאקרו-כלכלה, מצב גאופוליטי עולמי ופריצות דרך טכנולוגיות. הפרד פסקאות בשורה ריקה (\\n\\n).",',
         '  "ideas": [ { "ticker": "SYMBOL", "name": "שם החברה", "why": "משפט קצר בעברית — מדוע רלוונטי לתקופה הקרובה" } ],',
         '  "suggested_strategy_he": "משפט אחד המתאר אסטרטגיה אוטומטית קונקרטית שאפשר להפעיל (טריגר→פעולה→נכס), או null"',
         '}',
-        'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים הנסחרים בבורסה (למשל NVDA, ASML, LMT). (2) התבסס על הידע העדכני שלך והכותרות; אל תמציא מספרים ספציפיים (מחירים/יעדי מחיר) — דבר במונחים איכותיים. (3) עברית מקצועית וברורה. (4) אם השאלה כללית, בחר את הפרשנות הסבירה ביותר וספק ערך אמיתי.',
+        'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים הנסחרים בבורסה (למשל NVDA, ASML, LMT) — העדף מניות שעולות מנתוני הפלטפורמה (דוח חזק, סקטור חזק, סיגנל נזילות חיובי, קטליסט) כשרלוונטי. (2) התבסס על נתוני הפלטפורמה, הידע העדכני שלך והכותרות; אל תמציא מספרים ספציפיים (מחירים/יעדי מחיר) שאינם בנתונים — דבר במונחים איכותיים. (3) עברית מקצועית וברורה, והתייחס במפורש לנתוני הפלטפורמה כשאתה מסתמך עליהם (למשל "לפי מנוע הנזילות", "הדוח מציג score גבוה"). (4) אם השאלה נוגעת לתיק/לאחזקות של המשתמש — התבסס על התיקים והטכני החי שבנתונים. (5) אם השאלה כללית, בחר את הפרשנות הסבירה ביותר וספק ערך אמיתי.',
         ctx,
+        ctxBlock || '',
         '',
         'בקשת המשתמש: ' + JSON.stringify(String(text || '').slice(0, 600)),
     ].join('\n');
@@ -749,24 +781,33 @@ module.exports = async (req, res) => {
             const text = String(d.text || '').trim();
             if (!text) { res.status(400).json({ error: 'text_required' }); return; }
             if (text.length > 600) { res.status(400).json({ error: 'text_too_long' }); return; }
-            const memoKey = `strategy:${text.slice(0, 180)}`;
-            if (_memo.has(memoKey)) { res.setHeader('Cache-Control', 's-maxage=3600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
+            // Real-data platform context from the client (portfolios, reports, sectors, catalysts,
+            // tweets, LHE, macro, technicals) → a compact Hebrew block grounding the LLM.
+            const ctxBlock = _ctxBlockHe(d.context);
+            const headlines = (d.context && Array.isArray(d.context.macro_news)) ? d.context.macro_news : [];
+            // The memo is shared across warm invocations (⇒ across users). A context-grounded answer is
+            // PERSONAL (it embeds the user's portfolio/holdings), so key it on a hash of the context to
+            // prevent serving one user's grounded answer to another. Grounded answers cache short.
+            let _h = 5381; for (let i = 0; i < ctxBlock.length; i++) _h = ((_h << 5) + _h + ctxBlock.charCodeAt(i)) | 0;
+            const memoKey = `strategy:${ctxBlock ? 'c' + (_h >>> 0).toString(36) + ':' : 'c0:'}${text.slice(0, 180)}`;
+            if (_memo.has(memoKey)) { res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
             let rule = null, wantAdvice = false;
             // The model classifies: a concrete rule → JSON rule; an open-ended question → {"advice":true}.
-            try { const g = await _geminiGroundedJson(_strategyPrompt(text), KEY, MODELS, false, 0.1, 1200); if (g && g.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g); } catch (e) { rule = null; }
-            if (!rule && !wantAdvice) { try { const g2 = await _aiGatewayJson(_strategyPrompt(text), 0.1, 1300); if (g2 && g2.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g2); } catch (e) { rule = null; } }
+            try { const g = await _geminiGroundedJson(_strategyPrompt(text, ctxBlock), KEY, MODELS, false, 0.1, 1200); if (g && g.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g); } catch (e) { rule = null; }
+            if (!rule && !wantAdvice) { try { const g2 = await _aiGatewayJson(_strategyPrompt(text, ctxBlock), 0.1, 1300); if (g2 && g2.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g2); } catch (e) { rule = null; } }
             let source = 'ai';
             if (!rule && !wantAdvice) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
             if (rule && rule._src) { source = rule._src; delete rule._src; }
             if (!rule) {
-                // Not a concrete rule → treat as an open-ended market question and answer as an advisor.
+                // Not a concrete rule → treat as an open-ended market question and answer as an advisor,
+                // grounded in the platform context.
                 let advice = null;
-                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text), KEY, MODELS, false, 0.55, 1500)); } catch (e) { advice = null; }
-                if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text), 0.55, 1600)); } catch (e) { advice = null; } }
+                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock), KEY, MODELS, false, 0.55, 1500)); } catch (e) { advice = null; }
+                if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text, headlines, ctxBlock), 0.55, 1600)); } catch (e) { advice = null; } }
                 if (advice) {
                     const aResult = { advice, source: 'ai' };
                     _memo.set(memoKey, aResult);
-                    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+                    res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=3600, stale-while-revalidate=86400');
                     res.status(200).json(aResult); return;
                 }
                 res.setHeader('Cache-Control', 's-maxage=60');
@@ -775,7 +816,7 @@ module.exports = async (req, res) => {
             }
             const result = { rule, summary_he: _strategySummaryHe(rule), source };
             _memo.set(memoKey, result);
-            res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+            res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=3600, stale-while-revalidate=86400');
             res.status(200).json(result);
         } catch (e) {
             res.setHeader('Cache-Control', 's-maxage=60');

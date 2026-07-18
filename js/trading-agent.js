@@ -96,7 +96,8 @@ function _taFmtAmtInput(el) {
 const _TA_EXAMPLES = [
     'אם הנפט יורד מתחת ל-$70 או שיש אזכור של איראן/טראמפ בחדשות, תקנה USO ב-500 דולר',
     'מכור 50% מהאחזקה ב-NVDA אם ה-RSI עולה מעל 80',
-    'אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו-כלכלה, מצב עולמי ופריצות דרך טכנולוגיות?',
+    'לפי הדוחות, הסקטורים, מנוע הנזילות והמאקרו בפלטפורמה — אילו מניות הכי רלוונטיות עכשיו?',
+    'מה מצב האחזקות שלי בתיק לפי הטכני והדוחות?',
 ];
 
 // ── Routed page (mirrors the correlation/stress-test page pattern) ──
@@ -118,6 +119,7 @@ function openTradingAgentPage() {
     window._taSrvTimer = setInterval(_taLoadServerStatus, 60000);
     _taLoadBrokers();
     _taLoadStrategies();
+    _taGatherContext().catch(() => { }); // warm the platform-data cache so the first ask is instant
     window.scrollTo(0, 0);
 }
 function closeTradingAgentPage() {
@@ -166,7 +168,7 @@ function _taRenderShell() {
                 <button class="ta-mini ta-mini-on" onclick="_taCheckStrategies(true)">בדוק עכשיו</button>
             </div>
             <div class="risk-table-card glass-card" style="padding:18px">
-                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — או שאל שאלת שוק פתוחה. הסוכן יבין, יארגן את הנתונים בפלטפורמה ומחוצה לה, ויחזיר כרטיס אסטרטגיה או ניתוח עם רעיונות.</div>
+                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — או שאל שאלת שוק פתוחה. הסוכן מחובר לכל נתוני הפלטפורמה: דוחות, סקטורים, קטליסטים, חדשות מאקרו, ציוצים, מנוע הנזילות, נתוני מאקרו, ניתוח טכני והתיקים שלך — ומבין כל בקשה על בסיסם.</div>
                 <div class="ta-chat-row">
                     <textarea id="taInput" class="ta-input" rows="2" placeholder="למשל: מכור 50% מ-NVDA אם ה-RSI מעל 80 · או: אילו מניות מתאימות לתקופה הקרובה?" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){_taParse();}"></textarea>
                     <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">בצע אסטרטגיה</button>
@@ -182,15 +184,98 @@ function _taRenderShell() {
     </div>`;
 }
 
+// ══════════════ PLATFORM DATA CONTEXT — wire the agent's chat into every data source ══════════════
+// Builds a COMPACT, real-data snapshot of the whole platform so the chat reasons with the same data
+// the user sees: the user's portfolios, company reports, sector strength, catalysts (Early-Alpha),
+// tweets, the liquidity engine (LHE), macro indicators + geo-macro news, and live technicals for the
+// holdings. Every source is best-effort, size-capped, and time-boxed — a slow/unavailable source is
+// simply skipped (never blocks the chat, never fabricated). Cached ~2 min so repeat asks are instant.
+let _taCtx = null, _taCtxAt = 0;
+async function _taGatherContext(force) {
+    if (!force && _taCtx && (Date.now() - _taCtxAt) < 120000) return _taCtx;
+    const ctx = {}; const sb = (typeof supabaseClient !== 'undefined') ? supabaseClient : null;
+    // Portfolios + holdings (already in memory — free).
+    try {
+        if (typeof clients !== 'undefined' && Array.isArray(clients)) {
+            ctx.portfolios = clients.slice(0, 8).map(c => ({
+                name: c.name,
+                holdings: (c.holdings || []).slice(0, 40).map(h => String(h.ticker || h.symbol || '').toUpperCase()).filter(Boolean),
+            })).filter(p => (p.holdings && p.holdings.length) || p.name);
+        }
+    } catch (e) { }
+    const holdingSyms = [...new Set((ctx.portfolios || []).flatMap(p => p.holdings))].slice(0, 25);
+    const jobs = [];
+    // Company reports — top US by score (fundamental strength) + sector strength derived from them.
+    jobs.push((async () => {
+        if (!sb) return;
+        try {
+            const { data } = await sb.from('company_reports').select('symbol,company_name,score,sector,improved').eq('market', 'us').order('score', { ascending: false }).limit(40);
+            if (data && data.length) {
+                ctx.top_reports = data.slice(0, 15).map(r => ({ t: r.symbol, n: r.company_name, score: r.score, sector: r.sector, up: !!r.improved }));
+                const bySec = {};
+                data.forEach(r => { if (!r.sector) return; (bySec[r.sector] = bySec[r.sector] || []).push(+r.score || 0); });
+                ctx.sectors = Object.entries(bySec).map(([s, arr]) => ({ sector: s, avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length), n: arr.length })).sort((a, b) => b.avg - a.avg).slice(0, 10);
+            }
+        } catch (e) { }
+    })());
+    // The user's holdings' fundamental scores.
+    jobs.push((async () => {
+        if (!sb || !holdingSyms.length) return;
+        try { const { data } = await sb.from('company_reports').select('symbol,score,sector,improved').in('symbol', holdingSyms); if (data && data.length) ctx.holdings_reports = data.map(r => ({ t: r.symbol, score: r.score, sector: r.sector, up: !!r.improved })); } catch (e) { }
+    })());
+    // Catalysts (Early-Alpha intelligence — sector, thesis, stealth tickers).
+    jobs.push((async () => {
+        if (!sb) return;
+        try {
+            const { data } = await sb.from('catalyst_cards').select('sector_name,thesis,stealth_targets,stage_score,created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(6);
+            if (data && data.length) ctx.catalysts = data.map(c => ({ sector: c.sector_name, thesis: String(c.thesis || '').slice(0, 160), tickers: (Array.isArray(c.stealth_targets) ? c.stealth_targets : []).map(t => String(t.ticker || '').toUpperCase()).filter(Boolean).slice(0, 5), stage: c.stage_score }));
+        } catch (e) { }
+    })());
+    // Liquidity engine (LHE) signals — bias/regime/confluence per ticker.
+    jobs.push((async () => {
+        if (!sb) return;
+        try {
+            const { data } = await sb.from('lhe_signals').select('ticker,bias,confluence_score,regime,net_liquidity_flow').order('confluence_score', { ascending: false }).limit(10);
+            if (data && data.length) ctx.liquidity = data.map(r => ({ t: r.ticker, bias: r.bias, conf: Math.round(+r.confluence_score || 0), regime: r.regime, flow: r.net_liquidity_flow }));
+        } catch (e) { }
+    })());
+    // Macro indicators (persisted, US) — compact key/value.
+    jobs.push((async () => {
+        if (!sb) return;
+        try {
+            const { data } = await sb.from('macro_data').select('country,indicators').eq('country', 'us').maybeSingle();
+            const ind = data && data.indicators ? data.indicators : null;
+            if (ind && typeof ind === 'object') ctx.macro = Object.entries(ind).slice(0, 14).map(([k, v]) => ({ k, v: (v && typeof v === 'object') ? (v.actual != null ? v.actual : v.value != null ? v.value : null) : v })).filter(x => x.v != null);
+        } catch (e) { }
+    })());
+    // Geo-macro / economy news headlines.
+    jobs.push((async () => {
+        try { const r = await fetch('/api/news?macro=1', { headers: { Accept: 'application/json' } }); const j = await r.json(); const items = (j && Array.isArray(j.macro)) ? j.macro : []; if (items.length) ctx.macro_news = items.slice(0, 8).map(n => String(n.he || n.en || '').slice(0, 140)).filter(Boolean); } catch (e) { }
+    })());
+    // Live technicals for the user's holdings (RSI/price) — the same scan the Technical page uses.
+    jobs.push((async () => {
+        if (!holdingSyms.length) return;
+        try { const r = await fetch(`/api/technicals?mode=scan&symbols=${holdingSyms.slice(0, 20).join(',')}&v=2`, { headers: { Accept: 'application/json' } }); const j = await r.json(); const res = j && j.results; if (res) ctx.technicals = Object.entries(res).map(([t, v]) => ({ t, rsiD: v.rsiD != null ? Math.round(v.rsiD) : null, rsiW: v.rsiW != null ? Math.round(v.rsiW) : null, px: v.price })).slice(0, 20); } catch (e) { }
+    })());
+    // Tweets from tracked X accounts (best-effort — empty until the RapidAPI provider is subscribed).
+    jobs.push((async () => {
+        try { const r = await fetch('/api/vision?twitter=1', { headers: { Accept: 'application/json' } }); const j = await r.json(); if (j && Array.isArray(j.tweets) && j.tweets.length) ctx.tweets = j.tweets.slice(0, 8).map(tw => ({ u: tw.user, txt: String(tw.text || '').slice(0, 140) })); } catch (e) { }
+    })());
+    await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 6500))]);
+    _taCtx = ctx; _taCtxAt = Date.now();
+    return ctx;
+}
+
 // ── Parse the NL text → StrategyRule (LLM + fallback), then show the confirmation card ──
 async function _taParse() {
     const inp = document.getElementById('taInput');
     const box = document.getElementById('taCard');
     const text = inp ? inp.value.trim() : '';
     if (!text || !box) return;
-    box.innerHTML = '<div class="ta-card-load"><div class="rep-spinner"></div>מפענח את האסטרטגיה…</div>';
+    box.innerHTML = '<div class="ta-card-load"><div class="rep-spinner"></div>מנתח את הבקשה מול נתוני הפלטפורמה…</div>';
     try {
-        const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+        const context = await _taGatherContext();
+        const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, context }) });
         const j = await r.json();
         if (j && j.advice) { _taPendingRule = null; box.innerHTML = _taAdviceCardHtml(j.advice); return; }
         if (!r.ok || j.error || !j.rule) { box.innerHTML = `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי להבין את הבקשה. נסה לתאר אסטרטגיה (טריגר → פעולה → נכס) או לשאול שאלת שוק.')}</div>`; return; }
@@ -557,7 +642,7 @@ function _taRenderList() {
         const modeHe = (s.mode === 'ALERT' ? 'התראה' : s.mode === 'LIVE' ? 'אמיתי' : 'בתיק') + dest;
         return `<div class="ta-strat" data-ta-id="${s.id}">
             <div class="ta-strat-main">
-                <div class="ta-strat-id"><span class="ta-strat-name">${_taEsc(s.name)}</span><span class="ta-strat-sum">${summary}</span></div>
+                <div class="ta-strat-id"><span class="ta-strat-name">${_taEsc((s.name || '').replace(/\s*\(?\s*טיוטה\s*\)?/g, '').trim() || 'אסטרטגיה')}</span><span class="ta-strat-sum">${summary}</span></div>
                 <span class="ta-st-badge ${st[1]}">${st[0]}</span>
                 <span class="ta-mode-badge">${modeHe}</span>
                 <button class="ta-mini" onclick="_taToggleStructure(${s.id})" title="מבנה האסטרטגיה">מבנה</button>
