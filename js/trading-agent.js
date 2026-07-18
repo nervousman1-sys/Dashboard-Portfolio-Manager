@@ -237,6 +237,7 @@ const _taScrUniHe = { NDX: 'נאסד"ק 100', SP500: 'S&P 500' };
 function _taScreenerCardHtml(rule, source, existing) {
     const portfolios = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients : [];
     const sc = rule.screener || {};
+    const sm = sc.split_mode === 'equal' ? 'equal' : 'fixed';
     const uniHe = _taScrUniHe[sc.universe] || 'נאסד"ק 100';
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע' };
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', EQUALS: 'נוגעת ב', GTE: '≥', LTE: '≤' };
@@ -251,7 +252,13 @@ function _taScreenerCardHtml(rule, source, existing) {
         <div class="ta-card-top"><span class="ta-card-name">${_taEsc(rule.name || 'סורק מדד')}</span><span class="ta-trig">סורק מדד</span>${source === 'fallback' ? '<span class="ta-draft">טיוטה</span>' : ''}</div>
         <div class="ta-scr-desc">כל מניה ב<b>${uniHe}</b> שבה <span class="ta-scr-cond">${conds}</span> — נקנית אוטומטית (המניה עצמה, לא תעודת סל).</div>
         <div class="ta-scr-alloc">
-            <label class="ta-mode-lbl">סכום לכל מניה: $
+            <label class="ta-mode-lbl">אופן חלוקה:
+                <select id="taScrMode" class="st-pf-select" onchange="_taScrModeChange()">
+                    <option value="fixed" ${sm === 'fixed' ? 'selected' : ''}>סכום קבוע לכל מניה</option>
+                    <option value="equal" ${sm === 'equal' ? 'selected' : ''}>חלוקה שווה של התקציב</option>
+                </select>
+            </label>
+            <label class="ta-mode-lbl" id="taScrPerWrap" style="display:${sm === 'equal' ? 'none' : 'inline-flex'}">סכום לכל מניה: $
                 <input id="taScrPer" type="text" inputmode="numeric" value="${_taFmtNum(sc.per_stock_usd)}" oninput="_taFmtAmtInput(this);_taRunScreenerPreview()" class="st-pf-select ta-amt-input">
             </label>
             <label class="ta-mode-lbl">תקציב כולל: $
@@ -296,11 +303,18 @@ function _taScrMatchStock(row, rule) {
     const conds = rule.conditions || [];
     return rule.logic === 'ALL' ? conds.every(c => _taScrRowMatch(row, c)) : conds.some(c => _taScrRowMatch(row, c));
 }
-// Render the allocation preview: which stocks match now, the per-stock amount, and the total allocated.
+function _taScrModeChange() {
+    const mode = (document.getElementById('taScrMode') || {}).value;
+    const perWrap = document.getElementById('taScrPerWrap');
+    if (perWrap) perWrap.style.display = mode === 'equal' ? 'none' : 'inline-flex';
+    _taRunScreenerPreview();
+}
+// Render the allocation preview: which stocks match now + how the budget is divided among them.
 async function _taRunScreenerPreview() {
     const el = document.getElementById('taScrPreview');
     const rule = _taPendingRule;
     if (!el || !rule || !rule.screener) return;
+    const mode = (document.getElementById('taScrMode') || {}).value || rule.screener.split_mode || 'fixed';
     const per = _taNum((document.getElementById('taScrPer') || {}).value) || 0;
     const budget = _taNum((document.getElementById('taScrTotal') || {}).value) || 0;
     const uniHe = _taScrUniHe[rule.screener.universe] || 'המדד';
@@ -311,17 +325,25 @@ async function _taRunScreenerPreview() {
         _taScrMatches = tickers.filter(t => _taScrMatchStock(results[t], rule)).map(t => ({ ticker: t, row: results[t] }));
     }
     const matches = _taScrMatches || [];
-    const maxStocks = (per > 0 && budget > 0) ? Math.floor(budget / per) : matches.length;
-    const allocated = matches.slice(0, maxStocks);
-    const totalAlloc = allocated.length * per;
     if (!matches.length) { el.innerHTML = `<div class="ta-scr-empty">כרגע אף מניה ב${uniHe} לא עונה על התנאי. הסורק יישאר פעיל ויקנה כל מניה שתעבור את התנאי בעתיד.</div>`; return; }
+    // Allocation per division mode.
+    let allocated, note;
+    if (mode === 'equal') {
+        const eachRaw = budget > 0 ? Math.floor(budget / matches.length) : 0;   // equal split of the budget
+        allocated = matches.map(m => ({ ...m, amt: eachRaw }));
+        note = `<div class="ta-scr-note">חלוקה שווה: התקציב <b>$${_taFmtNum(budget)}</b> מחולק בין <b>${matches.length}</b> מניות → <b>$${_taFmtNum(eachRaw)}</b> לכל אחת.</div>`;
+    } else {
+        const maxStocks = (per > 0 && budget > 0) ? Math.floor(budget / per) : matches.length;
+        allocated = matches.slice(0, maxStocks).map(m => ({ ...m, amt: per }));
+        note = matches.length > allocated.length
+            ? `<div class="ta-scr-note">נמצאו <b>${matches.length}</b> מניות תואמות · התקציב מכסה <b>${allocated.length}</b> מהן ($${_taFmtNum(per)} לכל אחת).</div>`
+            : `<div class="ta-scr-note"><b>${matches.length}</b> מניות תואמות כרגע · $${_taFmtNum(per)} לכל אחת.</div>`;
+    }
+    const totalAlloc = allocated.reduce((s, m) => s + (m.amt || 0), 0);
     const rows = allocated.map(m => {
         const rsiw = (m.row && m.row.rsiW != null) ? m.row.rsiW.toFixed(1) : '—';
-        return `<div class="ta-scr-row"><span class="ta-scr-tk">${_taEsc(m.ticker)}</span><span class="ta-scr-metric">RSI שבועי ${rsiw}</span><span class="ta-scr-amt">$${_taFmtNum(per)}</span></div>`;
+        return `<div class="ta-scr-row"><span class="ta-scr-tk">${_taEsc(m.ticker)}</span><span class="ta-scr-metric">RSI שבועי ${rsiw}</span><span class="ta-scr-amt">$${_taFmtNum(m.amt)}</span></div>`;
     }).join('');
-    const note = matches.length > allocated.length
-        ? `<div class="ta-scr-note">נמצאו <b>${matches.length}</b> מניות תואמות · התקציב מכסה <b>${allocated.length}</b> מהן ($${_taFmtNum(per)} לכל אחת).</div>`
-        : `<div class="ta-scr-note"><b>${matches.length}</b> מניות תואמות כרגע.</div>`;
     el.innerHTML = `<div class="ta-scr-prev-head">חלוקה צפויה עכשיו — ${allocated.length} מניות</div>${note}<div class="ta-scr-list">${rows}</div><div class="ta-scr-total">סה"כ מוקצב עכשיו: <b>$${_taFmtNum(totalAlloc)}</b>${budget > 0 ? ` מתוך תקציב $${_taFmtNum(budget)}` : ''}</div>`;
 }
 
@@ -407,11 +429,13 @@ async function _taEnable() {
     const mode = modeSel === 'ALERT' ? 'ALERT' : modeSel === 'LIVE' ? 'LIVE' : 'PAPER';
     // ── Screener strategy (scan an index, buy each matching stock up to a budget) ──
     if (_taPendingRule.screener) {
-        const per = _taNum((document.getElementById('taScrPer') || {}).value);
-        const budget = _taNum((document.getElementById('taScrTotal') || {}).value);
-        if (!(per > 0)) { if (typeof showToast === 'function') showToast('הזן סכום לכל מניה (גדול מ-0)', 'error'); return; }
-        _taPendingRule.screener = { ..._taPendingRule.screener, per_stock_usd: per, total_budget_usd: (budget > 0 ? budget : 0) };
-        _taPendingRule.amount = { type: 'CASH_USD', value: per };
+        const splitMode = (document.getElementById('taScrMode') || {}).value === 'equal' ? 'equal' : 'fixed';
+        const per = _taNum((document.getElementById('taScrPer') || {}).value) || 0;
+        const budget = _taNum((document.getElementById('taScrTotal') || {}).value) || 0;
+        if (splitMode === 'fixed' && !(per > 0)) { if (typeof showToast === 'function') showToast('הזן סכום לכל מניה (גדול מ-0)', 'error'); return; }
+        if (splitMode === 'equal' && !(budget > 0)) { if (typeof showToast === 'function') showToast('הזן תקציב כולל לחלוקה שווה', 'error'); return; }
+        _taPendingRule.screener = { ..._taPendingRule.screener, per_stock_usd: per, total_budget_usd: budget, split_mode: splitMode };
+        _taPendingRule.amount = { type: 'CASH_USD', value: per || (budget || 0) };
         let portfolioId = null;
         if (mode === 'PAPER') { portfolioId = +(((document.getElementById('taPortfolioSel') || {}).value) || 0) || null; if (!portfolioId) { if (typeof showToast === 'function') showToast('בחר תיק בפלטפורמה לביצוע', 'error'); return; } }
         const pfName = portfolioId && typeof clients !== 'undefined' ? (clients.find(c => c.id === portfolioId) || {}).name : null;
@@ -574,7 +598,8 @@ function _taRuleSummary(rule) {
         const uniHe = _taScrUniHe[rule.screener.universe] || 'נאסד"ק 100';
         const c = (rule.conditions || [])[0] || {};
         const cond = c.factor === 'rsi' ? `RSI ${c.timeframe === 'weekly' ? 'שבועי' : 'יומי'} ${c.operator === 'ABOVE' ? 'מעל' : 'מתחת ל-'}${c.threshold}` : 'תנאי';
-        return `סורק ${uniHe} — כל מניה: ${cond} ← קנייה $${_taFmtNum(rule.screener.per_stock_usd)} למניה (תקציב $${_taFmtNum(rule.screener.total_budget_usd)})`;
+        const alloc = rule.screener.split_mode === 'equal' ? `חלוקה שווה של $${_taFmtNum(rule.screener.total_budget_usd)}` : `$${_taFmtNum(rule.screener.per_stock_usd)} למניה (תקציב $${_taFmtNum(rule.screener.total_budget_usd)})`;
+        return `סורק ${uniHe} — כל מניה: ${cond} ← קנייה ${alloc}`;
     }
     // Mirror the server _strategySummaryHe for the list (kept in sync).
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
@@ -934,10 +959,14 @@ async function _taRunScreener(s) {
     const rule = s.parsed_rule || {}; const sc = rule.screener; if (!sc) return;
     const state = s.screener_state || { spent: 0, bought: [] };
     const bought = Array.isArray(state.bought) ? state.bought : [];
-    const per = +sc.per_stock_usd || 0, budget = +sc.total_budget_usd || 0;
+    const budget = +sc.total_budget_usd || 0;
     const logs = Array.isArray(s.execution_logs) ? s.execution_logs.slice(-40) : [];
     const { tickers, results } = await _taScreenUniverse(sc.universe);
     const matches = tickers.filter(t => _taScrMatchStock(results[t], rule));
+    // Fixed mode: a set $ per stock. Equal mode: the total budget split across the current matches.
+    const per = sc.split_mode === 'equal'
+        ? (matches.length > 0 && budget > 0 ? Math.floor(budget / matches.length) : 0)
+        : (+sc.per_stock_usd || 0);
     const held = new Set();
     if (s.portfolio_id && typeof clients !== 'undefined') { const c = clients.find(x => x.id === s.portfolio_id); if (c) (c.holdings || []).forEach(h => held.add(String(h.ticker || '').toUpperCase())); }
     let boughtNow = 0;
@@ -1035,7 +1064,7 @@ if (typeof window !== 'undefined') {
     window.openTradingAgentPage = openTradingAgentPage; window.closeTradingAgentPage = closeTradingAgentPage;
     window._taParse = _taParse; window._taEnable = _taEnable; window._taToggle = _taToggle; window._taDelete = _taDelete;
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; _taEditingId = null; };
-    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview;
+    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;

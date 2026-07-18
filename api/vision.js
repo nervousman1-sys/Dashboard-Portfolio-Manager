@@ -221,7 +221,7 @@ function _strategyPrompt(text) {
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות במדד* (למשל "כל מניה בנאסד\'ק שעוברת תנאי") ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל}, קבע trigger_type "SCREENER", target_asset null, ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "10 אלף דולר"=10000, "50 אלף"=50000.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות במדד* (למשל "כל מניה בנאסד\'ק שעוברת תנאי") ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל,"split_mode":"fixed" (סכום קבוע לכל מניה — כשצוין סכום למניה) או "equal" (חלוקה שווה של התקציב בין כל המניות התואמות — כשהמשתמש אומר "חלק/מחולק שווה" בלי סכום קבוע למניה)}, קבע trigger_type "SCREENER", target_asset null, ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "10 אלף דולר"=10000, "50 אלף"=50000.',
         'דוגמאות:',
         'קלט: "אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו, מצב עולמי ופריצות טכנולוגיות?" → {"advice": true}',
         'קלט: "צור אסטרטגיה שכל מניה בנאסד\'ק שה-RSI השבועי שלה יורד מתחת ל-30 — תקנה אותה ב-10 אלף דולר, עד תקציב כולל של 50 אלף דולר" → {"name":"סורק נאסד\'ק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
@@ -281,7 +281,11 @@ function _normalizeStrategy(r) {
         const universe = /NDX|NASDAQ|נאסד/.test(uni) ? 'NDX' : /SPX|S&P|SP500|SPY|ספ|S&P500/.test(uni) ? 'SP500' : (uni || 'NDX');
         const perStock = num(r.screener.per_stock_usd) || num(r.screener.per_stock && r.screener.per_stock.value) || (amount.type === 'CASH_USD' ? amount.value : 0) || 0;
         const totalBudget = num(r.screener.total_budget_usd) || 0;
-        if (perStock > 0 || totalBudget > 0) screener = { universe, per_stock_usd: perStock, total_budget_usd: totalBudget };
+        // Division mode: 'fixed' = a set $ per stock (up to the budget); 'equal' = split the total
+        // budget equally across all matching stocks. Explicit split_mode wins; else infer from inputs.
+        const sm = String(r.screener.split_mode || '').toLowerCase();
+        const splitMode = (sm === 'equal' || sm === 'split') ? 'equal' : (sm === 'fixed' || sm === 'per_stock') ? 'fixed' : (perStock > 0 ? 'fixed' : (totalBudget > 0 ? 'equal' : 'fixed'));
+        if (perStock > 0 || totalBudget > 0) screener = { universe, per_stock_usd: perStock, total_budget_usd: totalBudget, split_mode: splitMode };
     }
     return {
         name: (r.name ? String(r.name).trim() : '') || 'אסטרטגיה',
@@ -352,19 +356,33 @@ function _strategyFallback(text) {
     const isScreener = /(כל\s+מני[הות]|לכל\s+מני[הת]|every\s+stock|all\s+stocks|each\s+stock)/i.test(t) && /(נאסד|nasdaq|ndx|s&p|sp500|ס["׳]?פ|ספ\s*500)/i.test(t);
     if (isScreener) {
         const universe = /(נאסד|nasdaq|ndx)/i.test(t) ? 'NDX' : 'SP500';
-        const amtNear = (re) => { const m = t.match(re); if (!m) return 0; let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; };
-        let per = amtNear(/(?:לכל\s+מני[הת]|כל\s+מני[הת]|per\s*stock|each|לכל\s+אחת)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?/i);
-        let tot = amtNear(/(?:כולל|סה["׳]?כ|total|תקציב)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?/i);
-        if (!per || !tot) {
-            const all = [...t.matchAll(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$)/gi)]
-                .map(m => { let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; })
-                .filter(v => v >= 100);
-            const uniq = [...new Set(all)].sort((a, b) => a - b);
-            if (uniq.length >= 2) { if (!per) per = uniq[0]; if (!tot) tot = uniq[uniq.length - 1]; }
-            else if (uniq.length === 1 && !per) per = uniq[0];
+        // Only accept amounts that carry a MONEY marker (אלף/k/דולר/usd/$) or are ≥1000 — so an RSI
+        // threshold like "30" is never mistaken for an allocation.
+        const amtNear = (re) => {
+            const m = t.match(re); if (!m) return 0;
+            let v = parseFloat(String(m[1]).replace(/,/g, ''));
+            const hasK = /אלף|k|thousand/i.test(m[2] || ''); if (hasK) v *= 1000;
+            const hasMoney = hasK || /דולר|usd|\$|₪/i.test(m[0]);
+            return (!hasMoney && v < 1000) ? 0 : v;
+        };
+        const perRe = /(?:לכל\s+מני[הת]|כל\s+מני[הת]|per\s*stock|each|לכל\s+אחת)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$|₪)?/i;
+        const totRe = /(?:כולל|סה["׳]?כ|total|תקציב)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$|₪)?/i;
+        let per = amtNear(perRe), tot = amtNear(totRe);
+        // All money amounts in the text (require a currency/thousand marker → excludes RSI numbers).
+        const money = [...t.matchAll(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$)/gi)]
+            .map(m => { let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; }).filter(v => v >= 100);
+        const uniq = [...new Set(money)].sort((a, b) => a - b);
+        const equalSplit = /(חלוק[הת]\s*שוו|חלק\s*שוו|מחולק\s*שוו|בחלוקה\s*שוו|שווה\s*בין|split\s*equal|equal\s*split|divide\s*equally)/i.test(t);
+        if (equalSplit && !per) {           // equal split: the amount is the TOTAL budget, no per-stock
+            if (!tot) tot = uniq.length ? uniq[uniq.length - 1] : 0;
+            per = 0;
+        } else {                            // fixed: smaller amount = per-stock, larger = total budget
+            if (!per && uniq.length) per = uniq[0];
+            if (!tot && uniq.length >= 2) tot = uniq[uniq.length - 1];
         }
         if (per > 0 || tot > 0) {
-            screener = { universe, per_stock_usd: per, total_budget_usd: tot };
+            const splitMode = (equalSplit && !per) ? 'equal' : (per > 0 ? 'fixed' : 'equal');
+            screener = { universe, per_stock_usd: per, total_budget_usd: tot, split_mode: splitMode };
             conditions.forEach(c => { c.subject = null; }); // the condition applies to EACH stock, not a single ticker
             target2 = null;
             if (per > 0) amount = { type: 'CASH_USD', value: per };
