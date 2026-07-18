@@ -10822,7 +10822,26 @@ html.day-mode .ta-idea { background: rgba(58,50,36,0.04); }
 .ta-adv-strat b { color: var(--accent-blue); }
 .ta-adv-disc { margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--accent-yellow, #f0b400); }
 html.day-mode .ta-adv-disc { color: #9a6f00; }
-.ta-amt-input { max-width: 100px; direction: ltr; text-align: left; }
+.ta-amt-input { max-width: 110px; direction: ltr; text-align: left; }
+/* Request: whiten ALL gray text on the trading-agent page for maximum sharpness/clarity.
+   Remapping the two "gray" text vars → primary makes every secondary/muted label crisp in BOTH
+   modes (white at night, black in day) while accent colors (yellow warnings, blue tickers) keep
+   their own vars and stay. */
+#tradingAgentPage { --text-secondary: var(--text-primary); --text-muted: var(--text-primary); }
+#tradingAgentPage .ta-input::placeholder { opacity: 0.5; }
+#tradingAgentPage .ta-strat-sum, #tradingAgentPage .ta-strat-log, #tradingAgentPage .ta-mon-last,
+#tradingAgentPage .ta-bk-meta, #tradingAgentPage .ta-idea-why, #tradingAgentPage .ta-idea-name,
+#tradingAgentPage .ta-mode-lbl, #tradingAgentPage .ta-adv-p, #tradingAgentPage .ta-example { color: var(--text-primary); }
+/* Read-only strategy structure panel ("מבנה") */
+.ta-struct { margin-top: 10px; }
+.ta-struct-inner { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,0.03);
+    display: flex; flex-direction: column; gap: 9px; }
+html.day-mode .ta-struct-inner { background: rgba(58,50,36,0.04); }
+.ta-struct-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; font-size: 12.5px; }
+.ta-struct-lbl { font-weight: 900; color: var(--text-primary); min-width: 130px; }
+.ta-struct-val { color: var(--text-primary); font-weight: 700; }
+.ta-struct-conds { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
+.ta-struct-conds li { color: var(--text-primary); font-weight: 700; line-height: 1.5; }
 .ta-chat-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; }
 .ta-chat-row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
 .ta-input { flex: 1; min-width: 260px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px;
