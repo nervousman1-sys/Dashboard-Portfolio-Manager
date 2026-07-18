@@ -220,28 +220,76 @@ function setDnChannel(id) {
 // ── X (Twitter) feed — pulls clean tweets from the tracked market accounts via /api/news?twitter=1
 // (a RapidAPI third-party provider server-side; the same JSON also feeds the Gemini agent). ──
 let _dnXLoading = false;
-async function _dnLoadX(force) {
+let _dnXAccounts = null; // cached list of the user's tracked usernames
+
+// Load the user's tracked X accounts from Supabase (RLS per user).
+async function _dnLoadXAccounts() {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { if (!_dnXAccounts) _dnXAccounts = []; return _dnXAccounts; }
+    try {
+        const { data } = await supabaseClient.from('x_tracked_accounts').select('username').order('created_at', { ascending: true });
+        _dnXAccounts = (data || []).map(r => r.username);
+    } catch (e) { if (!_dnXAccounts) _dnXAccounts = []; }
+    return _dnXAccounts;
+}
+// Render the manage-accounts bar (add / remove) + the tweets container, then load the tweets.
+async function _dnLoadX() {
     const el = document.getElementById('dnXFeed');
+    if (!el) return;
+    await _dnLoadXAccounts();
+    el.innerHTML = _dnXAccountsBarHtml() + `<div id="dnXTweets"><div class="adv-empty">טוען ציוצים…</div></div>`;
+    _dnLoadXTweets();
+}
+function _dnXAccountsBarHtml() {
+    const accs = _dnXAccounts || [];
+    const chips = accs.length
+        ? accs.map(u => `<span class="dn-x-chip">@${_dnEsc(u)}<button class="dn-x-chip-x" onclick="_dnRemoveXAccount('${_dnEsc(u)}')" title="הסר">✕</button></span>`).join('')
+        : `<span class="dn-x-acc-empty">לא הוגדרו חשבונות — כרגע נעקוב אחרי חשבונות ברירת המחדל. הוסף חשבונות כדי לעקוב בדיוק אחרי מי שתרצה.</span>`;
+    return `<div class="dn-x-accounts">
+        <div class="dn-x-acc-title">חשבונות במעקב</div>
+        <div class="dn-x-acc-chips">${chips}</div>
+        <div class="dn-x-add">
+            <input id="dnXAddInput" class="dn-x-add-input" placeholder="הוסף חשבון (שם משתמש, למשל elonmusk)" onkeydown="if(event.key==='Enter'){_dnAddXAccount();}" autocomplete="off">
+            <button class="dn-x-add-btn" onclick="_dnAddXAccount()">הוסף</button>
+        </div>
+    </div>`;
+}
+async function _dnLoadXTweets() {
+    const el = document.getElementById('dnXTweets');
     if (!el || _dnXLoading) return;
     _dnXLoading = true;
     try {
-        const r = await fetch(`/api/news?twitter=1&t=${Math.floor(Date.now() / 120000)}`, { headers: { Accept: 'application/json' } });
+        const accs = _dnXAccounts || [];
+        const usersParam = accs.length ? `&users=${encodeURIComponent(accs.join(','))}` : '';
+        const r = await fetch(`/api/news?twitter=1${usersParam}&t=${Math.floor(Date.now() / 120000)}`, { headers: { Accept: 'application/json' } });
         const j = await r.json();
-        if (!document.getElementById('dnXFeed')) return; // user switched tabs
+        if (!document.getElementById('dnXTweets')) return; // user switched tabs
         if (j && j.error === 'not_configured') {
-            el.innerHTML = `<div class="risk-table-card glass-card dn-setup">
-                <h3>מעקב ציוצים (X) ממתין להגדרה</h3>
-                <p>כדי למשוך את הציוצים האחרונים מחשבונות מובילים בשוק, יש להגדיר מפתח RapidAPI בשרת (משתנה הסביבה <b>RAPIDAPI_KEY</b>). ברירת המחדל עובדת מול הספק twitter-api45; אפשר לשנות ספק דרך <b>RAPIDAPI_TWITTER_HOST</b>.</p>
-            </div>`;
-            return;
+            el.innerHTML = `<div class="dn-setup"><h3>מעקב ציוצים (X) ממתין להגדרה</h3><p>יש להגדיר מפתח RapidAPI בשרת (<b>RAPIDAPI_KEY</b>).</p></div>`; return;
+        }
+        if (j && j.error === 'provider_error') {
+            el.innerHTML = `<div class="dn-setup"><h3>ספק ה-X אינו מגיב</h3><p>הספק <b>${_dnEsc(j.provider || '')}</b> החזיר: "${_dnEsc(j.message || '')}" (${j.status || ''}). ודא ש-<b>RAPIDAPI_TWITTER_HOST</b> וה-Endpoint תואמים בדיוק ל-API שאליו נרשמת ב-RapidAPI.</p></div>`; return;
         }
         const tweets = (j && j.tweets) || [];
-        if (!tweets.length) { el.innerHTML = '<div class="adv-empty">אין ציוצים חדשים כרגע.</div>'; return; }
-        const accounts = (j.accounts || []).map(a => '@' + a).join(' · ');
-        el.innerHTML = `<div class="dn-x-head">עוקב אחרי: ${_dnEsc(accounts)}</div>` + tweets.map(_dnXItemHtml).join('');
+        el.innerHTML = tweets.length ? tweets.map(_dnXItemHtml).join('') : '<div class="adv-empty">אין ציוצים חדשים כרגע מהחשבונות שבחרת.</div>';
     } catch (e) {
         if (el) el.innerHTML = '<div class="adv-empty">שגיאה בטעינת הציוצים — ננסה שוב אוטומטית.</div>';
     } finally { _dnXLoading = false; }
+}
+async function _dnAddXAccount() {
+    const inp = document.getElementById('dnXAddInput');
+    const u = inp ? inp.value.trim().replace(/^@/, '') : '';
+    if (!u) return;
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(u)) { if (typeof showToast === 'function') showToast('שם משתמש לא תקין (אותיות/ספרות/קו־תחתון, עד 15 תווים)', 'error'); return; }
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) { if (typeof showToast === 'function') showToast('אין חיבור לשרת כרגע', 'error'); return; }
+    try { await supabaseClient.from('x_tracked_accounts').insert({ username: u }); } catch (e) { }
+    if (inp) inp.value = '';
+    await _dnLoadX();
+}
+async function _dnRemoveXAccount(u) {
+    if (typeof ensureSupabaseReady === 'function' && !(await ensureSupabaseReady())) return;
+    try { await supabaseClient.from('x_tracked_accounts').delete().eq('username', u); } catch (e) { }
+    if (_dnXAccounts) _dnXAccounts = _dnXAccounts.filter(x => x !== u);
+    await _dnLoadX();
 }
 function _dnXItemHtml(t) {
     const when = t.date ? new Date(t.date).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';

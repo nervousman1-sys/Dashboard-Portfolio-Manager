@@ -8454,6 +8454,22 @@ html.day-mode .dn-x-msg { background: rgba(58,50,36,0.04); }
 .dn-x-text { font-size: 14px; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
 .dn-x-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #8ab4f8; text-decoration: none; }
 .dn-x-link:hover { text-decoration: underline; }
+/* Manage tracked accounts */
+.dn-x-accounts { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; background: rgba(255,255,255,0.02); }
+html.day-mode .dn-x-accounts { background: rgba(58,50,36,0.03); }
+.dn-x-acc-title { font-size: 12px; font-weight: 900; color: var(--text-secondary); margin-bottom: 8px; }
+.dn-x-acc-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+.dn-x-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.28); color: var(--text-primary); border-radius: 999px; padding: 4px 6px 4px 11px; font-size: 12.5px; font-weight: 700; }
+.dn-x-chip-x { background: rgba(255,77,77,0.12); border: none; color: #ff6b6b; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 11px; line-height: 1; font-family: inherit; }
+.dn-x-chip-x:hover { background: rgba(255,77,77,0.25); }
+.dn-x-acc-empty { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
+.dn-x-add { display: flex; gap: 8px; }
+.dn-x-add-input { flex: 1; min-width: 150px; background: var(--input-bg, rgba(255,255,255,0.05)); border: 1px solid var(--border); color: var(--text-primary); border-radius: 9px; padding: 8px 12px; font-size: 13px; font-family: inherit; outline: none; }
+html.day-mode .dn-x-add-input { background: #f6f2e6; }
+.dn-x-add-input:focus { border-color: var(--accent-blue); }
+.dn-x-add-btn { background: rgba(0,229,255,0.14); border: 1px solid rgba(0,229,255,0.32); color: #22d3ee; border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.dn-x-add-btn:hover { background: rgba(0,229,255,0.24); }
+html.day-mode .dn-x-add-btn { color: #0e7490; }
 .dn-img { max-width: 100%; max-height: 420px; border-radius: 9px; margin-top: 8px; border: 1px solid var(--border); display: block; }
 
 /* Discord feed: date-collapsed daily posts + clear options font */

@@ -294,9 +294,9 @@ async function _fetchUserTweets(user, host, key, limit) {
     let j = null;
     try {
         const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host, Accept: 'application/json' } });
-        if (!r.ok) return [];
+        if (!r.ok) { let msg = ''; try { const b = await r.json(); msg = b && b.message; } catch (e) { } return { items: [], err: { status: r.status, message: msg || ('HTTP ' + r.status) } }; }
         j = await r.json();
-    } catch (e) { return []; }
+    } catch (e) { return { items: [], err: { status: 0, message: e.message } }; }
     // Common array locations across providers:
     const arr = (j && (j.timeline || j.tweets || j.results || (j.data && (j.data.tweets || j.data)) || (Array.isArray(j) ? j : []))) || [];
     const out = [];
@@ -311,7 +311,7 @@ async function _fetchUserTweets(user, host, key, limit) {
         if (id && text && text.length > 1) out.push({ id, user: uname, date, text });
         if (out.length >= limit) break;
     }
-    return out;
+    return { items: out, err: null };
 }
 
 module.exports = async (req, res) => {
@@ -340,8 +340,8 @@ module.exports = async (req, res) => {
             const sinceMs = req.query.since ? Date.parse(req.query.since) : 0;
             try {
                 const batches = await Promise.allSettled(users.map(u => _fetchUserTweets(u, host, key, perUser)));
-                let tweets = [];
-                for (const b of batches) if (b.status === 'fulfilled' && Array.isArray(b.value)) tweets = tweets.concat(b.value);
+                let tweets = []; let providerErr = null;
+                for (const b of batches) if (b.status === 'fulfilled' && b.value) { if (Array.isArray(b.value.items)) tweets = tweets.concat(b.value.items); if (b.value.err && !providerErr) providerErr = b.value.err; }
                 // Dedup by id + drop anything older than `since` (only NEW tweets), newest first.
                 const seen = new Set();
                 tweets = tweets.filter(t => {
@@ -349,6 +349,12 @@ module.exports = async (req, res) => {
                     if (sinceMs && t.date && Date.parse(t.date) <= sinceMs) return false;
                     return true;
                 }).sort((a, b) => (Date.parse(b.date || 0) || 0) - (Date.parse(a.date || 0) || 0)).slice(0, 80);
+                // No tweets AND the provider rejected every call → surface a clear diagnostic (wrong host/not-subscribed).
+                if (!tweets.length && providerErr) {
+                    res.setHeader('Cache-Control', 's-maxage=30');
+                    res.status(200).json({ error: 'provider_error', provider: host, status: providerErr.status, message: providerErr.message, tweets: [], accounts: users });
+                    return;
+                }
                 res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
                 res.status(200).json({ tweets, accounts: users, count: tweets.length, asOf: new Date().toISOString() });
             } catch (e) {
