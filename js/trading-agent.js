@@ -113,6 +113,9 @@ function openTradingAgentPage() {
     if (typeof updateURLState === 'function') updateURLState({ view: 'tradingagent' });
     _taRenderShell();
     _taUpdateMonitorBar();
+    _taLoadServerStatus();
+    if (window._taSrvTimer) clearInterval(window._taSrvTimer);
+    window._taSrvTimer = setInterval(_taLoadServerStatus, 60000);
     _taLoadBrokers();
     _taLoadStrategies();
     window.scrollTo(0, 0);
@@ -126,8 +129,26 @@ function closeTradingAgentPage() {
     if (heroFold) Array.from(heroFold.children).forEach(el => { el.style.display = ''; });
     const grid = document.getElementById('clientsGrid'); if (grid) grid.style.display = '';
     const psh = document.querySelector('.portfolio-section-header'); if (psh) psh.style.display = '';
+    if (window._taSrvTimer) { clearInterval(window._taSrvTimer); window._taSrvTimer = null; }
     if (typeof clearURLState === 'function') clearURLState();
     if (typeof _setActiveNav === 'function') _setActiveNav('dashboard');
+}
+// Read the VPS agent's heartbeat and CONFIRM (or not) that it's running 24/7 — this timestamp
+// advances even while the site is closed, so a recent beat proves autonomous server execution.
+async function _taLoadServerStatus() {
+    const el = document.getElementById('taSrvStatus'); const dot = document.getElementById('taMonDot');
+    if (!el || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    try {
+        const { data } = await supabaseClient.from('agent_status').select('last_run, last_result').eq('agent', 'strategy').maybeSingle();
+        if (data && data.last_run) {
+            const ageMin = (Date.now() - new Date(data.last_run)) / 60000;
+            const hhmm = new Date(data.last_run).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+            if (ageMin <= 20) { el.innerHTML = `<b class="ta-srv-on">פעיל</b> — הפקודות מתבצעות אוטומטית גם כשהאתר סגור · פעימה אחרונה ${hhmm}`; if (dot) dot.className = 'ta-mon-dot ta-dot-on'; return; }
+            el.innerHTML = `<b class="ta-srv-off">לא מגיב</b> — פעימה אחרונה ${hhmm}`; if (dot) dot.className = 'ta-mon-dot ta-dot-warn';
+        } else {
+            el.innerHTML = `<b class="ta-srv-off">כבוי</b> — סוכן השרת עדיין לא הופעל`; if (dot) dot.className = 'ta-mon-dot ta-dot-off';
+        }
+    } catch (e) { el.textContent = '—'; }
 }
 
 function _taRenderShell() {
@@ -139,8 +160,8 @@ function _taRenderShell() {
         <div class="macro-content">
             <div class="ta-safety"><b>נתונים אמיתיים · ביצוע מבוקר</b> — הסוכן מנטר את התנאים על נתוני שוק אמיתיים. כל אסטרטגיה מקושרת ל<b>תיק בפלטפורמה</b> (מבצע בתיק הנייר) או ל<b>ברוקר חיצוני</b> (מצב Live), או שולח <b>התראה בלבד</b>. אין זה ייעוץ השקעות.</div>
             <div class="ta-monitor-bar" id="taMonBar">
-                <span class="ta-mon-dot"></span>
-                <span class="ta-mon-txt" id="taMonTxt">הסוכן פעיל — מנטר את האסטרטגיות כל 5 דקות כל עוד האתר פתוח</span>
+                <span class="ta-mon-dot" id="taMonDot"></span>
+                <span class="ta-mon-txt">מנוע 24/7 בשרת: <span id="taSrvStatus">בודק…</span></span>
                 <span class="ta-mon-last" id="taMonLast"></span>
                 <button class="ta-mini ta-mini-on" onclick="_taCheckStrategies(true)">בדוק עכשיו</button>
             </div>
@@ -812,8 +833,7 @@ function _taUpdateMonitorBar() {
     const last = window._taLastRun;
     if (!last) { el.textContent = ''; return; }
     const hhmm = new Date(last).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const nextMin = Math.max(1, Math.round((5 * 60 * 1000 - (Date.now() - last)) / 60000));
-    el.textContent = `· נבדק לאחרונה ${hhmm} · בדיקה הבאה בעוד ~${nextMin} דק'`;
+    el.textContent = `· בדיקת דפדפן אחרונה ${hhmm}`;
 }
 
 // ── Init: monitor strategies while the app is open (every 5 min) ──
