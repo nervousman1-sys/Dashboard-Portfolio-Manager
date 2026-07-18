@@ -75,8 +75,20 @@ async function getQuote(sym) {
 }
 function sma(cl, period) { if (!Array.isArray(cl) || cl.length < period || period < 1) return null; let s = 0; for (let i = cl.length - period; i < cl.length; i++) s += cl[i]; return s / period; }
 function maParams(tf, period) {
-    if (tf === 'weekly' || tf === '1wk' || tf === '1w') { const w = period + 10; return { interval: '1wk', range: w <= 52 ? '1y' : w <= 104 ? '2y' : w <= 260 ? '5y' : 'max' }; }
+    // range='max' weekly is DOWNSAMPLED by Yahoo (~163 coarse bars) — use '10y' (~520 true weekly) first.
+    if (tf === 'weekly' || tf === '1wk' || tf === '1w') { const w = period + 10; return { interval: '1wk', range: w <= 52 ? '1y' : w <= 104 ? '2y' : w <= 260 ? '5y' : w <= 520 ? '10y' : 'max' }; }
     const d = period + 20; return { interval: '1d', range: d <= 130 ? '6mo' : d <= 260 ? '1y' : d <= 520 ? '2y' : d <= 1300 ? '5y' : 'max' };
+}
+// Platform's precomputed technical scan (price, rsiD/rsiW, ma.{d200,d300,w200,w300}+dist), cached ~60s.
+const _scanCache = {};
+async function getScan(sym) {
+    const key = String(sym || '').toUpperCase();
+    const c = _scanCache[key];
+    if (c && (Date.now() - c.t) < 60000) return c.v;
+    const j = await apiJson(`/api/technicals?mode=scan&symbols=${encodeURIComponent(key)}&v=2`);
+    const v = (j && j.results && j.results[key]) || null;
+    _scanCache[key] = { t: Date.now(), v };
+    return v;
 }
 function rsiCalc(closes, period) {
     period = period || 14;
@@ -116,20 +128,32 @@ async function evalCondition(c, rule) {
             return { met: cmp(price, +c.threshold), value: `מחיר ${sym} $${price.toFixed(2)}` };
         }
         if (c.factor === 'rsi' && sym && c.threshold != null) {
-            const rsi = await rsiValue(sym, c.timeframe);
-            if (rsi == null) return { met: false, value: 'אין RSI' };
+            const tf = (c.timeframe || 'daily').toLowerCase();
+            const weekly = tf === 'weekly' || tf === '1wk' || tf === '1w';
+            const intraday = /^\d+\s*h/.test(tf);
+            let rsi = null;
+            if (!intraday) { const scan = await getScan(sym); if (scan) { const v = weekly ? scan.rsiW : scan.rsiD; if (v != null) rsi = +v; } }
+            if (rsi == null) rsi = await rsiValue(sym, c.timeframe);
+            if (rsi == null) return { met: false, value: `אין RSI ל-${sym}` };
             return { met: cmp(rsi, +c.threshold), value: `RSI ${sym} ${rsi.toFixed(1)}${c.timeframe ? ' (' + c.timeframe + ')' : ''}` };
         }
         if (c.factor === 'ma' && sym) {
             const period = c.period || (typeof c.threshold === 'number' ? Math.round(c.threshold) : 200);
             const tf = (c.timeframe || 'daily').toLowerCase();
-            const { interval, range } = maParams(tf, period);
-            const closes = await getCloses(sym, interval, range);
-            if (!closes || closes.length < period + 1) return { met: false, value: `אין מספיק היסטוריה ל-${sym}` };
-            const ma = sma(closes, period), price = closes[closes.length - 1];
-            if (ma == null || price == null) return { met: false, value: 'אין ממוצע' };
-            const distPct = ((price - ma) / ma) * 100;
-            const unit = tf === 'weekly' ? ' שבועות' : tf === 'daily' ? ' ימים' : '';
+            const weekly = tf === 'weekly' || tf === '1wk' || tf === '1w';
+            let ma = null, price = null, distPct = null;
+            if (period === 200 || period === 300) {
+                const scan = await getScan(sym); const m = scan && scan.ma; const k = (weekly ? 'w' : 'd') + period;
+                if (m && m[k] != null && m[k + 'dist'] != null) { ma = +m[k]; distPct = +m[k + 'dist']; price = scan.price != null ? +scan.price : null; }
+            }
+            if (ma == null) {
+                const { interval, range } = maParams(tf, period);
+                const closes = await getCloses(sym, interval, range);
+                if (closes && closes.length >= period + 1) { ma = sma(closes, period); price = closes[closes.length - 1]; if (ma) distPct = ((price - ma) / ma) * 100; }
+            }
+            if (ma == null || distPct == null) return { met: false, value: `אין נתוני ממוצע ${period} ל-${sym}` };
+            if (price == null) price = ma * (1 + distPct / 100);
+            const unit = weekly ? ' שבועות' : ' ימים';
             const met = c.operator === 'EQUALS' ? Math.abs(distPct) <= 2.5 : cmp(price, ma);
             const near = c.operator === 'EQUALS' ? (met ? ' — נוגע' : ' — לא נוגע') : '';
             return { met, value: `${sym} $${price.toFixed(2)} מול ממוצע ${period}${unit} $${ma.toFixed(2)} (${distPct >= 0 ? '+' : ''}${distPct.toFixed(1)}%)${near}` };

@@ -651,16 +651,33 @@ function _taSma(closes, period) {
     let sum = 0; for (let i = closes.length - period; i < closes.length; i++) sum += closes[i];
     return sum / period;
 }
-// Pick a Yahoo interval+range that yields at least `period` bars at the requested timeframe.
+// Pick a Yahoo interval+range that yields at least `period` REAL bars. NOTE: range='max' with a
+// weekly interval is DOWNSAMPLED by Yahoo (~163 coarse points even for a 40-year stock), so prefer
+// the explicit '10y' tier (≈520 true weekly bars) before ever falling back to 'max'.
 function _taMaParams(tf, period) {
     if (tf === 'weekly' || tf === '1wk' || tf === '1w') {
         const w = period + 10;
-        const range = w <= 52 ? '1y' : w <= 104 ? '2y' : w <= 260 ? '5y' : 'max';
+        const range = w <= 52 ? '1y' : w <= 104 ? '2y' : w <= 260 ? '5y' : w <= 520 ? '10y' : 'max';
         return { interval: '1wk', range };
     }
     const d = period + 20;
     const range = d <= 130 ? '6mo' : d <= 260 ? '1y' : d <= 520 ? '2y' : d <= 1300 ? '5y' : 'max';
     return { interval: '1d', range };
+}
+// The platform's precomputed technical scan (price, rsiD/rsiW, ma.{d200,d300,w200,w300} + *dist).
+// Cached ~60s so an MA + RSI condition on the same symbol share one fetch.
+const _taScanCache = {};
+async function _taScan(sym) {
+    const key = String(sym || '').toUpperCase();
+    const c = _taScanCache[key];
+    if (c && (Date.now() - c.t) < 60000) return c.v;
+    try {
+        const r = await fetch(`/api/technicals?mode=scan&symbols=${encodeURIComponent(key)}&v=2`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const v = (j && j.results && j.results[key]) || null;
+        _taScanCache[key] = { t: Date.now(), v };
+        return v;
+    } catch (e) { return null; }
 }
 // Evaluate ONE condition → { met:boolean, value:string } (value for the log). Real data only.
 async function _taEvalCondition(c, rule) {
@@ -683,26 +700,38 @@ async function _taEvalCondition(c, rule) {
             return { met: cmp(price, +c.threshold), value: `מחיר ${sym} $${(+price).toFixed(2)}` };
         }
         if (c.factor === 'rsi' && sym && c.threshold != null) {
-            const rsi = await _taRsiValue(sym, c.timeframe);
-            if (rsi == null) return { met: false, value: 'אין RSI' };
+            const tf = (c.timeframe || 'daily').toLowerCase();
+            const weekly = tf === 'weekly' || tf === '1wk' || tf === '1w';
+            const intraday = /^\d+\s*h/.test(tf);
+            let rsi = null;
+            // Standard daily/weekly RSI → use the platform's precomputed scan (reliable). Intraday → history.
+            if (!intraday) { const scan = await _taScan(sym); if (scan) { const v = weekly ? scan.rsiW : scan.rsiD; if (v != null) rsi = +v; } }
+            if (rsi == null) rsi = await _taRsiValue(sym, c.timeframe);
+            if (rsi == null) return { met: false, value: `אין RSI ל-${sym}` };
             return { met: cmp(rsi, +c.threshold), value: `RSI ${sym} ${rsi.toFixed(1)}${c.timeframe ? ' (' + c.timeframe + ')' : ''}` };
         }
         if (c.factor === 'ma' && sym) {
-            // The MA "level" is the moving average itself — compute the real SMA of the monitored
-            // asset over `period` bars at the requested timeframe, then compare price vs that MA.
+            // The MA "level" is the moving average itself. Prefer the platform's precomputed technical
+            // scan (w200/w300/d200/d300) — reliable, no history-length gaps; fall back to a real SMA
+            // from /api/history for non-standard periods (or symbols the scan doesn't cover, e.g. crypto).
             const period = c.period || (typeof c.threshold === 'number' ? Math.round(c.threshold) : 200);
             const tf = (c.timeframe || 'daily').toLowerCase();
-            const { interval, range } = _taMaParams(tf, period);
-            const closes = await _taCloses(sym, interval, range);
-            if (!closes || closes.length < period + 1) return { met: false, value: `אין מספיק היסטוריה ל-${sym} (נדרש ${period} ${tf === 'weekly' ? 'שבועות' : 'ימים'})` };
-            const ma = _taSma(closes, period);
-            const price = closes[closes.length - 1];
-            if (ma == null || price == null) return { met: false, value: 'אין ממוצע' };
-            const distPct = ((price - ma) / ma) * 100;
-            const unit = tf === 'weekly' ? ' שבועות' : tf === 'daily' ? ' ימים' : '';
-            // "Touches" the MA (operator EQUALS): met when price is within a small band of the average.
+            const weekly = tf === 'weekly' || tf === '1wk' || tf === '1w';
+            let ma = null, price = null, distPct = null;
+            if (period === 200 || period === 300) {
+                const scan = await _taScan(sym); const m = scan && scan.ma; const k = (weekly ? 'w' : 'd') + period;
+                if (m && m[k] != null && m[k + 'dist'] != null) { ma = +m[k]; distPct = +m[k + 'dist']; price = scan.price != null ? +scan.price : null; }
+            }
+            if (ma == null) {
+                const { interval, range } = _taMaParams(tf, period);
+                const closes = await _taCloses(sym, interval, range);
+                if (closes && closes.length >= period + 1) { ma = _taSma(closes, period); price = closes[closes.length - 1]; if (ma) distPct = ((price - ma) / ma) * 100; }
+            }
+            if (ma == null || distPct == null) return { met: false, value: `אין נתוני ממוצע ${period} ל-${sym}` };
+            if (price == null) price = ma * (1 + distPct / 100);
+            const unit = weekly ? ' שבועות' : ' ימים';
             const met = c.operator === 'EQUALS' ? Math.abs(distPct) <= 2.5 : cmp(price, ma);
-            const near = c.operator === 'EQUALS' ? (Math.abs(distPct) <= 2.5 ? ' — נוגע' : ' — לא נוגע') : '';
+            const near = c.operator === 'EQUALS' ? (met ? ' — נוגע' : ' — לא נוגע') : '';
             return { met, value: `${sym} $${(+price).toFixed(2)} מול ממוצע ${period}${unit} $${(+ma).toFixed(2)} (${distPct >= 0 ? '+' : ''}${distPct.toFixed(1)}%)${near}` };
         }
         if (c.factor === 'eps_surprise' && c.threshold != null) {
