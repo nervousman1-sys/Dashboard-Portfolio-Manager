@@ -51,18 +51,18 @@ function openCreateAlert(sym, market) {
         <div class="wl-head"><span class="wl-title">🔔 התראה חדשה · ${_saEsc(disp)}</span><button class="wl-close" onclick="closeCreateAlert()">✕</button></div>
         <div class="sa-form">
             <div class="sa-field"><label>סוג ההתראה</label>
+                <!-- Alert types = the table's price-relative indicators: a user PRICE target + price
+                     crossing the 200/300 day & week MAs + entering a monthly/quarterly FVG. The
+                     type-an-indicator-value kinds (RSI/ATR/volume) were intentionally removed from the
+                     create flow (kept in _SA_KINDS below so existing alerts still render). -->
                 <select id="saKind" class="st-pf-select" onchange="_saKindChanged()">
                     <option value="price">מחיר מגיע ל…</option>
-                    <option value="rsi_d">RSI יומי מגיע ל…</option>
-                    <option value="rsi_w">RSI שבועי מגיע ל…</option>
                     <option value="ma200">המחיר חוצה ממוצע 200 יום</option>
                     <option value="ma300">המחיר חוצה ממוצע 300 יום</option>
                     <option value="ma_w200">המחיר חוצה ממוצע 200 שבועות</option>
                     <option value="ma_w300">המחיר חוצה ממוצע 300 שבועות</option>
                     <option value="fvg_m">המחיר נכנס ל-FVG חודשי</option>
                     <option value="fvg_q">המחיר נכנס ל-FVG רבעוני</option>
-                    <option value="atr">ATR יומי (%) מגיע ל…</option>
-                    <option value="vol">נפח חריג (× מהממוצע)</option>
                 </select>
             </div>
             <div class="sa-field" id="saDirWrap"><label>כיוון</label>
