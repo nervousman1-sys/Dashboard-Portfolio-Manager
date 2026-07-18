@@ -918,10 +918,30 @@ function _taSyncClient(id, updated) {
 }
 // Execute a fired BUY/SELL FOR REAL against a linked in-platform (paper) portfolio, via the existing
 // buy/sell engine. Returns { ok, message }. Fails safe: on any guard/failure it does NOT trade.
+// Is the market for this ticker currently open (INCLUDING pre-market + after-hours)?
+//   US  → Mon–Fri 04:00–20:00 ET  (pre-market 04:00, regular 09:30-16:00, after-hours →20:00)
+//   TASE→ Sun–Thu ~09:00–17:40 Israel time (pre-open + continuous + closing auction)
+// (Holidays are not modeled — day/hour only.) Orders never execute outside these windows.
+function _taIsIsraeli(ticker) { const t = String(ticker || '').toUpperCase(); return /\.TA$|\.TASE$/.test(t) || /^\d{6,9}$/.test(t); }
+function _taMarketOpen(ticker) {
+    const il = _taIsIsraeli(ticker);
+    const tz = il ? 'Asia/Jerusalem' : 'America/New_York';
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+        const get = (k) => (parts.find(p => p.type === k) || {}).value;
+        const wd = get('weekday'); let hh = parseInt(get('hour'), 10); if (hh === 24) hh = 0; const mins = hh * 60 + parseInt(get('minute'), 10);
+        if (il) { if (wd === 'Fri' || wd === 'Sat') return false; return mins >= 9 * 60 && mins <= 17 * 60 + 40; }
+        if (wd === 'Sat' || wd === 'Sun') return false; return mins >= 4 * 60 && mins <= 20 * 60;
+    } catch (e) { return true; } // if TZ math fails, don't block
+}
+function _taMarketClosedMsg(ticker) { return `מחוץ לשעות המסחר של ${_taIsIsraeli(ticker) ? 'הבורסה בת"א' : 'שוק ארה"ב'} — ההזמנה ממתינה לפתיחת המסחר`; }
+
 async function _taExecutePaperTrade(portfolioId, rule, px) {
     if (typeof portfolioBuyAsset !== 'function' || typeof portfolioSellAsset !== 'function') return { ok: false, message: 'מנוע התיקים אינו זמין' };
     const sym = String(rule.target_asset || '').toUpperCase();
     if (!sym) return { ok: false, message: 'אין נכס יעד לפעולה' };
+    // Orders execute ONLY during market hours (incl. pre/after-hours). Outside → defer (order queued).
+    if (!_taMarketOpen(sym)) return { ok: false, deferred: true, message: _taMarketClosedMsg(sym) };
     if (px == null || !(+px > 0)) return { ok: false, message: `אין מחיר שוק זמין ל-${sym}` };
     const client = (typeof clients !== 'undefined' && Array.isArray(clients)) ? clients.find(c => c.id === portfolioId) : null;
     const pname = client ? client.name : ('#' + portfolioId);
@@ -969,10 +989,13 @@ async function _taRunScreener(s) {
         : (+sc.per_stock_usd || 0);
     const held = new Set();
     if (s.portfolio_id && typeof clients !== 'undefined') { const c = clients.find(x => x.id === s.portfolio_id); if (c) (c.holdings || []).forEach(h => held.add(String(h.ticker || '').toUpperCase())); }
-    let boughtNow = 0;
+    // Index stocks (NDX/SP500) trade on US hours; if the market is closed, defer the buys.
+    const marketOpen = _taMarketOpen('SPY');
+    let boughtNow = 0, pendingCount = 0;
     for (const t of matches) {
         if (bought.includes(t) || held.has(String(t).toUpperCase())) continue;
         if (budget > 0 && state.spent + per > budget + 0.01) break; // budget exhausted
+        if (s.mode === 'PAPER' && s.portfolio_id && !marketOpen) { pendingCount++; continue; } // wait for market hours
         if (s.mode === 'PAPER' && s.portfolio_id) {
             let px = null; try { const r = await fetch(`/api/quote?symbols=${encodeURIComponent(t)}`); const jj = await r.json(); const q = jj[t] || (jj.quotes && jj.quotes[t]) || {}; px = q.price != null ? q.price : q.regularMarketPrice; } catch (e) { }
             const exec = await _taExecutePaperTrade(s.portfolio_id, { action: 'BUY', target_asset: t, amount: { type: 'CASH_USD', value: per } }, px);
@@ -985,7 +1008,8 @@ async function _taRunScreener(s) {
     }
     state.bought = bought;
     const budgetDone = budget > 0 && state.spent + per > budget + 0.01;
-    if (!boughtNow) logs.push({ ts: new Date().toISOString(), kind: 'check', message: `נסרקו ${tickers.length} מניות · ${matches.length} תואמות · ${bought.length} כבר נקנו${budgetDone ? ' · התקציב מוצה' : ''}` });
+    if (pendingCount > 0) logs.push({ ts: new Date().toISOString(), kind: 'pending', message: `[סורק] ${pendingCount} מניות תואמות ${_taMarketClosedMsg('SPY')}` });
+    else if (!boughtNow) logs.push({ ts: new Date().toISOString(), kind: 'check', message: `נסרקו ${tickers.length} מניות · ${matches.length} תואמות · ${bought.length} כבר נקנו${budgetDone ? ' · התקציב מוצה' : ''}` });
     try { await supabaseClient.from('automated_strategies').update({ status: 'ACTIVE', last_checked: new Date().toISOString(), execution_logs: logs.slice(-40), screener_state: state, updated_at: new Date().toISOString() }).eq('id', s.id); } catch (e) { }
     if (boughtNow && typeof showToast === 'function') showToast(`הסורק קנה ${boughtNow} מניות`, 'success');
 }
@@ -1007,7 +1031,7 @@ async function _taCheckStrategies(force) {
             const logs = Array.isArray(s.execution_logs) ? s.execution_logs.slice(-40) : [];
             if (fired) {
                 const detail = results.filter(r => r.met).map(r => r.value).join(' · ') || results.map(r => r.value).join(' · ');
-                let msg;
+                let msg; let deferred = false;
                 if (rule.action === 'ALERT_ONLY' || s.mode === 'ALERT') {
                     msg = `טריגר התקיים — ${detail}`;
                 } else {
@@ -1016,7 +1040,11 @@ async function _taCheckStrategies(force) {
                     try { if (rule.target_asset) { const r = await fetch(`/api/quote?symbols=${encodeURIComponent(rule.target_asset)}`); const jj = await r.json(); const q = jj[rule.target_asset] || (jj.quotes && jj.quotes[rule.target_asset]) || {}; px = q.price != null ? q.price : q.regularMarketPrice; } } catch (e) { }
                     const actHe = rule.action === 'BUY' ? 'קנייה' : 'מכירה';
                     const amtHe = rule.amount.type === 'SHARES' ? `${_taFmtNum(rule.amount.value)} מניות` : rule.amount.type === 'PORTFOLIO_PCT' ? `${rule.amount.value}% מהאחזקה` : `$${_taFmtNum(rule.amount.value)}`;
-                    if (s.mode === 'LIVE') {
+                    if (!_taMarketOpen(rule.target_asset)) {
+                        // Order is "sent" (trigger met) but execution waits for market hours — stay ACTIVE.
+                        deferred = true;
+                        msg = `הטריגר התקיים — ${_taMarketClosedMsg(rule.target_asset)} · ${detail}`;
+                    } else if (s.mode === 'LIVE') {
                         // Route the order through the broker adapter. Real brokers fail safe (no live order).
                         const conn = await _taGetBrokerConn(s.broker_connection_id);
                         const order = { side: rule.action === 'BUY' ? 'BUY' : 'SELL', symbol: rule.target_asset || '', qtyLabel: amtHe, price: px };
@@ -1025,18 +1053,24 @@ async function _taCheckStrategies(force) {
                     } else if (s.mode === 'PAPER' && s.portfolio_id) {
                         // Execute the trade FOR REAL in the linked paper portfolio (deduct cash / add-remove position).
                         const exec = await _taExecutePaperTrade(s.portfolio_id, rule, px);
-                        msg = exec.ok ? `${exec.message} — ${detail}` : `לא בוצע בתיק — ${exec.message} · ${detail}`;
+                        if (exec.deferred) { deferred = true; msg = `${exec.message} · ${detail}`; }
+                        else msg = exec.ok ? `${exec.message} — ${detail}` : `לא בוצע בתיק — ${exec.message} · ${detail}`;
                     } else {
                         // Legacy PAPER without a linked portfolio → simulate + log only.
                         msg = `סימולציה: בוצעה ${actHe} של ${amtHe} ${rule.target_asset || ''}${px != null ? ` במחיר ~$${(+px).toFixed(2)}` : ''} — ${detail}`;
                     }
                 }
-                logs.push({ ts: new Date().toISOString(), kind: 'triggered', message: msg });
+                logs.push({ ts: new Date().toISOString(), kind: deferred ? 'pending' : 'triggered', message: msg });
                 try {
-                    await supabaseClient.from('automated_strategies').update({ status: 'TRIGGERED', triggered_at: new Date().toISOString(), last_checked: new Date().toISOString(), execution_logs: logs, updated_at: new Date().toISOString() }).eq('id', s.id);
+                    if (deferred) {
+                        // Keep monitoring — it will execute on the next check inside market hours.
+                        await supabaseClient.from('automated_strategies').update({ last_checked: new Date().toISOString(), execution_logs: logs.slice(-40), updated_at: new Date().toISOString() }).eq('id', s.id);
+                    } else {
+                        await supabaseClient.from('automated_strategies').update({ status: 'TRIGGERED', triggered_at: new Date().toISOString(), last_checked: new Date().toISOString(), execution_logs: logs, updated_at: new Date().toISOString() }).eq('id', s.id);
+                    }
                 } catch (e) { }
-                if (typeof showToast === 'function') showToast(`אסטרטגיה "${s.name}" הופעלה`, 'success');
-                if (typeof window !== 'undefined' && typeof window.checkStockAlerts === 'function') { const dot = document.getElementById('bellDot'); if (dot) dot.style.display = 'block'; }
+                if (!deferred && typeof showToast === 'function') showToast(`אסטרטגיה "${s.name}" הופעלה`, 'success');
+                if (!deferred && typeof window !== 'undefined' && typeof window.checkStockAlerts === 'function') { const dot = document.getElementById('bellDot'); if (dot) dot.style.display = 'block'; }
             } else {
                 logs.push({ ts: new Date().toISOString(), kind: 'check', message: `נבדק — התנאים לא התקיימו (${results.map(r => r.value).join(' · ').slice(0, 120)})` });
                 try { await supabaseClient.from('automated_strategies').update({ last_checked: new Date().toISOString(), execution_logs: logs.slice(-40) }).eq('id', s.id); } catch (e) { }

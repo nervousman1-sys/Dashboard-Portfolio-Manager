@@ -253,6 +253,22 @@ async function execPaperTrade(portfolioId, rule, px, fxIls) {
     return { ok: true, message: `בוצעה מכירה בתיק «${pname}»: ${qty} מניות ${sym} @ ~$${px.toFixed(2)}` };
 }
 
+// ── Market hours — orders execute ONLY during trading hours (incl. pre-market + after-hours). ──
+//   US  → Mon–Fri 04:00–20:00 ET.   TASE → Sun–Thu ~09:00–17:40 Israel time. (Holidays not modeled.)
+function isIsraeliTicker(t) { const s = String(t || '').toUpperCase(); return /\.TA$|\.TASE$/.test(s) || /^\d{6,9}$/.test(s); }
+function marketOpen(ticker) {
+    const il = isIsraeliTicker(ticker);
+    const tz = il ? 'Asia/Jerusalem' : 'America/New_York';
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+        const get = (k) => (parts.find(p => p.type === k) || {}).value;
+        const wd = get('weekday'); let hh = parseInt(get('hour'), 10); if (hh === 24) hh = 0; const mins = hh * 60 + parseInt(get('minute'), 10);
+        if (il) { if (wd === 'Fri' || wd === 'Sat') return false; return mins >= 9 * 60 && mins <= 17 * 60 + 40; }
+        if (wd === 'Sat' || wd === 'Sun') return false; return mins >= 4 * 60 && mins <= 20 * 60;
+    } catch (e) { return true; }
+}
+function marketClosedMsg(ticker) { return `מחוץ לשעות המסחר של ${isIsraeliTicker(ticker) ? 'הבורסה בת"א' : 'שוק ארה"ב'} — ההזמנה ממתינה לפתיחת המסחר`; }
+
 // ── Broker adapter (LIVE) — real brokers FAIL SAFE (no live order) until a gateway is wired ──
 function brokerPlaceOrder(conn, order) {
     const broker = (conn && conn.broker) || 'PAPER';
@@ -270,13 +286,23 @@ async function processStrategy(s, fxIls) {
     const logs = Array.isArray(s.execution_logs) ? s.execution_logs.slice(-40) : [];
     if (!fired) { await supabase.from('automated_strategies').update({ last_checked: new Date().toISOString() }).eq('id', s.id); return false; }
 
+    const detail = results.filter(r => r.met).map(r => r.value).join(' · ') || results.map(r => r.value).join(' · ');
+    // Trade orders execute ONLY during market hours. Trigger met but market closed → keep the order
+    // QUEUED: stay ACTIVE (don't claim/TRIGGER) and execute on the next pass inside market hours.
+    const isTrade = rule.action === 'BUY' || rule.action === 'SELL';
+    if (isTrade && s.mode !== 'ALERT' && !marketOpen(rule.target_asset)) {
+        logs.push({ ts: new Date().toISOString(), kind: 'pending', message: `[סוכן שרת] הטריגר התקיים — ${marketClosedMsg(rule.target_asset)} · ${detail}` });
+        await supabase.from('automated_strategies').update({ last_checked: new Date().toISOString(), execution_logs: logs.slice(-40), updated_at: new Date().toISOString() }).eq('id', s.id);
+        log(`deferred #${s.id} "${s.name}" — market closed`);
+        return false;
+    }
+
     // CLAIM the strategy atomically so the browser engine can't also fire it (ACTIVE→TRIGGERED once).
     const { data: claimed } = await supabase.from('automated_strategies')
         .update({ status: 'TRIGGERED', triggered_at: new Date().toISOString(), last_checked: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', s.id).eq('status', 'ACTIVE').select();
     if (!claimed || !claimed.length) return false; // someone else already claimed it
 
-    const detail = results.filter(r => r.met).map(r => r.value).join(' · ') || results.map(r => r.value).join(' · ');
     let msg;
     if (rule.action === 'ALERT_ONLY' || s.mode === 'ALERT') {
         msg = `טריגר התקיים — ${detail}`;
