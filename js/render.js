@@ -1478,9 +1478,9 @@ function renderClientCards() {
         const _mc = (typeof rmModelScoreOf === 'function') ? rmModelScoreOf(client) : (client.modelScore != null ? client.modelScore : null);
         const _mcColor = _mc == null ? 'var(--text-muted)'
             : _mc >= 65 ? 'var(--risk-low)' : _mc >= 45 ? 'var(--accent-yellow)' : 'var(--risk-high)';
-        const _mcChip = (_mc != null)
-            ? `<button class="card-model-btn" style="--mc:${_mcColor}" onclick="event.stopPropagation(); openModal(${client.id})" title="ציון מודל כולל: 40% דוחות · 40% SML/CML · 20% טכני — לחץ לתוכנית פעולה">מודל ${_mc} · מה לשנות</button>`
-            : (client.compliancePartial ? `<button class="card-model-btn" style="--mc:var(--text-muted)" onclick="event.stopPropagation(); openModal(${client.id})" title="מחשב ציון מודל">מודל · מחשב…</button>` : '');
+        // Model score is intentionally NOT shown on the card (external/grid view) — it appears only
+        // inside the opened portfolio (the model analysis + action plan in the modal).
+        const _mcChip = '';
 
         // Allocation-breach chip — equities pushed cash below the portfolio's
         // minimum-cash target. Click → smart page with the rebalance instructions.

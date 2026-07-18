@@ -354,6 +354,16 @@ async function _fetchTickerTimeSeries(ticker, currency, outputSize) {
 //      Forward-fill any missing prices from last known close
 //   6. Normalize all values to returnPct from first data point
 
+// The portfolio's real INCEPTION date (YYYY-MM-DD) — the chart must never show movement before it.
+// Per holding the effective open date = real buyDate → the date its row was added (createdAt) →
+// the portfolio's creation date. Inception = the EARLIEST of those across all holdings.
+function _portfolioInceptionIso(client) {
+    if (!client) return null;
+    const created = client.createdAt ? new Date(client.createdAt).toISOString().slice(0, 10) : null;
+    const effBuys = (client.holdings || []).map(h => h.buyDate || h.createdAt || created).filter(Boolean).sort();
+    return effBuys.length ? effBuys[0] : created;
+}
+
 async function fetchSyntheticHistory(client, range) {
     if (!client || !client.holdings) return null;
 
@@ -447,14 +457,17 @@ async function fetchSyntheticHistory(client, range) {
 
     if (backbone.length < 2) return null;
 
-    // Real opening date: portfolios created with purchase dates start their
-    // history at the FIRST buy — no flat pre-history before the portfolio existed.
-    const _knownBuyDates = client.holdings.map(h => h.buyDate).filter(Boolean).sort();
-    if (_knownBuyDates.length) {
-        const openIso = _knownBuyDates[0];
-        const startIdx = backbone.findIndex(p => p.date >= openIso);
+    // INCEPTION CLIP — the chart must start at the portfolio's real inception and NEVER fabricate
+    // movement from before it existed. Uses buyDate → row-creation date → portfolio creation date,
+    // so portfolios whose holdings lack an explicit buyDate no longer show a full year of fake
+    // pre-existence history (the exact "false data" bug).
+    const _effBuyOf = (h) => h.buyDate || h.createdAt || _createdIso || null;
+    const inceptionIso = _portfolioInceptionIso(client);
+    if (inceptionIso) {
+        const startIdx = backbone.findIndex(p => p.date >= inceptionIso);
         if (startIdx > 0) backbone = backbone.slice(startIdx);
-        if (backbone.length < 2) return null;
+        else if (startIdx === -1) return _buildCostBasisFallback(client, range); // inception newer than every fetched close
+        if (backbone.length < 2) return _buildCostBasisFallback(client, range);
     }
 
     // Step 4: Create O(1) date→close lookup Maps
@@ -519,9 +532,11 @@ async function fetchSyntheticHistory(client, range) {
         let currentClose = 0;
         if (dateMap) { for (let i = n - 1; i >= 0; i--) { const c = dateMap.get(backbone[i].date); if (c > 0) { currentClose = c; break; } } }
         if (!dateMap || !(currentClose > 0) || !(valueUsd > 0)) { legs.push({ ticker: h.ticker, flat: true, costUsd, valueUsd: valueUsd > 0 ? valueUsd : costUsd }); continue; }
-        // Track price from the actual buy date (if it falls inside the window); before
-        // that the capital is held flat at cost. Bought-before-window legs track from day 0.
-        const buyIso = (h.buyDate && h.buyDate > windowStart) ? h.buyDate : windowStart;
+        // Track price from the holding's effective open date (buyDate → row-added → portfolio
+        // creation); before that the capital is held flat at cost (0 return contribution). A
+        // holding with no explicit buyDate now opens at its creation date, not the window start.
+        const _eb = _effBuyOf(h);
+        const buyIso = (_eb && _eb > windowStart) ? _eb : windowStart;
         let entryIdx = 0;
         for (let i = 0; i < n; i++) { if (backbone[i].date >= buyIso) { entryIdx = i; break; } entryIdx = n - 1; }
         legs.push({ ticker: h.ticker, dateMap, currentClose, costUsd, valueUsd, entryIdx });
@@ -599,18 +614,17 @@ function _buildCostBasisFallback(client, range) {
 
     const startValue = totalCostBasis + (client.cashBalance || 0);
 
-    // Generate daily points from range start → today.
-    // Cap at 5Y (1825 days) — our static benchmark data only goes back 5Y,
-    // so generating portfolio history beyond that creates an empty gap on the chart.
+    // Generate daily points from INCEPTION → today (never before the portfolio existed).
+    // Cap at 5Y (1825 days) — our static benchmark data only goes back 5Y.
     const rawDays = _rangeToOutputSize(range);
-    const days = Math.min(rawDays, 1825);
     const today = new Date();
-    const startDate = new Date(today.getTime() - days * 86400000);
+    let startDate = new Date(today.getTime() - Math.min(rawDays, 1825) * 86400000);
+    const _incIso = _portfolioInceptionIso(client);
+    if (_incIso) { const inc = new Date(_incIso + 'T00:00:00'); if (inc > startDate && inc <= today) startDate = inc; }
 
-    // Linear interpolation between costBasis and current value
-    // For 5Y/MAX: sample monthly (every ~21 trading days) to keep points manageable.
-    // For shorter ranges: daily points (capped at 500).
-    const n = days > 500 ? Math.min(Math.ceil(days / 21), 260) : Math.min(days, 500);
+    // Linear interpolation between costBasis and current value over the REAL active span.
+    const spanDays = Math.max(1, Math.round((today.getTime() - startDate.getTime()) / 86400000));
+    const n = Math.max(2, spanDays > 500 ? Math.min(Math.ceil(spanDays / 21), 260) : Math.min(spanDays, 500));
     const history = new Array(n);
     for (let i = 0; i < n; i++) {
         const t = i / (n - 1); // 0 → 1
