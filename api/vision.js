@@ -410,7 +410,7 @@ function _normalizeAdvice(r) {
 async function _aiGatewayJson(prompt, temperature, maxTokens) {
     const key = process.env.AI_GATEWAY_API_KEY;
     if (!key) return null;
-    const model = process.env.AI_GATEWAY_MODEL || 'anthropic/claude-sonnet-4.6';
+    const model = process.env.AI_GATEWAY_MODEL || 'anthropic/claude-sonnet-5';
     try {
         const r = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
             method: 'POST',
