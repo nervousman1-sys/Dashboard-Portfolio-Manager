@@ -266,6 +266,54 @@ async function newsFor(symbol, perSymbol) {
     return items.map(n => ({ he: '', en: n.en, date: n.date, url: n.url, source: n.source }));
 }
 
+// ══════════════ Twitter/X feed pipeline (market-news "X" tab + Gemini agent context) ══════════════
+// Bypasses the paid official X API and direct scraping (blocked) by using a third-party RapidAPI
+// provider via a plain HTTP GET. Configure with env vars (see below). Returns CLEAN tweet objects:
+//   { id, user, date (ISO), text }  — junk/links stripped — ideal to feed straight into an LLM.
+//
+// The list of accounts to track (override per-request with ?users=a,b):
+const X_ACCOUNTS = ['elonmusk', 'YahooFinance', 'DeItaone', 'unusual_whales', 'FinancialJuice', 'markets'];
+
+// Strip t.co/other short-links, decode entities, collapse whitespace → clean text for the LLM.
+function _cleanTweetText(t) {
+    return String(t || '')
+        .replace(/https?:\/\/t\.co\/\S+/gi, ' ')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Fetch one user's latest tweets from the RapidAPI provider. Defensive parsing so it survives the
+// slightly different response shapes across popular providers (twitter-api45 / Y2S / etc.).
+async function _fetchUserTweets(user, host, key, limit) {
+    // Default path targets twitter-api45 (GET /timeline.php?screenname=USER). Override with
+    // RAPIDAPI_TWITTER_PATH if your provider differs — {user} is substituted, else appended.
+    const tmpl = process.env.RAPIDAPI_TWITTER_PATH || '/timeline.php?screenname={user}';
+    const path = tmpl.includes('{user}') ? tmpl.replace('{user}', encodeURIComponent(user)) : tmpl + encodeURIComponent(user);
+    const url = `https://${host}${path}`;
+    let j = null;
+    try {
+        const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host, Accept: 'application/json' } });
+        if (!r.ok) return [];
+        j = await r.json();
+    } catch (e) { return []; }
+    // Common array locations across providers:
+    const arr = (j && (j.timeline || j.tweets || j.results || (j.data && (j.data.tweets || j.data)) || (Array.isArray(j) ? j : []))) || [];
+    const out = [];
+    for (const it of (Array.isArray(arr) ? arr : [])) {
+        if (!it || typeof it !== 'object') continue;
+        const src = it.tweet && typeof it.tweet === 'object' ? it.tweet : it;
+        const id = String(src.tweet_id || src.id_str || src.rest_id || src.id || '');
+        const text = _cleanTweetText(src.text || src.full_text || src.content || '');
+        const dateRaw = src.created_at || src.date || src.time || null;
+        let date = null; if (dateRaw) { const d = new Date(dateRaw); if (!isNaN(d)) date = d.toISOString(); }
+        const uname = src.screen_name || (src.author && src.author.screen_name) || (src.user && (src.user.screen_name || src.user.username)) || user;
+        if (id && text && text.length > 1) out.push({ id, user: uname, date, text });
+        if (out.length >= limit) break;
+    }
+    return out;
+}
+
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
@@ -278,6 +326,35 @@ module.exports = async (req, res) => {
                 ? 's-maxage=900, stale-while-revalidate=3600'      // refresh ~every 15 min (continuous)
                 : 's-maxage=120');
             res.status(200).json({ macro: items });
+            return;
+        }
+
+        // ── Twitter/X feed: /api/news?twitter=1[&users=a,b][&limit=5][&since=ISO] ──
+        if (req.query.twitter || req.query.x) {
+            const key = process.env.RAPIDAPI_KEY;
+            if (!key) { res.setHeader('Cache-Control', 's-maxage=60'); res.status(200).json({ error: 'not_configured', message: 'RAPIDAPI_KEY is not set on the server' }); return; }
+            const host = process.env.RAPIDAPI_TWITTER_HOST || 'twitter-api45.p.rapidapi.com';
+            const users = (req.query.users ? String(req.query.users).split(',') : X_ACCOUNTS)
+                .map(s => String(s).trim().replace(/^@/, '')).filter(Boolean).slice(0, 12);
+            const perUser = Math.min(parseInt(req.query.limit, 10) || 5, 15);
+            const sinceMs = req.query.since ? Date.parse(req.query.since) : 0;
+            try {
+                const batches = await Promise.allSettled(users.map(u => _fetchUserTweets(u, host, key, perUser)));
+                let tweets = [];
+                for (const b of batches) if (b.status === 'fulfilled' && Array.isArray(b.value)) tweets = tweets.concat(b.value);
+                // Dedup by id + drop anything older than `since` (only NEW tweets), newest first.
+                const seen = new Set();
+                tweets = tweets.filter(t => {
+                    if (!t.id || seen.has(t.id)) return false; seen.add(t.id);
+                    if (sinceMs && t.date && Date.parse(t.date) <= sinceMs) return false;
+                    return true;
+                }).sort((a, b) => (Date.parse(b.date || 0) || 0) - (Date.parse(a.date || 0) || 0)).slice(0, 80);
+                res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+                res.status(200).json({ tweets, accounts: users, count: tweets.length, asOf: new Date().toISOString() });
+            } catch (e) {
+                res.setHeader('Cache-Control', 's-maxage=30');
+                res.status(200).json({ error: 'fetch_failed', message: e.message, tweets: [] });
+            }
             return;
         }
 

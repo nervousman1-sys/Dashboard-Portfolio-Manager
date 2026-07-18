@@ -211,10 +211,46 @@ function setDnChannel(id) {
     _dnActiveChannel = id;
     // Persist the chosen category (by label) so a page refresh stays on it
     try {
-        const c = (_dnLastData?.channels || []).find(x => x.id === id);
-        if (c) localStorage.setItem('dn_active_cat', _dnLabelOf(c.name));
+        if (id === '__x') localStorage.setItem('dn_active_cat', 'X');
+        else { const c = (_dnLastData?.channels || []).find(x => x.id === id); if (c) localStorage.setItem('dn_active_cat', _dnLabelOf(c.name)); }
     } catch (e) { /* ignore */ }
     _dnRender();
+}
+
+// ── X (Twitter) feed — pulls clean tweets from the tracked market accounts via /api/news?twitter=1
+// (a RapidAPI third-party provider server-side; the same JSON also feeds the Gemini agent). ──
+let _dnXLoading = false;
+async function _dnLoadX(force) {
+    const el = document.getElementById('dnXFeed');
+    if (!el || _dnXLoading) return;
+    _dnXLoading = true;
+    try {
+        const r = await fetch(`/api/news?twitter=1&t=${Math.floor(Date.now() / 120000)}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        if (!document.getElementById('dnXFeed')) return; // user switched tabs
+        if (j && j.error === 'not_configured') {
+            el.innerHTML = `<div class="risk-table-card glass-card dn-setup">
+                <h3>מעקב ציוצים (X) ממתין להגדרה</h3>
+                <p>כדי למשוך את הציוצים האחרונים מחשבונות מובילים בשוק, יש להגדיר מפתח RapidAPI בשרת (משתנה הסביבה <b>RAPIDAPI_KEY</b>). ברירת המחדל עובדת מול הספק twitter-api45; אפשר לשנות ספק דרך <b>RAPIDAPI_TWITTER_HOST</b>.</p>
+            </div>`;
+            return;
+        }
+        const tweets = (j && j.tweets) || [];
+        if (!tweets.length) { el.innerHTML = '<div class="adv-empty">אין ציוצים חדשים כרגע.</div>'; return; }
+        const accounts = (j.accounts || []).map(a => '@' + a).join(' · ');
+        el.innerHTML = `<div class="dn-x-head">עוקב אחרי: ${_dnEsc(accounts)}</div>` + tweets.map(_dnXItemHtml).join('');
+    } catch (e) {
+        if (el) el.innerHTML = '<div class="adv-empty">שגיאה בטעינת הציוצים — ננסה שוב אוטומטית.</div>';
+    } finally { _dnXLoading = false; }
+}
+function _dnXItemHtml(t) {
+    const when = t.date ? new Date(t.date).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const url = `https://x.com/${encodeURIComponent(t.user)}/status/${encodeURIComponent(t.id)}`;
+    return `<div class="dn-msg dn-x-msg">
+        <div class="dn-x-top"><span class="dn-x-user">@${_dnEsc(t.user)}</span><span class="dn-x-when">${_dnEsc(when)}</span></div>
+        <div class="dn-x-text">${_dnEsc(t.text)}</div>
+        <a class="dn-x-link" href="${url}" target="_blank" rel="noopener">צפה ב-X ↗</a>
+    </div>`;
 }
 
 // Per-channel display rules:
@@ -719,18 +755,27 @@ function _dnRender() {
     // Everything is categorized — no merged view. Restore the LAST-VIEWED category
     // (persisted by label, so a refresh keeps you on e.g. "תנועות הון" instead of
     // bouncing back to the default "חדשות"). Falls back to the first category.
-    if (_dnActiveChannel === 'all' || !ordered.some(c => c.id === _dnActiveChannel)) {
+    if (_dnActiveChannel !== '__x' && (_dnActiveChannel === 'all' || !ordered.some(c => c.id === _dnActiveChannel))) {
         let restored = null;
         try {
             const savedCat = localStorage.getItem('dn_active_cat');
-            if (savedCat) { const m = ordered.find(c => labelOf(c.name) === savedCat); if (m) restored = m.id; }
+            if (savedCat === 'X') { _dnActiveChannel = '__x'; }
+            else if (savedCat) { const m = ordered.find(c => labelOf(c.name) === savedCat); if (m) restored = m.id; }
         } catch (e) { /* ignore */ }
-        _dnActiveChannel = restored || (ordered.length ? ordered[0].id : null);
+        if (_dnActiveChannel !== '__x') _dnActiveChannel = restored || (ordered.length ? ordered[0].id : null);
     }
 
+    // Discord category tabs + an "X (טוויטר)" tab that pulls tweets from tracked market accounts.
     tabsEl.innerHTML = ordered.map(c =>
         `<button class="dn-tab ${_dnActiveChannel === c.id ? 'active' : ''}" onclick="setDnChannel('${c.id}')">${_dnEsc(labelOf(c.name))}</button>`
-    ).join('');
+    ).join('') + `<button class="dn-tab dn-tab-x ${_dnActiveChannel === '__x' ? 'active' : ''}" onclick="setDnChannel('__x')">X (טוויטר)</button>`;
+
+    // X feed is a separate source (not a Discord channel) — render it and stop.
+    if (_dnActiveChannel === '__x') {
+        feedEl.innerHTML = `<div id="dnXFeed"><div class="adv-empty">טוען ציוצים…</div></div>`;
+        _dnLoadX();
+        return;
+    }
 
     const isImgUrl = (u) => /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(u) || /hcti\.io\/v1\/image\//i.test(u);
     const renderMsg = (m, chName) => {
