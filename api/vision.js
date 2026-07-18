@@ -221,10 +221,11 @@ function _strategyPrompt(text) {
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות במדד* (למשל "כל מניה בנאסד\'ק שעוברת תנאי") ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל,"split_mode":"fixed" (סכום קבוע לכל מניה — כשצוין סכום למניה) או "equal" (חלוקה שווה של התקציב בין כל המניות התואמות — כשהמשתמש אומר "חלק/מחולק שווה" בלי סכום קבוע למניה)}, קבע trigger_type "SCREENER", target_asset null, ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "10 אלף דולר"=10000, "50 אלף"=50000.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות* (למשל "כל מניה בנאסד\'ק שעוברת תנאי", או אפילו סתם "כל מניה שעוברת RSI 30" בלי לציין מדד) ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P — וברירת המחדל היא "NDX" כשלא צוין מדד,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל,"split_mode":"fixed" (סכום קבוע לכל מניה — כשצוין סכום למניה) או "equal" (חלוקה שווה של התקציב בין כל המניות התואמות — כשהמשתמש אומר "חלק/מחולק שווה" בלי סכום קבוע למניה)}, קבע trigger_type "SCREENER", target_asset null, action "BUY" (סורק תמיד קונה, אף פעם לא ALERT_ONLY), ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "קונה"/"קונה לי"/"תקנה"/"רכישה" = BUY. "10 אלף דולר"=10000, "50 אלף"=50000. חשוב: כל אמירת "כל מניה ש..." עם תנאי טכני היא SCREENER — לעולם לא TECHNICAL_INDICATOR של נכס בודד.',
         'דוגמאות:',
         'קלט: "אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו, מצב עולמי ופריצות טכנולוגיות?" → {"advice": true}',
-        'קלט: "צור אסטרטגיה שכל מניה בנאסד\'ק שה-RSI השבועי שלה יורד מתחת ל-30 — תקנה אותה ב-10 אלף דולר, עד תקציב כולל של 50 אלף דולר" → {"name":"סורק נאסד\'ק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "צור אסטרטגיה שכל מניה בנאסד\'ק שה-RSI השבועי שלה יורד מתחת ל-30 — תקנה אותה ב-10 אלף דולר, עד תקציב כולל של 50 אלף דולר" → {"name":"סורק נאסד\'ק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000,"split_mode":"fixed"},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "אני רוצה אסטרטגיה שבה אתה קונה לי כל מניה שעוברת את RSI 30 בטיים פריים שבועי, התקציב 50 אלף דולר ו-10 אלף לכל מניה" (בלי לציין מדד) → {"name":"סורק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000,"split_mode":"fixed"},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה לי את מניית ORCL כשה-RSI השבועי מתחת ל-30 וגם מחיר המניה נוגע בממוצע 300 השבועות" → {"name":"קניית ORCL על RSI וממוצע","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"ORCL","keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"},{"factor":"ma","subject":"ORCL","keyword":null,"operator":"EQUALS","threshold":null,"period":300,"timeframe":"weekly"}],"action":"BUY","target_asset":"ORCL","amount":{"type":"CASH_USD","value":0},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
@@ -285,7 +286,10 @@ function _normalizeStrategy(r) {
         // budget equally across all matching stocks. Explicit split_mode wins; else infer from inputs.
         const sm = String(r.screener.split_mode || '').toLowerCase();
         const splitMode = (sm === 'equal' || sm === 'split') ? 'equal' : (sm === 'fixed' || sm === 'per_stock') ? 'fixed' : (perStock > 0 ? 'fixed' : (totalBudget > 0 ? 'equal' : 'fixed'));
-        if (perStock > 0 || totalBudget > 0) screener = { universe, per_stock_usd: perStock, total_budget_usd: totalBudget, split_mode: splitMode };
+        // Keep the screener whenever a real universe is named — even with no budget yet — so the card can
+        // render its (editable) allocation fields. Drops only a truly empty {} with no universe/budget.
+        const hasUni = /NDX|NASDAQ|נאסד|SPX|S&P|SP500|SPY|ספ/.test(uni);
+        if (perStock > 0 || totalBudget > 0 || hasUni) screener = { universe, per_stock_usd: perStock, total_budget_usd: totalBudget, split_mode: splitMode };
     }
     return {
         name: (r.name ? String(r.name).trim() : '') || 'אסטרטגיה',
@@ -342,7 +346,11 @@ function _strategyFallback(text) {
     const kw = (t.match(/(Iran|Trump|Israel|Fed|Powell|OPEC|איראן|טראמפ|ישראל|הפד|אופ"ק|נפט|ריבית)/gi) || []);
     if (kw.length) conditions.push({ factor: 'news', subject: kw[0], keyword: [...new Set(kw.map(k => k.trim()))].join(','), operator: 'CONTAINS', threshold: null, timeframe: null });
     if (!conditions.length) return null;
-    const action = /(sell|מכור|מכיר|למכור)/i.test(t) ? 'SELL' : /(buy|תקנה|לקנות|קנה|קניי?[הת]|קניה)/i.test(t) ? 'BUY' : 'ALERT_ONLY';
+    // Buy/sell intent — cover present tense ("קונה"/"מוכר"), nouns ("קנייה"/"מכירה") and "רכישה",
+    // not just imperative/infinitive, so "אתה קונה לי כל מניה…" is a BUY (not a fallthrough ALERT).
+    let action = /(sell|מכור|מוכר|למכור|מכיר[הת])/i.test(t) ? 'SELL'
+        : /(buy|תקנה|תקנו|לקנות|קנה|קונ[היםות]|קניי?[הת]|קניה|לרכוש|רכוש|רוכש|רכיש[הת])/i.test(t) ? 'BUY'
+        : 'ALERT_ONLY';
     // Logic: explicit "או/or" → ANY; otherwise multiple conditions are treated as ALL (compound "and").
     const logic = (/\sאו\s/.test(t) || /[^א-ת\w]or[^א-ת\w]/i.test(t)) ? 'ANY' : (conditions.length > 1 ? 'ALL' : 'ANY');
     let amount = { type: 'CASH_USD', value: 0 };
@@ -354,9 +362,17 @@ function _strategyFallback(text) {
     else if (mCash) amount = { type: 'CASH_USD', value: +mCash[1].replace(/,/g, '') };
     // ── Index SCREENER: "every stock in Nasdaq that crosses weekly RSI 30 → buy $X each, $Y total" ──
     let screener = null; let target2 = target;
-    const isScreener = /(כל\s+מני[הות]|לכל\s+מני[הת]|every\s+stock|all\s+stocks|each\s+stock)/i.test(t) && /(נאסד|nasdaq|ndx|s&p|sp500|ס["׳]?פ|ספ\s*500)/i.test(t);
+    // A SCREENER = "scan the market and buy EACH stock passing a filter". It fires on an "every stock"
+    // phrase + a technical/price filter — EVEN when no index is named (the user often writes just
+    // "כל מניה שעוברת RSI 30"). The universe defaults to NDX (editable in the card) unless an index is
+    // named. Excluded when the scope is the user's own portfolio ("כל מניה בתיק…").
+    const everyStock = /(כל\s+מני[הות]|לכל\s+מני[הת]|every\s+stock|all\s+stocks|each\s+stock)/i.test(t);
+    const hasScreenCond = conditions.some(c => c.factor === 'rsi' || c.factor === 'ma' || c.factor === 'price');
+    const portfolioScoped = /(בתיק|בתיקים|התיק\s+שלי|בפורטפ|in\s+(?:my\s+)?portfolio|from\s+my\s+portfolio)/i.test(t);
+    const namedIdx = /(נאסד|nasdaq|ndx)/i.test(t) ? 'NDX' : /(s&p|sp\s*500|sp500|ס["׳]?פ\s*500|ספ\s*500)/i.test(t) ? 'SP500' : null;
+    const isScreener = everyStock && hasScreenCond && !portfolioScoped;
     if (isScreener) {
-        const universe = /(נאסד|nasdaq|ndx)/i.test(t) ? 'NDX' : 'SP500';
+        const universe = namedIdx || 'NDX';
         // Only accept amounts that carry a MONEY marker (אלף/k/דולר/usd/$) or are ≥1000 — so an RSI
         // threshold like "30" is never mistaken for an allocation.
         const amtNear = (re) => {
@@ -389,6 +405,15 @@ function _strategyFallback(text) {
             conditions.forEach(c => { c.subject = null; }); // the condition applies to EACH stock, not a single ticker
             target2 = null;
             if (per > 0) amount = { type: 'CASH_USD', value: per };
+            if (action === 'ALERT_ONLY') action = 'BUY'; // a budgeted screener buys the matches; never a bare alert
+        }
+        // Even with no explicit budget yet, a clear "buy every stock that…" is a screener — carry it so
+        // the card shows the (editable) budget/division fields rather than collapsing to a plain alert.
+        if (!screener) {
+            screener = { universe, per_stock_usd: 0, total_budget_usd: 0, split_mode: equalSplit ? 'equal' : 'fixed' };
+            conditions.forEach(c => { c.subject = null; });
+            target2 = null;
+            if (action === 'ALERT_ONLY') action = 'BUY';
         }
     }
     const r = _normalizeStrategy({ name: screener ? 'סורק מדד' : 'אסטרטגיה (טיוטה)', trigger_type: null, logic, conditions, action, target_asset: target2, amount, screener, risk_limits: {} });

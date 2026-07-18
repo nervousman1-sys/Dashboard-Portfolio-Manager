@@ -250,8 +250,14 @@ function _taScreenerCardHtml(rule, source, existing) {
     const sel = (a, b) => a === b ? 'selected' : '';
     return `<div class="ta-card ta-scr-card">
         <div class="ta-card-top"><span class="ta-card-name">${_taEsc(rule.name || 'סורק מדד')}</span><span class="ta-trig">סורק מדד</span>${source === 'fallback' ? '<span class="ta-draft">טיוטה</span>' : ''}</div>
-        <div class="ta-scr-desc">כל מניה ב<b>${uniHe}</b> שבה <span class="ta-scr-cond">${conds}</span> — נקנית אוטומטית (המניה עצמה, לא תעודת סל).</div>
+        <div class="ta-scr-desc">כל מניה ב<b id="taScrUniLbl">${uniHe}</b> שבה <span class="ta-scr-cond">${conds}</span> — נקנית אוטומטית (המניה עצמה, לא תעודת סל).</div>
         <div class="ta-scr-alloc">
+            <label class="ta-mode-lbl">מדד לסריקה:
+                <select id="taScrUniverse" class="st-pf-select" onchange="_taScrUniverseChange()">
+                    <option value="NDX" ${sc.universe === 'SP500' ? '' : 'selected'}>נאסד"ק 100</option>
+                    <option value="SP500" ${sc.universe === 'SP500' ? 'selected' : ''}>S&P 500</option>
+                </select>
+            </label>
             <label class="ta-mode-lbl">אופן חלוקה:
                 <select id="taScrMode" class="st-pf-select" onchange="_taScrModeChange()">
                     <option value="fixed" ${sm === 'fixed' ? 'selected' : ''}>סכום קבוע לכל מניה</option>
@@ -317,6 +323,15 @@ function _taScrModeChange() {
     const mode = (document.getElementById('taScrMode') || {}).value;
     const perWrap = document.getElementById('taScrPerWrap');
     if (perWrap) perWrap.style.display = mode === 'equal' ? 'none' : 'inline-flex';
+    _taRunScreenerPreview();
+}
+// Switch the scanned index (NDX ↔ S&P 500) — updates the rule, the label, and re-scans from scratch.
+function _taScrUniverseChange() {
+    const u = (document.getElementById('taScrUniverse') || {}).value;
+    if (!_taPendingRule || !_taPendingRule.screener || !u) return;
+    _taPendingRule.screener.universe = u;
+    const lbl = document.getElementById('taScrUniLbl'); if (lbl) lbl.textContent = _taScrUniHe[u] || u;
+    _taScrMatches = null;              // different universe → re-scan
     _taRunScreenerPreview();
 }
 // Render the allocation preview: which stocks match now + how the budget is divided among them.
@@ -1107,7 +1122,7 @@ if (typeof window !== 'undefined') {
     window.openTradingAgentPage = openTradingAgentPage; window.closeTradingAgentPage = closeTradingAgentPage;
     window._taParse = _taParse; window._taEnable = _taEnable; window._taToggle = _taToggle; window._taDelete = _taDelete;
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; _taEditingId = null; };
-    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange;
+    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange; window._taScrUniverseChange = _taScrUniverseChange;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;
