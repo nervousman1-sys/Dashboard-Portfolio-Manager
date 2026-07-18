@@ -221,9 +221,10 @@ function _strategyPrompt(text) {
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות במדד* (למשל "כל מניה בנאסד\'ק שעוברת תנאי") ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל}, קבע trigger_type "SCREENER", target_asset null, ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "10 אלף דולר"=10000, "50 אלף"=50000.',
         'דוגמאות:',
         'קלט: "אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו, מצב עולמי ופריצות טכנולוגיות?" → {"advice": true}',
+        'קלט: "צור אסטרטגיה שכל מניה בנאסד\'ק שה-RSI השבועי שלה יורד מתחת ל-30 — תקנה אותה ב-10 אלף דולר, עד תקציב כולל של 50 אלף דולר" → {"name":"סורק נאסד\'ק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה לי את מניית ORCL כשה-RSI השבועי מתחת ל-30 וגם מחיר המניה נוגע בממוצע 300 השבועות" → {"name":"קניית ORCL על RSI וממוצע","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"ORCL","keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"},{"factor":"ma","subject":"ORCL","keyword":null,"operator":"EQUALS","threshold":null,"period":300,"timeframe":"weekly"}],"action":"BUY","target_asset":"ORCL","amount":{"type":"CASH_USD","value":0},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
@@ -272,11 +273,21 @@ function _normalizeStrategy(r) {
     // target_asset: explicit, else the first condition subject that looks like a ticker
     let target = r.target_asset ? up(r.target_asset).replace(/[^A-Z0-9.\-]/g, '') : '';
     if (!target) { const t = conditions.find(c => c.subject && /^[A-Za-z.\-]{1,6}$/.test(c.subject)); if (t) target = up(t.subject); }
+    // Screener: scan an ENTIRE index and buy each stock that meets the condition (not the ETF).
+    // { universe (NDX=Nasdaq-100 / SP500), per_stock_usd, total_budget_usd }.
+    let screener = null;
+    if (r.screener && typeof r.screener === 'object') {
+        const uni = String(r.screener.universe || '').toUpperCase();
+        const universe = /NDX|NASDAQ|נאסד/.test(uni) ? 'NDX' : /SPX|S&P|SP500|SPY|ספ|S&P500/.test(uni) ? 'SP500' : (uni || 'NDX');
+        const perStock = num(r.screener.per_stock_usd) || num(r.screener.per_stock && r.screener.per_stock.value) || (amount.type === 'CASH_USD' ? amount.value : 0) || 0;
+        const totalBudget = num(r.screener.total_budget_usd) || 0;
+        if (perStock > 0 || totalBudget > 0) screener = { universe, per_stock_usd: perStock, total_budget_usd: totalBudget };
+    }
     return {
         name: (r.name ? String(r.name).trim() : '') || 'אסטרטגיה',
-        trigger_type: trigger || (conditions.some(c => c.factor === 'rsi' || c.factor === 'ma') ? 'TECHNICAL_INDICATOR' : conditions.some(c => c.factor === 'eps_surprise') ? 'EARNINGS_BEAT' : conditions.some(c => c.factor === 'news') ? 'NEWS_SENTIMENT' : 'PRICE_LEVEL'),
+        trigger_type: screener ? 'SCREENER' : (trigger || (conditions.some(c => c.factor === 'rsi' || c.factor === 'ma') ? 'TECHNICAL_INDICATOR' : conditions.some(c => c.factor === 'eps_surprise') ? 'EARNINGS_BEAT' : conditions.some(c => c.factor === 'news') ? 'NEWS_SENTIMENT' : 'PRICE_LEVEL')),
         logic: up(r.logic) === 'ALL' ? 'ALL' : 'ANY',
-        conditions, action, target_asset: target || null, amount,
+        conditions, action, target_asset: screener ? null : (target || null), amount, screener,
         risk_limits: { stop_loss_pct: num(rl.stop_loss_pct), max_slippage_pct: num(rl.max_slippage_pct), max_portfolio_pct: num(rl.max_portfolio_pct) },
     };
 }
@@ -310,7 +321,7 @@ function _strategyFallback(text) {
     const tfOf = (w) => /(?:שבוע|weekly|1w)/i.test(w) ? 'weekly' : (w.match(/(\d+)\s*(?:h|hour|שע)/i) ? (w.match(/(\d+)\s*(?:h|hour|שע)/i)[1] + 'h') : (/(?:יומי|daily|1d)/i.test(w) ? 'daily' : null));
     const conditions = [];
     // RSI (operator + timeframe from its LOCAL window)
-    const mRsi = t.match(/rsi[^\d]{0,18}(\d{1,3})|(\d{1,3})[^\d]{0,10}rsi/i);
+    const mRsi = t.match(/rsi[^\d]{0,30}(\d{1,3})|(\d{1,3})[^\d]{0,12}rsi/i);
     if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +(mRsi[1] || mRsi[2]), timeframe: tfOf(w) }); }
     // Moving average ("ממוצע 300", "300 שבועות", "MA200"…) — operator (incl. "touch"→EQUALS) from its window
     const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day)/i);
@@ -336,7 +347,30 @@ function _strategyFallback(text) {
     if (mShares) amount = { type: 'SHARES', value: +mShares[1].replace(/,/g, '') };
     else if (mPct && action === 'SELL') amount = { type: 'PORTFOLIO_PCT', value: +mPct[1] };
     else if (mCash) amount = { type: 'CASH_USD', value: +mCash[1].replace(/,/g, '') };
-    const r = _normalizeStrategy({ name: 'אסטרטגיה (טיוטה)', trigger_type: null, logic, conditions, action, target_asset: target, amount, risk_limits: {} });
+    // ── Index SCREENER: "every stock in Nasdaq that crosses weekly RSI 30 → buy $X each, $Y total" ──
+    let screener = null; let target2 = target;
+    const isScreener = /(כל\s+מני[הות]|לכל\s+מני[הת]|every\s+stock|all\s+stocks|each\s+stock)/i.test(t) && /(נאסד|nasdaq|ndx|s&p|sp500|ס["׳]?פ|ספ\s*500)/i.test(t);
+    if (isScreener) {
+        const universe = /(נאסד|nasdaq|ndx)/i.test(t) ? 'NDX' : 'SP500';
+        const amtNear = (re) => { const m = t.match(re); if (!m) return 0; let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; };
+        let per = amtNear(/(?:לכל\s+מני[הת]|כל\s+מני[הת]|per\s*stock|each|לכל\s+אחת)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?/i);
+        let tot = amtNear(/(?:כולל|סה["׳]?כ|total|תקציב)[^\d$]{0,25}\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?/i);
+        if (!per || !tot) {
+            const all = [...t.matchAll(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(אלף|k|thousand)?\s*(?:דולר|usd|\$)/gi)]
+                .map(m => { let v = parseFloat(String(m[1]).replace(/,/g, '')); if (/אלף|k|thousand/i.test(m[2] || '')) v *= 1000; return v; })
+                .filter(v => v >= 100);
+            const uniq = [...new Set(all)].sort((a, b) => a - b);
+            if (uniq.length >= 2) { if (!per) per = uniq[0]; if (!tot) tot = uniq[uniq.length - 1]; }
+            else if (uniq.length === 1 && !per) per = uniq[0];
+        }
+        if (per > 0 || tot > 0) {
+            screener = { universe, per_stock_usd: per, total_budget_usd: tot };
+            conditions.forEach(c => { c.subject = null; }); // the condition applies to EACH stock, not a single ticker
+            target2 = null;
+            if (per > 0) amount = { type: 'CASH_USD', value: per };
+        }
+    }
+    const r = _normalizeStrategy({ name: screener ? 'סורק מדד' : 'אסטרטגיה (טיוטה)', trigger_type: null, logic, conditions, action, target_asset: target2, amount, screener, risk_limits: {} });
     if (r) r._src = 'fallback';
     return r;
 }
@@ -360,6 +394,11 @@ function _strategySummaryHe(r) {
         return `${facHe[c.factor] || c.factor}${subj}${th}${tf}`;
     });
     const join = conds.join(r.logic === 'ALL' ? ' וגם ' : ' או ');
+    const nf = (n) => Number(n || 0).toLocaleString('en-US');
+    if (r.screener) {
+        const uniHe = r.screener.universe === 'SP500' ? 'S&P 500' : 'נאסד"ק 100';
+        return `סורק ${uniHe} — כל מניה: ${join} → קנייה $${nf(r.screener.per_stock_usd)} למניה (תקציב $${nf(r.screener.total_budget_usd)})`;
+    }
     const actHe = r.action === 'BUY' ? 'קנייה' : r.action === 'SELL' ? 'מכירה' : 'התראה בלבד';
     const amtHe = r.action === 'ALERT_ONLY' ? '' : (r.amount.type === 'SHARES' ? `${r.amount.value} מניות` : r.amount.type === 'PORTFOLIO_PCT' ? `${r.amount.value}% מהאחזקה` : `$${r.amount.value}`);
     const tgt = r.target_asset ? ` ${r.target_asset}` : '';

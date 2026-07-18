@@ -10850,6 +10850,23 @@ html.day-mode .ta-idea { background: rgba(58,50,36,0.04); }
 .ta-adv-disc { margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--accent-yellow, #f0b400); }
 html.day-mode .ta-adv-disc { color: #9a6f00; }
 .ta-amt-input { max-width: 110px; direction: ltr; text-align: left; }
+/* Index SCREENER card + allocation preview */
+.ta-scr-desc { font-size: 13.5px; line-height: 1.7; color: var(--text-primary); margin: 10px 0 12px; }
+.ta-scr-cond { font-weight: 800; color: var(--accent-blue); }
+.ta-scr-alloc { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.ta-scr-preview { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: rgba(0,229,255,0.04); margin-bottom: 14px; }
+html.day-mode .ta-scr-preview { background: rgba(3,105,161,0.05); }
+.ta-scr-prev-head { font-size: 13px; font-weight: 900; color: var(--text-primary); margin-bottom: 6px; }
+.ta-scr-note { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+.ta-scr-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.ta-scr-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,0.02); }
+html.day-mode .ta-scr-row { background: rgba(58,50,36,0.03); }
+.ta-scr-tk { font-weight: 900; color: var(--accent-blue); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.ta-scr-metric { font-size: 12px; color: var(--text-secondary); }
+.ta-scr-amt { font-weight: 800; color: var(--accent-green); font-variant-numeric: tabular-nums; }
+.ta-scr-total { margin-top: 12px; font-size: 14px; color: var(--text-primary); font-weight: 700; }
+.ta-scr-total b { color: var(--accent-green); }
+.ta-scr-empty { font-size: 13px; line-height: 1.65; color: var(--text-secondary); }
 /* Request: whiten ALL gray text on the trading-agent page for maximum sharpness/clarity.
    Remapping the two "gray" text vars → primary makes every secondary/muted label crisp in BOTH
    modes (white at night, black in day) while accent colors (yellow warnings, blue tickers) keep
