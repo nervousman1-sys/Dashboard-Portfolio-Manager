@@ -10827,11 +10827,19 @@ html.day-mode .ta-adv-disc { color: #9a6f00; }
    Remapping the two "gray" text vars → primary makes every secondary/muted label crisp in BOTH
    modes (white at night, black in day) while accent colors (yellow warnings, blue tickers) keep
    their own vars and stay. */
-#tradingAgentPage { --text-secondary: var(--text-primary); --text-muted: var(--text-primary); }
+#tradingAgentPage { --text-secondary: var(--text-primary); --text-muted: var(--text-primary);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 #tradingAgentPage .ta-input::placeholder { opacity: 0.5; }
 #tradingAgentPage .ta-strat-sum, #tradingAgentPage .ta-strat-log, #tradingAgentPage .ta-mon-last,
 #tradingAgentPage .ta-bk-meta, #tradingAgentPage .ta-idea-why, #tradingAgentPage .ta-idea-name,
 #tradingAgentPage .ta-mode-lbl, #tradingAgentPage .ta-adv-p, #tradingAgentPage .ta-example { color: var(--text-primary); }
+/* Sharper, more legible small text (request: "חד וברור") */
+#tradingAgentPage .ta-strat-sum { font-size: 12px; font-weight: 600; }
+#tradingAgentPage .ta-strat-log { font-size: 12px; font-weight: 600; line-height: 1.55; }
+#tradingAgentPage .ta-mode-badge { font-size: 11px; font-weight: 700; }
+#tradingAgentPage .ta-mon-txt { font-weight: 800; }
+#tradingAgentPage .ta-mini { font-weight: 800; }
+#tradingAgentPage .ta-safety { font-size: 13px; line-height: 1.65; }
 /* Read-only strategy structure panel ("מבנה") */
 .ta-struct { margin-top: 10px; }
 .ta-struct-inner { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,0.03);
