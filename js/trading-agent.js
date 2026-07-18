@@ -64,6 +64,24 @@ function _taFmtNum(v) {
     return parts.length > 1 ? intPart + '.' + parts[1].slice(0, 4) : intPart;
 }
 function _taNum(v) { const n = parseFloat(String(v == null ? '' : v).replace(/,/g, '')); return isFinite(n) ? n : NaN; }
+// Human amount label used by the action box + summaries (comma-formatted).
+function _taAmtLabel(type, value) {
+    return type === 'SHARES' ? `${_taFmtNum(value)} מניות` : type === 'PORTFOLIO_PCT' ? `${value}% מהתיק` : `$${_taFmtNum(value)}`;
+}
+// Live-refresh the "פעולה" (action) box in the card from the current amount input + type.
+function _taUpdateActPreview() {
+    const box = document.getElementById('taActBox');
+    if (!box || !_taPendingRule) return;
+    const rule = _taPendingRule;
+    const actHe = rule.action === 'BUY' ? 'קנייה' : rule.action === 'SELL' ? 'מכירה' : 'התראה בלבד';
+    let amtHe = '';
+    if (rule.action === 'BUY' || rule.action === 'SELL') {
+        const v = _taNum((document.getElementById('taAmtVal') || {}).value);
+        const t = (document.getElementById('taAmtType') || {}).value;
+        if (isFinite(v)) amtHe = _taAmtLabel(t, v);
+    }
+    box.innerHTML = `${actHe}${amtHe ? ' · ' + _taEsc(amtHe) : ''}${rule.target_asset ? ' · <b>' + _taEsc(rule.target_asset) + '</b>' : ''}`;
+}
 // Live-format the amount input while preserving the caret position (by digit count).
 function _taFmtAmtInput(el) {
     const oldVal = el.value, oldPos = el.selectionStart || 0;
@@ -223,7 +241,7 @@ function _taStrategyCardHtml(rule, summaryHe, source, existing) {
     }).join('');
     const actCls = rule.action === 'BUY' ? 'ta-buy' : rule.action === 'SELL' ? 'ta-sell' : 'ta-alert';
     const actHe = rule.action === 'BUY' ? 'קנייה' : rule.action === 'SELL' ? 'מכירה' : 'התראה בלבד';
-    const amtHe = rule.action === 'ALERT_ONLY' ? '' : (rule.amount.type === 'SHARES' ? `${rule.amount.value} מניות` : rule.amount.type === 'PORTFOLIO_PCT' ? `${rule.amount.value}% מהאחזקה` : `$${rule.amount.value}`);
+    const amtHe = rule.action === 'ALERT_ONLY' ? '' : _taAmtLabel(amtType, amtVal);
     const rl = rule.risk_limits || {};
     const riskBits = [rl.stop_loss_pct != null ? `Stop-Loss ${rl.stop_loss_pct}%` : '', rl.max_slippage_pct != null ? `סליפג׳ מקס ${rl.max_slippage_pct}%` : '', rl.max_portfolio_pct != null ? `עד ${rl.max_portfolio_pct}% מהתיק` : ''].filter(Boolean);
     return `<div class="ta-card">
@@ -231,14 +249,14 @@ function _taStrategyCardHtml(rule, summaryHe, source, existing) {
         <div class="ta-flow">
             <div class="ta-flow-col"><span class="ta-flow-lbl">טריגר (${rule.logic === 'ALL' ? 'כל התנאים' : 'לפחות תנאי אחד'})</span><ul class="ta-conds">${conds}</ul></div>
             <div class="ta-flow-arrow">←</div>
-            <div class="ta-flow-col"><span class="ta-flow-lbl">פעולה</span><div class="ta-act ${actCls}">${actHe}${amtHe ? ' · ' + _taEsc(amtHe) : ''}${rule.target_asset ? ' · <b>' + _taEsc(rule.target_asset) + '</b>' : ''}</div></div>
+            <div class="ta-flow-col"><span class="ta-flow-lbl">פעולה</span><div class="ta-act ${actCls}" id="taActBox">${actHe}${amtHe ? ' · ' + _taEsc(amtHe) : ''}${rule.target_asset ? ' · <b>' + _taEsc(rule.target_asset) + '</b>' : ''}</div></div>
             <div class="ta-flow-arrow">←</div>
             <div class="ta-flow-col"><span class="ta-flow-lbl">ניהול סיכון</span><div class="ta-risk">${riskBits.length ? riskBits.map(b => `<span class="ta-risk-chip">${_taEsc(b)}</span>`).join('') : '<span class="ta-risk-none">לא הוגדרו מגבלות</span>'}</div></div>
         </div>
         <div class="ta-card-actions">
             ${isTrade ? `<label class="ta-mode-lbl">סכום:
-                <input id="taAmtVal" type="text" inputmode="decimal" value="${_taFmtNum(amtVal)}" oninput="_taFmtAmtInput(this)" class="st-pf-select ta-amt-input">
-                <select id="taAmtType" class="st-pf-select">
+                <input id="taAmtVal" type="text" inputmode="decimal" value="${_taFmtNum(amtVal)}" oninput="_taFmtAmtInput(this);_taUpdateActPreview()" class="st-pf-select ta-amt-input">
+                <select id="taAmtType" class="st-pf-select" onchange="_taUpdateActPreview()">
                     <option value="CASH_USD" ${amtType === 'CASH_USD' ? 'selected' : ''}>$ מזומן</option>
                     <option value="SHARES" ${amtType === 'SHARES' ? 'selected' : ''}>מניות</option>
                     <option value="PORTFOLIO_PCT" ${amtType === 'PORTFOLIO_PCT' ? 'selected' : ''}>% מהתיק</option>
@@ -804,7 +822,7 @@ if (typeof window !== 'undefined') {
     window.openTradingAgentPage = openTradingAgentPage; window.closeTradingAgentPage = closeTradingAgentPage;
     window._taParse = _taParse; window._taEnable = _taEnable; window._taToggle = _taToggle; window._taDelete = _taDelete;
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; _taEditingId = null; };
-    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput;
+    window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;
