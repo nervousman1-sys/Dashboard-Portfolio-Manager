@@ -6992,6 +6992,52 @@ body.filter-modal-open::after {
     margin-top: 2px;
 }
 
+/* ── Brand logo (transparent-PNG lockup — replaces the old icon + text) ── */
+.sidebar-brand {
+    cursor: pointer;
+}
+
+.sidebar-logo {
+    height: 50px;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
+/* Night mode (default): the light-on-dark logo. Day mode: the dark-on-light logo. */
+.sidebar-logo--light {
+    display: none;
+}
+
+.sidebar-logo--dark {
+    display: block;
+}
+
+html.day-mode .sidebar-logo--light {
+    display: block;
+}
+
+html.day-mode .sidebar-logo--dark {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+
+    /* Expanded: the logo fills + centers the header; its own drawn hamburger + a click toggles the
+       sidebar, so the separate toggle button is hidden to avoid a duplicate hamburger. */
+    .sidebar.expanded .sidebar-brand {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .sidebar.expanded .sidebar-toggle-btn {
+        display: none;
+    }
+}
+
 .sidebar-toggle-btn {
     width: 36px;
     height: 36px;

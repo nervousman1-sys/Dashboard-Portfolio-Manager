@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=212.0">
+    <link rel="stylesheet" href="css/main.css?v=213.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -58,19 +58,11 @@
         <!-- ── Desktop / Mobile Sidebar ── -->
         <aside class="sidebar" id="appSidebar">
             <div class="sidebar-header">
-                <!-- Brand (visible when expanded / on mobile) -->
-                <div class="sidebar-brand">
-                    <div class="sidebar-brand-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                            <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                        </svg>
-                    </div>
-                    <div class="sidebar-brand-text">
-                        <span class="sidebar-brand-name">FINEXTIUM</span>
-                        <span class="sidebar-brand-sub">INTELLIGENCE</span>
-                    </div>
+                <!-- Brand logo (visible when expanded / on mobile). Two theme variants swap by mode.
+                     The lockup includes a hamburger, so on desktop clicking it toggles the sidebar. -->
+                <div class="sidebar-brand" onclick="if(window.innerWidth>=1024)toggleSidebar()" title="פתח/סגור תפריט">
+                    <img class="sidebar-logo sidebar-logo--light" src="icons/logo-light.png?v=2" alt="FINEXTIUM INTELLIGENCE" draggable="false">
+                    <img class="sidebar-logo sidebar-logo--dark" src="icons/logo-dark.png?v=2" alt="FINEXTIUM INTELLIGENCE" draggable="false">
                 </div>
                 <!-- Desktop toggle (hamburger) -->
                 <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="פתח/סגור תפריט">
