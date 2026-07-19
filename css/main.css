@@ -12474,3 +12474,13 @@ html { scrollbar-gutter: stable; }
     #geoMacroSection:not(.gm-collapsed) { min-height: 2050px; }
     #econCalSection:not(.ec-collapsed) { min-height: 1830px; }
 }
+
+/* ══ Mobile drawer header: brand LOGO instead of the ✕ close button ══
+   The full logo lockup already carries the name; tapping it (or the overlay, or any nav item)
+   closes the drawer, so the separate ✕ is dropped. Desktop (≥1024px) is unaffected. */
+@media (max-width: 1023px) {
+    .sidebar .sidebar-brand { display: flex !important; opacity: 1; width: auto; cursor: pointer; }
+    .sidebar .sidebar-close-btn { display: none !important; }
+    .sidebar .sidebar-header { justify-content: flex-start; }
+    .sidebar .sidebar-logo { height: 46px; }
+}

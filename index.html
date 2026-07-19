@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Finextium">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon-192.png?v=2">
     <title>Finextium — Portfolio Intelligence</title>
     <!-- Warm the critical connections early: the CDN (Supabase SDK + Chart.js) and the Supabase
          backend (auth/data) — saves the DNS+TLS round-trips before the deferred scripts run. -->
@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=215.0">
+    <link rel="stylesheet" href="css/main.css?v=216.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -60,7 +60,7 @@
             <div class="sidebar-header">
                 <!-- Brand logo (visible when expanded / on mobile). Two theme variants swap by mode.
                      The lockup includes a hamburger, so on desktop clicking it toggles the sidebar. -->
-                <div class="sidebar-brand" onclick="if(window.innerWidth>=1024)toggleSidebar()" title="פתח/סגור תפריט">
+                <div class="sidebar-brand" onclick="window.innerWidth>=1024?toggleSidebar():toggleMobileSidebar()" title="פתח/סגור תפריט">
                     <img class="sidebar-logo sidebar-logo--light" src="icons/logo-light.png?v=3" alt="FINEXTIUM INTELLIGENCE" draggable="false">
                     <img class="sidebar-logo sidebar-logo--dark" src="icons/logo-dark.png?v=3" alt="FINEXTIUM INTELLIGENCE" draggable="false">
                 </div>
