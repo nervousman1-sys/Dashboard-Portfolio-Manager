@@ -8743,10 +8743,11 @@ html.day-mode .ec-tab.active {
 html.day-mode .ec-table thead th { color: #1e293b; }
 html.day-mode .ec-th-lbl {
     display: inline-block;
-    background: #f3efe2;
-    border: 1.5px solid rgba(58, 50, 36, 0.34);
+    background: #efe9da;
+    border: 1.5px solid rgba(58, 50, 36, 0.6);
     border-radius: 9px;
     padding: 6px 14px;
+    box-shadow: 0 1px 2px rgba(58, 50, 36, 0.1);
 }
 /* ── Day-mode tonal pass (user: colors must sit in the cream skin, nothing neon) ── */
 /* Horizontal-scroll rails: glowing cyan → quiet warm gray */
@@ -10863,7 +10864,9 @@ html.day-mode .gm-detail-lbl { color: #0369a1; }
 .gm-detail-foot { margin-top: 9px; font-size: 10.5px; color: var(--text-muted); }
 
 /* ══════════════ AI TRADING AGENT ══════════════ */
-.ta-safety { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);
+/* Plain text banner — must be block flow. display:flex turned each <b>/text run into a shrinking
+   flex item, which collapsed into unreadable vertical columns on narrow (phone) screens. */
+.ta-safety { display: block; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);
     background: rgba(250,204,21,0.07); border: 1px solid rgba(250,204,21,0.28); border-radius: 12px; padding: 12px 15px; margin-bottom: 16px; }
 .ta-safety b { color: var(--accent-yellow); }
 html.day-mode .ta-safety { background: #f3ead2; border-color: rgba(176,124,0,0.3); color: #4a3f24; }
@@ -12403,6 +12406,46 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     .ec-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
     .ec-title { font-size: 14px; line-height: 1.35; }
     .ec-head .ec-agent-tag, .ec-head .macro-agent-tag { grid-column: 1 / -1; justify-self: start; margin-top: 2px; }
+}
+
+/* Mobile: "פרסומים קרובים" — the cramped 3-column table becomes full-width stacked cards.
+   Each event: date top-right, importance+status top-left, name+result on its own row below.
+   Layout-only; both themes handled (day overrides right after). Desktop table is untouched. */
+@media (max-width: 768px) {
+    .ec-table { display: block; width: 100%; border-collapse: collapse; border-spacing: 0; }
+    .ec-table thead { display: none; }                 /* column headers don't map to cards */
+    .ec-table tbody, .ec-table tr { display: block; }
+    .ec-tr-month td { display: block; padding: 14px 2px 6px; }
+    .ec-tr {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        grid-template-areas: "date imp" "name name";
+        gap: 4px 10px;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.025);
+        padding: 10px 12px 11px;
+        margin: 0 0 9px;
+    }
+    .ec-tr td { display: block; padding: 0; border: none; }
+    .ec-td-date { grid-area: date; box-shadow: none !important; }
+    .ec-td-imp { grid-area: imp; justify-self: end; text-align: left; }
+    .ec-td-name { grid-area: name; font-size: 13px; }
+    .ec-recv { margin-top: 5px; }
+    /* Importance accent on the leading (right, RTL) edge of the card */
+    .ec-tr.ec-high { border-inline-start: 3px solid #ef4444; }
+    .ec-tr.ec-med { border-inline-start: 3px solid #f59e0b; }
+    .ec-tr.ec-today { background: rgba(0, 229, 255, 0.08); }
+    /* Day skin: cream cards (beat the desktop day-mode td rules which are more specific) */
+    html.day-mode .ec-tr {
+        background: #f6f2e6;
+        border-color: rgba(58, 50, 36, 0.22);
+    }
+    html.day-mode .ec-tr td { background: none !important; box-shadow: none !important; border: none !important; }
+    html.day-mode .ec-tr.ec-high { border-inline-start: 3px solid #c81e1e; }
+    html.day-mode .ec-tr.ec-med { border-inline-start: 3px solid #a1610a; }
+    html.day-mode .ec-tr.ec-today { background: #e3eee9; }
 }
 
 /* ══ ANTI-JUMP (CLS) — reserve space for async content so pages never shift ══ */

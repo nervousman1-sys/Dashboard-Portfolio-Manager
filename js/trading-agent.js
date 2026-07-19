@@ -168,7 +168,7 @@ function _taRenderShell() {
                 <button class="ta-mini ta-mini-on" onclick="_taCheckStrategies(true)">בדוק עכשיו</button>
             </div>
             <div class="risk-table-card glass-card" style="padding:18px">
-                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — או שאל שאלת שוק פתוחה. הסוכן מחובר לכל נתוני הפלטפורמה: דוחות, סקטורים, קטליסטים, חדשות מאקרו, ציוצים, מנוע הנזילות, נתוני מאקרו, ניתוח טכני והתיקים שלך — ומבין כל בקשה על בסיסם.</div>
+                <div class="ta-chat-title">תאר אסטרטגיה בשפה חופשית — או שאל שאלת שוק פתוחה. הסוכן מחובר לכל נתוני הפלטפורמה.</div>
                 <div class="ta-chat-row">
                     <textarea id="taInput" class="ta-input" rows="2" placeholder="למשל: מכור 50% מ-NVDA אם ה-RSI מעל 80 · או: אילו מניות מתאימות לתקופה הקרובה?" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){_taParse();}"></textarea>
                     <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">בצע אסטרטגיה</button>
