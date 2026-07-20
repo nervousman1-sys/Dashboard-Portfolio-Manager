@@ -291,7 +291,16 @@ async function _taParse() {
 let _taSuggestion = null;
 function _taAdviceCardHtml(a) {
     _taSuggestion = a && a.suggested_strategy_he ? a.suggested_strategy_he : null;
-    const paras = String(a.answer_he || '').split(/\n\s*\n/).filter(Boolean).map(p => `<p class="ta-adv-p">${_taEsc(p)}</p>`).join('');
+    const parasOf = (s) => String(s || '').split(/\n\s*\n/).filter(Boolean).map(p => `<p class="ta-adv-p">${_taEsc(p)}</p>`).join('');
+    // 1) Executive insight (fall back to answer_he for older payloads)
+    const execHtml = parasOf(a.executive_he || a.answer_he);
+    // 2) Connected logic (macro → sector → stock)
+    const logicHtml = a.logic_he ? parasOf(a.logic_he) : '';
+    // 3) Verified live data points
+    const liveArr = Array.isArray(a.live_data) ? a.live_data : [];
+    const liveHtml = liveArr.length
+        ? `<ul class="ta-adv-live-list">${liveArr.map(d => `<li>${_taEsc(d)}</li>`).join('')}</ul>`
+        : '<div class="ta-adv-live-empty">לא נמשכו נתונים חיים ספציפיים לשאלה זו כרגע.</div>';
     const ideas = (a.ideas || []).map(i => `
         <div class="ta-idea">
             <div class="ta-idea-head"><span class="ta-idea-tk">${_taEsc(i.ticker)}</span>${i.name ? `<span class="ta-idea-name">${_taEsc(i.name)}</span>` : ''}</div>
@@ -300,7 +309,9 @@ function _taAdviceCardHtml(a) {
         </div>`).join('');
     return `<div class="ta-advice">
         <div class="ta-card-top"><span class="ta-card-name">${_taEsc(a.title || 'ניתוח והמלצות')}</span><span class="ta-trig">אנליסט AI</span></div>
-        <div class="ta-adv-body">${paras}</div>
+        ${execHtml ? `<div class="ta-adv-sec"><div class="ta-adv-sec-lbl">📌 תובנה מנהלתית</div><div class="ta-adv-body">${execHtml}</div></div>` : ''}
+        ${logicHtml ? `<div class="ta-adv-sec ta-adv-logic"><div class="ta-adv-sec-lbl">🔗 הקשר והיגיון מחובר</div><div class="ta-adv-body">${logicHtml}</div></div>` : ''}
+        <div class="ta-adv-sec"><div class="ta-adv-sec-lbl">🟢 נתוני אמת מאומתים</div>${liveHtml}</div>
         ${ideas ? `<div class="ta-adv-ideas-lbl">רעיונות רלוונטיים</div><div class="ta-adv-ideas">${ideas}</div>` : ''}
         ${_taSuggestion ? `<div class="ta-adv-strat">אסטרטגיה מוצעת: <b>${_taEsc(_taSuggestion)}</b> <button class="ta-mini ta-mini-on" onclick="_taUseSuggestion()">נסח אותה</button></div>` : ''}
         <div class="ta-adv-disc">ניתוח AI למטרות מידע בלבד — אינו ייעוץ השקעות. אמת את הנתונים לפני פעולה.</div>

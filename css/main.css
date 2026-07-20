@@ -10888,6 +10888,17 @@ html.day-mode .ta-monitor-bar { background: rgba(4,120,87,0.06); border-color: r
 html.day-mode .ta-advice { background: rgba(3,105,161,0.05); border-color: rgba(3,105,161,0.28); }
 .ta-adv-body { margin: 10px 0 4px; }
 .ta-adv-p { font-size: 13.5px; line-height: 1.75; color: var(--text-primary); margin: 0 0 10px; }
+/* Structured advisory: Executive Insight · Connected Logic · Verified Live Data */
+.ta-adv-sec { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.ta-adv-sec:first-of-type { border-top: none; padding-top: 0; }
+.ta-adv-sec-lbl { font-size: 12px; font-weight: 900; color: var(--text-secondary); letter-spacing: .01em; margin-bottom: 4px; }
+.ta-adv-logic { background: rgba(0, 229, 255, 0.04); border: 1px solid rgba(0, 229, 255, 0.16); border-radius: 10px; padding: 10px 12px; }
+.ta-adv-logic .ta-adv-p { font-size: 13px; }
+.ta-adv-live-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ta-adv-live-list li { position: relative; padding: 7px 10px 7px 12px; background: rgba(34, 197, 94, 0.06); border: 1px solid rgba(34, 197, 94, 0.22); border-radius: 8px; font-size: 12.5px; line-height: 1.55; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.ta-adv-live-empty { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 4px 0; }
+html.day-mode .ta-adv-logic { background: rgba(15, 118, 178, 0.05); border-color: rgba(15, 118, 178, 0.22); }
+html.day-mode .ta-adv-live-list li { background: rgba(21, 128, 61, 0.07); border-color: rgba(21, 128, 61, 0.28); }
 .ta-adv-ideas-lbl { font-size: 12px; font-weight: 900; color: var(--text-secondary); margin: 12px 0 8px; }
 .ta-adv-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 .ta-idea { border: 1px solid var(--border); border-radius: 11px; padding: 11px 12px; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: 6px; }

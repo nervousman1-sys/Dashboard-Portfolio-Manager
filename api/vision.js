@@ -487,17 +487,23 @@ function _strategySummaryHe(r) {
 // written analysis + real tickers as ideas. Framed as AI opinion, never fabricated data.
 function _advicePrompt(text, headlines, ctxBlock) {
     const ctx = (Array.isArray(headlines) && headlines.length)
-        ? '\nכותרות שוק עדכניות (למידע בלבד, התייחס אליהן אם רלוונטי):\n- ' + headlines.slice(0, 8).map(h => String(h).slice(0, 140)).join('\n- ')
+        ? '\nכותרות שוק עדכניות מהפלטפורמה:\n- ' + headlines.slice(0, 8).map(h => String(h).slice(0, 140)).join('\n- ')
         : '';
     return [
-        'אתה אנליסט שווקים בכיר בפלטפורמת Finextium. המשתמש מבקש רעיונות השקעה או שואל שאלת שוק פתוחה. יש לך גישה לנתוני אמת של הפלטפורמה (דוחות פונדמנטליים, חוזק סקטורים, קטליסטים, מנוע נזילות, מאקרו, טכני חי, והתיקים של המשתמש). בסס את הניתוח על נתונים אלה כשהם רלוונטיים, וציין מהם. החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף):',
+        'אתה אנליסט פיננסי מומחה וסוכן AI מתקדם לניתוח מאקרו, סקטורים ונכסים פיננסיים בפלטפורמת Finextium. מטרתך: לספק תובנות שוק מדויקות, מצולבות ומקושרות לנתוני אמת. אל תסתמך אך ורק על ידע סטטי/קודם עבור שאלות הדורשות נתונים עדכניים.',
+        'יש לך גישה חיה לשני מקורות: (א) חיפוש אינטרנט (Google Search) — השתמש בו למשיכת מחירים חיים, נתוני מאקרו עדכניים, רוטציית סקטורים, דוחות אחרונים וכותרות; (ב) "נתוני הפלטפורמה" למטה (דוחות פונדמנטליים+score, חוזק סקטורים, קטליסטים, מנוע נזילות LHE, אינדיקטורים מאקרו, טכני חי, והתיקים של המשתמש).',
+        'שרשרת ההיגיון (חובה — אל תנתח מדד במבודד): קשר מאקרו→סקטור→חברה. הצלב מאקרו/נזילות עם הפונדמנטלס (score הדוח) והטכני (RSI/מבנה). כל תמחור/מגמה חייבים לשקף שווי שוק חי ואמיתי (Live), לא עלויות כניסה היסטוריות.',
+        'חוקי ברזל: (1) עדיפות מוחלטת לנתון החי המאומת על פני הידע הפנימי אם יש סתירה. (2) איסור הזיות — אם מחיר/נתון אינו זמין בחיפוש/בנתונים, ציין זאת במפורש ("לא נמצא נתון חי ל-X"); אל תנחש, אל תמציא מספרים, אל תבצע אקסטרפולציה. (3) סיווג נכסים מדויק — הבחן במפורש בין מניה של חברה ספציפית לבין תעודת סל מבוזרת.',
+        'החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף) במבנה הבא:',
         '{',
         '  "title": "כותרת קצרה בעברית",',
-        '  "answer_he": "ניתוח מקצועי בעברית, 2-4 פסקאות, המשלב לפי הצורך מאקרו-כלכלה, מצב גאופוליטי עולמי ופריצות דרך טכנולוגיות. הפרד פסקאות בשורה ריקה (\\n\\n).",',
-        '  "ideas": [ { "ticker": "SYMBOL", "name": "שם החברה", "why": "משפט קצר בעברית — מדוע רלוונטי לתקופה הקרובה" } ],',
+        '  "executive_he": "תובנה מנהלתית — תשובה ישירה, ממוקדת ומגובה בנתונים לשאלת המשתמש (1-2 פסקאות).",',
+        '  "logic_he": "הקשר והיגיון מחובר — שרשרת מפורשת: גורם מאקרו X ← לוחץ/תומך בסקטור Y ← מייצר הזדמנות/סיכון במניה Z. הראה את החיבור בין השכבות.",',
+        '  "live_data": [ "נתון/מחיר/כותרת מדויקים שמשכת ברגע זה ותומכים במסקנה (עם מקור/הקשר). רק נתונים מאומתים — אם אין, השאר ריק." ],',
+        '  "ideas": [ { "ticker": "SYMBOL", "name": "שם החברה", "why": "משפט קצר — מדוע רלוונטי, מקושר לשרשרת ההיגיון" } ],',
         '  "suggested_strategy_he": "משפט אחד המתאר אסטרטגיה אוטומטית קונקרטית שאפשר להפעיל (טריגר→פעולה→נכס), או null"',
         '}',
-        'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים הנסחרים בבורסה (למשל NVDA, ASML, LMT) — העדף מניות שעולות מנתוני הפלטפורמה (דוח חזק, סקטור חזק, סיגנל נזילות חיובי, קטליסט) כשרלוונטי. (2) התבסס על נתוני הפלטפורמה, הידע העדכני שלך והכותרות; אל תמציא מספרים ספציפיים (מחירים/יעדי מחיר) שאינם בנתונים — דבר במונחים איכותיים. (3) עברית מקצועית וברורה, והתייחס במפורש לנתוני הפלטפורמה כשאתה מסתמך עליהם (למשל "לפי מנוע הנזילות", "הדוח מציג score גבוה"). (4) אם השאלה נוגעת לתיק/לאחזקות של המשתמש — התבסס על התיקים והטכני החי שבנתונים. (5) אם השאלה כללית, בחר את הפרשנות הסבירה ביותר וספק ערך אמיתי.',
+        'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים בלבד; העדף מניות שעולות מנתוני הפלטפורמה (דוח חזק, סקטור חזק, סיגנל נזילות חיובי, קטליסט) ומאומתות בחיפוש. (2) עברית מקצועית וברורה; ציין מפורשות את המקור ("לפי מנוע הנזילות", "לפי החיפוש: מחיר NVDA…", "score הדוח"). (3) live_data חייב להכיל נתונים אמיתיים בלבד שנמשכו עכשיו — לא המצאות. (4) הישאר ממוקד ורלוונטי לשאלה בלבד — אל תוסיף מידע לא קשור.',
         ctx,
         ctxBlock || '',
         '',
@@ -506,16 +512,24 @@ function _advicePrompt(text, headlines, ctxBlock) {
 }
 function _normalizeAdvice(r) {
     if (!r || typeof r !== 'object') return null;
-    const answer = r.answer_he || r.answer || '';
+    // New structured mandate: executive insight + connected logic + verified live data. Falls back to
+    // the older single answer_he if the model returned that shape.
+    const executive = r.executive_he || r.answer_he || r.answer || '';
+    const logic = r.logic_he || r.connected_logic_he || '';
+    const liveData = (Array.isArray(r.live_data) ? r.live_data : (Array.isArray(r.verified_live_data) ? r.verified_live_data : []))
+        .map(x => String(x || '').trim()).filter(Boolean).slice(0, 8).map(x => x.slice(0, 220));
     const ideas = (Array.isArray(r.ideas) ? r.ideas : []).slice(0, 6).map(i => ({
         ticker: String((i && (i.ticker || i.symbol)) || '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 8),
         name: i && i.name ? String(i.name).slice(0, 60) : '',
         why: i && i.why ? String(i.why).slice(0, 240) : '',
     })).filter(i => i.ticker);
-    if (!answer && !ideas.length) return null;
+    if (!executive && !logic && !ideas.length && !liveData.length) return null;
     return {
         title: r.title ? String(r.title).slice(0, 80) : 'ניתוח והמלצות',
-        answer_he: String(answer).slice(0, 2200),
+        executive_he: String(executive).slice(0, 2000),
+        logic_he: String(logic).slice(0, 1200),
+        live_data: liveData,
+        answer_he: String(executive).slice(0, 2000), // back-compat for any older renderer
         ideas,
         suggested_strategy_he: (r.suggested_strategy_he && r.suggested_strategy_he !== 'null') ? String(r.suggested_strategy_he).slice(0, 200) : null,
     };
@@ -802,7 +816,8 @@ module.exports = async (req, res) => {
                 // Not a concrete rule → treat as an open-ended market question and answer as an advisor,
                 // grounded in the platform context.
                 let advice = null;
-                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock), KEY, MODELS, false, 0.55, 1500)); } catch (e) { advice = null; }
+                // grounded:true → Gemini pulls LIVE data via Google Search (prices/macro/headlines).
+                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock), KEY, MODELS, true, 0.5, 1900)); } catch (e) { advice = null; }
                 if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text, headlines, ctxBlock), 0.55, 1600)); } catch (e) { advice = null; } }
                 if (advice) {
                     const aResult = { advice, source: 'ai' };
