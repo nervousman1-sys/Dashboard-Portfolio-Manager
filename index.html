@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@200;300;400;500;600;700;800&family=Heebo:wght@400;500;700;800;900&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css?v=221.0">
+    <link rel="stylesheet" href="css/main.css?v=222.0">
     <link rel="stylesheet" href="css/auth.css?v=15.0">
     <link rel="stylesheet" href="css/lhe.css?v=1.0">
     <link rel="stylesheet" href="css/press-alerts.css?v=1.0">
@@ -247,6 +247,14 @@
                         <button class="sidebar-tz-btn" onclick="setClockTZ('EST', null); document.querySelectorAll('.sidebar-tz-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">ארה״ב</button>
                     </div>
                 </div>
+                <!-- Profile: name + email + settings (change password / email) -->
+                <button class="sidebar-report-btn sidebar-profile-btn" onclick="_closeMobileSidebar(); if(typeof openProfileModal==='function') openProfileModal();">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span class="sidebar-logout-text" id="sidebarProfileName">הפרופיל שלי</span>
+                </button>
                 <!-- Generate Report -->
                 <button class="sidebar-report-btn" onclick="_closeMobileSidebar(); if(typeof generateReport==='function') generateReport();">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -715,7 +723,7 @@
     <script defer src="js/trading-agent.js?v=18"></script>
     <script defer src="js/stock-alerts.js?v=4"></script>
     <script defer src="js/sidebar.js?v=484"></script>
-    <script defer src="js/auth.js?v=482"></script>
+    <script defer src="js/auth.js?v=483"></script>
     <script defer src="js/mobile-sheets.js?v=2"></script>
     <script defer src="js/mobile-modals.js?v=2"></script>
     <script defer src="js/init.js?v=488"></script>

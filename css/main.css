@@ -12576,3 +12576,36 @@ html { scrollbar-gutter: stable; }
 .hsheet-actions .holding-action-btn { flex: 1; padding: 11px; font-size: 14px; }
 html.day-mode .hsheet-kv { border-bottom-color: rgba(58, 50, 36, 0.14); }
 html.day-mode .hsheet-report { background: rgba(15, 118, 178, 0.09); border-color: #2f83b0; color: #1e6f9c; }
+
+/* ══ Header user chip (click → profile) + Profile modal ══ */
+.user-chip { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px 4px 4px; cursor: pointer; color: var(--text-primary); transition: background .15s; }
+.user-chip:hover { background: rgba(0,229,255,0.1); }
+.user-chip-av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent-blue); color: #05202b; font-size: 11px; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-chip .username { font-size: 12.5px; font-weight: 700; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.day-mode .user-chip { background: rgba(58,50,36,0.05); }
+html.day-mode .user-chip:hover { background: rgba(15,118,178,0.1); }
+
+.sidebar-profile-btn svg { color: var(--accent-blue); }
+.pf-box { max-width: 460px; }
+.pf-body { padding: 4px 2px 2px; display: flex; flex-direction: column; gap: 10px; }
+.pf-id { display: flex; align-items: center; gap: 14px; padding: 6px 2px 12px; border-bottom: 1px solid var(--border); }
+.pf-avatar { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-blue), #1b6ca8); color: #04222e; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pf-name { font-size: 17px; font-weight: 900; color: var(--text-primary); }
+.pf-email { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; word-break: break-all; }
+.pf-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+.pf-k { color: var(--text-secondary); }
+.pf-v { color: var(--text-primary); font-weight: 700; word-break: break-all; text-align: left; }
+.pf-sec-lbl { font-size: 12px; font-weight: 900; color: var(--text-secondary); margin: 10px 0 2px; }
+.pf-form { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.pf-input { flex: 1 1 160px; min-width: 0; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text-primary); font-size: 13.5px; }
+.pf-input:focus { outline: none; border-color: var(--accent-blue); }
+.pf-btn { flex: 0 0 auto; background: var(--accent-blue); color: #04222e; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 800; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.pf-btn:hover { filter: brightness(1.08); }
+.pf-msg { font-size: 12.5px; margin-top: 4px; min-height: 16px; line-height: 1.5; }
+.pf-msg.pf-ok { color: var(--risk-low, #34d399); }
+.pf-msg.pf-err { color: var(--risk-high, #ef4444); }
+.pf-logout { margin-top: 8px; width: 100%; background: transparent; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; border-radius: 10px; padding: 11px; font-weight: 800; font-size: 13.5px; cursor: pointer; }
+.pf-logout:hover { background: rgba(239,68,68,0.08); }
+html.day-mode .pf-input { background: #f6f2e6; }
+html.day-mode .pf-avatar { color: #f6f2e6; }
+html.day-mode .pf-btn { color: #f6f2e6; }

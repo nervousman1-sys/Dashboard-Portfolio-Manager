@@ -360,9 +360,15 @@ function updateUserDisplay() {
 
     if (!userArea) return;
     if (user) {
+        const uInitials = String(user.username || '?').split(/[\s@._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('') || '?';
+        const uShort = String(user.username || '').split(/[\s@]/)[0];
+        const spn = document.getElementById('sidebarProfileName'); if (spn) spn.textContent = uShort || 'הפרופיל שלי';
         userArea.innerHTML = `
             <div class="user-display">
-                <span class="username">${user.username}</span>
+                <button class="user-chip" onclick="openProfileModal()" title="הפרופיל שלי — פרטים והגדרות">
+                    <span class="user-chip-av">${uInitials}</span>
+                    <span class="username">${uShort}</span>
+                </button>
                 <button class="logout-btn" onclick="logout()">התנתק</button>
             </div>
         `;
@@ -371,6 +377,74 @@ function updateUserDisplay() {
         userArea.innerHTML = '';
         userArea.style.cssText = 'display: none !important;';
     }
+}
+
+// ========== PROFILE — "מי אני" + change email / password ==========
+function _pfEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function closeProfileModal() { const ov = document.getElementById('profileOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
+async function openProfileModal() {
+    let ov = document.getElementById('profileOverlay');
+    if (!ov) { ov = document.createElement('div'); ov.id = 'profileOverlay'; ov.className = 'wl-overlay'; ov.addEventListener('click', (e) => { if (e.target === ov) closeProfileModal(); }); document.body.appendChild(ov); }
+    const u = (typeof getUser === 'function' && getUser()) || {};
+    let email = u.username || '—', name = u.username || '—', created = '';
+    try {
+        const { data } = await supabaseClient.auth.getUser();
+        if (data && data.user) {
+            email = data.user.email || email;
+            name = (data.user.user_metadata && data.user.user_metadata.username) || data.user.email || name;
+            if (data.user.created_at) { const d = new Date(data.user.created_at); created = `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`; }
+        }
+    } catch (e) { }
+    const initials = String(name).split(/[\s@._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('') || '?';
+    ov.innerHTML = `<div class="wl-box pf-box" dir="rtl">
+        <div class="wl-head"><span class="wl-title">👤 הפרופיל שלי</span><button class="wl-close" onclick="closeProfileModal()" aria-label="סגור">✕</button></div>
+        <div class="pf-body">
+            <div class="pf-id">
+                <div class="pf-avatar">${_pfEsc(initials)}</div>
+                <div class="pf-id-txt"><div class="pf-name">${_pfEsc(name)}</div><div class="pf-email">${_pfEsc(email)}</div></div>
+            </div>
+            <div class="pf-kv"><span class="pf-k">שם משתמש</span><b class="pf-v">${_pfEsc(name)}</b></div>
+            <div class="pf-kv"><span class="pf-k">אימייל</span><b class="pf-v">${_pfEsc(email)}</b></div>
+            ${created ? `<div class="pf-kv"><span class="pf-k">חבר/ה מאז</span><b class="pf-v">${_pfEsc(created)}</b></div>` : ''}
+
+            <div class="pf-sec-lbl">שינוי אימייל</div>
+            <div class="pf-form"><input id="pfNewEmail" type="email" class="pf-input" placeholder="אימייל חדש" value="${_pfEsc(email === '—' ? '' : email)}"><button class="pf-btn" onclick="_pfUpdateEmail()">עדכן אימייל</button></div>
+
+            <div class="pf-sec-lbl">שינוי סיסמה</div>
+            <div class="pf-form"><input id="pfNewPass" type="password" class="pf-input" placeholder="סיסמה חדשה (6+ תווים)" autocomplete="new-password"><button class="pf-btn" onclick="_pfUpdatePass()">עדכן סיסמה</button></div>
+
+            <div class="pf-msg" id="pfMsg"></div>
+            <button class="pf-logout" onclick="closeProfileModal(); logout()">התנתקות מהחשבון</button>
+        </div>
+    </div>`;
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+}
+function _pfShowMsg(text, ok) { const el = document.getElementById('pfMsg'); if (el) { el.textContent = text; el.className = 'pf-msg ' + (ok ? 'pf-ok' : 'pf-err'); } }
+async function _pfUpdateEmail() {
+    const v = (document.getElementById('pfNewEmail') || {}).value; const email = String(v || '').trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { _pfShowMsg('הזן כתובת אימייל תקינה', false); return; }
+    _pfShowMsg('מעדכן…', true);
+    try {
+        const { error } = await supabaseClient.auth.updateUser({ email });
+        if (error) { _pfShowMsg('שגיאה: ' + error.message, false); return; }
+        _pfShowMsg('נשלח מייל אישור לכתובת החדשה (וגם לישנה). האימייל יתעדכן לאחר האישור.', true);
+    } catch (e) { _pfShowMsg('שגיאת חיבור — נסה שוב בעוד רגע.', false); }
+}
+async function _pfUpdatePass() {
+    const v = (document.getElementById('pfNewPass') || {}).value; const password = String(v || '');
+    if (password.length < 6) { _pfShowMsg('סיסמה חייבת להכיל לפחות 6 תווים', false); return; }
+    _pfShowMsg('מעדכן…', true);
+    try {
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) { _pfShowMsg('שגיאה: ' + error.message, false); return; }
+        const inp = document.getElementById('pfNewPass'); if (inp) inp.value = '';
+        _pfShowMsg('הסיסמה עודכנה בהצלחה ✓', true);
+    } catch (e) { _pfShowMsg('שגיאת חיבור — נסה שוב בעוד רגע.', false); }
+}
+if (typeof window !== 'undefined') {
+    window.openProfileModal = openProfileModal; window.closeProfileModal = closeProfileModal;
+    window._pfUpdateEmail = _pfUpdateEmail; window._pfUpdatePass = _pfUpdatePass;
 }
 
 // Immediately show user area if a session exists in localStorage.
