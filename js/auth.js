@@ -379,72 +379,131 @@ function updateUserDisplay() {
     }
 }
 
-// ========== PROFILE — "מי אני" + change email / password ==========
+// ========== PROFILE — account panel: identity + inline-edit username / email / password ==========
 function _pfEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+const _PF_PENCIL = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+let _pfState = {};   // { username, email } current values, for cancel/reset
 function closeProfileModal() { const ov = document.getElementById('profileOverlay'); if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; } if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock(); }
+
+// One editable row: label + value + pencil → expands to input + save/cancel (inline).
+function _pfRow(field, label, value, opts) {
+    opts = opts || {};
+    const mask = !!opts.mask;
+    const disp = mask ? '••••••••' : (value || '—');
+    const inputAttrs = mask
+        ? `type="password" placeholder="סיסמה חדשה (6+ תווים)" autocomplete="new-password"`
+        : `type="${opts.type || 'text'}" value="${_pfEsc(value || '')}"`;
+    return `<div class="pf-row" id="pfRow-${field}">
+        <div class="pf-row-main">
+            <span class="pf-row-label">${label}</span>
+            <span class="pf-row-value" id="pfVal-${field}">${_pfEsc(disp)}</span>
+            <button class="pf-edit" onclick="_pfEdit('${field}')" aria-label="עריכת ${label}">${_PF_PENCIL}</button>
+        </div>
+        <div class="pf-row-form">
+            <input class="pf-input" id="pfIn-${field}" ${inputAttrs}>
+            <div class="pf-row-act">
+                <button class="pf-save" onclick="_pfSave('${field}')">שמירה</button>
+                <button class="pf-cancel" onclick="_pfCancel('${field}')">ביטול</button>
+            </div>
+            <div class="pf-row-msg" id="pfMsg-${field}"></div>
+        </div>
+    </div>`;
+}
+
 async function openProfileModal() {
     let ov = document.getElementById('profileOverlay');
     if (!ov) { ov = document.createElement('div'); ov.id = 'profileOverlay'; ov.className = 'wl-overlay'; ov.addEventListener('click', (e) => { if (e.target === ov) closeProfileModal(); }); document.body.appendChild(ov); }
     const u = (typeof getUser === 'function' && getUser()) || {};
-    let email = u.username || '—', name = u.username || '—', created = '';
+    let email = u.username || '', name = u.username || '', created = '';
     try {
         const { data } = await supabaseClient.auth.getUser();
         if (data && data.user) {
             email = data.user.email || email;
-            name = (data.user.user_metadata && data.user.user_metadata.username) || data.user.email || name;
+            name = (data.user.user_metadata && data.user.user_metadata.username) || (data.user.email ? data.user.email.split('@')[0] : '') || name;
             if (data.user.created_at) { const d = new Date(data.user.created_at); created = `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`; }
         }
     } catch (e) { }
-    const initials = String(name).split(/[\s@._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('') || '?';
+    _pfState = { username: name, email };
+    const initials = String(name || email || '?').split(/[\s@._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('') || '?';
     ov.innerHTML = `<div class="wl-box pf-box" dir="rtl">
-        <div class="wl-head"><span class="wl-title">👤 הפרופיל שלי</span><button class="wl-close" onclick="closeProfileModal()" aria-label="סגור">✕</button></div>
-        <div class="pf-body">
-            <div class="pf-id">
-                <div class="pf-avatar">${_pfEsc(initials)}</div>
-                <div class="pf-id-txt"><div class="pf-name">${_pfEsc(name)}</div><div class="pf-email">${_pfEsc(email)}</div></div>
+        <button class="pf-x" onclick="closeProfileModal()" aria-label="סגירה">✕</button>
+        <div class="pf-hero">
+            <div class="pf-avatar"><span>${_pfEsc(initials)}</span></div>
+            <div class="pf-hero-txt">
+                <div class="pf-name" id="pfHeroName">${_pfEsc(name || '—')}</div>
+                <div class="pf-email" id="pfHeroEmail">${_pfEsc(email || '—')}</div>
             </div>
-            <div class="pf-kv"><span class="pf-k">שם משתמש</span><b class="pf-v">${_pfEsc(name)}</b></div>
-            <div class="pf-kv"><span class="pf-k">אימייל</span><b class="pf-v">${_pfEsc(email)}</b></div>
-            ${created ? `<div class="pf-kv"><span class="pf-k">חבר/ה מאז</span><b class="pf-v">${_pfEsc(created)}</b></div>` : ''}
-
-            <div class="pf-sec-lbl">שינוי אימייל</div>
-            <div class="pf-form"><input id="pfNewEmail" type="email" class="pf-input" placeholder="אימייל חדש" value="${_pfEsc(email === '—' ? '' : email)}"><button class="pf-btn" onclick="_pfUpdateEmail()">עדכן אימייל</button></div>
-
-            <div class="pf-sec-lbl">שינוי סיסמה</div>
-            <div class="pf-form"><input id="pfNewPass" type="password" class="pf-input" placeholder="סיסמה חדשה (6+ תווים)" autocomplete="new-password"><button class="pf-btn" onclick="_pfUpdatePass()">עדכן סיסמה</button></div>
-
-            <div class="pf-msg" id="pfMsg"></div>
-            <button class="pf-logout" onclick="closeProfileModal(); logout()">התנתקות מהחשבון</button>
+        </div>
+        <div class="pf-body">
+            <div class="pf-sec">חשבון</div>
+            ${_pfRow('username', 'שם משתמש', name)}
+            ${_pfRow('email', 'אימייל', email, { type: 'email' })}
+            ${created ? `<div class="pf-row pf-row--ro"><div class="pf-row-main"><span class="pf-row-label">חבר/ה מאז</span><span class="pf-row-value">${_pfEsc(created)}</span></div></div>` : ''}
+            <div class="pf-sec">אבטחה</div>
+            ${_pfRow('password', 'סיסמה', '', { mask: true })}
+            <button class="pf-logout" onclick="closeProfileModal(); logout()">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span>התנתקות מהחשבון</span>
+            </button>
         </div>
     </div>`;
     ov.classList.add('active');
     if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
 }
-function _pfShowMsg(text, ok) { const el = document.getElementById('pfMsg'); if (el) { el.textContent = text; el.className = 'pf-msg ' + (ok ? 'pf-ok' : 'pf-err'); } }
-async function _pfUpdateEmail() {
-    const v = (document.getElementById('pfNewEmail') || {}).value; const email = String(v || '').trim();
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { _pfShowMsg('הזן כתובת אימייל תקינה', false); return; }
-    _pfShowMsg('מעדכן…', true);
-    try {
-        const { error } = await supabaseClient.auth.updateUser({ email });
-        if (error) { _pfShowMsg('שגיאה: ' + error.message, false); return; }
-        _pfShowMsg('נשלח מייל אישור לכתובת החדשה (וגם לישנה). האימייל יתעדכן לאחר האישור.', true);
-    } catch (e) { _pfShowMsg('שגיאת חיבור — נסה שוב בעוד רגע.', false); }
+
+function _pfEdit(field) {
+    const row = document.getElementById('pfRow-' + field); if (!row) return;
+    document.querySelectorAll('.pf-row--editing').forEach(r => { if (r !== row) r.classList.remove('editing'); });
+    row.classList.add('editing');
+    const inp = document.getElementById('pfIn-' + field);
+    if (inp) { if (field !== 'password') inp.value = _pfState[field] || ''; setTimeout(() => inp.focus(), 30); }
+    const msg = document.getElementById('pfMsg-' + field); if (msg) { msg.textContent = ''; msg.className = 'pf-row-msg'; }
 }
-async function _pfUpdatePass() {
-    const v = (document.getElementById('pfNewPass') || {}).value; const password = String(v || '');
-    if (password.length < 6) { _pfShowMsg('סיסמה חייבת להכיל לפחות 6 תווים', false); return; }
-    _pfShowMsg('מעדכן…', true);
+function _pfCancel(field) { const row = document.getElementById('pfRow-' + field); if (row) row.classList.remove('editing'); }
+function _pfRowMsg(field, text, ok) { const el = document.getElementById('pfMsg-' + field); if (el) { el.textContent = text; el.className = 'pf-row-msg ' + (ok ? 'pf-ok' : 'pf-err'); } }
+
+async function _pfSave(field) {
+    const inp = document.getElementById('pfIn-' + field); if (!inp) return;
+    const val = String(inp.value || '').trim();
+    if (field === 'password') {
+        if (val.length < 6) { _pfRowMsg(field, 'סיסמה חייבת להכיל לפחות 6 תווים', false); return; }
+    } else if (field === 'email') {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) { _pfRowMsg(field, 'הזן כתובת אימייל תקינה', false); return; }
+        if (val === _pfState.email) { _pfCancel(field); return; }
+    } else if (field === 'username') {
+        if (val.length < 2) { _pfRowMsg(field, 'שם משתמש קצר מדי', false); return; }
+        if (val === _pfState.username) { _pfCancel(field); return; }
+    }
+    _pfRowMsg(field, 'שומר…', true);
     try {
-        const { error } = await supabaseClient.auth.updateUser({ password });
-        if (error) { _pfShowMsg('שגיאה: ' + error.message, false); return; }
-        const inp = document.getElementById('pfNewPass'); if (inp) inp.value = '';
-        _pfShowMsg('הסיסמה עודכנה בהצלחה ✓', true);
-    } catch (e) { _pfShowMsg('שגיאת חיבור — נסה שוב בעוד רגע.', false); }
+        let payload;
+        if (field === 'password') payload = { password: val };
+        else if (field === 'email') payload = { email: val };
+        else payload = { data: { username: val } };
+        const { error } = await supabaseClient.auth.updateUser(payload);
+        if (error) { _pfRowMsg(field, 'שגיאה: ' + error.message, false); return; }
+
+        if (field === 'password') {
+            inp.value = ''; _pfRowMsg(field, 'הסיסמה עודכנה ✓', true);
+            setTimeout(() => _pfCancel(field), 1400);
+        } else if (field === 'email') {
+            _pfRowMsg(field, 'שלחנו מייל אישור לכתובת החדשה — האימייל יתחלף לאחר האישור.', true);
+        } else { // username — takes effect immediately
+            _pfState.username = val;
+            const vEl = document.getElementById('pfVal-username'); if (vEl) vEl.textContent = val;
+            const hn = document.getElementById('pfHeroName'); if (hn) hn.textContent = val;
+            // reflect in the header chip + sidebar + local user record
+            try { const cur = getUser() || {}; if (typeof saveUser === 'function') saveUser({ ...cur, username: val }); } catch (e) { }
+            if (typeof updateUserDisplay === 'function') updateUserDisplay();
+            _pfRowMsg(field, 'שם המשתמש עודכן ✓', true);
+            setTimeout(() => _pfCancel(field), 1200);
+        }
+    } catch (e) { _pfRowMsg(field, 'שגיאת חיבור — נסה שוב בעוד רגע.', false); }
 }
+
 if (typeof window !== 'undefined') {
     window.openProfileModal = openProfileModal; window.closeProfileModal = closeProfileModal;
-    window._pfUpdateEmail = _pfUpdateEmail; window._pfUpdatePass = _pfUpdatePass;
+    window._pfEdit = _pfEdit; window._pfCancel = _pfCancel; window._pfSave = _pfSave;
 }
 
 // Immediately show user area if a session exists in localStorage.
