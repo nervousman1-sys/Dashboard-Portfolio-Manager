@@ -535,6 +535,74 @@ function _normalizeAdvice(r) {
     };
 }
 
+// Curated theme → REAL, well-known public companies (no invented tickers). Used by the deterministic
+// advisory fallback so the agent still answers thematic questions when the LLM is unavailable.
+const _ADVICE_THEMES = [
+    { keys: ['רובוט', 'robot', 'אוטומצי', 'אוטומט', 'automation'], he: 'רובוטיקה ואוטומציה', picks: [['ISRG', 'Intuitive Surgical', 'רובוטים כירורגיים — מוביל שוק'], ['ABB', 'ABB Ltd', 'רובוטים תעשייתיים ואוטומציה'], ['TER', 'Teradyne', 'רובוטיקה (Universal Robots) + ציוד בדיקה'], ['ROK', 'Rockwell Automation', 'אוטומציה תעשייתית'], ['SYM', 'Symbotic', 'רובוטיקה למחסנים ולוגיסטיקה'], ['PATH', 'UiPath', 'אוטומציית תהליכים (RPA)'], ['NVDA', 'NVIDIA', 'פלטפורמות AI לרובוטיקה (Isaac)']] },
+    { keys: ['בינה מלאכות', 'בינה', ' ai ', 'artificial intel'], he: 'בינה מלאכותית (AI)', picks: [['NVDA', 'NVIDIA', 'שבבי AI מובילים'], ['MSFT', 'Microsoft', 'AI + ענן (Copilot/Azure)'], ['GOOGL', 'Alphabet', 'מודלים ותשתיות AI'], ['AVGO', 'Broadcom', 'שבבי רשת ל-AI'], ['AMD', 'AMD', 'מאיצי AI'], ['PLTR', 'Palantir', 'תוכנת AI לארגונים']] },
+    { keys: ['שבב', 'מוליכ', 'semi', 'chip'], he: 'מוליכים למחצה (שבבים)', picks: [['NVDA', 'NVIDIA', 'GPU/AI'], ['AVGO', 'Broadcom', 'שבבי רשת'], ['AMD', 'AMD', 'מעבדים ומאיצים'], ['ASML', 'ASML', 'ליתוגרפיה EUV'], ['TSM', 'TSMC', 'ייצור שבבים'], ['MU', 'Micron', 'זיכרון']] },
+    { keys: ['ביטחון', 'בטחון', 'נשק', 'defense', 'military'], he: 'ביטחון וחלל', picks: [['LMT', 'Lockheed Martin', 'מערכות נשק'], ['RTX', 'RTX (Raytheon)', 'טילים והגנה אווירית'], ['NOC', 'Northrop Grumman', 'חלל וביטחון'], ['GD', 'General Dynamics', 'יבשה וימית'], ['LHX', 'L3Harris', 'תקשורת ביטחונית']] },
+    { keys: ['אנרגי', 'נפט', 'energy', 'oil'], he: 'אנרגיה', picks: [['XOM', 'ExxonMobil', 'נפט וגז משולב'], ['CVX', 'Chevron', 'נפט וגז'], ['COP', 'ConocoPhillips', 'הפקה'], ['SLB', 'Schlumberger', 'שירותי נפט']] },
+    { keys: ['בנק', 'פיננס', 'bank', 'financ'], he: 'בנקאות ופיננסים', picks: [['JPM', 'JPMorgan', 'בנק מוביל'], ['BAC', 'Bank of America', 'בנקאות קמעונאית'], ['GS', 'Goldman Sachs', 'בנקאות השקעות'], ['V', 'Visa', 'תשלומים']] },
+    { keys: ['תרופ', 'ביוטק', 'biotech', 'pharma', 'בריאות', 'health'], he: 'בריאות וביוטק', picks: [['LLY', 'Eli Lilly', 'תרופות השמנה/סוכרת'], ['NVO', 'Novo Nordisk', 'GLP-1'], ['MRK', 'Merck', 'אונקולוגיה'], ['ISRG', 'Intuitive Surgical', 'רובוטיקה רפואית'], ['UNH', 'UnitedHealth', 'ביטוח בריאות']] },
+    { keys: ['ענן', 'תוכנ', 'cloud', 'saas', 'software'], he: 'ענן ותוכנה', picks: [['MSFT', 'Microsoft', 'Azure'], ['AMZN', 'Amazon', 'AWS'], ['CRM', 'Salesforce', 'CRM ענן'], ['NOW', 'ServiceNow', 'זרימות עבודה'], ['SNOW', 'Snowflake', 'נתונים בענן']] },
+    { keys: ['סייבר', 'cyber', 'security'], he: 'סייבר', picks: [['CRWD', 'CrowdStrike', 'הגנת קצה'], ['PANW', 'Palo Alto', 'חומות אש'], ['ZS', 'Zscaler', 'Zero-Trust'], ['FTNT', 'Fortinet', 'רשת ואבטחה']] },
+    { keys: ['רכב חשמל', 'טסלה', 'electric veh', ' ev '], he: 'רכב חשמלי', picks: [['TSLA', 'Tesla', 'מוביל EV'], ['GM', 'General Motors', 'מעבר ל-EV'], ['RIVN', 'Rivian', 'טנדרים חשמליים']] },
+];
+
+// Deterministic advisory answer from REAL platform data (context) + the theme map above — so the
+// agent responds even when the LLM (Gemini/AI-Gateway) is down. Never invents prices/numbers.
+function _adviceFallback(text, context) {
+    const t = ' ' + String(text || '').toLowerCase() + ' ';
+    const ctx = (context && typeof context === 'object') ? context : {};
+    const arr = (x) => Array.isArray(x) ? x : [];
+    const reports = [...arr(ctx.top_reports), ...arr(ctx.holdings_reports)];
+    const scoreOf = (tk) => { const r = reports.find(x => String(x.t).toUpperCase() === tk); return r ? r.score : null; };
+    // Real data points from the context (never fabricated).
+    const live = [];
+    if (arr(ctx.macro).length) live.push('מאקרו (ארה"ב): ' + ctx.macro.slice(0, 4).map(m => `${m.k}=${m.v}`).join(', '));
+    if (arr(ctx.sectors).length) live.push('חוזק סקטורים (score ממוצע): ' + ctx.sectors.slice(0, 4).map(s => `${s.sector} ${s.avg}`).join(' · '));
+    if (arr(ctx.liquidity).length) live.push('מנוע נזילות: ' + ctx.liquidity.slice(0, 3).map(l => `${l.t} ${l.bias}/${l.regime}`).join(' · '));
+    if (arr(ctx.macro_news).length) live.push('כותרת מאקרו: ' + ctx.macro_news[0]);
+
+    let title = '', executive = '', logic = '', ideas = [];
+    const theme = _ADVICE_THEMES.find(th => th.keys.some(k => t.includes(k)));
+    // Catalysts (Early-Alpha) that mention the theme/query text — real, from the scanner.
+    const catHit = arr(ctx.catalysts).filter(c => {
+        const blob = ((c.sector || '') + ' ' + (c.thesis || '')).toLowerCase();
+        return (theme && theme.keys.some(k => blob.includes(k))) || false;
+    });
+
+    if (theme) {
+        title = `חברות בתחום ${theme.he}`;
+        ideas = theme.picks.slice(0, 6).map(([tk, n, why]) => { const sc = scoreOf(tk); return { ticker: tk, name: n, why: why + (sc != null ? ` · score דוח ${sc}` : '') }; });
+        // Merge in any catalyst stealth tickers for this theme.
+        catHit.forEach(c => arr(c.tickers).forEach(tk => { if (ideas.length < 8 && !ideas.some(i => i.ticker === tk)) ideas.push({ ticker: tk, name: '', why: `זוהתה בסורק הקטליסטים — ${String(c.thesis || '').slice(0, 80)}` }); }));
+        const graded = ideas.filter(i => scoreOf(i.ticker) != null);
+        executive = `להלן חברות בולטות ואמיתיות הנסחרות בבורסה בתחום ${theme.he}.` + (graded.length ? ` חלקן מדורגות במערכת הדוחות של הפלטפורמה (מוצג ה-score ליד כל אחת).` : '') + (catHit.length ? ` הסורק (Early-Alpha) זיהה קטליסטים רלוונטיים בתחום.` : '');
+        logic = arr(ctx.sectors).length ? `הקשר: התחום מושפע ממצב הסקטורים והנזילות בשוק — ראה "נתוני אמת" למטה. לכל מניה, הצלב את ה-score הפונדמנטלי עם הטכני לפני כניסה.` : '';
+    } else if (/(רלוונט|כדאי|מומלצ|מעניינ|הזדמנות|לתקופה|עכשיו|היום|opportunit|relevant)/.test(t) && (reports.length || arr(ctx.catalysts).length)) {
+        // "what's relevant now" — surface the platform's own top-scored companies + catalysts.
+        title = 'הכי רלוונטי עכשיו — לפי נתוני הפלטפורמה';
+        const tops = arr(ctx.top_reports).slice(0, 6);
+        ideas = tops.map(r => ({ ticker: r.t, name: r.n || '', why: `score דוח ${r.score}${r.up ? ' ↑' : ''}${r.sector ? ' · ' + r.sector : ''}` }));
+        arr(ctx.catalysts).forEach(c => arr(c.tickers).forEach(tk => { if (ideas.length < 8 && !ideas.some(i => i.ticker === tk)) ideas.push({ ticker: tk, name: '', why: `קטליסט: ${String(c.thesis || '').slice(0, 80)}` }); }));
+        executive = 'לפי בסיס הנתונים של הפלטפורמה, אלה החברות עם ציוני הדוחות הגבוהים ביותר כרגע, בתוספת קטליסטים פעילים שזוהו בסורק. הצלב אותן עם חוזק הסקטור והנזילות (למטה).';
+        logic = 'הקשר: score דוח גבוה = פונדמנטלס חזק; קטליסט = זרז חדשותי/מבני. שילוב עם סקטור חזק ונזילות חיובית מחזק את הרלוונטיות.';
+    }
+    if (!ideas.length && !executive) return null;
+    return {
+        title: title || 'ניתוח מבוסס-נתונים',
+        executive_he: executive + '\n\n(תשובה מבוססת על נתוני הפלטפורמה בזמן אמת. לניתוח AI מלא עם חיפוש-אינטרנט ומחירים חיים — נדרש מנוע ה-AI, ראה ההערה למעלה.)',
+        logic_he: logic,
+        live_data: live,
+        answer_he: executive,
+        ideas: ideas.slice(0, 8).map(i => ({ ticker: String(i.ticker).toUpperCase().slice(0, 8), name: (i.name || '').slice(0, 60), why: (i.why || '').slice(0, 200) })).filter(i => i.ticker),
+        suggested_strategy_he: null,
+        _src: 'data-fallback',
+    };
+}
+
 // Optional RELIABLE-LLM fallback via Vercel AI Gateway (OpenAI-compatible). Used when the free-tier
 // Gemini key is exhausted (429). No-op unless AI_GATEWAY_API_KEY is set — then complex parsing AND
 // open-ended advice work reliably (default model configurable via AI_GATEWAY_MODEL).
@@ -819,14 +887,19 @@ module.exports = async (req, res) => {
                 // grounded:true → Gemini pulls LIVE data via Google Search (prices/macro/headlines).
                 try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock), KEY, MODELS, true, 0.5, 1900)); } catch (e) { advice = null; }
                 if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text, headlines, ctxBlock), 0.55, 1600)); } catch (e) { advice = null; } }
+                // LLM down (Gemini 429 + AI Gateway unfunded)? Answer deterministically from REAL
+                // platform data + the curated theme map, so the agent still helps (thematic queries,
+                // "what's relevant now"). Only falls through to the error if even that can't help.
+                let adviceSrc = 'ai';
+                if (!advice) { const fb = _adviceFallback(text, d.context); if (fb) { adviceSrc = 'data'; delete fb._src; advice = fb; } }
                 if (advice) {
-                    const aResult = { advice, source: 'ai' };
+                    const aResult = { advice, source: adviceSrc };
                     _memo.set(memoKey, aResult);
-                    res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=3600, stale-while-revalidate=86400');
+                    res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=600');
                     res.status(200).json(aResult); return;
                 }
                 res.setHeader('Cache-Control', 's-maxage=60');
-                res.status(200).json({ error: 'unparsed', message: 'לא הצלחתי להבין את הבקשה כרגע. אפשר לתאר אסטרטגיה (טריגר → פעולה → נכס), או לשאול שאלת שוק פתוחה. אם מנוע ה-AI עמוס — נסה שוב בעוד רגע.' });
+                res.status(200).json({ error: 'unparsed', message: 'לא הצלחתי להבין את הבקשה כרגע. נסה לנסח מחדש — למשל "חברות בתחום רובוטיקה", "מניות עם דוח חזק", או תאר אסטרטגיה (טריגר → פעולה → נכס).' });
                 return;
             }
             const result = { rule, summary_he: _strategySummaryHe(rule), source };
