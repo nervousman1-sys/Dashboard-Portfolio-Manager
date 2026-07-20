@@ -640,7 +640,9 @@ async function openModal(clientId) {
                     const word = fxPct >= 0 ? 'רווח' : 'הפסד';
                     const ilsAmt = (pnl && isFinite(pnl.ils)) ? `${pnl.ils >= 0 ? '+' : '−'}₪${Math.abs(Math.round(pnl.ils)).toLocaleString('en-US')}` : '';
                     const srcTxt = b.src === 'conversions' ? 'לפי המרות בפועל' : 'לפי שער ה-₪/$ במועד הרכישה';
-                    return `<div class="ov-fx-note">שער דולר ממוצע בתיק (${srcTxt}): <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · ${word} מט"ח: <b class="${cls}">${sign}${fxPct.toFixed(1)}%</b>${ilsAmt ? ` · רווח/הפסד מהחזקת המטבע: <b class="${cls}">${ilsAmt}</b>` : ''}</div>`;
+                    // .ov-fx-verbose spans are hidden on phones → the note collapses to the core
+                    // "מט״ח: -14.9% · -₪2,434" (desktop keeps the full sentence unchanged).
+                    return `<div class="ov-fx-note"><span class="ov-fx-verbose">שער דולר ממוצע בתיק (${srcTxt}): <b>₪${b.rate.toFixed(3)}</b> · שער נוכחי ₪${cur.toFixed(3)} · </span>${word} מט"ח: <b class="${cls}">${sign}${fxPct.toFixed(1)}%</b>${ilsAmt ? ` · <span class="ov-fx-verbose">רווח/הפסד מהחזקת המטבע: </span><b class="${cls}">${ilsAmt}</b>` : ''}</div>`;
                 })()}
 
                 <!-- ═══ MODEL COMPLIANCE — compact, links to the CML/SML tab ═══ -->

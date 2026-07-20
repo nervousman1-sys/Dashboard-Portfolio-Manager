@@ -12484,3 +12484,17 @@ html { scrollbar-gutter: stable; }
     .sidebar .sidebar-header { justify-content: flex-start; }
     .sidebar .sidebar-logo { height: 46px; }
 }
+
+/* ══ Mobile: leaner portfolio analysis — keep the visual verdict + numbers, drop the prose ══
+   The score ring, sub-bars, metric chips and fit chips already convey the analysis at a glance;
+   the long explanatory paragraphs (which duplicate the action plan) are hidden on phones so the
+   view is scannable, not a wall of text. Desktop is untouched. ══ */
+@media (max-width: 768px) {
+    .ov-advisory-sub { display: none; }          /* "פירוט סיכון…" section subtitle */
+    .adv-eff-sub { display: none; }              /* efficiency paragraph (duplicates the action plan) */
+    .adv-eff { align-items: center; }
+    .ov-fx-verbose { display: none; }            /* FX note → compact "מט״ח: -14.9% · -₪2,434" */
+    .adv-note { font-size: 12px; line-height: 1.5; }
+    /* Slightly tighter analysis chips so more fits without scrolling */
+    .adv-metaline { gap: 6px 10px; font-size: 12px; }
+}
