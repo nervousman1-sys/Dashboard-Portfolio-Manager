@@ -218,7 +218,7 @@ function _buildHoldingsTable(client) {
             }
         }
 
-        holdingsRows += `<tr>
+        holdingsRows += `<tr class="hold-row" data-hold-client="${client.id}" data-hold-id="${h.id}">
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
                     ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}
@@ -283,6 +283,75 @@ if (typeof window !== 'undefined') {
     window._cycleHoldingsSort = _cycleHoldingsSort;
     window._buildHoldingsTable = _buildHoldingsTable;
 }
+
+// ── Mobile: per-asset detail sheet (opened by tapping a holdings row) ──
+// The phone holdings list shows only the essentials (name · price · value · return) — no
+// horizontal scroll. Tapping a row opens a bottom sheet with EVERYTHING: the full position
+// numbers + β, Sharpe, next-earnings date, P/E, and a link to the stock's latest report.
+function _holdingDetailSheet(clientId, holdingId) {
+    if (typeof window._openMobileSheet !== 'function') return;
+    const client = (typeof clients !== 'undefined') ? clients.find(c => c.id === clientId) : null;
+    if (!client) return;
+    const h = (client.holdings || []).find(x => x.id === holdingId);
+    if (!h) return;
+    const cs = h.currency === 'ILS' ? '₪' : '$';
+    const purchase = h.shares > 0 ? (h.costBasis / h.shares) : 0;
+    const profit = h.value - h.costBasis;
+    const ret = h.costBasis > 0 ? (profit / h.costBasis * 100) : 0;
+    const pcls = profit >= 0 ? 'val-positive' : 'val-negative';
+    const m = window._lastRiskModel;
+    const a = (m && m.assets && h.type === 'stock') ? m.assets[h.ticker] : null;
+    const beta = (a && a.beta != null && isFinite(a.beta)) ? a.beta.toFixed(2) : '—';
+    const sharpe = (a && a.sharpe != null && isFinite(a.sharpe)) ? a.sharpe.toFixed(2) : '—';
+    const kv = (label, val, cls) => `<div class="hsheet-kv"><span class="hsheet-k">${label}</span><b class="hsheet-v ${cls || ''}">${val}</b></div>`;
+    const isStock = h.type === 'stock' && h.ticker;
+    const html = `<div class="hsheet">
+        <div class="hsheet-grid">
+            ${kv('מחיר נוכחי', formatPrice(h.price) + ' ' + cs)}
+            ${kv('מחיר קנייה', formatPrice(purchase) + ' ' + cs)}
+            ${kv('כמות', formatAssetQuantity(h.shares))}
+            ${kv('שווי כולל', formatCurrency(h.value, h.currency))}
+            ${kv('רווח/הפסד', (profit >= 0 ? '+' : '−') + formatCurrency(Math.abs(profit), h.currency), pcls)}
+            ${kv('תשואה כוללת', (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%', pcls)}
+            ${kv('שנתי גבוה', h.yearHigh ? formatPrice(h.yearHigh) + ' ' + cs : '—')}
+            ${kv('שנתי נמוך', h.yearLow ? formatPrice(h.yearLow) + ' ' + cs : '—')}
+            ${kv('בטא (β)', beta)}
+            ${kv('יחס שארפ', sharpe)}
+            ${isStock ? kv('מכפיל רווח (P/E)', '<span id="hsPe">…</span>') : ''}
+            ${isStock ? kv('דוח הבא', '<span id="hsEarn">…</span>') : ''}
+        </div>
+        ${isStock ? `<button class="hsheet-report" onclick="(document.querySelector('#mobileSheetWrap .msheet-close')||{click:()=>{}}).click(); openReportForTicker('${h.ticker}')">📊 דוח כספי מלא של ${h.ticker}</button>` : ''}
+        <div class="hsheet-actions">
+            <button class="holding-action-btn buy" onclick="(document.querySelector('#mobileSheetWrap .msheet-close')||{click:()=>{}}).click(); openMgmtModal('buyHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(x=>x.id===${h.id})})">קנה</button>
+            <button class="holding-action-btn sell" onclick="(document.querySelector('#mobileSheetWrap .msheet-close')||{click:()=>{}}).click(); openMgmtModal('sellHolding', {client: clients.find(c=>c.id===${client.id}), holdingId: ${h.id}, holding: clients.find(c=>c.id===${client.id}).holdings.find(x=>x.id===${h.id})})">מכור</button>
+        </div>
+    </div>`;
+    const title = (typeof getHebrewName === 'function' && getHebrewName(h)) ? `${getHebrewName(h)} · ${h.ticker || ''}` : (h.ticker || h.name || 'נכס');
+    window._openMobileSheet(title, html);
+    // Async: P/E (Yahoo stats via peers mode) + next-earnings date (company_reports).
+    if (isStock) {
+        fetch(`/api/technicals?mode=peers&symbol=${encodeURIComponent(h.ticker)}`, { headers: { Accept: 'application/json' } })
+            .then(r => r.json()).then(j => { const pe = j && j.base && j.base.pe; const el = document.getElementById('hsPe'); if (el) el.textContent = (pe != null && isFinite(pe)) ? (+pe).toFixed(1) : '—'; })
+            .catch(() => { const el = document.getElementById('hsPe'); if (el) el.textContent = '—'; });
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            supabaseClient.from('company_reports').select('next_earnings').eq('symbol', h.ticker.toUpperCase()).maybeSingle()
+                .then(({ data }) => { const el = document.getElementById('hsEarn'); if (el) el.textContent = (data && data.next_earnings && typeof _repHeDate === 'function') ? _repHeDate(data.next_earnings) : '—'; })
+                .catch(() => { const el = document.getElementById('hsEarn'); if (el) el.textContent = '—'; });
+        }
+    }
+}
+// Delegated: tap a holdings row on a phone → open its detail sheet (ignore the inner name/action controls).
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', function (e) {
+        if (!(window.matchMedia ? window.matchMedia('(max-width:768px)').matches : window.innerWidth <= 768)) return;
+        const row = e.target.closest && e.target.closest('.hold-row');
+        if (!row || !row.closest('#tab-holdings')) return;
+        if (e.target.closest('button, a, .hold-name-link')) return; // let inner controls act
+        const cid = +row.getAttribute('data-hold-client'), hid = +row.getAttribute('data-hold-id');
+        if (cid && hid) _holdingDetailSheet(cid, hid);
+    });
+}
+if (typeof window !== 'undefined') window._holdingDetailSheet = _holdingDetailSheet;
 
 async function openModal(clientId) {
     currentModalClientId = clientId;
@@ -385,7 +454,7 @@ async function openModal(clientId) {
             return (a && a.beta != null && isFinite(a.beta)) ? a.beta.toFixed(2) : '<span style="color:var(--text-muted)">—</span>';
         })();
         const _pctOfPort = _portTotalForPct > 0 ? (h.value * _hFx / _portTotalForPct * 100) : 0;
-        holdingsRows += `<tr>
+        holdingsRows += `<tr class="hold-row" data-hold-client="${client.id}" data-hold-id="${h.id}">
             <td>
                 <div style="display:flex;flex-direction:column;gap:2px">
                     ${h.type === 'stock' && h.ticker ? `<span class="hold-name-link" onclick="event.stopPropagation(); openReportForTicker('${h.ticker}')" title="פתח דו״ח כספי של ${h.ticker}">${primaryName}</span>` : `<span style="font-weight:600;color:var(--text-primary)">${primaryName}</span>`}

@@ -14,9 +14,10 @@
     function isPhone() { return mq ? mq.matches : window.innerWidth <= 1023; }
 
     // Generic overlays that DON'T manage their own history (we push a back-state for these).
-    var GENERIC = '.wl-overlay.active, .chart-info-overlay.active, .fullscreen-chart-overlay.active, .pa-modal-overlay.active, #mobileSheetWrap.active';
+    // NB: the mobile bottom-sheet toggles `.open` (not `.active`).
+    var GENERIC = '.wl-overlay.active, .chart-info-overlay.active, .fullscreen-chart-overlay.active, .pa-modal-overlay.active, #mobileSheetWrap.open';
     // Every dismissable window (generic + the app-managed modals + the sidebar drawer) — for SWIPE.
-    var ANY = GENERIC + ', .modal-overlay.active, .mgmt-overlay.active, .reco-overlay.active, .dc-overlay.active, .sa-overlay.active, .sidebar.mobile-open';
+    var ANY = GENERIC + ', .modal-overlay.active, .mgmt-overlay.active, .reco-overlay.active, .dc-overlay.active, .sa-overlay.active, .wl-overlay.active, .sidebar.mobile-open';
     // expose the generic list so init.js's popstate handler closes the same set
     window._finxGenericOverlaySel = GENERIC;
 
