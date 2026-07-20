@@ -1040,6 +1040,14 @@ window.addEventListener('popstate', function (e) {
         return;
     }
 
+    // Generic pop-up overlays (PHONE) that don't manage their own history — close the topmost so the
+    // Back button dismisses ANY open window (watchlist, earnings, correlation, chart-info, press
+    // modal, mobile sheet, sidebar drawer). js/mobile-modals.js pushes the matching state on open.
+    if ((window.matchMedia ? window.matchMedia('(max-width:1023px)').matches : window.innerWidth <= 1023)
+        && typeof window._finxCloseTopOverlay === 'function' && window._finxCloseTopOverlay()) {
+        return;
+    }
+
     // Everything else: just make the UI match the URL — this handles BOTH the Back
     // button (close current view) and the Forward button (re-open the next view).
     syncViewToURL();

@@ -1105,7 +1105,7 @@ function _renderFullList(list) {
             const maxDDClass = parseFloat(m.maxDD) < 0 ? 'negative' : '';
             return `
             <div class="full-list-card" data-id="${c.id}">
-                <div class="full-list-card-top" onclick="_toggleFullListCard(this)">
+                <div class="full-list-card-top" onclick="closeFullPortfolioList(); openModal(${c.id})">
                     <div class="full-list-avatar">${initial}</div>
                     <div class="full-list-info">
                         <span class="full-list-name">${c.name}</span>
@@ -1115,7 +1115,7 @@ function _renderFullList(list) {
                         <span class="full-list-value">${formatCurrency(_clientDisplayValue(c))}</span>
                         <span class="full-list-ret price-change ${retClass}">${retSign}${m.returnPct.toFixed(2)}%</span>
                     </div>
-                    <span class="full-list-expand-icon">&#x25BC;</span>
+                    <span class="full-list-expand-icon" onclick="event.stopPropagation(); _toggleFullListCard(this.parentElement)" title="הצג נתונים מהירים">&#x25BC;</span>
                 </div>
                 <div class="full-list-card-details">
                     <div class="fl-detail-grid">

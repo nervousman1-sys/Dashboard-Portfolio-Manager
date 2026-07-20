@@ -740,15 +740,18 @@ html.day-mode select option {
 }
 
 .s-bar {
-    width: 4px;
+    width: 5px;
     height: 16px;
     border-radius: 2px;
+    box-sizing: border-box;
 }
 
 .s-bar-red    { background: var(--accent-red); }
 .s-bar-green  { background: var(--accent-green); }
 .s-bar-yellow { background: var(--accent-yellow); }
-.s-bar-dim    { background: rgba(255, 255, 255, 0.08); }
+/* Empty cells: outlined frame (not a barely-visible fill) so the gauge scale always reads clearly */
+.s-bar-dim    { background: transparent; border: 1px solid rgba(255, 255, 255, 0.3); }
+html.day-mode .s-bar-dim { background: transparent; border: 1px solid rgba(58, 50, 36, 0.45); }
 
 .sentiment-text {
     display: flex;
@@ -12497,4 +12500,19 @@ html { scrollbar-gutter: stable; }
     .adv-note { font-size: 12px; line-height: 1.5; }
     /* Slightly tighter analysis chips so more fits without scrolling */
     .adv-metaline { gap: 6px 10px; font-size: 12px; }
+}
+
+/* ══ Mobile: earnings / watchlist rows — no date/ticker overlap, tidy 2-row layout ══
+   The .wl-main flex row was cramming ticker + date + price + score + buttons on one line and the
+   date collided with the ticker. Wrap it: row 1 = ticker (right) + date (left), row 2 = price +
+   score, buttons on their own line. Desktop unchanged. ══ */
+@media (max-width: 768px) {
+    .wl-main { flex-wrap: wrap; align-items: center; row-gap: 7px; column-gap: 8px; }
+    .wl-id { order: 1; flex: 1 1 auto; min-width: 0; }
+    .er-date-block { order: 2; flex: 0 0 auto; min-width: 0; align-items: flex-end; }
+    .er-date-big { font-size: 13px; }
+    .er-date-when { font-size: 10px; }
+    .wl-priceblock { order: 3; min-width: 0; align-items: flex-start; }
+    .wl-row .rep-card-score { order: 4; }
+    .er-row-actions { order: 5; flex: 1 1 100%; justify-content: flex-start; margin-top: 1px; }
 }
