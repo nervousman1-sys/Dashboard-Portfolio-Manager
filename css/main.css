@@ -10980,6 +10980,12 @@ html.day-mode .ta-input { background: #f6f2e6; }
 html.day-mode .ta-example { background: #eee6d3; border-color: rgba(58,50,36,0.25); }
 .ta-card-load, .ta-card-err { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: var(--text-secondary); font-size: 13px; }
 .ta-card-err { color: var(--accent-red, #ff6b6b); }
+/* Question bubble — the text you sent, moved into the answer (chat flow) */
+.ta-ask { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 13px 13px 13px 4px; background: rgba(0,229,255,0.07); border: 1px solid var(--border-hover, rgba(0,229,255,0.28)); }
+.ta-ask-tag { flex: 0 0 auto; font-size: 10.5px; font-weight: 900; letter-spacing: .04em; color: var(--accent-cyan, #00e5ff); text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: rgba(0,229,255,0.12); margin-top: 1px; }
+.ta-ask-txt { flex: 1 1 auto; font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.45; word-break: break-word; }
+html.day-mode .ta-ask { background: #efe8d6; border-color: rgba(58,50,36,0.2); }
+html.day-mode .ta-ask-tag { color: #7a5a1e; background: rgba(122,90,30,0.14); }
 /* Strategy Card */
 .ta-card { margin-top: 16px; border: 1px solid var(--border-hover, rgba(0,229,255,0.3)); border-radius: 14px; padding: 15px 16px; background: rgba(0,229,255,0.04); }
 html.day-mode .ta-card { background: #f3efe2; border-color: rgba(58,50,36,0.22); }

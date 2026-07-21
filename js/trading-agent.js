@@ -272,18 +272,21 @@ async function _taParse() {
     const box = document.getElementById('taCard');
     const text = inp ? inp.value.trim() : '';
     if (!text || !box) return;
-    box.innerHTML = '<div class="ta-card-load"><div class="rep-spinner"></div>מנתח את הבקשה מול נתוני הפלטפורמה…</div>';
+    // Chat flow: move the question into the answer and clear the box so the user can keep typing.
+    if (inp) { inp.value = ''; inp.style.height = ''; }
+    const ask = `<div class="ta-ask"><span class="ta-ask-tag">שאלת</span><span class="ta-ask-txt">${_taEsc(text)}</span></div>`;
+    box.innerHTML = ask + '<div class="ta-card-load"><div class="rep-spinner"></div>מנתח את הבקשה מול נתוני הפלטפורמה…</div>';
     try {
         const context = await _taGatherContext();
         const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, context }) });
         const j = await r.json();
-        if (j && j.advice) { _taPendingRule = null; box.innerHTML = _taAdviceCardHtml(j.advice); return; }
-        if (!r.ok || j.error || !j.rule) { box.innerHTML = `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי להבין את הבקשה. נסה לתאר אסטרטגיה (טריגר → פעולה → נכס) או לשאול שאלת שוק.')}</div>`; return; }
+        if (j && j.advice) { _taPendingRule = null; box.innerHTML = ask + _taAdviceCardHtml(j.advice); return; }
+        if (!r.ok || j.error || !j.rule) { box.innerHTML = ask + `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי להבין את הבקשה. נסה לתאר אסטרטגיה (טריגר → פעולה → נכס) או לשאול שאלת שוק.')}</div>`; return; }
         _taPendingRule = j.rule;
-        if (j.rule.screener) { _taScrMatches = null; box.innerHTML = _taScreenerCardHtml(j.rule, j.source, null); _taRunScreenerPreview(); return; }
-        box.innerHTML = _taStrategyCardHtml(j.rule, j.summary_he, j.source);
+        if (j.rule.screener) { _taScrMatches = null; box.innerHTML = ask + _taScreenerCardHtml(j.rule, j.source, null); _taRunScreenerPreview(); return; }
+        box.innerHTML = ask + _taStrategyCardHtml(j.rule, j.summary_he, j.source);
     } catch (e) {
-        box.innerHTML = '<div class="ta-card-err">מנוע ה-AI עמוס כרגע. נסה שוב בעוד רגע.</div>';
+        box.innerHTML = ask + '<div class="ta-card-err">מנוע ה-AI עמוס כרגע. נסה שוב בעוד רגע.</div>';
     }
 }
 
