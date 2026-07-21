@@ -10986,6 +10986,21 @@ html.day-mode .ta-example { background: #eee6d3; border-color: rgba(58,50,36,0.2
 .ta-ask-txt { flex: 1 1 auto; font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.45; word-break: break-word; }
 html.day-mode .ta-ask { background: #efe8d6; border-color: rgba(58,50,36,0.2); }
 html.day-mode .ta-ask-tag { color: #7a5a1e; background: rgba(122,90,30,0.14); }
+/* Question history — persisted, re-ask on click, delete per item */
+.ta-hist { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.02); }
+html.day-mode .ta-hist { background: rgba(58,50,36,0.03); }
+.ta-hist-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ta-hist-title { font-size: 11.5px; font-weight: 900; letter-spacing: .02em; color: var(--text-secondary); }
+.ta-hist-clear { background: none; border: none; cursor: pointer; font-size: 11.5px; font-weight: 700; color: var(--accent-red, #ff6b6b); padding: 2px 4px; border-radius: 6px; }
+.ta-hist-clear:hover { background: rgba(255,107,107,0.1); }
+.ta-hist-list { display: flex; flex-direction: column; gap: 5px; max-height: 168px; overflow-y: auto; }
+.ta-hist-item { display: flex; align-items: stretch; gap: 6px; }
+.ta-hist-q { flex: 1 1 auto; text-align: right; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ta-hist-q:hover { background: rgba(0,229,255,0.08); border-color: var(--border-hover, rgba(0,229,255,0.3)); }
+html.day-mode .ta-hist-q { background: #f3efe2; }
+.ta-hist-del { flex: 0 0 auto; width: 32px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1; }
+.ta-hist-del:hover { background: rgba(255,107,107,0.12); border-color: rgba(255,107,107,0.35); color: var(--accent-red, #ff6b6b); }
+html.day-mode .ta-hist-del { background: #f3efe2; }
 /* Strategy Card */
 .ta-card { margin-top: 16px; border: 1px solid var(--border-hover, rgba(0,229,255,0.3)); border-radius: 14px; padding: 15px 16px; background: rgba(0,229,255,0.04); }
 html.day-mode .ta-card { background: #f3efe2; border-color: rgba(58,50,36,0.22); }
@@ -12645,5 +12660,7 @@ html.day-mode .pf-edit:hover { color: #1e6f9c; background: rgba(15, 118, 178, 0.
 .rep-web-link:disabled { opacity: .6; cursor: default; }
 html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color: rgba(15, 118, 178, 0.35); color: #1565a0; }
 /* Advisory idea: report / technical / build-strategy action row */
-.ta-idea-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
-.ta-idea-acts .ta-mini { align-self: auto; margin-top: 0; }
+.ta-idea-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 8px; }
+.ta-idea-acts .ta-mini { align-self: auto; margin-top: 0; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; }
+.ta-idea-acts .ta-mini:not(.ta-mini-on) { flex: 1 1 0; }      /* דוח + טכני share the top row equally */
+.ta-idea-acts .ta-mini-on { flex: 1 1 100%; }                 /* בנה אסטרטגיה — full-width row below, identical on every card */

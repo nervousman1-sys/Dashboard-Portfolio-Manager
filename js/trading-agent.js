@@ -174,6 +174,7 @@ function _taRenderShell() {
                     <button class="corr-run-btn corr-run-primary" id="taParseBtn" onclick="_taParse()">בצע אסטרטגיה</button>
                 </div>
                 <div class="ta-examples">${_TA_EXAMPLES.map(e => `<button class="ta-example" onclick="document.getElementById('taInput').value=this.textContent;_taParse()">${_taEsc(e)}</button>`).join('')}</div>
+                <div id="taHistory" class="ta-hist" style="display:none"></div>
                 <div id="taCard"></div>
             </div>
             <div class="ta-list-head">חיבור לברוקר <span class="ta-broker-sub">תשתית להרצה אמיתית</span> <button class="ta-broker-add" onclick="_taOpenBrokerForm()">הוסף חיבור</button></div>
@@ -182,6 +183,7 @@ function _taRenderShell() {
             <div id="taList" class="risk-table-card glass-card" style="padding:10px 14px"><div class="wl-empty"><div class="rep-spinner"></div>טוען…</div></div>
         </div>
     </div>`;
+    _taRenderHistory();
 }
 
 // ══════════════ PLATFORM DATA CONTEXT — wire the agent's chat into every data source ══════════════
@@ -266,6 +268,30 @@ async function _taGatherContext(force) {
     return ctx;
 }
 
+// ── Question history (persisted) + last-answer memory for follow-up continuity ──
+const _TA_HIST_KEY = 'finx_ta_history';
+let _taHistory = _taLoadHistory();   // [{id, q, ts}] — newest first
+let _taLastAnswer = null;            // {q, title, ideas:[{t,n}]} — sent back so the agent connects follow-ups
+function _taLoadHistory() { try { const a = JSON.parse(localStorage.getItem(_TA_HIST_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 30) : []; } catch (e) { return []; } }
+function _taSaveHistory() { try { localStorage.setItem(_TA_HIST_KEY, JSON.stringify(_taHistory.slice(0, 30))); } catch (e) { } }
+function _taAddHistory(q) {
+    q = String(q || '').trim(); if (!q) return;
+    _taHistory = _taHistory.filter(h => h.q !== q);   // de-dupe (also lifts an existing one to the top)
+    _taHistory.unshift({ id: 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), q: q, ts: Date.now() });
+    _taHistory = _taHistory.slice(0, 30);
+    _taSaveHistory(); _taRenderHistory();
+}
+function _taDelHistory(id) { _taHistory = _taHistory.filter(h => h.id !== id); _taSaveHistory(); _taRenderHistory(); }
+function _taClearHistory() { _taHistory = []; _taSaveHistory(); _taRenderHistory(); }
+function _taReask(id) { const h = _taHistory.find(x => x.id === id); if (!h) return; const i = document.getElementById('taInput'); if (i) i.value = h.q; _taParse(); }
+function _taRenderHistory() {
+    const el = document.getElementById('taHistory'); if (!el) return;
+    if (!_taHistory.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = `<div class="ta-hist-head"><span class="ta-hist-title">היסטוריית שאלות</span><button class="ta-hist-clear" onclick="_taClearHistory()">נקה הכל</button></div>`
+        + `<div class="ta-hist-list">${_taHistory.map(h => `<div class="ta-hist-item"><button class="ta-hist-q" onclick="_taReask('${h.id}')" title="שאל שוב">${_taEsc(h.q)}</button><button class="ta-hist-del" onclick="_taDelHistory('${h.id}')" title="מחק מההיסטוריה" aria-label="מחק">✕</button></div>`).join('')}</div>`;
+}
+
 // ── Parse the NL text → StrategyRule (LLM + fallback), then show the confirmation card ──
 async function _taParse() {
     const inp = document.getElementById('taInput');
@@ -274,13 +300,16 @@ async function _taParse() {
     if (!text || !box) return;
     // Chat flow: move the question into the answer and clear the box so the user can keep typing.
     if (inp) { inp.value = ''; inp.style.height = ''; }
+    _taAddHistory(text);
+    // Carry the previous answer forward so the agent connects follow-ups ("split 10k among these").
+    const history = _taLastAnswer ? [{ q: _taLastAnswer.q, ideas: _taLastAnswer.ideas }] : [];
     const ask = `<div class="ta-ask"><span class="ta-ask-tag">שאלת</span><span class="ta-ask-txt">${_taEsc(text)}</span></div>`;
     box.innerHTML = ask + '<div class="ta-card-load"><div class="rep-spinner"></div>מנתח את הבקשה מול נתוני הפלטפורמה…</div>';
     try {
         const context = await _taGatherContext();
-        const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, context }) });
+        const r = await fetch('/api/vision?mode=strategy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, context, history }) });
         const j = await r.json();
-        if (j && j.advice) { _taPendingRule = null; box.innerHTML = ask + _taAdviceCardHtml(j.advice); return; }
+        if (j && j.advice) { _taPendingRule = null; _taLastAnswer = { q: text, title: j.advice.title || '', ideas: (j.advice.ideas || []).map(i => ({ t: i.ticker, n: i.name })) }; box.innerHTML = ask + _taAdviceCardHtml(j.advice); return; }
         if (!r.ok || j.error || !j.rule) { box.innerHTML = ask + `<div class="ta-card-err">${_taEsc(j.message || 'לא הצלחתי להבין את הבקשה. נסה לתאר אסטרטגיה (טריגר → פעולה → נכס) או לשאול שאלת שוק.')}</div>`; return; }
         _taPendingRule = j.rule;
         if (j.rule.screener) { _taScrMatches = null; box.innerHTML = ask + _taScreenerCardHtml(j.rule, j.source, null); _taRunScreenerPreview(); return; }
@@ -1228,6 +1257,7 @@ if (typeof window !== 'undefined') {
     window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange; window._taScrUniverseChange = _taScrUniverseChange;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
+    window._taReask = _taReask; window._taDelHistory = _taDelHistory; window._taClearHistory = _taClearHistory;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;
     window._taConnectBroker = _taConnectBroker; window._taDeleteBroker = _taDeleteBroker;
     window._taCheckStrategies = _taCheckStrategies; window._taPendingRule = _taPendingRule;

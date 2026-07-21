@@ -489,7 +489,7 @@ function _strategySummaryHe(r) {
 // ── Market-advisor path — for OPEN-ENDED requests that aren't a concrete rule
 // ("bring me relevant stocks for the coming period based on macro/geo/tech"). Returns a
 // written analysis + real tickers as ideas. Framed as AI opinion, never fabricated data.
-function _advicePrompt(text, headlines, ctxBlock) {
+function _advicePrompt(text, headlines, ctxBlock, convoBlock) {
     const ctx = (Array.isArray(headlines) && headlines.length)
         ? '\nכותרות שוק עדכניות מהפלטפורמה:\n- ' + headlines.slice(0, 8).map(h => String(h).slice(0, 140)).join('\n- ')
         : '';
@@ -499,6 +499,7 @@ function _advicePrompt(text, headlines, ctxBlock) {
         'שרשרת ההיגיון (חובה — אל תנתח מדד במבודד): קשר מאקרו→סקטור→חברה. הצלב מאקרו/נזילות עם הפונדמנטלס (score הדוח) והטכני (RSI/מבנה). כל תמחור/מגמה חייבים לשקף שווי שוק חי ואמיתי (Live), לא עלויות כניסה היסטוריות.',
         'חוקי ברזל: (1) עדיפות מוחלטת לנתון החי המאומת על פני הידע הפנימי אם יש סתירה. (2) איסור הזיות — אם מחיר/נתון אינו זמין בחיפוש/בנתונים, ציין זאת במפורש ("לא נמצא נתון חי ל-X"); אל תנחש, אל תמציא מספרים, אל תבצע אקסטרפולציה. (3) סיווג נכסים מדויק — הבחן במפורש בין מניה של חברה ספציפית לבין תעודת סל מבוזרת.',
         'דיוק נושאי (קריטי): כשמבקשים חברות בתחום מסוים, החזר PURE-PLAYS — חברות שהעיסוק המרכזי/הליבה שלהן הוא בדיוק אותו תחום, ולא חברות שקשורות אליו בעקיפין או רק "מאפשרות" אותו. דוגמה: לשאלה על "רובוטיקה" החזר יצרניות רובוטים ומערכות רובוטיות ממשיות (למשל Intuitive Surgical=רובוטים כירורגיים, ABB/Teradyne(Universal Robots)=רובוטים תעשייתיים/שיתופיים, Symbotic=רובוטיקת מחסנים, iRobot=רובוטים צרכניים) — ולא יצרנית שבבים כללית (NVIDIA) או תוכנת RPA (UiPath), שהן תשתית/מאפשרות בלבד. אם אתה כולל חברה מאפשרת, סמן זאת מפורשות ב-why ("תשתית/מאפשרת, לא pure-play") והצב אותה אחרי ה-pure-plays. בשדה why חובה לציין את הקשר הישיר והספציפי לתחום (מה בדיוק החברה עושה בתחום), לא ניסוח כללי.',
+        'המשכיות שיחה (חשוב מאוד): אם צורף בלוק "שיחה קודמת" למטה, זו אותה שיחה מתמשכת. כאשר הבקשה הנוכחית מתייחסת אליה — במפורש ("החברות האלה", "אותן", "מתוכן", "מהרשימה", "הנ"ל", "חלק ביניהן") או במשתמע (בקשה שממשיכה ישירות את הקודמת, כמו "בנה על זה אסטרטגיה" או "חלק 10 אלף דולר ביניהן") — חובה להמשיך לעבוד עם אותן חברות/נושא בדיוק מהתשובה הקודמת. אל תחליף לרשימת חברות חדשה ולא-קשורה. אם מבקשים לחלק סכום בין "החברות האלה" — חלק בין החברות שהחזרת קודם (בחר את בעלות הפוטנציאל הגבוה מתוכן, נמק, ופרט את חלוקת הסכום). רק אם הבקשה החדשה בבירור פותחת נושא אחר — התעלם מההקשר הקודם.',
         'החזר אך ורק JSON תקין (ללא ``` וללא טקסט נוסף) במבנה הבא:',
         '{',
         '  "title": "כותרת קצרה בעברית",',
@@ -511,9 +512,29 @@ function _advicePrompt(text, headlines, ctxBlock) {
         'כללים: (1) עד 6 רעיונות, טיקרים אמיתיים בלבד; העדף מניות שעולות מנתוני הפלטפורמה (דוח חזק, סקטור חזק, סיגנל נזילות חיובי, קטליסט) ומאומתות בחיפוש. (2) עברית מקצועית וברורה; ציין מפורשות את המקור ("לפי מנוע הנזילות", "לפי החיפוש: מחיר NVDA…", "score הדוח"). (3) live_data חייב להכיל נתונים אמיתיים בלבד שנמשכו עכשיו — לא המצאות. (4) הישאר ממוקד ורלוונטי לשאלה בלבד — אל תוסיף מידע לא קשור.',
         ctx,
         ctxBlock || '',
+        convoBlock || '',
         '',
         'בקשת המשתמש: ' + JSON.stringify(String(text || '').slice(0, 600)),
     ].join('\n');
+}
+// Renders the recent conversation turns (the client sends the last answer's question + returned
+// tickers) into a compact Hebrew block so the advisor can resolve follow-ups like "these companies".
+function _convoBlockHe(history) {
+    const arr = Array.isArray(history) ? history.filter(h => h && (h.q || (Array.isArray(h.ideas) && h.ideas.length))).slice(-2) : [];
+    if (!arr.length) return '';
+    const lines = ['', 'שיחה קודמת (הקשר — ייתכן שהבקשה הנוכחית ממשיכה אותה):'];
+    arr.forEach((h, idx) => {
+        const q = String(h.q || '').slice(0, 220);
+        const ideas = Array.isArray(h.ideas) ? h.ideas.slice(0, 12) : [];
+        const tickers = ideas.map(i => {
+            const tk = String((i && (i.t || i.ticker)) || '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 8);
+            const nm = (i && (i.n || i.name)) ? String(i.n || i.name).slice(0, 40) : '';
+            return tk ? (nm ? `${tk} (${nm})` : tk) : '';
+        }).filter(Boolean).join(', ');
+        if (q) lines.push(`- שאלה קודמת ${idx + 1}: "${q}"`);
+        if (tickers) lines.push(`  חברות שהוחזרו בתשובה הקודמת: ${tickers}`);
+    });
+    return lines.join('\n');
 }
 function _normalizeAdvice(r) {
     if (!r || typeof r !== 'object') return null;
@@ -557,12 +578,31 @@ const _ADVICE_THEMES = [
 
 // Deterministic advisory answer from REAL platform data (context) + the theme map above — so the
 // agent responds even when the LLM (Gemini/AI-Gateway) is down. Never invents prices/numbers.
-function _adviceFallback(text, context) {
+function _adviceFallback(text, context, history) {
     const t = ' ' + String(text || '').toLowerCase() + ' ';
     const ctx = (context && typeof context === 'object') ? context : {};
     const arr = (x) => Array.isArray(x) ? x : [];
     const reports = [...arr(ctx.top_reports), ...arr(ctx.holdings_reports)];
     const scoreOf = (tk) => { const r = reports.find(x => String(x.t).toUpperCase() === tk); return r ? r.score : null; };
+    // Continuity: the client sends the last answer's returned tickers so "these companies" resolves.
+    const prevIdeas = arr(history).flatMap(h => arr(h && h.ideas)).map(i => ({
+        ticker: String((i && (i.t || i.ticker)) || '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 8),
+        name: (i && (i.n || i.name)) ? String(i.n || i.name).slice(0, 60) : '',
+    })).filter((i, idx, a) => i.ticker && a.findIndex(x => x.ticker === i.ticker) === idx);
+    const refersPrev = /(האל[הו]|הנ["״']ל|אות[םן]|מתוכ[םן]|מהרשימה|החברות הלל[וה]|הלל[וה]|these companies)/.test(String(text || '')) && prevIdeas.length;
+    if (refersPrev) {
+        const ideas = prevIdeas.slice(0, 8).map(i => { const sc = scoreOf(i.ticker); return { ticker: i.ticker, name: i.name, why: (sc != null ? `score דוח ${sc} · ` : '') + 'מהרשימה מהתשובה הקודמת' }; });
+        return {
+            title: 'המשך על החברות מהתשובה הקודמת',
+            executive_he: 'לפי בקשתך, אני ממשיך עם אותן חברות מהתשובה הקודמת: ' + prevIdeas.map(i => i.ticker).join(', ') + '. הצלב את ה-score הפונדמנטלי עם הטכני (RSI/מבנה) כדי לבחור את בעלות הפוטנציאל הגבוה לפריצה, וחלק את הסכום בהתאם.\n\n(תשובה מבוססת על נתוני הפלטפורמה. לחלוקה אופטימלית עם מחירים חיים — נדרש מנוע ה-AI.)',
+            logic_he: 'הקשר: השארתי את אותה קבוצת חברות מהשאלה הקודמת (כפי שביקשת), במקום להחליף לרשימה חדשה. דירוג לפי score הדוח מסייע לבחור מתוכן.',
+            live_data: [],
+            answer_he: '',
+            ideas,
+            suggested_strategy_he: null,
+            _src: 'data-fallback',
+        };
+    }
     // Real data points from the context (never fabricated).
     const live = [];
     if (arr(ctx.macro).length) live.push('מאקרו (ארה"ב): ' + ctx.macro.slice(0, 4).map(m => `${m.k}=${m.v}`).join(', '));
@@ -871,12 +911,15 @@ module.exports = async (req, res) => {
             // Real-data platform context from the client (portfolios, reports, sectors, catalysts,
             // tweets, LHE, macro, technicals) → a compact Hebrew block grounding the LLM.
             const ctxBlock = _ctxBlockHe(d.context);
+            const convoBlock = _convoBlockHe(d.history);
             const headlines = (d.context && Array.isArray(d.context.macro_news)) ? d.context.macro_news : [];
             // The memo is shared across warm invocations (⇒ across users). A context-grounded answer is
             // PERSONAL (it embeds the user's portfolio/holdings), so key it on a hash of the context to
-            // prevent serving one user's grounded answer to another. Grounded answers cache short.
+            // prevent serving one user's grounded answer to another. The conversation block is folded in
+            // too, so a follow-up ("these companies") never collides with the same text in a fresh thread.
             let _h = 5381; for (let i = 0; i < ctxBlock.length; i++) _h = ((_h << 5) + _h + ctxBlock.charCodeAt(i)) | 0;
-            const memoKey = `strategy:${ctxBlock ? 'c' + (_h >>> 0).toString(36) + ':' : 'c0:'}${text.slice(0, 180)}`;
+            let _hc = 5381; for (let i = 0; i < convoBlock.length; i++) _hc = ((_hc << 5) + _hc + convoBlock.charCodeAt(i)) | 0;
+            const memoKey = `strategy:${ctxBlock ? 'c' + (_h >>> 0).toString(36) + ':' : 'c0:'}${convoBlock ? 'h' + (_hc >>> 0).toString(36) + ':' : ''}${text.slice(0, 180)}`;
             if (_memo.has(memoKey)) { res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
             let rule = null, wantAdvice = false;
             // The model classifies: a concrete rule → JSON rule; an open-ended question → {"advice":true}.
@@ -890,13 +933,13 @@ module.exports = async (req, res) => {
                 // grounded in the platform context.
                 let advice = null;
                 // grounded:true → Gemini pulls LIVE data via Google Search (prices/macro/headlines).
-                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock), KEY, MODELS, true, 0.5, 1900)); } catch (e) { advice = null; }
-                if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text, headlines, ctxBlock), 0.55, 1600)); } catch (e) { advice = null; } }
+                try { advice = _normalizeAdvice(await _geminiGroundedJson(_advicePrompt(text, headlines, ctxBlock, convoBlock), KEY, MODELS, true, 0.5, 1900)); } catch (e) { advice = null; }
+                if (!advice) { try { advice = _normalizeAdvice(await _aiGatewayJson(_advicePrompt(text, headlines, ctxBlock, convoBlock), 0.55, 1600)); } catch (e) { advice = null; } }
                 // LLM down (Gemini 429 + AI Gateway unfunded)? Answer deterministically from REAL
                 // platform data + the curated theme map, so the agent still helps (thematic queries,
                 // "what's relevant now"). Only falls through to the error if even that can't help.
                 let adviceSrc = 'ai';
-                if (!advice) { const fb = _adviceFallback(text, d.context); if (fb) { adviceSrc = 'data'; delete fb._src; advice = fb; } }
+                if (!advice) { const fb = _adviceFallback(text, d.context, d.history); if (fb) { adviceSrc = 'data'; delete fb._src; advice = fb; } }
                 if (advice) {
                     const aResult = { advice, source: adviceSrc };
                     _memo.set(memoKey, aResult);
