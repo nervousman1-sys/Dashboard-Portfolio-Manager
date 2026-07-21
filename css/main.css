@@ -12632,3 +12632,12 @@ html.day-mode .pf-save { color: #f6f2e6; }
 html.day-mode .pf-input { background: #f6f2e6; }
 html.day-mode .pf-row { border-bottom-color: rgba(58, 50, 36, 0.11); }
 html.day-mode .pf-edit:hover { color: #1e6f9c; background: rgba(15, 118, 178, 0.08); border-color: rgba(15, 118, 178, 0.22); }
+
+/* Report: company-website link (mirrors .rep-tech-link) */
+.rep-web-link { background: rgba(0, 229, 255, 0.10); color: var(--accent-blue, #00e5ff); border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 9px; padding: 7px 14px; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap; transition: background .12s, box-shadow .12s; }
+.rep-web-link:hover { background: rgba(0, 229, 255, 0.18); box-shadow: 0 0 14px rgba(0, 229, 255, 0.25); }
+.rep-web-link:disabled { opacity: .6; cursor: default; }
+html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color: rgba(15, 118, 178, 0.35); color: #1565a0; }
+/* Advisory idea: report / technical / build-strategy action row */
+.ta-idea-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.ta-idea-acts .ta-mini { align-self: auto; margin-top: 0; }

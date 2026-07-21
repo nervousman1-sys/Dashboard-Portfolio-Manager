@@ -305,7 +305,11 @@ function _taAdviceCardHtml(a) {
         <div class="ta-idea">
             <div class="ta-idea-head"><span class="ta-idea-tk">${_taEsc(i.ticker)}</span>${i.name ? `<span class="ta-idea-name">${_taEsc(i.name)}</span>` : ''}</div>
             ${i.why ? `<div class="ta-idea-why">${_taEsc(i.why)}</div>` : ''}
-            <button class="ta-mini ta-mini-on" onclick="_taIdeaToStrategy('${_taEsc(i.ticker)}')">בנה אסטרטגיה</button>
+            <div class="ta-idea-acts">
+                <button class="ta-mini" onclick="if(typeof openReportForTicker==='function')openReportForTicker('${_taEsc(i.ticker)}')" title="דוח כספי של ${_taEsc(i.ticker)}">📊 דוח</button>
+                <button class="ta-mini" onclick="if(typeof openTechnicalForTicker==='function')openTechnicalForTicker('${_taEsc(i.ticker)}')" title="ניתוח טכני של ${_taEsc(i.ticker)}">📈 טכני</button>
+                <button class="ta-mini ta-mini-on" onclick="_taIdeaToStrategy('${_taEsc(i.ticker)}')">בנה אסטרטגיה</button>
+            </div>
         </div>`).join('');
     return `<div class="ta-advice">
         <div class="ta-card-top"><span class="ta-card-name">${_taEsc(a.title || 'ניתוח והמלצות')}</span><span class="ta-trig">אנליסט AI</span></div>

@@ -357,8 +357,12 @@ function _strategyFallback(text) {
     const conditions = [];
     // RSI (operator + timeframe from its LOCAL window; timeframe also checked over the WHOLE text so
     // "שבועי"/"weekly" is captured even when it sits a few words away from "RSI").
-    const mRsi = t.match(/rsi[^\d]{0,30}(\d{1,3})|(\d{1,3})[^\d]{0,12}rsi/i);
-    if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +(mRsi[1] || mRsi[2]), timeframe: tfOf(w) || tfOf(t) }); }
+    // Prefer the number AFTER "rsi" ("RSI … מתחת ל-35"). Only fall back to a number BEFORE "rsi" when
+    // it's a STANDALONE value (not digits pulled out of a bigger number like the "1000" amount — that
+    // bug read "1000 … RSI" as threshold 0 from the trailing "000").
+    let mRsi = t.match(/rsi[^\d]{0,30}(\d{1,3})/i);
+    if (!mRsi) { const m2 = t.match(/(?<!\d)(\d{1,3})(?!\d)[^\d]{0,10}rsi/i); if (m2) mRsi = [m2[0], m2[1]]; }
+    if (mRsi) { const w = around(/rsi/i, 28); conditions.push({ factor: 'rsi', subject: primary, keyword: null, operator: rsiOp(w), threshold: +mRsi[1], timeframe: tfOf(w) || tfOf(t) }); }
     // Moving average ("ממוצע 300", "300 שבועות", "MA200"…) — operator (incl. "touch"→EQUALS) from its window
     const mMa = t.match(/(?:ממוצע(?:\s*נע)?|moving\s*average|\bma\b|\bsma\b)[^\d]{0,10}(\d{1,4})/i) || t.match(/(\d{1,4})\s*(?:שבוע|week|יום|day)/i);
     if (mMa) { const w = around(/ממוצע|moving\s*average|\bma\b|\bsma\b/i, 28) || t; const weekly = /שבוע|week/i.test(w) || (!/יום|day/i.test(w) && /שבוע|week/i.test(t)); conditions.push({ factor: 'ma', subject: primary, keyword: null, operator: maOp(w), threshold: null, period: +mMa[1], timeframe: weekly ? 'weekly' : 'daily' }); }

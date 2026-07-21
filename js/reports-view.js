@@ -1615,6 +1615,7 @@ function _repRenderDetail(m) {
             <button class="macro-back-btn" onclick="backToReportsList()">→ חזרה לרשימה</button>
             <button class="rep-watch-btn ${_repIsWatched(m.symbol) ? 'on' : ''}" id="repWatchDetailBtn" onclick="_repToggleWatch('${m.symbol}')">${_repIsWatched(m.symbol) ? '★ במעקב' : '☆ הוסף למעקב'}</button>
             <button class="rep-tech-link" onclick="openTechnicalForTicker('${m.symbol}')" title="פתח את ${(m.companyName || m.symbol).replace(/'/g, '')} בניתוח הטכני">📈 ניתוח טכני →</button>
+            <button class="rep-web-link" onclick="_repOpenWebsite('${m.symbol}', this)" title="פתח את האתר הרשמי של ${(m.companyName || m.symbol).replace(/'/g, '')}">🔗 אתר החברה →</button>
         </div>
 
         <div class="rep-head">
@@ -2136,9 +2137,30 @@ function openReportForTicker(ticker) {
     if (typeof updateURLState === 'function') updateURLState({ view: 'reports', mkt: _repMarket, sym });
 }
 
+// Open the company's OFFICIAL website (from Yahoo assetProfile via the peers endpoint). Falls back
+// to the Yahoo profile page if no website is on file, so every report links somewhere useful.
+async function _repOpenWebsite(symbol, btn) {
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (!sym) return;
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '🔗 טוען…'; }
+    const restore = () => { if (btn) { btn.disabled = false; btn.textContent = label || '🔗 אתר החברה →'; } };
+    let url = null;
+    try {
+        const r = await fetch(`/api/technicals?mode=peers&symbol=${encodeURIComponent(sym)}`, { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        const w = j && j.base && j.base.website;
+        if (w) url = /^https?:\/\//i.test(w) ? w : ('https://' + w);
+    } catch (e) { }
+    if (!url) url = `https://finance.yahoo.com/quote/${encodeURIComponent(sym)}/profile`; // fallback
+    window.open(url, '_blank', 'noopener');
+    restore();
+}
+
 if (typeof window !== 'undefined') {
     window.openReportsPage = openReportsPage;
     window.openReportForTicker = openReportForTicker;
+    window._repOpenWebsite = _repOpenWebsite;
     window.closeReportsPage = closeReportsPage;
     window.setRepMarket = setRepMarket;
     window._repRenderList = _repRenderList;
