@@ -355,7 +355,16 @@ function _taAdviceCardHtml(a) {
 }
 function _taIdeaToStrategy(tk) {
     const i = document.getElementById('taInput');
-    if (i) { i.value = `קנה ${tk} ב-1000 דולר אם ה-RSI היומי יורד מתחת ל-35`; i.focus(); _taParse(); }
+    if (!i) return;
+    // Start a strategy for this ticker WITHOUT forcing a technical trigger — the user chooses their own
+    // condition (price / news / earnings / technical). We only prefill the buy + a "when" cue, and do
+    // NOT auto-run, so no RSI (or any) trigger is added unless the user actually asks for one.
+    i.value = `קנה ${tk} ב-1000 דולר כאשר `;
+    i.focus();
+    try { const n = i.value.length; i.setSelectionRange(n, n); } catch (e) { }
+    try { i.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { }
+    const box = document.getElementById('taCard');
+    if (box) box.innerHTML = `<div class="ta-hint">השלם את הטריגר של <b>${_taEsc(tk)}</b> — לדוגמה: "כשהמחיר יורד מתחת ל-90$", "כשיוצא דוח עם הפתעת רווח מעל 10%", "אם יש חדשה על ריבית הפד". רוצה תנאי טכני (RSI/ממוצע)? כתוב אותו במפורש. אין טריגר אוטומטי.</div>`;
 }
 function _taUseSuggestion() {
     const i = document.getElementById('taInput');
