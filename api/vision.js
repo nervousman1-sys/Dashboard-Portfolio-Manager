@@ -233,7 +233,7 @@ function _ctxBlockHe(context) {
     return '\n\n== נתוני הפלטפורמה (אמת, עדכני — השתמש בהם כשהם רלוונטיים לבקשה; אל תמציא נתונים שאינם כאן) ==\n' + block + '\n== סוף נתוני הפלטפורמה ==\n';
 }
 
-function _strategyPrompt(text, ctxBlock) {
+function _strategyPrompt(text, ctxBlock, convoBlock) {
     return [
         'אתה מנוע פענוח אסטרטגיות מסחר. קבל הוראת מסחר בשפה טבעית (עברית או אנגלית) והחזר אך ורק אובייקט JSON תקין (ללא ``` וללא טקסט נוסף) לפי הסכמה הבאה:',
         '{',
@@ -257,7 +257,9 @@ function _strategyPrompt(text, ctxBlock) {
         'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"period":null,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה 200 מניות MSTR אם הביטקוין חוצה מעלה את ממוצע 200 השבועות" → {"name":"MSTR על ממוצע 200 שבועות של ביטקוין","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"ma","subject":"BTC-USD","keyword":null,"operator":"CROSSES_ABOVE","threshold":null,"period":200,"timeframe":"weekly"}],"action":"BUY","target_asset":"MSTR","amount":{"type":"SHARES","value":200},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         '(14) כשהמשתמש מתייחס לנתוני הפלטפורמה — "האחזקה הכי חלשה שלי", "המניה עם הדוח הכי טוב", "לפי מנוע הנזילות", "הסקטור החזק ביותר" — היעזר בבלוק "נתוני הפלטפורמה" שבהמשך כדי לזהות את הטיקר/הערך המדויק, ובנה את האסטרטגיה עליו.',
+        '(15) המשכיות שיחה: אם צורף בלוק "שיחה קודמת" והבקשה הנוכחית מבקשת לפעול על אותן חברות מהתשובה הקודמת — לחלק סכום *ביניהן*, "בנה אסטרטגיה עליהן/על אלה", "השקע בהן" וכד\' (בלי לנקוב בטיקר בודד או בתנאי סינון טכני) — החזר בדיוק {"advice": true}. שם השלב הבא יטפל בבקשה עם רשימת החברות. אל תמציא screener או טיקר יחיד במקרה כזה.',
         ctxBlock || '',
+        convoBlock || '',
         '',
         `ההוראה לפענוח: "${text}"`,
     ].join('\n');
@@ -576,6 +578,20 @@ const _ADVICE_THEMES = [
     { keys: ['רכב חשמל', 'טסלה', 'electric veh', ' ev '], he: 'רכב חשמלי', picks: [['TSLA', 'Tesla', 'מוביל EV'], ['GM', 'General Motors', 'מעבר ל-EV'], ['RIVN', 'Rivian', 'טנדרים חשמליים']] },
 ];
 
+// Best-effort USD amount from a Hebrew/English request ("10 אלף דולר" → 10000, "$5,000" → 5000).
+function _parseAmtUsd(s) {
+    s = String(s || '');
+    let m = s.match(/(\d[\d,.]{0,9})\s*(אלף|k\b|K\b)/);           // "10 אלף" / "10k"
+    if (m) return Math.round(parseFloat(m[1].replace(/,/g, '')) * 1000);
+    m = s.match(/[$₪]\s*(\d[\d,.]{2,12})/);                        // "$5,000"
+    if (m) return Math.round(parseFloat(m[1].replace(/,/g, '')));
+    m = s.match(/(\d[\d,.]{2,12})\s*(דולר|usd|\$)/i);              // "5000 דולר"
+    if (m) return Math.round(parseFloat(m[1].replace(/,/g, '')));
+    m = s.match(/(?<!\d)(\d{4,9})(?!\d)/);                          // a bare 4+ digit number
+    if (m) return Math.round(parseFloat(m[1]));
+    return null;
+}
+
 // Deterministic advisory answer from REAL platform data (context) + the theme map above — so the
 // agent responds even when the LLM (Gemini/AI-Gateway) is down. Never invents prices/numbers.
 function _adviceFallback(text, context, history) {
@@ -589,13 +605,43 @@ function _adviceFallback(text, context, history) {
         ticker: String((i && (i.t || i.ticker)) || '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 8),
         name: (i && (i.n || i.name)) ? String(i.n || i.name).slice(0, 60) : '',
     })).filter((i, idx, a) => i.ticker && a.findIndex(x => x.ticker === i.ticker) === idx);
-    const refersPrev = /(האל[הו]|הנ["״']ל|אות[םן]|מתוכ[םן]|מהרשימה|החברות הלל[וה]|הלל[וה]|these companies)/.test(String(text || '')) && prevIdeas.length;
+    const raw = String(text || '');
+    // A follow-up refers to the previous companies either explicitly (pronouns: "these", "among them",
+    // "ביניהם/בהם/להם/אותם/הנ"ל") or implicitly — a build/allocate request that names no company of its
+    // own only makes sense as a continuation. Guarded below by "this text opened no NEW theme".
+    const pronounRef = /(האל[הו]|הנ["״']ל|אות[םן]|מתוכ[םן]|מהרשימה|החברות הלל[וה]|הלל[וה]|ביניה[םן]|בה[םן]|לה[םן]|עליה[םן]|מה[םן]|איתם|שלה[םן]|these|among them|between them)/.test(raw);
+    const buildLike = /(בנה|תבנה|בניית|תחלק|חלק לי|לחלק|חלוקה|פזר|לפזר|השקע|להשקיע|תשקיע|אסטרטגי)/.test(raw);
+    const opensNewTheme = _ADVICE_THEMES.some(th => th.keys.some(k => t.includes(k)));
+    const refersPrev = prevIdeas.length && !opensNewTheme && (pronounRef || buildLike);
     if (refersPrev) {
-        const ideas = prevIdeas.slice(0, 8).map(i => { const sc = scoreOf(i.ticker); return { ticker: i.ticker, name: i.name, why: (sc != null ? `score דוח ${sc} · ` : '') + 'מהרשימה מהתשובה הקודמת' }; });
+        const picks = prevIdeas.slice(0, 8).map(i => ({ ticker: i.ticker, name: i.name, sc: scoreOf(i.ticker) }));
+        // Rank by report score (breakout potential proxy) when available; unscored keep their order.
+        const ranked = picks.slice().sort((a, b) => (b.sc == null ? -1 : b.sc) - (a.sc == null ? -1 : a.sc));
+        const amt = _parseAmtUsd(raw);
+        const alloc = {}; let weighted = false;
+        if (amt) {
+            const scored = ranked.filter(x => x.sc != null);
+            if (scored.length === ranked.length && scored.length) {
+                weighted = true; const tot = scored.reduce((s, x) => s + x.sc, 0) || 1;
+                ranked.forEach(x => { alloc[x.ticker] = Math.round(amt * (x.sc / tot)); });
+            } else {
+                const each = Math.round(amt / (ranked.length || 1));
+                ranked.forEach(x => { alloc[x.ticker] = each; });
+            }
+        }
+        const ideas = ranked.map(x => {
+            const bits = [];
+            if (x.sc != null) bits.push(`score דוח ${x.sc}`);
+            if (alloc[x.ticker]) bits.push(`הקצאה מוצעת ~$${alloc[x.ticker].toLocaleString('en-US')}`);
+            return { ticker: x.ticker, name: x.name, why: bits.join(' · ') || 'מהרשימה מהתשובה הקודמת' };
+        });
+        const execLines = ['ממשיך עם אותן חברות מהתשובה הקודמת (כפי שביקשת): ' + ranked.map(x => x.ticker).join(', ') + '.'];
+        if (amt) execLines.push(`חלוקת $${amt.toLocaleString('en-US')} ${weighted ? 'משוקללת לפי חוזק הדוח (score) — יותר לחברות עם דוח חזק יותר' : 'שווה בשווה בין החברות'}. ההקצאה המוצעת מוצגת ליד כל חברה.`);
+        execLines.push('לפני ביצוע — הצלב עם הניתוח הטכני (RSI/מבנה) והמחיר החי של כל מניה.');
         return {
-            title: 'המשך על החברות מהתשובה הקודמת',
-            executive_he: 'לפי בקשתך, אני ממשיך עם אותן חברות מהתשובה הקודמת: ' + prevIdeas.map(i => i.ticker).join(', ') + '. הצלב את ה-score הפונדמנטלי עם הטכני (RSI/מבנה) כדי לבחור את בעלות הפוטנציאל הגבוה לפריצה, וחלק את הסכום בהתאם.\n\n(תשובה מבוססת על נתוני הפלטפורמה. לחלוקה אופטימלית עם מחירים חיים — נדרש מנוע ה-AI.)',
-            logic_he: 'הקשר: השארתי את אותה קבוצת חברות מהשאלה הקודמת (כפי שביקשת), במקום להחליף לרשימה חדשה. דירוג לפי score הדוח מסייע לבחור מתוכן.',
+            title: amt ? `חלוקת $${amt.toLocaleString('en-US')} בין החברות מהתשובה הקודמת` : 'המשך על החברות מהתשובה הקודמת',
+            executive_he: execLines.join(' ') + '\n\n(תשובה מבוססת על נתוני הפלטפורמה. לחלוקה אופטימלית עם מחירים חיים ומשקולות סיכון — נדרש מנוע ה-AI.)',
+            logic_he: 'הקשר: זיהיתי שהבקשה ממשיכה את השאלה הקודמת, ולכן שמרתי בדיוק על אותה קבוצת חברות במקום להחליף לרשימה חדשה. הדירוג/החלוקה לפי score הדוח מסייעים לזהות את בעלות הפוטנציאל הגבוה.',
             live_data: [],
             answer_he: '',
             ideas,
@@ -923,8 +969,8 @@ module.exports = async (req, res) => {
             if (_memo.has(memoKey)) { res.setHeader('Cache-Control', ctxBlock ? 's-maxage=120, private' : 's-maxage=600'); res.status(200).json({ ..._memo.get(memoKey), cached: true }); return; }
             let rule = null, wantAdvice = false;
             // The model classifies: a concrete rule → JSON rule; an open-ended question → {"advice":true}.
-            try { const g = await _geminiGroundedJson(_strategyPrompt(text, ctxBlock), KEY, MODELS, false, 0.1, 1200); if (g && g.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g); } catch (e) { rule = null; }
-            if (!rule && !wantAdvice) { try { const g2 = await _aiGatewayJson(_strategyPrompt(text, ctxBlock), 0.1, 1300); if (g2 && g2.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g2); } catch (e) { rule = null; } }
+            try { const g = await _geminiGroundedJson(_strategyPrompt(text, ctxBlock, convoBlock), KEY, MODELS, false, 0.1, 1200); if (g && g.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g); } catch (e) { rule = null; }
+            if (!rule && !wantAdvice) { try { const g2 = await _aiGatewayJson(_strategyPrompt(text, ctxBlock, convoBlock), 0.1, 1300); if (g2 && g2.advice === true) wantAdvice = true; else rule = _normalizeStrategy(g2); } catch (e) { rule = null; } }
             let source = 'ai';
             if (!rule && !wantAdvice) { rule = _strategyFallback(text); source = rule ? 'fallback' : 'none'; }
             if (rule && rule._src) { source = rule._src; delete rule._src; }
