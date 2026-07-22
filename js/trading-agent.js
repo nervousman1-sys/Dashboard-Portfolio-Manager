@@ -793,14 +793,34 @@ async function _taEnable() {
 }
 
 // ── The user's strategies list ──
+// Race a Supabase query against a timeout so a hung/saturated connection (the DB pool can be
+// briefly exhausted by the 24/7 agents) can never leave a list stuck on "טוען…" forever.
+// Resolves like Supabase; on timeout → { data:null, error:{message:'timeout'} }.
+function _taQueryWithTimeout(query, ms = 12000) {
+    return Promise.race([
+        query,
+        new Promise((resolve) => setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), ms)),
+    ]);
+}
+function _taRenderListError() {
+    const el = document.getElementById('taList');
+    if (el) el.innerHTML = '<div class="wl-empty ta-load-err">לא ניתן לטעון את האסטרטגיות כרגע — ייתכן שהשרת עמוס לרגע. <button class="ta-retry-btn" onclick="_taRetryStrategies()">נסה שוב</button></div>';
+}
+function _taRetryStrategies() {
+    const el = document.getElementById('taList');
+    if (el) el.innerHTML = '<div class="wl-empty"><div class="rep-spinner"></div>טוען…</div>';
+    _taLoadStrategies();
+}
 async function _taLoadStrategies() {
-    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _taRenderListError(); return; }
     try {
-        const { data, error } = await supabaseClient.from('automated_strategies').select('*').order('created_at', { ascending: false });
-        if (error) return;
+        const { data, error } = await _taQueryWithTimeout(
+            supabaseClient.from('automated_strategies').select('*').order('created_at', { ascending: false })
+        );
+        if (error) { _taRenderListError(); return; }
         _taStrategies = data || [];
         _taRenderList();
-    } catch (e) { }
+    } catch (e) { _taRenderListError(); }
 }
 function _taRenderList() {
     const el = document.getElementById('taList');
@@ -942,14 +962,25 @@ function _taBrokerAdapter(conn) {
     };
 }
 
+function _taRenderBrokersError() {
+    const el = document.getElementById('taBrokerCard');
+    if (el) el.innerHTML = '<div class="wl-empty ta-load-err">לא ניתן לטעון את החיבורים כרגע — ייתכן שהשרת עמוס לרגע. <button class="ta-retry-btn" onclick="_taRetryBrokers()">נסה שוב</button></div>';
+}
+function _taRetryBrokers() {
+    const el = document.getElementById('taBrokerCard');
+    if (el) el.innerHTML = '<div class="wl-empty"><div class="rep-spinner"></div>טוען…</div>';
+    _taLoadBrokers();
+}
 async function _taLoadBrokers() {
-    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) { _taRenderBrokersError(); return; }
     try {
-        const { data, error } = await supabaseClient.from('broker_connections').select('*').order('created_at', { ascending: false });
-        if (error) return;
+        const { data, error } = await _taQueryWithTimeout(
+            supabaseClient.from('broker_connections').select('*').order('created_at', { ascending: false })
+        );
+        if (error) { _taRenderBrokersError(); return; }
         _taBrokers = data || [];
         _taRenderBrokers();
-    } catch (e) { }
+    } catch (e) { _taRenderBrokersError(); }
 }
 function _taRenderBrokers() {
     const el = document.getElementById('taBrokerCard');
@@ -1389,6 +1420,7 @@ if (typeof window !== 'undefined') {
     window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange; window._taScrUniverseChange = _taScrUniverseChange;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
     window._taToggleTrigEdit = _taToggleTrigEdit; window._taEditCond = _taEditCond; window._taEditLogic = _taEditLogic; window._taAddCond = _taAddCond; window._taRemoveCond = _taRemoveCond;
+    window._taRetryStrategies = _taRetryStrategies; window._taRetryBrokers = _taRetryBrokers;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taReask = _taReask; window._taDelHistory = _taDelHistory; window._taClearHistory = _taClearHistory;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;

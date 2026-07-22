@@ -10981,6 +10981,13 @@ html.day-mode .ta-input { background: #f6f2e6; }
     border-radius: 999px; padding: 5px 12px; font-size: 11.5px; cursor: pointer; font-family: inherit; text-align: right; transition: background .12s; }
 .ta-example:hover { background: rgba(0,229,255,0.14); color: var(--text-primary); }
 html.day-mode .ta-example { background: #eee6d3; border-color: rgba(58,50,36,0.25); }
+/* Load-failure state (e.g. Supabase pool momentarily saturated) — clear message + retry, never an
+   infinite spinner. */
+.ta-load-err { color: var(--text-secondary); line-height: 1.7; }
+.ta-retry-btn { margin-inline-start: 6px; font-size: 12px; font-weight: 700; color: var(--accent-blue);
+    background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.3); border-radius: 8px;
+    padding: 5px 13px; cursor: pointer; font-family: inherit; }
+.ta-retry-btn:hover { background: rgba(0,229,255,0.18); }
 .ta-card-load, .ta-card-err { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: var(--text-secondary); font-size: 13px; }
 .ta-card-err { color: var(--accent-red, #ff6b6b); }
 .ta-hint { margin-top: 14px; padding: 11px 13px; border-radius: 11px; border: 1px dashed var(--border-hover, rgba(0,229,255,0.3)); background: rgba(0,229,255,0.04); color: var(--text-secondary); font-size: 12.5px; line-height: 1.6; }
