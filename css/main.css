@@ -11106,6 +11106,21 @@ html.day-mode .ta-bk-secnote { color: #9a6f00; }
     .ta-flow-arrow { transform: rotate(-90deg); justify-self: center; }
 }
 @media (max-width: 768px) {
+    /* AI-agent Strategy Card on phones: the base .st-pf-select min-width:260px overflowed the
+       card, pushing the amount/mode/portfolio controls and buttons out of their frames. Make every
+       control full-width and proportional, and stack the actions as clean full-width rows. */
+    .ta-card .st-pf-select { min-width: 0; max-width: 100%; }
+    .ta-card-actions { flex-direction: column; align-items: stretch; gap: 10px; }
+    .ta-card-actions .ta-mode-lbl { width: 100%; gap: 8px; flex-wrap: nowrap; }
+    .ta-card-actions .ta-mode-lbl .st-pf-select { flex: 1 1 auto; min-width: 0; }
+    .ta-card-actions .ta-amt-input { flex: 0 0 96px; max-width: 96px; }
+    .ta-card-actions .corr-run-btn { width: 100%; padding: 12px; font-size: 0.95rem; }
+    .ta-card-actions .wl-close-btn { width: 100%; padding: 11px; }
+    /* Trigger editor rows: keep every field inside the card. */
+    .ta-ed-row { gap: 6px; }
+    .ta-ed-row .ta-ed-kw { flex: 1 1 100%; }
+}
+@media (max-width: 768px) {
     .gm-item-row { grid-template-columns: auto 1fr; }
     .gm-meta { grid-column: 2; }
     .gm-detail-btn { grid-column: 1 / -1; justify-self: start; }
