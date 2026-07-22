@@ -10577,10 +10577,11 @@ html.day-mode .wl-close-btn { background: rgba(58,50,36,0.06); }
     gap: 10px; margin-bottom: 20px;
 }
 .rep-keyfig {
-    display: flex; flex-direction: column; gap: 4px; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; min-width: 0;
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
 }
-.rep-keyfig-label { font-size: 11px; color: var(--text-secondary); }
+/* Label uses the same font as the "הוסף למעקב" button (app font, weight 800) for a consistent look. */
+.rep-keyfig-label { font-size: 13px; font-weight: 800; color: var(--text-secondary); }
 .rep-keyfig-val { font-size: 17px; font-weight: 800; color: var(--text-primary); }
 .rep-keyfig-earn { border-color: rgba(0,229,255,0.30); background: rgba(0,229,255,0.05); }
 .rep-keyfig-earn .rep-keyfig-val { font-size: 15px; color: #67e8f9; }
@@ -10602,7 +10603,9 @@ html.day-mode .wl-close-btn { background: rgba(58,50,36,0.06); }
 .rep-peers-empty { padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px;
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 22px; }
 .rep-peers-table th, .rep-peers-table td { text-align: center; white-space: nowrap; }
-.rep-peers-table td.rep-peer-name { text-align: right; font-weight: 700; }
+/* Match the "הוסף למעקב" button font weight — the peer-comparison words read as one family. */
+.rep-peers-table th { font-weight: 800; }
+.rep-peers-table td.rep-peer-name { text-align: right; font-weight: 800; }
 .rep-peer-tk { font-size: 11px; color: var(--text-secondary); direction: ltr; display: inline-block; }
 .rep-peer-base { background: rgba(0,229,255,0.08); }
 .rep-peer-base td { font-weight: 800; }
@@ -12298,6 +12301,15 @@ html:not(.day-mode) { background-color: #0f1420; }
     }
     .rep-peers-panel { overflow-x: visible !important; }
     .rep-peers-legend { font-size: 9.5px; line-height: 1.6; }
+
+    /* ── Key figures: force 4 boxes per row on phones (auto-fit gave max 3 at this width).
+       Tighter type + padding so a value like "$222.38B" fits without spilling; the bold labels
+       wrap to 2 lines as needed. ── */
+    #reportsPage .rep-keyfigs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+    #reportsPage .rep-keyfig { padding: 9px 7px; }
+    #reportsPage .rep-keyfig-label { font-size: 10px; line-height: 1.25; }
+    #reportsPage .rep-keyfig-val { font-size: 12.5px; }
+    #reportsPage .rep-keyfig-earn .rep-keyfig-val { font-size: 11px; }
 
     /* ── מפת הנזילות: labels always readable — clean ellipsis, never a mid-letter cut;
        flags dropped on phones; extra map height gives small tiles room to breathe. ── */
