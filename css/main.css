@@ -11021,6 +11021,27 @@ html.day-mode .ta-cond { background: rgba(58,50,36,0.05); }
 .ta-cond b { color: var(--accent-blue); }
 html.day-mode .ta-cond b { color: #0369a1; }
 .ta-tf { font-size: 10.5px; color: var(--text-muted); }
+/* Inline trigger editor (edit the parsed condition so it captures exactly what the user means) */
+.ta-trig-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.ta-trig-head .ta-flow-lbl { margin-bottom: 0; }
+.ta-trig-edit { font-size: 11px; font-weight: 800; color: var(--accent-blue); background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25); border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.ta-trig-edit:hover { background: rgba(0,229,255,0.16); }
+.ta-trig-done { color: var(--accent-green); background: rgba(0,255,148,0.08); border-color: rgba(0,255,148,0.3); }
+.ta-trig-editor { display: flex; flex-direction: column; gap: 8px; }
+.ta-ed-logic { font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ta-ed-logic select { width: auto; }
+.ta-ed-conds { display: flex; flex-direction: column; gap: 6px; }
+.ta-ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 6px; }
+html.day-mode .ta-ed-row { background: rgba(58,50,36,0.05); }
+.ta-ed-row .st-pf-select { width: auto; min-width: 0; padding: 5px 8px; font-size: 12px; }
+.ta-ed-kw { flex: 1 1 140px; min-width: 120px; }
+.ta-ed-sym { width: 108px; }
+.ta-ed-num { width: 74px; }
+.ta-ed-inline { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
+.ta-ed-del { margin-inline-start: auto; background: transparent; border: none; color: var(--text-muted); font-size: 13px; cursor: pointer; padding: 2px 7px; border-radius: 6px; line-height: 1; }
+.ta-ed-del:hover { color: var(--accent-red, #ff6b6b); background: rgba(255,77,77,0.1); }
+.ta-ed-add { align-self: flex-start; font-size: 12px; font-weight: 700; color: var(--accent-blue); background: transparent; border: 1px dashed rgba(0,229,255,0.35); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+.ta-ed-add:hover { background: rgba(0,229,255,0.08); }
 .ta-act { font-size: 13.5px; font-weight: 800; padding: 9px 12px; border-radius: 10px; text-align: center; }
 .ta-act.ta-buy { color: var(--accent-green); background: rgba(0,255,148,0.1); border: 1px solid rgba(0,255,148,0.3); }
 .ta-act.ta-sell { color: var(--accent-red, #ff6b6b); background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3); }
@@ -12295,23 +12316,16 @@ html:not(.day-mode) { background-color: #0f1420; }
     .rep-score-label { font-size: 15px; margin-top: 0; }
     .rep-score-cap { font-size: 9.5px; margin-top: 2px; opacity: 0.8; }
 
-    /* ── "הוסף למעקב" → a single star at the row's side (444px acts like an icon).
-       The action bar becomes [חזרה לרשימה][ניתוח טכני][★]. ── */
-    .rep-detail-top { grid-template-columns: 1fr 1fr 54px !important; }
+    /* ── Four report actions → a tidy, balanced 2×2 grid (no orphaned oversized star).
+       Row 1: [→ חזרה לרשימה][📈 ניתוח טכני] · Row 2: [🔗 אתר החברה][☆ מעקב] —
+       every button labelled and equal-sized. ── */
+    .rep-detail-top { grid-template-columns: 1fr 1fr !important; gap: 8px; }
     .rep-detail-top .macro-back-btn { order: 1; }
-    .rep-detail-top .rep-tech-link { order: 2; }
-    .rep-detail-top .rep-watch-btn { order: 3; font-size: 0 !important; padding: 0 !important; }
-    .rep-detail-top .rep-watch-btn::before {
-        content: '☆';
-        font-size: 24px;
-        line-height: 1;
-        color: #9fb2cc;
-    }
-    .rep-detail-top .rep-watch-btn.on::before {
-        content: '★';
-        color: #fbbf24;
-        text-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
-    }
+    .rep-detail-top .rep-tech-link  { order: 2; }
+    .rep-detail-top .rep-web-link   { order: 3; }
+    .rep-detail-top .rep-watch-btn  { order: 4; }
+    /* The watchlist toggle sits inline like the rest — a normal labelled button, not a giant star. */
+    .rep-detail-top .rep-watch-btn { font-size: 11.5px !important; padding: 8px 4px !important; }
 }
 
 /* ── LHE liquidity map: readable companion list ── */

@@ -246,13 +246,14 @@ function _strategyPrompt(text, ctxBlock, convoBlock) {
         '  "amount": { "type": "SHARES | CASH_USD | PORTFOLIO_PCT", "value": מספר },',
         '  "risk_limits": { "stop_loss_pct": מספר או null, "max_slippage_pct": מספר או null, "max_portfolio_pct": מספר או null }',
         '}',
-        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אמירה של דמות/מדינה בחדשות → factor news, subject הישות, keyword המילים, operator CONTAINS. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות* (למשל "כל מניה בנאסד\'ק שעוברת תנאי", או אפילו סתם "כל מניה שעוברת RSI 30" בלי לציין מדד) ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P — וברירת המחדל היא "NDX" כשלא צוין מדד,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל,"split_mode":"fixed" (סכום קבוע לכל מניה — כשצוין סכום למניה) או "equal" (חלוקה שווה של התקציב בין כל המניות התואמות — כשהמשתמש אומר "חלק/מחולק שווה" בלי סכום קבוע למניה)}, קבע trigger_type "SCREENER", target_asset null, action "BUY" (סורק תמיד קונה, אף פעם לא ALERT_ONLY), ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "קונה"/"קונה לי"/"תקנה"/"רכישה" = BUY. "10 אלף דולר"=10000, "50 אלף"=50000. חשוב: כל אמירת "כל מניה ש..." עם תנאי טכני היא SCREENER — לעולם לא TECHNICAL_INDICATOR של נכס בודד.',
+        'כללים: (1) המר סכום דולרי ל-CASH_USD, מספר מניות ל-SHARES, ואחוז ל-PORTFOLIO_PCT. (2) "מתחת ל-$70" → operator BELOW, threshold 70. (3) "RSI מעל 80" → factor rsi, operator ABOVE, threshold 80. (4) "הפתעת EPS מעל 10%" → factor eps_surprise, operator ABOVE, threshold 10. (5) אזכור בחדשות → factor news, operator CONTAINS. חשוב מאוד: כל *מושג נפרד* (דמות, מדינה, נכס, נושא) מקבל תנאי news משלו, וה-keyword שלו כולל את המונח בעברית וגם באנגלית מופרדים בפסיק (הפסיק = "או" בין תרגומים/מילים נרדפות של אותו מושג). כשההוראה היא "אם X מדבר/אומר/מזכיר את Y" או "X על Y" — אתה חייב ליצור שני תנאי news נפרדים: אחד ל-X (הדובר) ואחד ל-Y (הנושא), עם logic=ALL (כי שניהם חייבים להופיע יחד). לעולם אל תשמיט את הנושא (Y) ואל תצמצם לתנאי אחד. subject של כל תנאי = שם הישות של אותו תנאי. (6) חשוב מאוד: subject של תנאי הוא הנכס שאותו מנטרים, target_asset הוא הנכס שעליו פועלים — הם יכולים להיות שונים (למשל: מנטרים BTC-USD, קונים MSTR). (7) "ממוצע 200 שבועות" → factor ma, period 200, timeframe weekly, threshold null. (8) חשוב: כשהמחיר "נוגע"/"על"/"touches"/"at" הממוצע (לא מעל ולא מתחת) → operator EQUALS. "חוצה מעלה" → CROSSES_ABOVE, "חוצה מטה" → CROSSES_BELOW. (9) "RSI שבועי" → timeframe weekly; "יומי" → daily; "4 שעות" → 4h. (10) קלוט את כל התנאים המבוקשים — אל תשמיט אף תנאי. logic=ALL כשצריך שכל התנאים יתקיימו ("וגם"/"and"/"כש...ו-"); logic=ANY רק כשכתוב במפורש "או"/"or". (11) ברירת מחדל ל-action כשלא מצוין: ALERT_ONLY. (12) חשוב: אם הקלט אינו חוק אוטומטי קונקרטי אלא שאלה פתוחה, בקשת רעיונות/המלצות למניות, או ניתוח שוק כללי (למשל "אילו מניות מתאימות לתקופה?") — החזר בדיוק {"advice": true} וכלום מלבד זה. (13) סורק מדד (SCREENER): אם המשתמש רוצה שהמערכת תסרוק את *כל המניות* (למשל "כל מניה בנאסד\'ק שעוברת תנאי", או אפילו סתם "כל מניה שעוברת RSI 30" בלי לציין מדד) ותקנה כל אחת שעונה — ולא נכס בודד ולא תעודת סל (QQQ) — הוסף שדה "screener":{"universe":"NDX" לנאסד\'ק או "SP500" ל-S&P — וברירת המחדל היא "NDX" כשלא צוין מדד,"per_stock_usd":הסכום לכל מניה,"total_budget_usd":התקציב הכולל,"split_mode":"fixed" (סכום קבוע לכל מניה — כשצוין סכום למניה) או "equal" (חלוקה שווה של התקציב בין כל המניות התואמות — כשהמשתמש אומר "חלק/מחולק שווה" בלי סכום קבוע למניה)}, קבע trigger_type "SCREENER", target_asset null, action "BUY" (סורק תמיד קונה, אף פעם לא ALERT_ONLY), ו-conditions כתנאי הסינון (למשל rsi weekly below 30). "קונה"/"קונה לי"/"תקנה"/"רכישה" = BUY. "10 אלף דולר"=10000, "50 אלף"=50000. חשוב: כל אמירת "כל מניה ש..." עם תנאי טכני היא SCREENER — לעולם לא TECHNICAL_INDICATOR של נכס בודד.',
         'דוגמאות:',
         'קלט: "אילו מניות רלוונטיות לתקופה הקרובה לפי מאקרו, מצב עולמי ופריצות טכנולוגיות?" → {"advice": true}',
         'קלט: "צור אסטרטגיה שכל מניה בנאסד\'ק שה-RSI השבועי שלה יורד מתחת ל-30 — תקנה אותה ב-10 אלף דולר, עד תקציב כולל של 50 אלף דולר" → {"name":"סורק נאסד\'ק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000,"split_mode":"fixed"},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "אני רוצה אסטרטגיה שבה אתה קונה לי כל מניה שעוברת את RSI 30 בטיים פריים שבועי, התקציב 50 אלף דולר ו-10 אלף לכל מניה" (בלי לציין מדד) → {"name":"סורק RSI שבועי","trigger_type":"SCREENER","logic":"ALL","conditions":[{"factor":"rsi","subject":null,"keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"}],"action":"BUY","target_asset":null,"screener":{"universe":"NDX","per_stock_usd":10000,"total_budget_usd":50000,"split_mode":"fixed"},"amount":{"type":"CASH_USD","value":10000},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה לי את מניית ORCL כשה-RSI השבועי מתחת ל-30 וגם מחיר המניה נוגע בממוצע 300 השבועות" → {"name":"קניית ORCL על RSI וממוצע","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"ORCL","keyword":null,"operator":"BELOW","threshold":30,"period":null,"timeframe":"weekly"},{"factor":"ma","subject":"ORCL","keyword":null,"operator":"EQUALS","threshold":null,"period":300,"timeframe":"weekly"}],"action":"BUY","target_asset":"ORCL","amount":{"type":"CASH_USD","value":0},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "אם טראמפ או גורם רשמי מפרסם אמירה על איראן, או אם הנפט יורד מתחת ל-70 דולר, תקנה USO ב-500 דולר" → {"name":"נפט על מתיחות/מחיר","trigger_type":"NEWS_SENTIMENT","logic":"ANY","conditions":[{"factor":"news","subject":"Iran","keyword":"Iran,Trump,איראן,טראמפ","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"price","subject":"USO","operator":"BELOW","threshold":70,"timeframe":null,"keyword":null}],"action":"BUY","target_asset":"USO","amount":{"type":"CASH_USD","value":500},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
+        'קלט: "אם טראמפ מדבר על ביטקוין תקנה MSTR" → {"name":"MSTR על אמירת טראמפ על ביטקוין","trigger_type":"NEWS_SENTIMENT","logic":"ALL","conditions":[{"factor":"news","subject":"Trump","keyword":"טראמפ,Trump","operator":"CONTAINS","threshold":null,"timeframe":null},{"factor":"news","subject":"Bitcoin","keyword":"ביטקוין,Bitcoin,BTC,קריפטו","operator":"CONTAINS","threshold":null,"timeframe":null}],"action":"BUY","target_asset":"MSTR","amount":{"type":"CASH_USD","value":0},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "ברגע שחברה מפרסמת דוח עם הפתעת EPS מעל 10%, תבצע קניית שוק של 5 מניות" → {"name":"קנייה על הפתעת רווח","trigger_type":"EARNINGS_BEAT","logic":"ALL","conditions":[{"factor":"eps_surprise","subject":null,"keyword":null,"operator":"ABOVE","threshold":10,"timeframe":null}],"action":"BUY","target_asset":null,"amount":{"type":"SHARES","value":5},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "מכור 50% מהאחזקה שלי ב-NVDA אם ה-RSI עולה מעל 80 בגרף 4 שעות" → {"name":"מימוש NVDA על RSI","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"rsi","subject":"NVDA","operator":"ABOVE","threshold":80,"period":null,"timeframe":"4h","keyword":null}],"action":"SELL","target_asset":"NVDA","amount":{"type":"PORTFOLIO_PCT","value":50},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
         'קלט: "קנה 200 מניות MSTR אם הביטקוין חוצה מעלה את ממוצע 200 השבועות" → {"name":"MSTR על ממוצע 200 שבועות של ביטקוין","trigger_type":"TECHNICAL_INDICATOR","logic":"ALL","conditions":[{"factor":"ma","subject":"BTC-USD","keyword":null,"operator":"CROSSES_ABOVE","threshold":null,"period":200,"timeframe":"weekly"}],"action":"BUY","target_asset":"MSTR","amount":{"type":"SHARES","value":200},"risk_limits":{"stop_loss_pct":null,"max_slippage_pct":null,"max_portfolio_pct":null}}',
@@ -375,9 +376,65 @@ function _strategyFallback(text) {
     const mAbove = t.match(/(?:מעל|above|over|גדול)[^\d$]{0,12}\$?\s*(\d+(?:\.\d+)?)/i);
     const mDollar = t.match(/\$\s*(\d+(?:\.\d+)?)/);
     if (!mRsi && !mMa && !mEps && (mBelow || mAbove || mDollar)) conditions.push({ factor: 'price', subject: primary, keyword: null, operator: mAbove ? 'ABOVE' : 'BELOW', threshold: +((mAbove || mBelow || mDollar)[1]), timeframe: null });
-    // \b doesn't work around Hebrew — match the words directly (Hebrew has no ASCII word boundary).
-    const kw = (t.match(/(Iran|Trump|Israel|Fed|Powell|OPEC|איראן|טראמפ|ישראל|הפד|אופ"ק|נפט|ריבית)/gi) || []);
-    if (kw.length) conditions.push({ factor: 'news', subject: kw[0], keyword: [...new Set(kw.map(k => k.trim()))].join(','), operator: 'CONTAINS', threshold: null, timeframe: null });
+    // ── News concepts ─────────────────────────────────────────────────────────────────────
+    // A news condition fires on ANY of its comma-listed terms (they are translations/synonyms of
+    // ONE concept — e.g. "טראמפ,Trump"). To require several DIFFERENT concepts TOGETHER
+    // ("אם טראמפ מדבר על ביטקוין" = Trump AND Bitcoin), each concept gets its OWN news condition,
+    // and the compound-AND (logic=ALL, computed below) makes "both must appear" work with no engine
+    // change. When the text is OR-ish ("איראן/טראמפ", "או"), the concepts are merged into a single
+    // OR condition instead. (\b doesn't work around Hebrew, so match the words directly.)
+    const NEWS_CONCEPTS = [
+        { re: /(טראמפ|trump)/i, kw: 'טראמפ,Trump' },
+        { re: /(איראן|iran)/i, kw: 'איראן,Iran' },
+        { re: /(ישראל|israel)/i, kw: 'ישראל,Israel' },
+        { re: /(פאוול|powell)/i, kw: 'פאוול,Powell' },
+        { re: /(הפד|federal\s*reserve|\bfed\b)/i, kw: 'פד,Fed' },
+        { re: /(אופ"ק|אופק|opec)/i, kw: 'אופ"ק,OPEC' },
+        { re: /(ביטקוין|bitcoin|\bbtc\b|קריפטו|crypto)/i, kw: 'ביטקוין,Bitcoin,BTC,קריפטו,crypto' },
+        { re: /(את'ריום|אתריום|ethereum|\beth\b)/i, kw: "את'ריום,Ethereum,ETH" },
+        { re: /(נפט|\boil\b|crude)/i, kw: 'נפט,oil,crude' },
+        { re: /(זהב|\bgold\b)/i, kw: 'זהב,gold' },
+        { re: /(מלחמ|\bwar\b|conflict)/i, kw: 'מלחמה,war,conflict' },
+        { re: /(מכס|tariff|טאריף)/i, kw: 'מכס,tariff,tariffs' },
+        { re: /(אינפלצי|inflation|\bcpi\b)/i, kw: 'אינפלציה,inflation,CPI' },
+        { re: /(ריבית|interest\s*rate|rate\s*cut|rate\s*hike)/i, kw: 'ריבית,interest rate' },
+    ];
+    // Only treat as a news trigger when the text actually refers to news/statements — so a bare ticker
+    // word ("נפט"/oil as an asset) in a pure technical rule doesn't become a phantom news condition.
+    const newsish = /(חדשות|אמ[רה]|אומר|מדבר|יאמר|אמיר[הת]|מזכיר|הכריז|יכריז|פרסם|יפרסם|טוויט|ציוץ|נאום|הודע[הת]|says?|said|announce|tweet|statement|talks?\s+about|mentions?)/i.test(t);
+    let newsConds = [];
+    if (newsish) {
+        // The ASSET the user wants to TRADE ("תקנה זהב"/"buy gold") is the target, NOT a news topic —
+        // collect traded objects so a tradeable lexicon word (gold/oil/bitcoin) isn't mistaken for news.
+        const traded = [];
+        for (const m of t.matchAll(/(?:תקנה|תקנו|קנה|קונ[הים]|לקנות|רכוש|רוכש|רכיש[הת]|מכור|מוכר|למכור|buy|sell|purchase)\s+(?:לי\s+|את\s+|the\s+|a\s+)?([A-Za-z֐-׿'"\-]{2,})/gi)) traded.push(m[1].toLowerCase());
+        const isTraded = (re) => traded.some(w => re.test(w));
+        for (const nc of NEWS_CONCEPTS) if (nc.re.test(t) && !isTraded(nc.re)) newsConds.push({ factor: 'news', subject: nc.kw.split(',')[0], keyword: nc.kw, operator: 'CONTAINS', threshold: null, timeframe: null });
+        // Also capture the explicit object of "מדבר על X" / "about X" — EVEN when a lexicon concept
+        // already matched, so "טראמפ מדבר על טאייוואן" keeps BOTH Trump AND Taiwan. Skip fillers,
+        // traded assets, and anything already covered by an existing keyword.
+        const mAbout = t.match(/(?:מדבר\S*\s+על|מזכיר\S*(?:\s+את)?|אמירה\s+על|בנושא|about|regarding)\s+([A-Za-z֐-׿][\w֐-׿'"\-]{1,20})/i);
+        if (mAbout) {
+            const w = mAbout[1].trim();
+            const after = t.slice(mAbout.index + mAbout[0].length, mAbout.index + mAbout[0].length + 18);
+            const STOP = /^(זה|זו|זאת|כך|מה|כל|הכל|כלום|משהו|it|this|that)$/i;
+            const covered = newsConds.some(c => c.keyword.toLowerCase().includes(w.toLowerCase()));
+            // Skip when the captured word is filler that just precedes a real lexicon concept
+            // ("על הורדת ריבית" → keep only ריבית, drop "הורדת") — otherwise a junk keyword with
+            // logic=ALL would make the strategy never fire.
+            const adjacentConcept = NEWS_CONCEPTS.some(nc => nc.re.test(after));
+            if (w.length >= 3 && !STOP.test(w) && !covered && !adjacentConcept && !traded.includes(w.toLowerCase())) newsConds.push({ factor: 'news', subject: w, keyword: w, operator: 'CONTAINS', threshold: null, timeframe: null });
+        }
+    }
+    if (newsConds.length) {
+        // OR-ish ("או" / a slash between two words) → merge every concept into ONE OR condition.
+        const orish = /\sאו\s/.test(t) || /[^א-ת\w]or[^א-ת\w]/i.test(t) || /[א-תA-Za-z]\s*\/\s*[א-תA-Za-z]/.test(t);
+        if (orish && newsConds.length > 1) {
+            const merged = [...new Set(newsConds.flatMap(c => c.keyword.split(',')))].join(',');
+            newsConds = [{ factor: 'news', subject: newsConds[0].subject, keyword: merged, operator: 'CONTAINS', threshold: null, timeframe: null }];
+        }
+        for (const nc of newsConds) conditions.push(nc);
+    }
     if (!conditions.length) return null;
     // Buy/sell intent — cover present tense ("קונה"/"מוכר"), nouns ("קנייה"/"מכירה") and "רכישה",
     // not just imperative/infinitive, so "אתה קונה לי כל מניה…" is a BUY (not a fallthrough ALERT).

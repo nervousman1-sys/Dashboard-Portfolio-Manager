@@ -51,6 +51,7 @@ let _taStrategies = [];         // cached rows
 let _taBrokers = [];            // cached broker_connections rows
 let _taPendingRule = null;      // the just-parsed rule awaiting confirmation
 let _taEditingId = null;        // id of the strategy currently being edited (null = creating new)
+let _taTrigEditing = false;     // is the pending rule's trigger open in the inline editor?
 let _taChecking = false;
 const _taEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
@@ -512,6 +513,142 @@ async function _taRunScreenerPreview() {
     el.innerHTML = `<div class="ta-scr-prev-head">חלוקה צפויה עכשיו — ${allocated.length} מניות</div>${note}<div class="ta-scr-list">${rows}</div><div class="ta-scr-total">סה"כ מוקצב עכשיו: <b>$${_taFmtNum(totalAlloc)}</b>${budget > 0 ? ` מתוך תקציב $${_taFmtNum(budget)}` : ''}</div>`;
 }
 
+// ── Trigger column: read-only chips (default) OR an inline editor the user can toggle into,
+//    so the parse can always be corrected to capture EXACTLY the intended condition. ──
+const _TA_FAC_HE = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
+const _TA_OP_HE = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', EQUALS: 'נוגע', GTE: '≥', LTE: '≤', CONTAINS: 'מזכיר' };
+const _TA_TF_HE = { weekly: 'שבועי', daily: 'יומי', '4h': '4 שעות', '1h': 'שעתי' };
+
+// Read-only chips (one per condition).
+function _taCondsViewHtml(rule) {
+    return (rule.conditions || []).map(c => {
+        const subj = c.subject ? ` <b>${_taEsc(c.subject)}</b>` : '';
+        let body;
+        if (c.factor === 'news') {
+            // Show the first (Hebrew) term for a clean chip — the full keyword list (translations) is
+            // still used for matching. "טראמפ,Trump" → "טראמפ"; several conditions render as several chips.
+            const kwDisp = (c.keyword ? String(c.keyword).split(',')[0].trim() : '') || c.subject || '';
+            body = `אזכור בחדשות: <b>${_taEsc(kwDisp)}</b>`;
+        } else if (c.factor === 'ma') {
+            const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
+            body = c.operator === 'EQUALS'
+                ? `מחיר${subj} נוגע בממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`
+                : `מחיר${subj} ${_TA_OP_HE[c.operator] || c.operator} ממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`;
+        } else {
+            body = `${_TA_FAC_HE[c.factor] || c.factor}${subj} ${_TA_OP_HE[c.operator] || c.operator} <b>${_taEsc(c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : '')}</b>${c.timeframe ? ` <span class="ta-tf">[${_taEsc(_TA_TF_HE[c.timeframe] || c.timeframe)}]</span>` : ''}`;
+        }
+        return `<li class="ta-cond">${body}</li>`;
+    }).join('');
+}
+
+function _taOpSelect(i, cur, ops) {
+    return `<select class="st-pf-select ta-ed-op" onchange="_taEditCond(${i},'operator',this.value)">${ops.map(o => `<option value="${o}" ${cur === o ? 'selected' : ''}>${_TA_OP_HE[o] || o}</option>`).join('')}</select>`;
+}
+function _taTfSelect(i, cur, tfs) {
+    return `<select class="st-pf-select ta-ed-tf" onchange="_taEditCond(${i},'timeframe',this.value)">${tfs.map(tf => `<option value="${tf}" ${cur === tf ? 'selected' : ''}>${_TA_TF_HE[tf] || tf}</option>`).join('')}</select>`;
+}
+
+// One editable condition row — fields shown depend on the factor.
+function _taCondEditHtml(c, i) {
+    const f = c.factor || 'news';
+    const factorSel = `<select class="st-pf-select ta-ed-factor" onchange="_taEditCond(${i},'factor',this.value)">${[['news', 'חדשות'], ['price', 'מחיר'], ['rsi', 'RSI'], ['ma', 'ממוצע נע'], ['eps_surprise', 'הפתעת EPS']].map(([v, l]) => `<option value="${v}" ${f === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    let fields;
+    if (f === 'news') {
+        fields = `<input class="st-pf-select ta-ed-kw" placeholder="מילות מפתח לחדשות (מופרד בפסיק)" value="${_taEsc(c.keyword || c.subject || '')}" oninput="_taEditCond(${i},'keyword',this.value)">`;
+    } else if (f === 'eps_surprise') {
+        fields = `<span class="ta-ed-inline">הפתעת EPS מעל <input class="st-pf-select ta-ed-num" type="number" value="${_taEsc(c.threshold != null ? c.threshold : '')}" oninput="_taEditCond(${i},'threshold',this.value)">%</span>`;
+    } else if (f === 'ma') {
+        fields = `<input class="st-pf-select ta-ed-sym" placeholder="נכס (למשל BTC-USD)" value="${_taEsc(c.subject || '')}" oninput="_taEditCond(${i},'subject',this.value)">${_taOpSelect(i, c.operator, ['EQUALS', 'ABOVE', 'BELOW', 'CROSSES_ABOVE', 'CROSSES_BELOW'])}<input class="st-pf-select ta-ed-num" type="number" placeholder="אורך" value="${_taEsc(c.period != null ? c.period : 200)}" oninput="_taEditCond(${i},'period',this.value)">${_taTfSelect(i, c.timeframe || 'weekly', ['weekly', 'daily'])}`;
+    } else { // price / rsi
+        fields = `<input class="st-pf-select ta-ed-sym" placeholder="נכס (למשל NVDA)" value="${_taEsc(c.subject || '')}" oninput="_taEditCond(${i},'subject',this.value)">${_taOpSelect(i, c.operator, ['ABOVE', 'BELOW'])}<input class="st-pf-select ta-ed-num" type="number" placeholder="${f === 'rsi' ? 'רמת RSI' : 'מחיר'}" value="${_taEsc(c.threshold != null ? c.threshold : '')}" oninput="_taEditCond(${i},'threshold',this.value)">${f === 'rsi' ? _taTfSelect(i, c.timeframe || 'daily', ['weekly', 'daily', '4h']) : ''}`;
+    }
+    return `<div class="ta-ed-row">${factorSel}${fields}<button class="ta-ed-del" onclick="_taRemoveCond(${i})" title="הסר תנאי" aria-label="הסר תנאי">✕</button></div>`;
+}
+
+// The whole trigger column — chips or editor, plus the edit/done toggle.
+function _taTriggerColHtml(rule) {
+    const logicHe = rule.logic === 'ALL' ? 'כל התנאים' : 'לפחות תנאי אחד';
+    if (!_taTrigEditing) {
+        return `<div class="ta-trig-head"><span class="ta-flow-lbl">טריגר (${logicHe})</span><button class="ta-trig-edit" onclick="_taToggleTrigEdit()" title="עריכת הטריגר">✏️ ערוך</button></div><ul class="ta-conds">${_taCondsViewHtml(rule)}</ul>`;
+    }
+    return `<div class="ta-trig-head"><span class="ta-flow-lbl">עריכת טריגר</span><button class="ta-trig-edit ta-trig-done" onclick="_taToggleTrigEdit()" title="סיום עריכה">✓ סיום</button></div>
+        <div class="ta-trig-editor">
+            <label class="ta-ed-logic">התנאים שחייבים להתקיים:
+                <select class="st-pf-select" onchange="_taEditLogic(this.value)">
+                    <option value="ALL" ${rule.logic === 'ALL' ? 'selected' : ''}>כולם (וגם)</option>
+                    <option value="ANY" ${rule.logic !== 'ALL' ? 'selected' : ''}>לפחות אחד (או)</option>
+                </select>
+            </label>
+            <div class="ta-ed-conds">${(rule.conditions || []).map((c, i) => _taCondEditHtml(c, i)).join('')}</div>
+            <button class="ta-ed-add" onclick="_taAddCond()">+ הוסף תנאי</button>
+        </div>`;
+}
+
+// Re-render ONLY the trigger column (keeps the rest of the card + its DOM inputs intact).
+function _taRenderTrigger() {
+    const col = document.getElementById('taTrigCol');
+    if (col && _taPendingRule) col.innerHTML = _taTriggerColHtml(_taPendingRule);
+}
+function _taToggleTrigEdit() { _taTrigEditing = !_taTrigEditing; _taRenderTrigger(); }
+function _taEditLogic(v) { if (_taPendingRule) _taPendingRule.logic = v === 'ALL' ? 'ALL' : 'ANY'; }
+
+// Set sensible defaults for a condition after its factor changes (or when adding a new one).
+function _taNormalizeEditedCond(c) {
+    if (c.factor === 'news') { c.operator = 'CONTAINS'; c.threshold = null; c.period = null; c.timeframe = null; if (c.keyword == null) c.keyword = c.subject || ''; }
+    else if (c.factor === 'ma') { if (!['ABOVE', 'BELOW', 'EQUALS', 'CROSSES_ABOVE', 'CROSSES_BELOW'].includes(c.operator)) c.operator = 'EQUALS'; if (c.period == null) c.period = 200; if (!c.timeframe) c.timeframe = 'weekly'; c.threshold = null; c.keyword = null; }
+    else if (c.factor === 'eps_surprise') { c.operator = 'ABOVE'; c.subject = null; c.keyword = null; c.period = null; c.timeframe = null; if (c.threshold == null) c.threshold = 10; }
+    else { if (!['ABOVE', 'BELOW'].includes(c.operator)) c.operator = c.factor === 'rsi' ? 'ABOVE' : 'BELOW'; c.period = null; c.keyword = null; if (c.factor === 'price') c.timeframe = null; else if (!c.timeframe) c.timeframe = 'daily'; if (c.threshold == null) c.threshold = c.factor === 'rsi' ? 70 : null; }
+}
+
+// Live-mutate the pending rule as the user edits. A factor change re-renders the row's fields.
+function _taEditCond(i, field, val) {
+    if (!_taPendingRule || !Array.isArray(_taPendingRule.conditions) || !_taPendingRule.conditions[i]) return;
+    const c = _taPendingRule.conditions[i];
+    if (field === 'factor') { c.factor = val; _taNormalizeEditedCond(c); _taRenderTrigger(); return; }
+    if (field === 'threshold' || field === 'period') { const n = parseFloat(String(val).replace(/,/g, '')); c[field] = isFinite(n) ? n : null; return; }
+    if (field === 'keyword') { c.keyword = String(val); if (!c.subject || String(c.subject).indexOf(',') === -1) c.subject = String(val).split(',')[0].trim(); return; }
+    c[field] = val;
+}
+function _taAddCond() {
+    if (!_taPendingRule) return;
+    if (!Array.isArray(_taPendingRule.conditions)) _taPendingRule.conditions = [];
+    _taPendingRule.conditions.push({ factor: 'news', subject: '', keyword: '', operator: 'CONTAINS', threshold: null, period: null, timeframe: null });
+    _taRenderTrigger();
+}
+function _taRemoveCond(i) {
+    if (!_taPendingRule || !Array.isArray(_taPendingRule.conditions)) return;
+    _taPendingRule.conditions.splice(i, 1);
+    if (!_taPendingRule.conditions.length) { _taAddCond(); return; }   // keep at least one condition
+    _taRenderTrigger();
+}
+
+// Clean + validate the (possibly hand-edited) conditions before saving: trim news keywords,
+// resolve technical subjects to tradeable tickers, ensure each condition can actually match.
+// Returns '' when OK, otherwise a Hebrew error message to surface.
+function _taFinalizeConditions() {
+    if (!_taPendingRule) return 'אין אסטרטגיה';
+    let conds = (Array.isArray(_taPendingRule.conditions) ? _taPendingRule.conditions : []).filter(c => c && c.factor);
+    for (const c of conds) {
+        if (c.factor === 'news' || c.factor === 'macro') {
+            c.keyword = String(c.keyword || '').split(',').map(s => s.trim()).filter(Boolean).join(',');
+            if (!c.subject && c.keyword) c.subject = c.keyword.split(',')[0];
+            c.operator = 'CONTAINS';
+        } else if (c.subject) {
+            const r = (typeof _taResolveTicker === 'function') ? _taResolveTicker(c.subject) : null;
+            if (r) c.subject = r;
+        }
+    }
+    if (!conds.length) return 'הוסף לפחות תנאי אחד לטריגר';
+    for (const c of conds) {
+        if (c.factor === 'news' || c.factor === 'macro') { if (!c.keyword) return 'תנאי חדשות ריק — הזן מילת מפתח או מחק את התנאי'; }
+        else if (c.factor === 'ma') { if (!c.subject) return 'לתנאי ממוצע נע חסר נכס'; if (!(c.period > 0)) c.period = 200; }
+        else if (c.factor === 'eps_surprise') { if (c.threshold == null) return 'הזן אחוז להפתעת EPS'; }
+        else { if (!c.subject) return `לתנאי ${_TA_FAC_HE[c.factor] || c.factor} חסר נכס`; if (c.threshold == null) return `הזן ערך לתנאי ${_TA_FAC_HE[c.factor] || c.factor}`; }
+    }
+    _taPendingRule.conditions = conds;
+    return '';
+}
+
 // ── The visual "Strategy Card": trigger → action → risk, with Enable/Disable ──
 function _taStrategyCardHtml(rule, summaryHe, source, existing) {
     const connBrokers = (_taBrokers || []).filter(b => b.status === 'CONNECTED');
@@ -525,24 +662,7 @@ function _taStrategyCardHtml(rule, summaryHe, source, existing) {
     const selBk = existing ? existing.broker_connection_id : null;
     const sel = (a, b) => a === b ? 'selected' : '';
     const trigHe = { NEWS_SENTIMENT: 'חדשות/סנטימנט', MACRO_EVENT: 'אירוע מאקרו', PRICE_LEVEL: 'רמת מחיר', EARNINGS_BEAT: 'הפתעת דוחות', TECHNICAL_INDICATOR: 'אינדיקטור טכני' };
-    const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע נע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
-    const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
-    const tfHe = { weekly: 'שבועי', daily: 'יומי', '4h': '4 שעות', '1h': 'שעתי' };
-    const conds = (rule.conditions || []).map(c => {
-        const subj = c.subject ? ` <b>${_taEsc(c.subject)}</b>` : '';
-        let body;
-        if (c.factor === 'news') {
-            body = `אזכור בחדשות: <b>${_taEsc(c.keyword || c.subject || '')}</b>`;
-        } else if (c.factor === 'ma') {
-            const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : '';
-            body = c.operator === 'EQUALS'
-                ? `מחיר${subj} נוגע בממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`
-                : `מחיר${subj} ${opHe[c.operator] || c.operator} ממוצע נע <b>${_taEsc(c.period || 200)}${unit}</b>`;
-        } else {
-            body = `${facHe[c.factor] || c.factor}${subj} ${opHe[c.operator] || c.operator} <b>${_taEsc(c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : '')}</b>${c.timeframe ? ` <span class="ta-tf">[${_taEsc(tfHe[c.timeframe] || c.timeframe)}]</span>` : ''}`;
-        }
-        return `<li class="ta-cond">${body}</li>`;
-    }).join('');
+    _taTrigEditing = false;   // every fresh card render starts in read-only (chips) view
     const actCls = rule.action === 'BUY' ? 'ta-buy' : rule.action === 'SELL' ? 'ta-sell' : 'ta-alert';
     const actHe = rule.action === 'BUY' ? 'קנייה' : rule.action === 'SELL' ? 'מכירה' : 'התראה בלבד';
     const amtHe = rule.action === 'ALERT_ONLY' ? '' : _taAmtLabel(amtType, amtVal);
@@ -551,7 +671,7 @@ function _taStrategyCardHtml(rule, summaryHe, source, existing) {
     return `<div class="ta-card">
         <div class="ta-card-top"><span class="ta-card-name">${_taEsc(rule.name)}</span><span class="ta-trig">${trigHe[rule.trigger_type] || rule.trigger_type}</span>${source === 'fallback' ? '<span class="ta-draft" title="פוענח היוריסטית — בדוק שהחוקים נכונים">טיוטה</span>' : ''}</div>
         <div class="ta-flow">
-            <div class="ta-flow-col"><span class="ta-flow-lbl">טריגר (${rule.logic === 'ALL' ? 'כל התנאים' : 'לפחות תנאי אחד'})</span><ul class="ta-conds">${conds}</ul></div>
+            <div class="ta-flow-col" id="taTrigCol">${_taTriggerColHtml(rule)}</div>
             <div class="ta-flow-arrow">←</div>
             <div class="ta-flow-col"><span class="ta-flow-lbl">פעולה</span><div class="ta-act ${actCls}" id="taActBox">${actHe}${amtHe ? ' · ' + _taEsc(amtHe) : ''}${rule.target_asset ? ' · <b>' + _taEsc(rule.target_asset) + '</b>' : ''}</div></div>
             <div class="ta-flow-arrow">←</div>
@@ -622,6 +742,9 @@ async function _taEnable() {
         } catch (e) { if (typeof showToast === 'function') showToast('שמירת הסורק נכשלה', 'error'); }
         return;
     }
+    // Clean + validate the (possibly hand-edited) trigger before saving.
+    const condErr = _taFinalizeConditions();
+    if (condErr) { if (typeof showToast === 'function') showToast(condErr, 'error'); _taTrigEditing = true; _taRenderTrigger(); return; }
     const isTrade = _taPendingRule.action === 'BUY' || _taPendingRule.action === 'SELL';
     // Let the user override the parsed amount (comma-formatted → number).
     if (isTrade) {
@@ -718,7 +841,7 @@ function _taStructureHtml(s) {
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
     const conds = (rule.conditions || []).map(c => {
         let body;
-        if (c.factor === 'news') body = `אזכור בחדשות: "${_taEsc(c.keyword || c.subject || '')}"`;
+        if (c.factor === 'news') body = `אזכור בחדשות: "${_taEsc((c.keyword ? String(c.keyword).split(',')[0].trim() : '') || c.subject || '')}"`;
         else if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; const op = c.operator === 'EQUALS' ? 'נוגע בממוצע' : (opHe[c.operator] || c.operator) + ' ממוצע'; body = `מחיר${c.subject ? ' ' + _taEsc(c.subject) : ''} ${op} ${c.period || 200}${unit}`; }
         else body = `${facHe[c.factor] || c.factor}${c.subject ? ' ' + _taEsc(c.subject) : ''} ${opHe[c.operator] || c.operator} ${c.threshold != null ? _taEsc(c.threshold) + (c.factor === 'eps_surprise' ? '%' : '') : ''}${c.timeframe && c.factor !== 'ma' ? ' [' + _taEsc(c.timeframe) + ']' : ''}`;
         return `<li>${body}</li>`;
@@ -770,7 +893,7 @@ function _taRuleSummary(rule) {
     const opHe = { ABOVE: 'מעל', BELOW: 'מתחת ל-', CROSSES_ABOVE: 'חוצה מעלה', CROSSES_BELOW: 'חוצה מטה', GTE: '≥', LTE: '≤', EQUALS: '=', CONTAINS: 'מזכיר' };
     const facHe = { price: 'מחיר', rsi: 'RSI', ma: 'ממוצע', eps_surprise: 'הפתעת EPS', news: 'חדשות', macro: 'מאקרו' };
     const conds = (rule.conditions || []).map(c => {
-        if (c.factor === 'news') return `אזכור "${c.keyword || c.subject}"`;
+        if (c.factor === 'news') return `אזכור "${(c.keyword ? String(c.keyword).split(',')[0].trim() : '') || c.subject || ''}"`;
         if (c.factor === 'ma') { const unit = c.timeframe === 'weekly' ? ' שבועות' : c.timeframe === 'daily' ? ' ימים' : ''; const op = c.operator === 'EQUALS' ? 'נוגע בממוצע' : (opHe[c.operator] || '') + ' ממוצע'; return `מחיר${c.subject ? ' ' + c.subject : ''} ${op} ${c.period || 200}${unit}`.trim(); }
         return `${facHe[c.factor] || c.factor}${c.subject ? ' ' + c.subject : ''} ${opHe[c.operator] || ''} ${c.threshold != null ? c.threshold + (c.factor === 'eps_surprise' ? '%' : '') : ''}`.trim();
     });
@@ -1265,6 +1388,7 @@ if (typeof window !== 'undefined') {
     window._taCancelCard = () => { const b = document.getElementById('taCard'); if (b) b.innerHTML = ''; _taPendingRule = null; _taEditingId = null; };
     window._taOnModeChange = _taOnModeChange; window._taFmtAmtInput = _taFmtAmtInput; window._taUpdateActPreview = _taUpdateActPreview; window._taRunScreenerPreview = _taRunScreenerPreview; window._taScrModeChange = _taScrModeChange; window._taScrUniverseChange = _taScrUniverseChange;
     window._taEditStrategy = _taEditStrategy; window._taToggleStructure = _taToggleStructure;
+    window._taToggleTrigEdit = _taToggleTrigEdit; window._taEditCond = _taEditCond; window._taEditLogic = _taEditLogic; window._taAddCond = _taAddCond; window._taRemoveCond = _taRemoveCond;
     window._taAdviceCardHtml = _taAdviceCardHtml; window._taIdeaToStrategy = _taIdeaToStrategy; window._taUseSuggestion = _taUseSuggestion;
     window._taReask = _taReask; window._taDelHistory = _taDelHistory; window._taClearHistory = _taClearHistory;
     window._taOpenBrokerForm = _taOpenBrokerForm; window._taBrokerFormNote = _taBrokerFormNote; window._taSaveBroker = _taSaveBroker;

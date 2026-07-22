@@ -1,6 +1,6 @@
 // ========== SERVICE WORKER - Stale-While-Revalidate Cache Strategy ==========
 
-const CACHE_NAME = 'portfolio-dashboard-v485';
+const CACHE_NAME = 'portfolio-dashboard-v486';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -95,7 +95,15 @@ const NETWORK_FIRST_FILES = [
     'scanner-agent.js',
     'filters.js',
     'modals.js',
-    'macro.js'
+    'macro.js',
+    // Newer routed views were never listed here → their updates could be served stale
+    // (e.g. the AI-agent card not showing a freshly-added button). Keep them network-first too.
+    'trading-agent.js',
+    'correlation.js',
+    'stock-alerts.js',
+    'sidebar.js',
+    'lhe-view.js',
+    'press-alerts.js'
 ];
 
 // Check if a URL matches a network-first file

@@ -124,6 +124,25 @@ function hideAuthError() {
     if (el) el.classList.remove('visible');
 }
 
+// Race an auth call against a hard timeout so a saturated backend (e.g. the Postgres
+// connection pool exhausted by the 24/7 agents) can never leave the login button stuck
+// on "מתחבר..." forever. On timeout the user gets a clear, actionable error and the form
+// is re-enabled. If the call resolves LATE (after the timeout), onAuthStateChange(SIGNED_IN)
+// still bootstraps the dashboard — so a late success is never lost.
+function _authWithTimeout(promise, ms = 15000) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AUTH_TIMEOUT')), ms))
+    ]);
+}
+
+// Human-readable auth error. AUTH_TIMEOUT → "server busy"; a missing client (SDK/CDN failed
+// to load) → "refresh"; anything else → the raw message.
+function _authErrorText(e) {
+    if (e && e.message === 'AUTH_TIMEOUT') return 'השרת עמוס כרגע וההתחברות נתקעה — נסה שוב בעוד רגע.';
+    return 'שגיאת חיבור לשרת: ' + ((e && e.message) || e);
+}
+
 // ========== GOOGLE LOGIN (Supabase OAuth) ==========
 
 async function handleGoogleLogin() {
@@ -134,21 +153,26 @@ async function handleGoogleLogin() {
     const redirectTo = window.location.origin;
     console.log('[Auth] Google OAuth start | redirectTo:', redirectTo);
 
+    if (!supabaseClient) {
+        showAuthError('שירות ההזדהות לא נטען. רענן את הדף (Ctrl+Shift+R) ונסה שוב.');
+        return;
+    }
+
     try {
-        const { error } = await supabaseClient.auth.signInWithOAuth({
+        const { error } = await _authWithTimeout(supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo,
                 queryParams: { prompt: 'select_account' }
             }
-        });
+        }));
         if (error) {
             showAuthError('שגיאה בהתחברות עם Google');
             console.error('[Auth] OAuth error:', error.message);
         }
     } catch (e) {
         console.error('[Auth] Google login exception:', e);
-        showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
+        showAuthError(_authErrorText(e));
     }
 }
 
@@ -161,12 +185,13 @@ async function handleLogin() {
 
     hideAuthError();
     if (!email || !password) { showAuthError('נא למלא את כל השדות'); return; }
+    if (!supabaseClient) { showAuthError('שירות ההזדהות לא נטען. רענן את הדף (Ctrl+Shift+R) ונסה שוב.'); return; }
 
     btn.disabled = true;
     btn.textContent = 'מתחבר...';
 
     try {
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        const { data, error } = await _authWithTimeout(supabaseClient.auth.signInWithPassword({ email, password }));
 
         if (error) {
             showAuthError(error.message === 'Invalid login credentials'
@@ -181,7 +206,7 @@ async function handleLogin() {
         onAuthSuccess();
     } catch (e) {
         console.error('Login error:', e);
-        showAuthError('שגיאת חיבור לשרת: ' + (e.message || e));
+        showAuthError(_authErrorText(e));
         btn.disabled = false;
         btn.textContent = 'התחבר';
     }
@@ -199,16 +224,17 @@ async function handleRegister() {
     hideAuthError();
     if (!email || !password) { showAuthError('נא למלא את כל השדות'); return; }
     if (password.length < 6) { showAuthError('סיסמה חייבת להכיל לפחות 6 תווים'); return; }
+    if (!supabaseClient) { showAuthError('שירות ההזדהות לא נטען. רענן את הדף (Ctrl+Shift+R) ונסה שוב.'); return; }
 
     btn.disabled = true;
     btn.textContent = 'נרשם...';
 
     try {
-        const { data, error } = await supabaseClient.auth.signUp({
+        const { data, error } = await _authWithTimeout(supabaseClient.auth.signUp({
             email,
             password,
             options: { data: { username } }
-        });
+        }));
 
         if (error) {
             showAuthError(error.message === 'User already registered'
@@ -231,7 +257,7 @@ async function handleRegister() {
 
         onAuthSuccess();
     } catch (e) {
-        showAuthError('שגיאת חיבור לשרת');
+        showAuthError(_authErrorText(e));
         btn.disabled = false;
         btn.textContent = 'הירשם';
     }
