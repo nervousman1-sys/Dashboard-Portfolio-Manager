@@ -5,17 +5,52 @@
 //   <div class="mcoll"><button class="mcoll-head" onclick="_mCollToggle(this)">
 //       <span>Title</span><span class="mcoll-chev">▾</span></button>
 //     <div class="mcoll-body">…dense content…</div></div>
+// Opens in a focused POPUP (not an inline expand down the page). The real .mcoll-body node is
+// MOVED into the modal — that keeps live Chart.js canvases intact — and moved back on close.
+// Uses .wl-overlay so the phone Back button + swipe-to-dismiss already cover it.
+var _mCollReturn = null;
 function _mCollToggle(head) {
     var box = head && head.closest ? head.closest('.mcoll') : null;
     if (!box) return;
-    box.classList.toggle('open');
-    // A chart drawn while the section was collapsed (display:none) has 0 size — once it becomes
-    // visible, nudge Chart.js (responsive) to re-fit by firing a resize.
-    if (box.classList.contains('open') && box.querySelector('canvas')) {
-        setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) { } }, 60);
+    var body = box.querySelector('.mcoll-body');
+    if (!body) return;
+    var lbl = head.querySelector('span');
+
+    var ov = document.getElementById('mcollOverlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'mcollOverlay';
+        ov.className = 'wl-overlay mcoll-overlay';
+        ov.addEventListener('click', function (e) { if (e.target === ov) _mCollPopupClose(); });
+        document.body.appendChild(ov);
     }
+    ov.innerHTML = '<div class="wl-box mcoll-modal" dir="rtl">'
+        + '<div class="mcoll-modal-head"><span class="mcoll-modal-title"></span>'
+        + '<button class="mcoll-modal-x" aria-label="סגור" onclick="_mCollPopupClose()">✕</button></div>'
+        + '<div class="mcoll-modal-body"></div></div>';
+    ov.querySelector('.mcoll-modal-title').textContent = lbl ? lbl.textContent : '';
+
+    // Remember exactly where it came from so it can be put back in place.
+    _mCollReturn = { body: body, parent: box, next: body.nextSibling };
+    ov.querySelector('.mcoll-modal-body').appendChild(body);
+    ov.classList.add('active');
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+    setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) { } }, 60);
 }
-if (typeof window !== 'undefined') window._mCollToggle = _mCollToggle;
+function _mCollPopupClose() {
+    var ov = document.getElementById('mcollOverlay');
+    if (_mCollReturn && _mCollReturn.body && _mCollReturn.parent) {
+        // If the section re-rendered while the popup was open its old parent is detached —
+        // then just drop the node instead of re-attaching it to nothing.
+        if (document.contains(_mCollReturn.parent)) {
+            _mCollReturn.parent.insertBefore(_mCollReturn.body, _mCollReturn.next || null);
+        }
+    }
+    _mCollReturn = null;
+    if (ov) { ov.classList.remove('active'); ov.innerHTML = ''; }
+    if (typeof syncBodyScrollLock === 'function') syncBodyScrollLock();
+}
+if (typeof window !== 'undefined') { window._mCollToggle = _mCollToggle; window._mCollPopupClose = _mCollPopupClose; }
 
 // Price cache
 let priceCache = {};

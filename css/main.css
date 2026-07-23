@@ -12505,9 +12505,9 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     .ec-tr {
         display: grid;
         grid-template-columns: auto 1fr;
-        grid-template-areas: "date imp" "name name";
+        grid-template-areas: "date name" "imp imp";
         gap: 4px 10px;
-        align-items: center;
+        align-items: start;
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
         background: rgba(255, 255, 255, 0.025);
@@ -12516,10 +12516,18 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     }
     .ec-tr td { display: block; padding: 0; border: none; }
     .ec-td-date { grid-area: date; box-shadow: none !important; }
-    /* Stack "גבוהה" and the "טרם התקבל" badge vertically so they never overlap on the narrow card. */
-    .ec-td-imp { grid-area: imp; justify-self: end; text-align: left; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; white-space: nowrap; }
-    .ec-imp-lbl { display: inline-flex; align-items: center; gap: 5px; }
     .ec-td-name { grid-area: name; font-size: 13px; }
+    /* Card footer: importance on one edge, release status on the other, split by a hairline —
+       reads as a proper card footer instead of two badges colliding. */
+    .ec-td-imp {
+        grid-area: imp; width: 100%;
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        margin-top: 9px; padding-top: 9px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        white-space: nowrap;
+    }
+    html.day-mode .ec-td-imp { border-top-color: rgba(58, 50, 36, 0.14); }
+    .ec-imp-lbl { display: inline-flex; align-items: center; gap: 5px; }
     .ec-recv { margin-top: 0; }
     /* Importance accent on the leading (right, RTL) edge of the card */
     .ec-tr.ec-high { border-inline-start: 3px solid #ef4444; }
@@ -12536,26 +12544,41 @@ html.day-mode .rep-cr-metric b { color: var(--text-primary); }
     html.day-mode .ec-tr.ec-today { background: #e3eee9; }
 }
 
-/* ══ Mobile collapsible: dense sections tuck behind a tap-to-expand header on phones.
-   Desktop is untouched — the header is hidden (≥769px) and the body always shows. ══ */
+/* ══ Mobile section popup: dense sections sit behind a tap-to-open row on phones and open in a
+   focused modal (not an inline expand). Desktop is untouched — the row is hidden (≥769px) and
+   the body always renders inline. ══ */
 .mcoll-head { display: none; }
-@keyframes mcollFade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.mcoll-overlay { padding: 4vh 12px 20px; align-items: flex-start; }
+.mcoll-overlay .mcoll-modal {
+    max-width: 780px; width: 100%; max-height: 86vh;
+    display: flex; flex-direction: column; overflow: hidden; padding: 0;
+}
+.mcoll-modal-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 16px; border-bottom: 1px solid var(--border); flex: 0 0 auto;
+}
+.mcoll-modal-title { font-size: 15px; font-weight: 900; color: var(--text-primary); }
+.mcoll-modal-x {
+    background: transparent; border: none; color: var(--text-secondary); font-size: 17px;
+    cursor: pointer; padding: 4px 9px; border-radius: 8px; line-height: 1; font-family: inherit;
+}
+.mcoll-modal-x:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); }
+.mcoll-modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px; flex: 1 1 auto; }
+.mcoll-modal-body > .mcoll-body { display: block !important; }
 @media (max-width: 768px) {
     .mcoll-head {
         display: flex; align-items: center; justify-content: space-between; gap: 10px;
         width: 100%; box-sizing: border-box; margin: 10px 0 0;
         background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
-        border-radius: 11px; padding: 11px 14px;
-        font-family: inherit; font-size: 13px; font-weight: 800; color: var(--text-primary);
+        border-radius: 11px; padding: 13px 15px;
+        font-family: inherit; font-size: 13.5px; font-weight: 800; color: var(--text-primary);
         cursor: pointer; text-align: right;
     }
     html.day-mode .mcoll-head { background: rgba(58, 50, 36, 0.05); }
-    .mcoll-head .mcoll-chev { flex: 0 0 auto; color: var(--accent-blue); font-size: 12px; transition: transform .18s ease; }
-    .mcoll.open > .mcoll-head .mcoll-chev { transform: rotate(180deg); }
+    .mcoll-head .mcoll-chev { flex: 0 0 auto; color: var(--accent-blue); font-size: 15px; line-height: 1; }
     .mcoll > .mcoll-body { display: none; }
-    .mcoll.open > .mcoll-body { display: block; animation: mcollFade .18s ease; }
-    /* The collapse button already carries the section title — drop the inner desktop header on mobile. */
-    .mcoll .adv-action-h, .mcoll > .mcoll-body > .macro-country-header { display: none; }
+    /* The tap-to-open row carries the section title — drop the inner desktop header on mobile. */
+    .mcoll .adv-action-h, .mcoll .macro-country-header { display: none; }
 }
 
 /* ══ ANTI-JUMP (CLS) — reserve space for async content so pages never shift ══ */

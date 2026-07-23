@@ -1637,7 +1637,7 @@ function renderAdvisoryHTML(adv, opts = {}) {
             <div class="adv-fit"><span class="adv-fit-h adv-fit-bad">לא מתאימים (מתחת ל-SML)</span>${list(adv.notFit)}</div>
         </div>
         <div class="adv-plan mcoll">
-            <button class="mcoll-head" onclick="_mCollToggle(this)"><span>תוכנית פעולה — מה לשנות כדי לעמוד במודל</span><span class="mcoll-chev">▾</span></button>
+            <button class="mcoll-head" onclick="_mCollToggle(this)"><span>תוכנית פעולה — מה לשנות כדי לעמוד במודל</span><span class="mcoll-chev">›</span></button>
             <div class="mcoll-body">
                 <div class="adv-action-h">תוכנית פעולה — מה לשנות כדי לעמוד במודל</div>
                 <ol class="adv-act-list">${actionsHTML}</ol>

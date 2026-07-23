@@ -1600,7 +1600,7 @@ function _renderIndicatorsTab() {
 
     // ── US Section ──
     html += `<div class="macro-country-section macro-section-us mcoll">
-        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>🇺🇸 אינדיקטורים — ארה״ב</span><span class="mcoll-chev">▾</span></button>
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>אינדיקטורים — ארה״ב</span><span class="mcoll-chev">›</span></button>
         <div class="mcoll-body">
         <h2 class="macro-country-header">US Indicators</h2>
         <div class="macro-indicator-grid">
@@ -1636,7 +1636,7 @@ function _renderIndicatorsTab() {
         ilAgentTag = `<span class="macro-agent-tag"><span class="rep-live on"></span> מחובר לסוכן 24/7 · עודכן ${ago}</span>`;
     }
     html += `<div class="macro-country-section macro-section-il mcoll">
-        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>🇮🇱 אינדיקטורים — ישראל</span><span class="mcoll-chev">▾</span></button>
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>אינדיקטורים — ישראל</span><span class="mcoll-chev">›</span></button>
         <div class="mcoll-body">
         <h2 class="macro-country-header">IL Indicators${ilAgentTag}</h2>
         <div class="macro-indicator-grid">
@@ -1667,7 +1667,7 @@ function _renderIndicatorsTab() {
     // ── Yield curves (US + Israel) — charts filled async by _renderYieldCurves ──
     html += `
     <div class="macro-country-section mcoll">
-        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>📈 עקומות תשואה</span><span class="mcoll-chev">▾</span></button>
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>עקומות תשואה</span><span class="mcoll-chev">›</span></button>
         <div class="mcoll-body">
         <h2 class="macro-country-header">עקומות תשואה <span class="yield-agent-tag" id="yieldAgentTag"></span></h2>
         <div class="macro-yield-grid">
