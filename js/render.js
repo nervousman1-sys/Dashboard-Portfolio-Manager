@@ -906,10 +906,11 @@ function _renderListView(filtered, container) {
         const dailyPnlClass = m.dailyPnl >= 0 ? 'price-change positive' : 'price-change negative';
         const dailyPnlSign = m.dailyPnl >= 0 ? '+' : '';
         const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
-        const isMob = window.innerWidth <= 768;
-        const rowClick = isMob ? `_toggleMobileRow(this, ${c.id})` : `openModal(${c.id})`;
+        // Tapping a row (mobile OR desktop) opens that portfolio's full modal — the most direct,
+        // expected action. (Was: mobile tap expanded an inline metrics panel; per user request the
+        // whole row now goes straight into the portfolio, where those metrics also live.)
         return `
-        <div class="pl-row pl-data-row" onclick="${rowClick}">
+        <div class="pl-row pl-data-row" onclick="openModal(${c.id})">
             <div class="pl-cell pl-c-name">
                 <div class="pl-avatar">${initial}</div>
                 <span class="pl-name-text">${c.name}</span>
@@ -931,26 +932,7 @@ function _renderListView(filtered, container) {
             <div class="pl-cell pl-c-std">${m.stdDev}%</div>
             <div class="pl-cell pl-c-holdings">${m.holdingsCount}</div>
             <div class="pl-cell pl-c-action" onclick="event.stopPropagation(); openModal(${c.id})">&#x203A;</div>
-        </div>
-        ${isMob ? `<div class="pl-mobile-details-wrap" style="display:none" data-row-id="${c.id}">
-            <div class="pl-mob-grid">
-                <div class="pl-mob-item"><span class="pl-mob-label">רווח/הפסד יומי</span><span class="pl-mob-val ${dailyPnlClass}">${dailyPnlSign}${formatCurrency(Math.abs(m.dailyPnl))}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">ציון מודל</span><span class="pl-mob-val"><span class="pl-score-badge" style="color:${_msCol};border-color:${_msCol}">${modelScore}</span></span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">ריכוזיות</span><span class="pl-mob-val">${m.concentration.toFixed(0)}% ${m.topHolding ? '(' + m.topHolding + ')' : ''}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">חשיפת מניות</span><span class="pl-mob-val">${m.marketExposure}%</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">חשיפת אג"ח</span><span class="pl-mob-val">${m.bondExposure}%</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">מזומן</span><span class="pl-mob-val">${formatCurrency(m.totalCash)}</span></div>
-                ${m.hasHistory ? `
-                <div class="pl-mob-item"><span class="pl-mob-label">שווי בסיכון (VaR)</span><span class="pl-mob-val">${formatCurrency(m.VaR)}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">מקס' ירידה</span><span class="pl-mob-val ${maxDDClass}">${m.maxDD}%</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">שארפ</span><span class="pl-mob-val">${m.sharpe}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">סורטינו</span><span class="pl-mob-val">${m.sortino}</span></div>
-                <div class="pl-mob-item"><span class="pl-mob-label">סטיית תקן (חודשי)</span><span class="pl-mob-val">${m.stdDev}%</span></div>
-                ` : '<div class="pl-mob-item" style="grid-column:1/-1"><span class="pl-mob-label">אין היסטוריית ביצועים — יחסי סיכון לא זמינים</span></div>'}
-                <div class="pl-mob-item"><span class="pl-mob-label">נכסים בתיק</span><span class="pl-mob-val">${m.holdingsCount}</span></div>
-            </div>
-            <button class="pl-mob-open-btn" onclick="event.stopPropagation(); openModal(${c.id})">פתח תיק מלא &larr;</button>
-        </div>` : ''}`;
+        </div>`;
     }).join('');
 
     container.innerHTML = `
@@ -1208,14 +1190,6 @@ function _toggleFullListCard(topEl) {
     const card = topEl.closest('.full-list-card');
     if (!card) return;
     card.classList.toggle('expanded');
-}
-
-// Toggle expand/collapse for mobile main-table rows
-function _toggleMobileRow(rowEl, clientId) {
-    const isExpanded = rowEl.classList.contains('expanded');
-    // Collapse all other expanded rows
-    rowEl.closest('.pl-table')?.querySelectorAll('.pl-data-row.expanded').forEach(r => r.classList.remove('expanded'));
-    if (!isExpanded) rowEl.classList.add('expanded');
 }
 
 function setPortfolioView(mode, btn) {
