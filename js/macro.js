@@ -1234,7 +1234,7 @@ function _ecRender() {
                 rows += `<tr class="ec-tr ${high ? 'ec-high' : 'ec-med'} ${e.date === todayStr ? 'ec-today' : ''}">
                     <td class="ec-td-date"><span class="ec-d">${dd}.${mo}</span>${soon ? ' <span class="ec-soon">בקרוב</span>' : ''}</td>
                     <td class="ec-td-name">${_macroEscape(e.he)}${e.approx ? ' <small>(מועד משוער · לוח הלמ״ס)</small>' : ''}${resultHtml}</td>
-                    <td class="ec-td-imp"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}${recv}</td>
+                    <td class="ec-td-imp"><span class="ec-imp-lbl"><span class="ec-dot ${high ? 'ec-imp-high' : 'ec-imp-med'}"></span> ${high ? 'גבוהה' : 'בינונית'}</span>${recv}</td>
                 </tr>`;
             }
         }
@@ -1599,7 +1599,9 @@ function _renderIndicatorsTab() {
     let html = '';
 
     // ── US Section ──
-    html += `<div class="macro-country-section macro-section-us">
+    html += `<div class="macro-country-section macro-section-us mcoll">
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>🇺🇸 אינדיקטורים — ארה״ב</span><span class="mcoll-chev">▾</span></button>
+        <div class="mcoll-body">
         <h2 class="macro-country-header">US Indicators</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('cpi',          usHead.cpi,          'אינפלציה שנתית (CPI YoY)',    '%')}
@@ -1624,7 +1626,7 @@ function _renderIndicatorsTab() {
         usCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
     }
-    html += '</div>';
+    html += '</div></div>';   // close .mcoll-body + .macro-country-section
 
     // ── Israel Section ──
     let ilAgentTag = '';
@@ -1633,7 +1635,9 @@ function _renderIndicatorsTab() {
         const ago = mins < 1 ? 'ממש עכשיו' : mins < 60 ? `לפני ${mins} דק׳` : mins < 1440 ? `לפני ${Math.round(mins / 60)} שע׳` : `לפני ${Math.round(mins / 1440)} ימים`;
         ilAgentTag = `<span class="macro-agent-tag"><span class="rep-live on"></span> מחובר לסוכן 24/7 · עודכן ${ago}</span>`;
     }
-    html += `<div class="macro-country-section macro-section-il">
+    html += `<div class="macro-country-section macro-section-il mcoll">
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>🇮🇱 אינדיקטורים — ישראל</span><span class="mcoll-chev">▾</span></button>
+        <div class="mcoll-body">
         <h2 class="macro-country-header">IL Indicators${ilAgentTag}</h2>
         <div class="macro-indicator-grid">
             ${_renderHeadlineWidget('il_cpi',           ilHead.il_cpi,           'אינפלציה שנתית (CPI YoY)',  '%')}
@@ -1658,11 +1662,13 @@ function _renderIndicatorsTab() {
         ilCal.forEach(a => { html += _renderCalendarCard(a); });
         html += '</div>';
     }
-    html += '</div>';
+    html += '</div></div>';   // close .mcoll-body + .macro-country-section
 
     // ── Yield curves (US + Israel) — charts filled async by _renderYieldCurves ──
     html += `
-    <div class="macro-country-section">
+    <div class="macro-country-section mcoll">
+        <button class="mcoll-head" onclick="_mCollToggle(this)"><span>📈 עקומות תשואה</span><span class="mcoll-chev">▾</span></button>
+        <div class="mcoll-body">
         <h2 class="macro-country-header">עקומות תשואה <span class="yield-agent-tag" id="yieldAgentTag"></span></h2>
         <div class="macro-yield-grid">
             <div class="macro-yield-card glass-card">
@@ -1675,6 +1681,7 @@ function _renderIndicatorsTab() {
                 <div class="macro-yield-canvas"><canvas id="ilYieldCurve"></canvas></div>
                 <div class="macro-yield-note" id="ilYieldNote">טוען נתונים…</div>
             </div>
+        </div>
         </div>
     </div>
 

@@ -1,5 +1,22 @@
 // ========== APP - Global State & Utility Functions ==========
 
+// ── Mobile collapsible: dense sections collapse behind a tap-to-expand header on phones;
+// desktop shows everything (the header is CSS-hidden ≥769px). Markup:
+//   <div class="mcoll"><button class="mcoll-head" onclick="_mCollToggle(this)">
+//       <span>Title</span><span class="mcoll-chev">▾</span></button>
+//     <div class="mcoll-body">…dense content…</div></div>
+function _mCollToggle(head) {
+    var box = head && head.closest ? head.closest('.mcoll') : null;
+    if (!box) return;
+    box.classList.toggle('open');
+    // A chart drawn while the section was collapsed (display:none) has 0 size — once it becomes
+    // visible, nudge Chart.js (responsive) to re-fit by firing a resize.
+    if (box.classList.contains('open') && box.querySelector('canvas')) {
+        setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) { } }, 60);
+    }
+}
+if (typeof window !== 'undefined') window._mCollToggle = _mCollToggle;
+
 // Price cache
 let priceCache = {};
 let clients = [];
