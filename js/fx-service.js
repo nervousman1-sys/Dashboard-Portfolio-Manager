@@ -42,7 +42,21 @@ async function fetchFxRates() {
             return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeout));
         };
 
-        // Primary: Twelve Data forex exchange rate
+        // Primary: same-origin /api/quote proxy (Yahoo, keyless) — USD/ILS via the ILS=X pair.
+        // This keeps the live rate working WITHOUT any client-side API key; the Twelve Data / FMP
+        // branches below remain only as legacy fallbacks (skipped now that no key ships to the client).
+        if (!rate) {
+            try {
+                const res = await fetchWithTimeout('/api/quote?symbols=' + encodeURIComponent('ILS=X'), 6000);
+                if (res.ok) {
+                    const j = await res.json();
+                    const p = j && j['ILS=X'] && +j['ILS=X'].price;
+                    if (p > 0) { rate = p; console.log(`[FX] Yahoo proxy: 1 USD = ${rate.toFixed(4)} ILS`); }
+                }
+            } catch (e) { /* fall through to legacy providers / hardcoded */ }
+        }
+
+        // Legacy fallback: Twelve Data forex exchange rate (only runs if a key is present)
         if (!rate && typeof TWELVE_DATA_API_KEY !== 'undefined' && TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY') {
             try {
                 const res = await fetchWithTimeout(

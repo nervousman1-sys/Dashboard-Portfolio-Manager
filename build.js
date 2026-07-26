@@ -14,7 +14,12 @@ function cleanEnvValue(key, value) {
     return value.trim();
 }
 
-const keys = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'FMP_API_KEY', 'TWELVE_DATA_API_KEY', 'FINNHUB_API_KEY', 'FRED_API_KEY'];
+// SECURITY: only the Supabase URL + ANON key are safe to ship to the browser (the anon key is
+// public by design; RLS protects the data). The third-party API keys (FMP / Twelve Data / Finnhub
+// / FRED) are NEVER injected into the client bundle — the client uses the same-origin /api/*
+// proxies (Yahoo-based /api/quote, /api/history + /api/fred, /api/macro), which hold the keys
+// server-side only. This is what keeps those keys off every user's browser.
+const keys = ['SUPABASE_URL', 'SUPABASE_ANON_KEY'];
 
 const envConfig = {};
 keys.forEach(key => {

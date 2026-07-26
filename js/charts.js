@@ -212,14 +212,9 @@ let _benchmarkDiagDone = false;
 function _logBenchmarkDiag() {
     if (_benchmarkDiagDone) return;
     _benchmarkDiagDone = true;
-    const fmpOk = FMP_API_KEY && FMP_API_KEY !== 'YOUR_FMP_API_KEY' && FMP_API_KEY !== '';
-    const tdOk = TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== 'YOUR_TWELVE_DATA_API_KEY' && TWELVE_DATA_API_KEY !== '';
-    console.log(`[Benchmark] API Key Status — FMP: ${fmpOk ? '✓ configured' : '✗ MISSING'}, Twelve Data: ${tdOk ? '✓ configured' : '✗ MISSING'}`);
-    if (!fmpOk && !tdOk) {
-        console.error('[Benchmark] ⚠ NO API KEYS CONFIGURED — benchmarks will use static fallback only (SPY, QQQ, DIA, IWM, TA-125, TA-35). Configure FMP_API_KEY and/or TWELVE_DATA_API_KEY in env-config.js or build process.');
-    } else if (!fmpOk) {
-        console.warn('[Benchmark] FMP key missing — all benchmarks depend on Twelve Data (8 req/min rate limit). Some benchmarks may fail.');
-    }
+    // By design there are no client-side API keys anymore — benchmarks come from the keyless
+    // same-origin /api/history (Yahoo) proxy, with the keyed providers as server-side-only backups.
+    console.log('[Benchmark] Source: /api/history (Yahoo, keyless) — primary; keyed providers are server-side only.');
 }
 
 // ── Yahoo via the same-origin /api/history proxy — PRIMARY benchmark source ──

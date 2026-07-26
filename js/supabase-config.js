@@ -7,8 +7,12 @@ const _env = (typeof __ENV !== 'undefined') ? __ENV : {};
 const SUPABASE_URL = _env.SUPABASE_URL || 'https://jdebxhxaiwbtgweruznd.supabase.co';
 const SUPABASE_ANON_KEY = _env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkZWJ4aHhhaXdidGd3ZXJ1em5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMTU2NjEsImV4cCI6MjA4ODc5MTY2MX0.4TPj2h_ftWi-2fIGM1y6vrcwzk3_vheBmbat3PrgjQc';
 
-// Financial Modeling Prep API key (free: https://site.financialmodelingprep.com/developer)
-const FMP_API_KEY = _env.FMP_API_KEY || 'PNbEHsY2AO0v9ZkYh69P7nTvyUUckcpp';
+// ── Third-party API keys are intentionally NOT held in the client anymore ──
+// They are never injected into the browser (see build.js) and no longer carry a hardcoded value.
+// The client reaches these providers ONLY through the same-origin /api/* proxies, which read the
+// keys from server-side env vars. These consts stay defined (empty) so the old key-guarded code
+// paths simply skip straight to the keyless proxies — nothing breaks.
+const FMP_API_KEY = _env.FMP_API_KEY || '';
 
 // ── GLOBAL FMP RATE-LIMIT GUARD ──
 // When FMP returns 429 (Too Many Requests), ALL further FMP calls are blocked
@@ -34,7 +38,7 @@ function setFmpRateLimited() {
 }
 
 // Twelve Data API key (free: https://twelvedata.com/pricing)
-const TWELVE_DATA_API_KEY = _env.TWELVE_DATA_API_KEY || '02940d45b4584a37a9e1c45940b912e7';
+const TWELVE_DATA_API_KEY = _env.TWELVE_DATA_API_KEY || '';
 
 // ── GLOBAL TWELVE DATA EXHAUSTION GUARD ──
 // When Twelve Data returns 401 or 429, or body contains "credits exhausted",
@@ -50,11 +54,11 @@ function setTwelveDataExhausted() {
 }
 
 // Finnhub API key (free: https://finnhub.io/register — 60 calls/min, all US stocks)
-const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || 'd6ji4k9r01qkvh5q0aa0d6ji4k9r01qkvh5q0aag';
+const FINNHUB_API_KEY = _env.FINNHUB_API_KEY || '';
 
 // FRED API key — free registration at https://fred.stlouisfed.org/docs/api/api_key.html
 // Used for US macro indicators: CPI, Core CPI, Fed Funds Rate, GDP, Unemployment
-const FRED_API_KEY = _env.FRED_API_KEY || 'f568440cde5cb64b20cd92e80292fbac';
+const FRED_API_KEY = _env.FRED_API_KEY || '';
 
 // Initialize Supabase client (uses the CDN global: supabase)
 //
