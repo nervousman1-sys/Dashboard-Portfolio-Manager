@@ -185,8 +185,8 @@ function _matchCategory(eventName) {
 // units=lin  → level values (Fed Rate, GDP growth %, Unemployment)
 
 const _FRED_SERIES = [
-    { key: 'cpi',          id: 'CPIAUCSL',       units: 'pc1', label: 'מדד המחירים לצרכן (CPI)',   unit: '%' },
-    { key: 'core_cpi',     id: 'CPILFESL',        units: 'pc1', label: 'אינפלציית ליבה (Core CPI)', unit: '%' },
+    { key: 'cpi',          id: 'CPIAUCNS',       units: 'pc1', label: 'מדד המחירים לצרכן (CPI)',   unit: '%' },
+    { key: 'core_cpi',     id: 'CPILFENS',        units: 'pc1', label: 'אינפלציית ליבה (Core CPI)', unit: '%' },
     { key: 'ppi',          id: 'PPIFIS',          units: 'pch', label: 'מדד מחירי יצרן (PPI MoM)',  unit: '%' },
     { key: 'core_ppi',     id: 'PPIFES',          units: 'pch', label: 'מדד יצרן ליבה (Core PPI)',  unit: '%' },
     { key: 'fed_rate',     id: 'FEDFUNDS',        units: 'lin', label: 'ריבית הפד',                 unit: '%' },

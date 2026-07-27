@@ -133,7 +133,7 @@ module.exports = async (req, res) => {
             // Latest RELEASED values per key indicator (actual + previous) → result analysis.
             // betterLower=true for inflation gauges (lower reading is the "good" outcome).
             const SERIES = {
-                CPI: { he: 'מדד המחירים לצרכן (CPI)', series: 'CPIAUCSL', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
+                CPI: { he: 'מדד המחירים לצרכן (CPI)', series: 'CPIAUCNS', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
                 PCE: { he: 'הוצאה אישית (PCE)', series: 'PCEPI', units: 'pc1', unit: '%', betterLower: true, kind: 'inflation' },
                 NFP: { he: 'תעסוקה — משרות שנוספו (NFP)', series: 'PAYEMS', units: 'chg', unit: 'K', betterLower: false, kind: 'jobs' },
                 GDP: { he: 'תוצר מקומי גולמי (GDP)', series: 'A191RL1Q225SBEA', units: 'lin', unit: '%', betterLower: false, kind: 'growth' },

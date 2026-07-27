@@ -115,7 +115,7 @@ module.exports = async (req, res) => {
         const [fed, cpi, coreCpi, ppi, corePpi, unrate, nfp, gdp, realRate,
                pce, corePce, retail, indProd, t10, sentiment,
                boi, ilUnemp, ilBond, ilShortRate, ilReer, ilExports, ilImports, ilStocks, ilCpi] = await Promise.all([
-            fredSeries('FEDFUNDS', 'lin'), fredSeries('CPIAUCSL', 'pc1'), fredSeries('CPILFESL', 'pc1'),
+            fredSeries('FEDFUNDS', 'lin'), fredSeries('CPIAUCNS', 'pc1'), fredSeries('CPILFENS', 'pc1'),
             fredSeries('PPIFIS', 'pch'), fredSeries('PPIFES', 'pch'), fredSeries('UNRATE', 'lin'), fredSeries('PAYEMS', 'chg'),
             fredSeries('A191RL1Q225SBEA', 'lin'), fredSeries('DFII10', 'lin'),
             fredSeries('PCEPI', 'pc1'), fredSeries('PCEPILFE', 'pc1'), fredSeries('RSAFS', 'pch'),
