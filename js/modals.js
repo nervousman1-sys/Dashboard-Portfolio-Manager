@@ -570,8 +570,12 @@ async function openModal(clientId) {
                         <div class="ov-hero-sep"></div>
                         <div class="ov-hero-kpis">
                             <div class="ov-kpi-card ${totalProfit >= 0 ? 'kpi-positive' : 'kpi-negative'}">
-                                <span class="ov-kpi-label">רווח/הפסד</span>
+                                <span class="ov-kpi-label">רווח/הפסד לא ממומש</span>
                                 <span class="ov-kpi-value ${totalProfit >= 0 ? 'val-positive' : 'val-negative'}">${totalProfitSign}${formatCurrency(Math.abs(totalProfit))}</span>
+                            </div>
+                            <div class="ov-kpi-card" id="ovRealizedCard" title="רווח/הפסד שנצבר ממכירות בפועל (פוזיציות שנסגרו)">
+                                <span class="ov-kpi-label">רווח/הפסד ממומש</span>
+                                <span class="ov-kpi-value" id="ovRealizedPnl">…</span>
                             </div>
                             <div class="ov-kpi-card ${totalProfit >= 0 ? 'kpi-positive' : 'kpi-negative'}">
                                 <span class="ov-kpi-label">תשואה</span>
@@ -892,12 +896,30 @@ async function openModal(clientId) {
 }
 
 // Fetches transactions and injects rows into the already-rendered modal
+// Sum realized P/L (from closed positions) for THIS portfolio and fill the overview KPI card.
+// Fed from the transactions already fetched by _loadTransactionHistory → no extra DB query.
+// realizedPnl is summed raw, matching the dashboard's aggregate "רווח/הפסד ממומש" card.
+function _updateRealizedPnlCard(transactions) {
+    const el = document.getElementById('ovRealizedPnl');
+    const card = document.getElementById('ovRealizedCard');
+    if (!el) return;
+    if (!Array.isArray(transactions) || transactions.unavailable) { el.textContent = '—'; return; }   // unavailable / error
+    let realized = 0;
+    transactions.forEach(t => { if (t.type === 'sell' && t.realizedPnl != null) realized += t.realizedPnl; });
+    const sign = realized > 0 ? '+' : realized < 0 ? '−' : '';
+    el.textContent = sign + formatCurrency(Math.abs(realized));
+    el.classList.remove('val-positive', 'val-negative');
+    el.classList.add(realized < 0 ? 'val-negative' : 'val-positive');
+    if (card) { card.classList.remove('kpi-positive', 'kpi-negative'); card.classList.add(realized < 0 ? 'kpi-negative' : 'kpi-positive'); }
+}
+
 async function _loadTransactionHistory(portfolioId) {
     const tbody = document.querySelector('#tab-transactions .holdings-table tbody');
-    if (!tbody) return;
+    if (!tbody) { if (supabaseConnected) { try { _updateRealizedPnlCard(await supaFetchTransactions(portfolioId)); } catch (e) { _updateRealizedPnlCard(null); } } return; }
 
     try {
         const transactions = supabaseConnected ? await supaFetchTransactions(portfolioId) : [];
+        _updateRealizedPnlCard(Array.isArray(transactions) ? transactions : null);
 
         // Table doesn't exist in Supabase — show setup instructions with retry
         if (transactions.unavailable) {
@@ -950,6 +972,7 @@ async function _loadTransactionHistory(portfolioId) {
         tbody.innerHTML = rows;
     } catch (e) {
         console.warn('[Modal] Transaction fetch failed:', e.message);
+        _updateRealizedPnlCard(null);
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px">
             <div style="color:var(--accent-red);margin-bottom:8px">שגיאה בטעינת היסטוריית פעולות</div>
             <button onclick="_retryTransactionLoad(${portfolioId})" style="
