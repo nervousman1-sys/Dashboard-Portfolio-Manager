@@ -372,17 +372,34 @@ async function init() {
     } catch (e) {
         console.error('[Init] Phase 1: Client fetch failed:', e.message);
         freshClients = null;
-        // Background retry (degraded-DB window or client-not-ready) — hydrates without a reload.
-        setTimeout(() => {
-            supaFetchClients().then(fc => {
-                if (fc && typeof clients !== 'undefined' && (!clients.length || fc.length)) {
-                    clients = fc;
-                    saveClientsToCache(clients);
-                    if (typeof window !== 'undefined') window._clientsConfirmedEmpty = (fc.length === 0);
-                    if (typeof refreshDashboard === 'function') refreshDashboard();
-                }
-            }).catch(() => { /* stays on cache */ });
-        }, 8000);
+        // Background retry with backoff — a throttled/degraded DB (the Disk-IO budget) can stay slow
+        // for a while, so ONE retry wasn't enough (the dashboard stayed stuck on 0 portfolios / $0).
+        // Retry a handful of times (~3 min total); the moment the fetch succeeds we hydrate + refresh
+        // prices, no page reload. Stops as soon as we have data.
+        let _bgRetries = 0;
+        const _retryClientFetch = () => {
+            if (typeof clients !== 'undefined' && clients.length) return;   // already hydrated (cache or a prior retry)
+            const delay = [5000, 10000, 20000, 40000, 60000][_bgRetries] || 60000;
+            _bgRetries++;
+            setTimeout(() => {
+                supaFetchClients().then(fc => {
+                    if (fc) {   // array (success) — even an empty array is a real "no portfolios" answer
+                        if (typeof clients !== 'undefined' && (!clients.length || fc.length)) {
+                            clients = fc;
+                            saveClientsToCache(clients);
+                            if (typeof window !== 'undefined') window._clientsConfirmedEmpty = (fc.length === 0);
+                            if (typeof refreshDashboard === 'function') refreshDashboard();
+                            if (fc.length && typeof updatePricesFromAPI === 'function') {
+                                updatePricesFromAPI(() => { if (typeof refreshDashboard === 'function') refreshDashboard(); }).catch(() => { });
+                            }
+                        }
+                    } else if (_bgRetries < 6) {
+                        _retryClientFetch();   // null = fetch error (throttled DB) → keep trying
+                    }
+                }).catch(() => { if (_bgRetries < 6) _retryClientFetch(); });
+            }, delay);
+        };
+        _retryClientFetch();
     }
 
     if (freshClients) {

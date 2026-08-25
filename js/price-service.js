@@ -335,6 +335,22 @@ async function _fetchYahooQuotesBatch(symbols) {
     } catch { return {}; }
 }
 
+// Intl (US/global) stocks via the keyless Yahoo /api/quote batch — ONE round-trip, shaped to the
+// standard {price, previousClose, change, changePct, currency}. This is the PRIMARY intl price path
+// now that no third-party API key ships to the client: FMP/Twelve Data were key-gated and, once the
+// keys were removed from the browser, silently stopped refreshing US holdings (prices froze a day
+// behind). Yahoo is keyless and same-origin, so it always refreshes.
+async function _batchFetchYahooIntl(tickers) {
+    if (!tickers || !tickers.length) return {};
+    const raw = await _fetchYahooQuotesBatch(tickers);
+    const out = {};
+    for (const t of tickers) {
+        const shaped = _shapeYahooQuote(t, raw[t] || raw[String(t).toUpperCase()], {});
+        if (shaped && shaped.price > 0) out[t] = shaped;
+    }
+    return out;
+}
+
 async function _fetchYahooPrice(yahooSymbol, opts = {}) {
     // PRIMARY: same-origin serverless quote proxy — fast, reliable, no public-proxy
     // flakiness. This is what makes TA-35 (and TASE prices generally) load instantly.
@@ -992,21 +1008,22 @@ async function updatePricesFromAPI(onUpdate) {
         fastPromises.push(yahooPromise);
     }
 
-    // 2b. International stocks → FMP batch quote (ONE fast call covers the whole
-    //     book). This replaces the old Twelve Data first-chunk path, which was
-    //     capped at 8 symbols and throttled at 8 calls/min. Twelve Data is kept
-    //     as a background fallback only for tickers FMP couldn't price.
+    // 2b. International stocks → keyless Yahoo /api/quote batch (ONE fast same-origin call covers the
+    //     whole book). This is the primary path: it needs NO client API key, so it keeps refreshing
+    //     after the third-party keys were removed from the browser (the old FMP/Twelve Data fast path
+    //     went dark then, freezing US prices a day behind). FMP/Twelve Data remain background fallbacks
+    //     (only if their server-side keys are present) for anything Yahoo couldn't price.
     if (intlStockTickers.length > 0) {
         if (israeliStockTickers.length === 0) _updateStatus(`מעדכן ${intlStockTickers.length} מניות בינלאומיות...`);
-        const fmpBatchPromise = fetchFMPBatchQuote(intlStockTickers).then(prices => {
+        const intlBatchPromise = _batchFetchYahooIntl(intlStockTickers).then(prices => {
             if (prices && Object.keys(prices).length > 0) {
                 Object.assign(collectedPrices, prices);
                 Object.assign(priceCache, prices);
                 if (_applyPricesToClientsInMemory(prices) && onUpdate) onUpdate();
-                console.log(`[PriceService] Intl fast batch: ${Object.keys(prices).length}/${intlStockTickers.length} from FMP`);
+                console.log(`[PriceService] Intl fast batch: ${Object.keys(prices).length}/${intlStockTickers.length} from Yahoo`);
             }
-        }).catch(e => console.warn('[PriceService] FMP batch fast path failed:', e.message));
-        fastPromises.push(fmpBatchPromise);
+        }).catch(e => console.warn('[PriceService] Yahoo intl batch fast path failed:', e.message));
+        fastPromises.push(intlBatchPromise);
     }
 
     // Wait for BOTH fast paths to resolve (parallel → faster than sequential)
