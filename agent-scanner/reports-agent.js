@@ -53,9 +53,22 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // 504s). Default: sweep us+il only (~700 companies); r2k board scores load on-demand
 // client-side, so nothing user-facing is lost.
 const SWEEP_R2K = process.env.SWEEP_R2K === '1';
+// REPORTS_MARKETS (comma-separated) scopes the sweep to specific index universes, e.g.
+//   REPORTS_MARKETS=ndx     → only the ~100 Nasdaq-100 names (far lighter on the disk-I/O budget)
+//   REPORTS_MARKETS=us,il   → the historical full sweep (also the default when unset)
+// Valid codes map to /api/technicals?market=<code>: ndx, sp500, us, il, r2k.
+const REPORTS_MARKETS = String(process.env.REPORTS_MARKETS || '')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// The DB `market` column groups rows the way the board + trading-agent expect (us / il / r2k).
+// ndx and sp500 are US large-cap SUBSETS, so their rows must stay market='us' — otherwise
+// anything that filters market='us' (e.g. the AI trading-agent's top-scored-US-stocks context)
+// would stop seeing them. Fetch from the ndx/sp500 list, but store under 'us'.
+const STORE_MARKET = { ndx: 'us', sp500: 'us', us: 'us', il: 'il', r2k: 'r2k' };
 async function loadUniverse() {
     const out = [];
-    const markets = SWEEP_R2K ? ['us', 'il', 'r2k'] : ['us', 'il'];
+    const markets = REPORTS_MARKETS.length
+        ? REPORTS_MARKETS
+        : (SWEEP_R2K ? ['us', 'il', 'r2k'] : ['us', 'il']);
     for (const market of markets) {
         try {
             const url = `${SITE}/api/technicals?mode=tickers&market=${market}&sv=3` + (market === 'il' ? '&stocksOnly=1' : '');
@@ -64,7 +77,8 @@ async function loadUniverse() {
             const j = await r.json();
             const tickers = Array.isArray(j.tickers) ? j.tickers : [];
             const sectors = j.sectors || {};
-            for (const t of tickers) out.push({ symbol: t, market, sector: sectors[t] || null });
+            const storeMkt = STORE_MARKET[market] || market;
+            for (const t of tickers) out.push({ symbol: t, market: storeMkt, sector: sectors[t] || null });
         } catch (e) { log(`universe ${market} failed:`, e.message); }
     }
     // WATCHED symbols (any user's watchlist) always join the sweep — so a starred
@@ -173,7 +187,8 @@ async function sweep(universe, lastSeen, nextEarn, lastSig) {
 }
 
 async function runForever() {
-    log(`Finextium Reports-Agent online · site=${SITE} · batch=${BATCH} · gap=${GAP_MS}ms · rest=${REST_MIN}min`);
+    const _mkts = REPORTS_MARKETS.length ? REPORTS_MARKETS.join('+') : (SWEEP_R2K ? 'us+il+r2k' : 'us+il');
+    log(`Finextium Reports-Agent online · site=${SITE} · markets=${_mkts} · batch=${BATCH} · gap=${GAP_MS}ms · rest=${REST_MIN}min`);
     const lastSeen = Object.create(null); // symbol → last stored asOf (for fresh-report detection)
     const nextEarn = Object.create(null); // symbol → stored next-earnings date (skip re-fetch while future)
     const lastSig = Object.create(null);  // symbol → asOf|score|improved|nextEarnings — skip unchanged upserts
