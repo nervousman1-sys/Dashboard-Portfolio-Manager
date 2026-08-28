@@ -1621,7 +1621,7 @@ function _repRenderDetail(m) {
         <div class="rep-head">
             <div class="rep-head-id">
                 <div class="rep-head-name">${m.companyName || m.symbol}</div>
-                <div class="rep-head-sub">${m.symbol.replace(/\.TA$/, '')}${m.sector ? ' · ' + m.sector : ''}${m.asOf ? ' · דוח אחרון: ' + m.asOf : ''}</div>
+                <div class="rep-head-sub">${m.symbol.replace(/\.TA$/, '')}${m.sector ? ' · ' + m.sector : ''}${(m.reportedDate && m.asOf && m.reportedDate >= m.asOf) ? ' · דוח אחרון פורסם: ' + _repHeDate(m.reportedDate) : (m.asOf ? ' · דוח אחרון: ' + _repHeDate(m.asOf) : '')}</div>
                 <div class="rep-head-badges">${beatBadge}${m.source === 'yahoo' ? '<span class="rep-badge rep-badge-src">מקור: Yahoo</span>' : ''}</div>
             </div>
             <div class="rep-score-box ${scoreCls}">
@@ -1844,8 +1844,16 @@ if (typeof window !== 'undefined') window._repTogglePeers = _repTogglePeers;
 
 function _repQuarterLabel(q) {
     if (!q) return '';
+    // Label by the CALENDAR period-end date, NOT the source's FISCAL period/year. Off-calendar filers
+    // (e.g. NVDA — its quarter ending Jul-2026 is "fiscal Q2 2027" at FMP) otherwise show a confusing
+    // future year. Calendar quarter = by the month the period ENDED in; year = that date's year.
+    if (q.date && /^\d{4}-\d{2}/.test(q.date)) {
+        if (q.period === 'FY') return q.date.slice(0, 4);
+        const yy = q.date.slice(2, 4);
+        const cq = Math.ceil(parseInt(q.date.slice(5, 7), 10) / 3);
+        return `Q${cq} ${yy}'`;
+    }
     if (q.period && q.fiscalYear && q.period !== 'FY') return `${q.period} ${String(q.fiscalYear).slice(-2)}'`;
-    if (q.date) return q.date.slice(0, 7);
     return q.fiscalYear || '';
 }
 
