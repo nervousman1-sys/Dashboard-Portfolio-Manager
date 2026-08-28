@@ -1308,10 +1308,12 @@ async function openReportDetail(symbol) {
             if (body) body.innerHTML = `<div class="adv-empty">${msg}<br><button class="macro-back-btn" style="margin-top:12px" onclick="backToReportsList()">חזרה לרשימה</button></div>`;
             return;
         }
-        // Use whichever report is FRESHER (newest as_of). Stored wins ties so a rate-limited live FMP
-        // fetch never downgrades the view to a stale Yahoo-only quarter.
+        // Prefer the stored report only when it's a strictly NEWER quarter (by period-end month) — for
+        // the same quarter keep the live fetch (its FMP merge carries filingDate + fuller fields when
+        // the key isn't rate-limited). If the live fetch failed/was stale, the newer stored quarter wins.
+        const _ym = d => String(d || '').slice(0, 7);
         let report = liveOk ? liveReport : null;
-        if (stored && stored.asOf && (!report || !report.asOf || stored.asOf >= report.asOf)) report = stored;
+        if (stored && stored.asOf && (!report || !report.asOf || _ym(stored.asOf) > _ym(report.asOf))) report = stored;
         // Stamp the real release date if the report blob lacks a valid one.
         if (reportedDate && report && reportedDate >= (report.asOf || '') && (!report.reportedDate || report.reportedDate < report.asOf)) {
             report.reportedDate = reportedDate;
