@@ -38,14 +38,18 @@ const REST_MIN = parseFloat(process.env.REPORTS_REST_MIN || '30');     // rest b
 const HEARTBEAT_EVERY = parseInt(process.env.REPORTS_HEARTBEAT_EVERY || '80', 10); // heartbeat every N companies
 const RUN_ONCE = process.argv.includes('--once');
 
-// ── FMP freshness reconciliation ──────────────────────────────────────────────
+// ── Freshness reconciliation ──────────────────────────────────────────────────
 // Yahoo's fundamentals-timeseries (the free/unlimited source the sweep uses) lags a just-FILED
 // quarter by days-to-weeks — e.g. NVDA reported late-Aug but Yahoo still served as_of Apr-30. When
-// a name's latest quarter looks stale (a newer one is almost certainly filed) we reconcile from FMP,
-// which reflects the filing within a day. FMP's free key allows ~250 calls/day and is SHARED with
-// the site's report detail view, so we cap how many names we reconcile per UTC day, and only ever
-// reconcile a name ONCE (once its fresh quarter is stored, the lagging Yahoo value can't overwrite it).
-const FMP_RECON_CAP = parseInt(process.env.REPORTS_FMP_CAP || '25', 10);        // names/day (each ≈5 FMP calls)
+// a name's latest quarter looks stale (a newer one is almost certainly filed) we reconcile it from
+// the SITE's own report endpoint (${SITE}/api/technicals?mode=report), which runs on Vercel where
+// FMP works (FMP reflects the filing within a day) — the VPS itself can't reach FMP directly
+// ("fetch failed" from the datacenter IP), and Vercel's response is CDN-cached 6h so this is cheap
+// on FMP no matter how often the sweep asks. A name is only ever reconciled UP: once its fresh
+// quarter is stored, the lagging Yahoo value can't overwrite it (priorAsOf>asOf ⇒ skip). The daily
+// cap is a loose safety net (the CDN cache is the real FMP limiter); it's high enough to never
+// starve a stale name in the ~100-name NDX sweep.
+const FMP_RECON_CAP = parseInt(process.env.REPORTS_FMP_CAP || '150', 10);        // recon fetches/day (safety net)
 const FMP_STALE_DAYS = parseInt(process.env.REPORTS_FMP_STALE_DAYS || '95', 10); // latest quarter older than this ⇒ suspect a newer filing
 let _fmpRecon = { day: '', n: 0 };
 function _fmpReconBudget() {
@@ -54,6 +58,17 @@ function _fmpReconBudget() {
     if (_fmpRecon.n >= FMP_RECON_CAP) return false;
     _fmpRecon.n++;
     return true;
+}
+// Pull the FMP-merged report from the site API (Vercel does the FMP fetch the VPS can't). Returns a
+// report object shaped exactly like fetchReport's output, or null. No cache-buster on purpose — the
+// 6h CDN cache keeps FMP usage tiny; a freshly-filed quarter lands within that window.
+async function fetchMergedReportViaSite(symbol) {
+    try {
+        const r = await fetch(`${SITE}/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return (j && Array.isArray(j.quarters) && j.quarters.length) ? j : null;
+    } catch (e) { return null; }
 }
 
 function log(...a) { console.log(`[${new Date().toISOString()}]`, ...a); }
@@ -143,12 +158,10 @@ async function refreshOne(item, lastSeen, nextEarn, lastSig) {
     }
     const ageDays = asOf ? Math.floor((Date.now() - Date.parse(asOf)) / 864e5) : 999;
     if (ageDays > FMP_STALE_DAYS && _fmpReconBudget()) {
-        try {
-            const merged = await fetchReport(symbol, market);   // non-fast → FMP+Yahoo union (fresh quarter)
-            if (merged && Array.isArray(merged.quarters) && merged.quarters.length && merged.asOf && merged.asOf > asOf) {
-                report = merged; asOf = merged.asOf;
-            }
-        } catch (e) { /* keep the Yahoo report */ }
+        const merged = await fetchMergedReportViaSite(symbol);   // Vercel FMP+Yahoo union (fresh quarter)
+        if (merged && merged.asOf && merged.asOf > asOf) {
+            report = merged; asOf = merged.asOf;
+        }
     }
 
     const model = ReportsEngine.buildReport(report);
