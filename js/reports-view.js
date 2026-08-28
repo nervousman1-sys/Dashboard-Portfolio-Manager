@@ -1252,6 +1252,34 @@ function _repRemoveCard(symbol) {
     }
 }
 
+// The 24/7 agent stores the FULL merged (fmp+yahoo) report in company_reports.report — built when
+// FMP was reachable and kept fresh. The live mode=report fetch can transiently fall back to a stale
+// Yahoo-only quarter when the free FMP key is rate-limited, so we read the stored blob too and use
+// whichever is FRESHER. This keeps the detail view as current as the board, FMP-quota-independent.
+async function _repFetchStoredReport(symbol) {
+    try {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) return null;
+        const { data, error } = await supabaseClient.from('company_reports')
+            .select('report, next_earnings').eq('symbol', String(symbol).toUpperCase()).maybeSingle();
+        if (error || !data || !data.report) return null;
+        const rep = data.report;
+        if (!rep || !Array.isArray(rep.quarters) || !rep.quarters.length) return null;
+        if (!rep.nextEarningsDate && data.next_earnings) rep.nextEarningsDate = data.next_earnings;
+        return rep;
+    } catch (e) { return null; }
+}
+// The true REPORT (release) date — free from the Yahoo earnings feed (≠ fiscal period end), used when
+// the report blob itself doesn't carry a filingDate (e.g. rows stored before that field existed).
+async function _repFetchReportedDate(symbol) {
+    try {
+        const r = await fetch(`/api/technicals?mode=earnings&symbols=${encodeURIComponent(symbol)}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const info = (j.results || {})[String(symbol).toUpperCase()] || null;
+        return (info && info.reportedDate) ? info.reportedDate : null;
+    } catch (e) { return null; }
+}
+
 // ── Detail: fetch report on demand → engine → render ──
 async function openReportDetail(symbol) {
     _repView = 'detail';
@@ -1261,17 +1289,33 @@ async function openReportDetail(symbol) {
     if (body) body.innerHTML = `<div class="rep-loading"><div class="rep-spinner"></div><span>טוען דו"ח עבור ${symbol.replace(/\.TA$/, '')}…</span></div>`;
 
     try {
-        const r = await fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}&rv=5`, { headers: { Accept: 'application/json' } });
-        if (!r.ok) {
-            const j = await r.json().catch(() => ({}));
-            const msg = r.status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
-                : r.status === 404 ? 'לא נמצאו נתונים פונדמנטליים לחברה זו.'
+        // rv bumped when the report shape changes — also busts the 6h CDN cache of stale responses.
+        const [liveRes, stored, reportedDate] = await Promise.all([
+            fetch(`/api/technicals?mode=report&symbol=${encodeURIComponent(symbol)}&market=${_repMarket}&rv=6`, { headers: { Accept: 'application/json' } }).catch(() => null),
+            _repFetchStoredReport(symbol),
+            _repFetchReportedDate(symbol),
+        ]);
+        let liveReport = null;
+        if (liveRes && liveRes.ok) { liveReport = await liveRes.json().catch(() => null); }
+        const liveOk = liveReport && Array.isArray(liveReport.quarters) && liveReport.quarters.length;
+        // Nothing usable from either source → surface the live error.
+        if (!liveOk && !stored) {
+            const status = liveRes ? liveRes.status : 0;
+            const msg = status === 429 ? 'מכסת ה-API היומית נוצלה — נסה שוב מאוחר יותר.'
+                : status === 404 ? 'לא נמצאו נתונים פונדמנטליים לחברה זו.'
                 : 'משיכת הדו"ח נכשלה.';
-            if (r.status === 404 && _repMarket === 'il') _repSaveScore(symbol, { noData: true }); // remember → drops from the IL list
+            if (status === 404 && _repMarket === 'il') _repSaveScore(symbol, { noData: true }); // remember → drops from the IL list
             if (body) body.innerHTML = `<div class="adv-empty">${msg}<br><button class="macro-back-btn" style="margin-top:12px" onclick="backToReportsList()">חזרה לרשימה</button></div>`;
             return;
         }
-        const report = await r.json();
+        // Use whichever report is FRESHER (newest as_of). Stored wins ties so a rate-limited live FMP
+        // fetch never downgrades the view to a stale Yahoo-only quarter.
+        let report = liveOk ? liveReport : null;
+        if (stored && stored.asOf && (!report || !report.asOf || stored.asOf >= report.asOf)) report = stored;
+        // Stamp the real release date if the report blob lacks a valid one.
+        if (reportedDate && report && reportedDate >= (report.asOf || '') && (!report.reportedDate || report.reportedDate < report.asOf)) {
+            report.reportedDate = reportedDate;
+        }
         const model = ReportsEngine.buildReport(report);
         _repCurrent = model;
         const hasData = _repHasData(model);
