@@ -38,6 +38,24 @@ const REST_MIN = parseFloat(process.env.REPORTS_REST_MIN || '30');     // rest b
 const HEARTBEAT_EVERY = parseInt(process.env.REPORTS_HEARTBEAT_EVERY || '80', 10); // heartbeat every N companies
 const RUN_ONCE = process.argv.includes('--once');
 
+// ── FMP freshness reconciliation ──────────────────────────────────────────────
+// Yahoo's fundamentals-timeseries (the free/unlimited source the sweep uses) lags a just-FILED
+// quarter by days-to-weeks — e.g. NVDA reported late-Aug but Yahoo still served as_of Apr-30. When
+// a name's latest quarter looks stale (a newer one is almost certainly filed) we reconcile from FMP,
+// which reflects the filing within a day. FMP's free key allows ~250 calls/day and is SHARED with
+// the site's report detail view, so we cap how many names we reconcile per UTC day, and only ever
+// reconcile a name ONCE (once its fresh quarter is stored, the lagging Yahoo value can't overwrite it).
+const FMP_RECON_CAP = parseInt(process.env.REPORTS_FMP_CAP || '25', 10);        // names/day (each ≈5 FMP calls)
+const FMP_STALE_DAYS = parseInt(process.env.REPORTS_FMP_STALE_DAYS || '95', 10); // latest quarter older than this ⇒ suspect a newer filing
+let _fmpRecon = { day: '', n: 0 };
+function _fmpReconBudget() {
+    const d = new Date().toISOString().slice(0, 10);
+    if (_fmpRecon.day !== d) _fmpRecon = { day: d, n: 0 };
+    if (_fmpRecon.n >= FMP_RECON_CAP) return false;
+    _fmpRecon.n++;
+    return true;
+}
+
 function log(...a) { console.log(`[${new Date().toISOString()}]`, ...a); }
 function fail(m) { console.error(`[${new Date().toISOString()}] FATAL:`, m); process.exit(1); }
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) fail('Missing SUPABASE_URL / SUPABASE_ANON_KEY');
@@ -113,11 +131,29 @@ async function refreshOne(item, lastSeen, nextEarn, lastSig) {
         report = await fetchReport(symbol, market, { yahooFirst: true });
     } catch (e) { return { ok: false }; }
     if (!report || !Array.isArray(report.quarters) || !report.quarters.length) return { ok: false };
+    let asOf = report.asOf || (report.quarters[0] && report.quarters[0].date) || null;
+
+    // FRESHNESS RECONCILE (see FMP_RECON_CAP note above) — keep the board on the LATEST filed quarter
+    // despite Yahoo's fundamentals lag.
+    const priorAsOf = lastSeen[symbol] || null;
+    if (priorAsOf && asOf && priorAsOf > asOf) {
+        // We already stored a NEWER quarter than Yahoo's (still-lagging) fast path now returns — don't
+        // downgrade the row, and don't spend FMP budget re-checking. The fresh quarter we have stands.
+        return { ok: true, skipped: true, symbol };
+    }
+    const ageDays = asOf ? Math.floor((Date.now() - Date.parse(asOf)) / 864e5) : 999;
+    if (ageDays > FMP_STALE_DAYS && _fmpReconBudget()) {
+        try {
+            const merged = await fetchReport(symbol, market);   // non-fast → FMP+Yahoo union (fresh quarter)
+            if (merged && Array.isArray(merged.quarters) && merged.quarters.length && merged.asOf && merged.asOf > asOf) {
+                report = merged; asOf = merged.asOf;
+            }
+        } catch (e) { /* keep the Yahoo report */ }
+    }
 
     const model = ReportsEngine.buildReport(report);
     const score = (model.score && model.score.value != null) ? model.score.value : null;
     const improved = !!(model.beat && model.beat.improved);
-    const asOf = report.asOf || (report.quarters[0] && report.quarters[0].date) || null;
 
     // Next earnings date — the fast (Yahoo-only) report path doesn't carry it for US, so fetch the
     // stat ONCE and reuse the stored future date on later sweeps (no extra Yahoo call until it passes).
