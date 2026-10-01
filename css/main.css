@@ -5422,19 +5422,19 @@ body.filter-modal-open::after {
         display: none;
     }
 
-    /* Settings gear — hidden in bar, use modal gear from bottom-right */
+    /* Settings gear — pinned to the SIDE (RTL start/right, same side as desktop) instead of floating
+       centered. order:-1 (base) keeps it on its own slim top strip; align-self moves it off-centre.
+       Full-width cards + FX bar are untouched, so no financial value gets clipped. */
     .qw-settings-btn {
-        position: absolute;
-        left: 10px;
-        top: 8px;
-        width: 26px;
-        height: 26px;
-        z-index: 2;
+        align-self: flex-start;
+        width: 30px;
+        height: 30px;
+        margin: 0;
     }
 
     .qw-settings-btn svg {
-        width: 12px;
-        height: 12px;
+        width: 14px;
+        height: 14px;
     }
 
     /* Tickers in single-row 4-column grid */
