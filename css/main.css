@@ -7658,9 +7658,12 @@ body.full-list-open { overflow: hidden; }
         left: 0;
         right: 0;
         height: 64px;
-        background: rgba(13, 18, 30, 0.93);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        /* OPAQUE, no backdrop-filter: a position:fixed element with backdrop-filter re-samples the
+           content behind it on every frame, and during fast/momentum scroll the compositor shows a
+           STALE backdrop — i.e. a flash of another section. Solid bg + no blur kills that glitch. */
+        background: #0d121e;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
         border-top: 1px solid rgba(255, 255, 255, 0.10);
         z-index: 100;
         align-items: center;
@@ -11685,6 +11688,11 @@ html:not(.day-mode) { background-color: #0f1420; }
         display: none;
     }
     #technicalPage .tech-table { width: 100%; min-width: 0; }
+    /* Frozen column header on phones: the 5-column table fits the width (no h-scroll), so drop the
+       scroll wrapper's overflow:auto — that removes it as the sticky-anchor scroll container, and the
+       already-sticky thead then sticks to the VIEWPORT (page scroll), staying visible while rows
+       scroll under it. (.header is hidden on this page, so top:0 has nothing to fight.) */
+    #technicalPage .risk-table-scroll { overflow: visible; }
     #technicalPage .tech-table th, #technicalPage .tech-table td { padding: 10px 6px; font-size: 12.5px; }
     /* The weekly-RSI warning chip is desktop luxury — on phones the number + color say it. */
     #technicalPage .tech-warn { display: none; }
