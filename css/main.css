@@ -11403,8 +11403,11 @@ html.day-mode .er-react-inner b { color: #0369a1; }
     background: linear-gradient(90deg, rgba(0,229,255,0.05), transparent); }
 .ec-hist-row { margin-top: 0; }
 .ec-hist-row .ec-rr-label { font-size: 12.5px; font-weight: 700; color: #e4e4ee; flex: 1; min-width: 110px; }
-.ec-past-date { flex: 0 0 auto; font-size: 12px; font-weight: 900; color: #67e8f9; min-width: 38px;
-    background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.22); border-radius: 7px; padding: 2px 7px; text-align: center; }
+/* FIXED width (not min-width) so every date badge is identical → the numbers line up in one straight
+   column down the list, and the event labels after them all start at the same x. 46px fits 2-digit
+   day + 2-digit month (e.g. 30.12). */
+.ec-past-date { flex: 0 0 46px; width: 46px; box-sizing: border-box; font-size: 12px; font-weight: 900; color: #67e8f9;
+    background: rgba(0,229,255,0.10); border: 1px solid rgba(0,229,255,0.22); border-radius: 7px; padding: 2px 5px; text-align: center; }
 .ec-upcoming-title { font-size: 13.5px; font-weight: 800; color: #b9b9c8; margin: 16px 0 8px;
     padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
 
