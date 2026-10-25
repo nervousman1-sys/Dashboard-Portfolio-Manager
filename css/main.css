@@ -12787,3 +12787,15 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
 .ta-idea-acts .ta-mini { align-self: auto; margin-top: 0; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; }
 .ta-idea-acts .ta-mini:not(.ta-mini-on) { flex: 1 1 0; }      /* דוח + טכני share the top row equally */
 .ta-idea-acts .ta-mini-on { flex: 1 1 100%; }                 /* בנה אסטרטגיה — full-width row below, identical on every card */
+
+/* ═══ MOBILE — body must NOT be a scroll container (Isolated: max-width 768px) ═══
+   `body { overflow-x: hidden }` (base rule) computes overflow-y to auto, turning <body> into a scroll
+   container that never actually scrolls (the document scroller is <html>). position:sticky anchors to
+   the nearest scroll container → the technical table's frozen header (and any sticky element) never
+   stuck. `clip` hides horizontal overflow exactly the same but creates no scroll container. */
+@media (max-width: 768px) {
+    body {
+        overflow-x: hidden;   /* fallback for browsers without overflow:clip */
+        overflow-x: clip;
+    }
+}
