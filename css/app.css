@@ -124,3 +124,6 @@ html.is-app .tech-tv::after {
 /* The smallest ones (chart range 1M/3M/1Y/ALL, watch-star) also grow visibly. */
 html.is-app .time-range-btn { min-height: 28px; padding-top: 5px; padding-bottom: 5px; }
 html.is-app .rep-star { font-size: 18px; padding: 4px 6px; }
+/* Portfolio header: action buttons (הפקד/ערוך/מחק/הפק דוח) and the risk badge read too small. */
+html.is-app .filter-btn { font-size: 12px !important; }
+html.is-app .risk-badge { font-size: 10.5px !important; padding: 3px 9px; }
