@@ -140,3 +140,14 @@ html.is-app .modal-close {
     align-items: center;
     justify-content: center;
 }
+/* "New app version" banner (js/app-shell.js — only for rare native-shell updates; the UI itself
+   updates live). Sits just above the bottom nav. */
+html.is-app .app-update-bar {
+    position: fixed; left: 12px; right: 12px; bottom: 76px; z-index: 2147482000;
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 10px;
+    background: #12202e; border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); color: #e8ecf4; font-size: 13.5px; font-weight: 700;
+}
+html.is-app .app-update-bar span { flex: 1; }
+html.is-app .app-update-go { min-height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: #00e5ff; color: #04121a; font-weight: 800; font-family: inherit; }
+html.is-app .app-update-x { width: 36px; height: 36px; border: 0; background: none; color: #94a3b8; font-size: 16px; }

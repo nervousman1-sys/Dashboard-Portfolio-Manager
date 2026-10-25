@@ -78,6 +78,8 @@ jobs:
 
       - name: Build release APK
         working-directory: mobile-app/android
+        env:
+          FINX_VERSION_CODE: ${{ github.run_number }}
         run: |
           chmod +x gradlew
           set +e
@@ -111,7 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="Finextium for Android — build ${GITHUB_SHA::7} ($(date -u +'%Y-%m-%d %H:%M UTC')). Download Finextium.apk on the phone and install it."
+          NOTES="versionCode: ${{ github.run_number }} · Finextium for Android — build ${GITHUB_SHA::7} ($(date -u +'%Y-%m-%d %H:%M UTC')). Download Finextium.apk on the phone and install it."
           gh release delete app-latest --yes --cleanup-tag 2>/dev/null || true
           gh release create app-latest Finextium.apk --title "Finextium App (Android)" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
 

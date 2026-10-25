@@ -12799,3 +12799,45 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
         overflow-x: clip;
     }
 }
+
+/* ═══ MOBILE — clipping + number-baseline alignment (Isolated: max-width 768px) ═══════════════
+   Found on a real Galaxy A56 (≈360–384 CSS px wide, narrower than the 412px we tested at). */
+@media (max-width: 768px) {
+    /* Macro "geopolitics" cards ran wider than the screen and cut text on the left edge: .gm-meta
+       (source · date, e.g. "ABC News - Breaking News, Latest News and Videos") was nowrap, and a
+       1fr grid column can't shrink below its min-content. Let the column shrink + text wrap. */
+    .gm-item { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .gm-item-row { grid-template-columns: auto minmax(0, 1fr); }
+    .gm-text, .gm-meta { min-width: 0; overflow-wrap: anywhere; }
+    .gm-meta { white-space: normal; }
+
+    /* Numbers on one straight line: when a tile's label wraps to 2 lines its value was pushed lower
+       than its neighbours. Reserve two label lines and sit the text on the bottom of that box, so
+       every value in a row starts at the same height. */
+    .risk-ref-panel { align-items: stretch; }
+    .risk-ref-label {
+        min-height: 2.6em;
+        display: flex; align-items: flex-end; justify-content: center; text-align: center;
+    }
+    #reportsPage .rep-keyfig { display: flex; flex-direction: column; }
+    #reportsPage .rep-keyfig-label {
+        min-height: 2.6em;
+        display: flex; align-items: flex-end;
+    }
+    /* Key-parameters table: the latest quarter carries a YoY badge under its value, making that row
+       taller; centred cells then left the other quarters' numbers floating at a different height.
+       Top-align the row so every figure shares the first line. */
+    .rep-table td { vertical-align: top; }
+}
+
+/* Header on narrow phones (≤400px): avatar + bell + USD/ILS + Fear&Greed needed ~415px, pushing the
+   avatar off the left edge. Drop the 5-bar meter (the score number + label carry the same info) and
+   tighten the currency toggle. */
+@media (max-width: 400px) {
+    .header-sentiment .sentiment-bars { display: none; }
+    .header-sentiment { gap: 8px; padding-inline: 10px; }
+    .sentiment-label { letter-spacing: 0.04em; }
+    .currency-btn { padding-inline: 11px; }
+    .header-left { flex-shrink: 0; }
+    .header-right { min-width: 0; }
+}

@@ -7,8 +7,10 @@ android {
         applicationId "com.finextium.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // CI sets FINX_VERSION_CODE = GitHub run number, so every published APK has a higher build than
+        // the last — the app compares it to offer native-shell updates.
+        versionCode((System.getenv("FINX_VERSION_CODE") ?: "1").toInteger())
+        versionName "1.0." + (System.getenv("FINX_VERSION_CODE") ?: "0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

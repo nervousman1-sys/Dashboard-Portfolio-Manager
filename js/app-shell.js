@@ -12,6 +12,8 @@
 //      replacing the platform.
 //   3. window.print() (report "save as PDF") → native Android/iOS print sheet (WebViews ignore it).
 //   4. Splash hand-off + light status-bar icons over the navy system-bar strips.
+//   5. Live updates: on resume / every 10 min, reload into a newer deploy (never mid-task);
+//      a banner offers a new APK only when the native shell itself changed.
 (function () {
     'use strict';
     const root = document.documentElement;
@@ -132,6 +134,75 @@
     }
     listen('App', 'appUrlOpen', (ev) => handleDeepLink(ev && ev.url));
     native('App', 'getLaunchUrl').then(r => r && r.url && handleDeepLink(r.url)).catch(() => { });
+
+    // ── Live updates — no reinstall needed ─────────────────────────────────────────────────────
+    // The app shows the LIVE site, and every deploy stamps all assets with a new ?v=<build>. But
+    // Android keeps the app alive in the background for days, so the page in memory never sees a
+    // new deploy. On every return to the foreground (and every 10 min while open) compare the live
+    // build stamp with the one this page was loaded from, and reload into the new version — never
+    // while the user is mid-task (open portfolio/form, focused input): then retry until idle.
+    const myBuild = ((document.querySelector('script[src*="app-shell.js"]') || {}).src || '').match(/[?&]v=([A-Za-z0-9._-]+)/);
+    const MY_BUILD = myBuild ? myBuild[1] : null;
+    const isBusy = () => {
+        const a = document.activeElement;
+        if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+        return !!(document.querySelector('#modalOverlay.active, #mgmtOverlay.active, .mgmt-overlay.active, #mobileSheetWrap.open, .wl-overlay.active')
+            || document.querySelector('#prModalOverlay.open, #paModalOverlay.open'));
+    };
+    let _updatePending = false, _updateTimer = null;
+    async function checkForUpdate() {
+        if (!MY_BUILD || document.hidden) return;
+        try {
+            const r = await fetch('/index.html?u=' + Date.now(), { cache: 'no-store' });
+            if (!r.ok) return;
+            const m = (await r.text()).match(/app-shell\.js\?v=([A-Za-z0-9._-]+)/);
+            if (!m || m[1] === MY_BUILD) return;
+            _updatePending = true;
+            applyUpdateWhenIdle();
+        } catch (e) { /* offline — try again later */ }
+    }
+    function applyUpdateWhenIdle() {
+        clearTimeout(_updateTimer);
+        if (!_updatePending) return;
+        if (isBusy()) { _updateTimer = setTimeout(applyUpdateWhenIdle, 15000); return; }
+        try { sessionStorage.setItem('finx_app_updated', '1'); } catch (e) { }
+        location.reload();
+    }
+    listen('App', 'resume', () => setTimeout(checkForUpdate, 600));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(checkForUpdate, 600); });
+    setInterval(checkForUpdate, 10 * 60 * 1000);
+    try {
+        if (sessionStorage.getItem('finx_app_updated')) {
+            sessionStorage.removeItem('finx_app_updated');
+            window.addEventListener('load', () => setTimeout(() => toast('האפליקציה עודכנה לגרסה האחרונה ✓', 2400), 1200), { once: true });
+        }
+    } catch (e) { }
+
+    // Native-shell updates (rare — only when mobile-app/ itself changes): once a day compare the
+    // installed build with the latest published APK and offer it in a small dismissible banner.
+    const APK_URL = 'https://github.com/nervousman1-sys/Dashboard-Portfolio-Manager/releases/download/app-latest/Finextium.apk';
+    async function checkNativeUpdate() {
+        try {
+            const last = +localStorage.getItem('finx_native_chk') || 0;
+            if (Date.now() - last < 24 * 3600 * 1000) return;
+            localStorage.setItem('finx_native_chk', String(Date.now()));
+            const info = await native('App', 'getInfo');
+            const installed = parseInt(info && info.build, 10) || 0;
+            const r = await fetch('https://api.github.com/repos/nervousman1-sys/Dashboard-Portfolio-Manager/releases/tags/app-latest', { cache: 'no-store' });
+            if (!r.ok) return;
+            const rel = await r.json();
+            const m = String(rel.body || '').match(/versionCode:\s*(\d+)/);
+            const latest = m ? parseInt(m[1], 10) : 0;
+            if (!latest || latest <= installed || localStorage.getItem('finx_native_skip') === String(latest)) return;
+            const bar = document.createElement('div');
+            bar.className = 'app-update-bar';
+            bar.innerHTML = '<span>גרסת אפליקציה חדשה זמינה</span><button class="app-update-go">עדכן</button><button class="app-update-x" aria-label="סגור">✕</button>';
+            bar.querySelector('.app-update-go').onclick = () => { openExternal(APK_URL); bar.remove(); };
+            bar.querySelector('.app-update-x').onclick = () => { localStorage.setItem('finx_native_skip', String(latest)); bar.remove(); };
+            document.body.appendChild(bar);
+        } catch (e) { }
+    }
+    setTimeout(checkNativeUpdate, 8000);
 
     // ── Status bar + splash ────────────────────────────────────────────────────────────────────
     // The WebView is laid out BELOW the status bar / ABOVE the gesture bar (no viewport-fit=cover),
