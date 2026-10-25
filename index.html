@@ -52,9 +52,11 @@
                     d.classList.add('is-app', ios ? 'is-ios' : 'is-android');
                     var v = document.querySelector('meta[name=viewport]');
                     if (v) v.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-                } else if (/access_token=/.test(location.hash)) {
+                } else if (/[?&]code=/.test(location.search)) {
+                    // App Google login (PKCE) that Supabase landed on the site root: pass the one-time
+                    // code on to /app-auth.html (session tokens are never forwarded to the app).
                     var t = +localStorage.getItem('finx_app_oauth') || 0;
-                    if (t && Date.now() - t < 15 * 60 * 1000) location.replace('/app-auth.html' + location.hash);
+                    if (t && Date.now() - t < 15 * 60 * 1000) location.replace('/app-auth.html' + location.search);
                 }
             } catch (e) { }
         })();

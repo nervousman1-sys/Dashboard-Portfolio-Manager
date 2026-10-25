@@ -56,27 +56,42 @@ jobs:
       - name: Prepare signing key (optional)
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        # Always a RELEASE build (not debuggable: no adb run-as / WebView devtools access to the
+        # stored session). Without the stable-key secrets, sign with a one-off key generated on the
+        # runner and discarded afterwards (then a newer APK needs an uninstall first).
         run: |
           if [ -n "$KS_B64" ]; then
             echo "$KS_B64" | base64 -d > android/app/finextium-release.keystore
-            echo "HAS_KEYSTORE=1" >> "$GITHUB_ENV"
+            echo "FINX_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "FINX_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "FINX_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            PW=$(openssl rand -hex 24)
+            echo "::add-mask::$PW"
+            keytool -genkeypair -noprompt -keystore android/app/finextium-release.keystore -storetype PKCS12 \
+              -alias finextium -keyalg RSA -keysize 3072 -validity 10000 \
+              -storepass "$PW" -keypass "$PW" -dname "CN=Finextium, O=Finextium, C=IL"
+            echo "FINX_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "FINX_KEY_ALIAS=finextium" >> "$GITHUB_ENV"
+            echo "FINX_KEY_PASSWORD=$PW" >> "$GITHUB_ENV"
           fi
 
-      - name: Build APK
+      - name: Build release APK
         working-directory: mobile-app/android
-        env:
-          FINX_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          FINX_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          FINX_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          if [ "$HAS_KEYSTORE" = "1" ]; then
-            ./gradlew --no-daemon assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk ../Finextium.apk
-          else
-            ./gradlew --no-daemon assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk ../Finextium.apk
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../Finextium.apk
+          rm -f app/finextium-release.keystore
+
+      - name: Verify the APK is a non-debuggable release
+        working-directory: mobile-app
+        run: |
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          if "$AAPT" dump badging Finextium.apk | grep -q "application-debuggable"; then
+            echo "::error::APK is debuggable"; exit 1
           fi
+          "$(dirname "$AAPT")/apksigner" verify --print-certs Finextium.apk | head -3
 
       - uses: actions/upload-artifact@v4
         with:

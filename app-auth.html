@@ -45,22 +45,40 @@
                 if (href) { $('back').href = href; $('back').textContent = label || 'חזרה לאפליקציה'; $('back').hidden = false; }
             }
 
-            // 1) Start: remember that this login belongs to the app, then go to Google via Supabase.
+            // 1) Start (PKCE): the APP generated a secret verifier and kept it; we only receive its
+            //    SHA-256 challenge (?cc=). Supabase binds the login to that challenge.
             if (q.get('start') === '1') {
+                var cc = q.get('cc') || '';
+                if (!/^[A-Za-z0-9_-]{43}$/.test(cc)) {
+                    show('עדכון נדרש', 'סגור חלון זה ופתח מחדש את האפליקציה כדי להתחבר עם Google.', 'finextium://auth?error=1');
+                    return;
+                }
                 try { localStorage.setItem('finx_app_oauth', String(Date.now())); } catch (e) { }
                 location.replace(SUPABASE_URL + '/auth/v1/authorize?provider=google'
                     + '&redirect_to=' + encodeURIComponent(location.origin + '/app-auth.html')
+                    + '&code_challenge=' + cc + '&code_challenge_method=s256'
                     + '&prompt=select_account');
                 return;
             }
 
-            // 2) Return from Google with the session → hand it to the app.
-            if (/access_token=/.test(h)) {
+            // 2) Return from Google with a ONE-TIME CODE → hand only the code to the app. It is useless
+            //    without the verifier that never left the app, so a rogue app that also listens on
+            //    finextium:// cannot turn it into a session.
+            var code = q.get('code');
+            if (code && /^[A-Za-z0-9_-]{8,200}$/.test(code)) {
                 try { localStorage.removeItem('finx_app_oauth'); } catch (e) { }
-                var deep = 'finextium://auth' + h;
-                history.replaceState(null, '', location.pathname);      // don't leave tokens in this tab
+                var deep = 'finextium://auth?code=' + encodeURIComponent(code);
+                history.replaceState(null, '', location.pathname);      // don't leave the code in this tab
                 show('ההתחברות הצליחה ✓', 'חוזרים לאפליקציה… אם היא לא נפתחה אוטומטית, הקש על הכפתור.', deep);
                 location.href = deep;
+                return;
+            }
+
+            // Session TOKENS must never be forwarded through a custom-scheme link. If they ever land
+            // here (implicit flow), wipe them from the address bar and stop.
+            if (/access_token=/.test(h)) {
+                history.replaceState(null, '', location.pathname);
+                show('ההתחברות לא הושלמה', 'חזור לאפליקציה ונסה להתחבר שוב.', 'finextium://auth?error=1');
                 return;
             }
 

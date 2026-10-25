@@ -6,8 +6,8 @@
 // into this page: Capacitor.nativePromise(plugin, method, options) / Capacitor.addListener(...).
 //
 // What it adds in the app:
-//   1. Google login through the phone's browser (Google blocks OAuth inside app WebViews) and a
-//      finextium://auth deep link back into the app with the session tokens.
+//   1. Google login through the phone's browser (Google blocks OAuth inside app WebViews) with PKCE —
+//      the finextium://auth deep link carries only a one-time code, never session tokens.
 //   2. External links (TradingView, company sites, news) open in an in-app browser tab instead of
 //      replacing the platform.
 //   3. window.print() (report "save as PDF") → native Android/iOS print sheet (WebViews ignore it).
@@ -75,38 +75,57 @@
             .catch(() => toast('הדפסה אינה זמינה במכשיר זה'));
     };
 
-    // ── Google login via the system browser + deep link back ───────────────────────────────────
-    // /app-auth.html (on the site, opened in the browser tab) starts Supabase's Google flow and,
-    // once Google returns, forwards #access_token/#refresh_token to finextium://auth.
+    // ── Google login via the system browser + deep link back — PKCE (RFC 8252) ─────────────────
+    // Google blocks OAuth inside app WebViews, so sign-in runs in the phone browser (/app-auth.html)
+    // and returns through the finextium://auth deep link. A custom URL scheme can be claimed by ANY app
+    // on the phone, so the link must never carry session tokens: it carries only a one-time
+    // authorization CODE. The secret code_verifier is generated and kept HERE (the app's own storage);
+    // only its SHA-256 challenge goes to the browser. A rogue app that intercepts the link gets a code it
+    // cannot redeem.
+    const PKCE_KEY = "finx_app_pkce";
+    const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     window.handleGoogleLogin = async function () {
-        if (!hasBridge) { toast('עדכן את האפליקציה כדי להתחבר עם Google'); return; }
+        if (!hasBridge) { toast("עדכן את האפליקציה כדי להתחבר עם Google"); return; }
         try {
-            await native('Browser', 'open', { url: SITE + '/app-auth.html?start=1', toolbarColor: '#0f1420' });
+            const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));            // 64 chars
+            const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+            localStorage.setItem(PKCE_KEY, JSON.stringify({ v: verifier, t: Date.now() }));
+            await native("Browser", "open", { url: SITE + "/app-auth.html?start=1&cc=" + challenge, toolbarColor: "#0f1420" });
         } catch (e) {
-            if (typeof showAuthError === 'function') showAuthError('לא ניתן לפתוח את חלון ההתחברות של Google');
+            if (typeof showAuthError === "function") showAuthError("לא ניתן לפתוח את חלון ההתחברות של Google");
         }
     };
 
     let _authBusy = false;
     async function handleDeepLink(url) {
-        url = String(url || '');
+        url = String(url || "");
         if (!/^finextium:\/\/auth/i.test(url) || _authBusy) return;
         _authBusy = true;
-        native('Browser', 'close').catch(() => { });
+        native("Browser", "close").catch(() => { });
         try {
-            const frag = url.includes('#') ? url.split('#')[1] : (url.split('?')[1] || '');
-            const p = new URLSearchParams(frag);
-            const at = p.get('access_token'), rt = p.get('refresh_token');
-            if (!at || !rt) { toast(p.get('error_description') ? 'ההתחברות עם Google נכשלה' : 'ההתחברות בוטלה'); return; }
+            const p = new URLSearchParams(url.split("?")[1] || "");
+            const code = p.get("code");
+            let saved = null;
+            try { saved = JSON.parse(localStorage.getItem(PKCE_KEY) || "null"); } catch (e) { }
+            localStorage.removeItem(PKCE_KEY);                                     // single use
+            if (!code) { toast(p.get("error") ? "ההתחברות עם Google לא הושלמה" : "ההתחברות בוטלה"); return; }
+            if (!saved || !saved.v || Date.now() - saved.t > 15 * 60 * 1000) { toast("פג תוקף ההתחברות — נסה שוב"); return; }
+            const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=pkce", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+                body: JSON.stringify({ auth_code: code, code_verifier: saved.v }),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok || !j.access_token || !j.refresh_token) { toast("ההתחברות עם Google נכשלה"); return; }
             // supabase-config.js creates the client during boot — wait for it if the link arrived early.
-            for (let i = 0; i < 80 && (typeof supabaseClient === 'undefined' || !supabaseClient); i++) await sleep(100);
-            if (typeof supabaseClient === 'undefined' || !supabaseClient) { toast('שירות ההתחברות לא נטען — נסה שוב'); return; }
-            const { error } = await supabaseClient.auth.setSession({ access_token: at, refresh_token: rt });
-            if (error) { toast('ההתחברות עם Google נכשלה'); return; }
-            toast('מחובר ✓', 1200);
-            location.replace('/');                       // clean boot with the persisted session
+            for (let i = 0; i < 80 && (typeof supabaseClient === "undefined" || !supabaseClient); i++) await sleep(100);
+            if (typeof supabaseClient === "undefined" || !supabaseClient) { toast("שירות ההתחברות לא נטען — נסה שוב"); return; }
+            const { error } = await supabaseClient.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+            if (error) { toast("ההתחברות עם Google נכשלה"); return; }
+            toast("מחובר ✓", 1200);
+            location.replace("/");                       // clean boot with the persisted session
         } catch (e) {
-            toast('ההתחברות עם Google נכשלה');
+            toast("ההתחברות עם Google נכשלה");
         } finally {
             _authBusy = false;
         }
