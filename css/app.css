@@ -127,3 +127,4 @@ html.is-app .rep-star { font-size: 18px; padding: 4px 6px; }
 /* Portfolio header: action buttons (הפקד/ערוך/מחק/הפק דוח) and the risk badge read too small. */
 html.is-app .filter-btn { font-size: 12px !important; }
 html.is-app .risk-badge { font-size: 10.5px !important; padding: 3px 9px; }
+html.is-app .ov-cell-sub { font-size: 10px !important; }
