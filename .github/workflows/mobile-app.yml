@@ -80,7 +80,16 @@ jobs:
         working-directory: mobile-app/android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          set +e
+          ./gradlew --no-daemon assembleRelease > build.log 2>&1
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            # Surface the real Gradle error as annotations (job logs need auth; annotations are public).
+            grep -E "What went wrong|error:|Error:|FAILED|Execution failed|Caused by|> " build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            tail -40 build.log
+            exit $STATUS
+          fi
           cp app/build/outputs/apk/release/app-release.apk ../Finextium.apk
           rm -f app/finextium-release.keystore
 
