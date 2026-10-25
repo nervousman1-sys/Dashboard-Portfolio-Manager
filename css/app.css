@@ -12,10 +12,10 @@ html.is-app {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
 }
-html.is-app,
-html.is-app body {
-    overscroll-behavior-y: none;
-}
+/* NOTE: never put overscroll-behavior on html/body here. On this site BOTH html and body are scroll
+   containers, so overscroll-behavior:none on them swallowed every finger swipe — the app could not
+   scroll at all (2026-10-26 bug: "no scrolling, portfolios not visible"). Verified with real CDP
+   touch events: 0px → 938px once removed. */
 
 /* Controls behave like native controls: no text-selection / long-press callout on tap targets.
    (Content text — reports, analysis, numbers — stays selectable/copyable.) */
