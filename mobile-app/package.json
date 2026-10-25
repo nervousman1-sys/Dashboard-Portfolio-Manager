@@ -1,0 +1,23 @@
+{
+  "name": "finextium-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Finextium native app shell (Android + iOS) — wraps https://www.finextium.com; web platform is untouched.",
+  "scripts": {
+    "sync": "cap sync",
+    "assets": "capacitor-assets generate --iconBackgroundColor '#0b1020' --iconBackgroundColorDark '#0b1020' --splashBackgroundColor '#0b1020' --splashBackgroundColorDark '#0b1020'",
+    "android:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/splash-screen": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  }
+}

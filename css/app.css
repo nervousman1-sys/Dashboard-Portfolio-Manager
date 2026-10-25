@@ -1,0 +1,65 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   FINEXTIUM NATIVE APP (Android / iOS — mobile-app/, Capacitor)
+   EVERY rule here is scoped to html.is-app, which index.html sets ONLY inside the app's WebView
+   (user agent carries "FinextiumApp"). The website never matches these selectors.
+   Tuned on Samsung Galaxy A56 (1080×2340, ~412×860 CSS px under the system bars).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Native feel: no grey tap flash, no double-tap zoom delay, no rubber-band glow ── */
+html.is-app {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+html.is-app,
+html.is-app body {
+    overscroll-behavior-y: none;
+}
+
+/* Controls behave like native controls: no text-selection / long-press callout on tap targets.
+   (Content text — reports, analysis, numbers — stays selectable/copyable.) */
+html.is-app button,
+html.is-app .mobile-bottom-nav,
+html.is-app .mobile-nav-btn,
+html.is-app .tech-mkt-btn,
+html.is-app .ec-tab,
+html.is-app .currency-btn,
+html.is-app .header-action-btn,
+html.is-app .header-bell-btn,
+html.is-app .modal-tab,
+html.is-app [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+html.is-app img {
+    -webkit-user-drag: none;
+    -webkit-touch-callout: none;
+}
+
+/* ── App toast (js/app-shell.js) ── */
+html.is-app .app-toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px);
+    max-width: calc(100vw - 40px);
+    padding: 11px 18px;
+    border-radius: 12px;
+    background: #182033;
+    border: 1px solid rgba(0, 229, 255, 0.28);
+    color: #f1f5f9;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 2147483000;
+}
+html.is-app .app-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}

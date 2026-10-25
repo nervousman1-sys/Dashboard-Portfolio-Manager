@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#0f1420">
+    <title>Finextium · התחברות לאפליקציה</title>
+    <!-- Opened by the Finextium APP in the phone's browser (Google blocks sign-in inside app
+         WebViews). ?start=1 → kick off Supabase's Google flow back to this page; on return,
+         forward #access_token/#refresh_token into the app through the finextium:// deep link. -->
+    <style>
+        html, body { margin: 0; height: 100%; background: #0f1420; color: #e8ecf4;
+            font-family: Heebo, Assistant, system-ui, -apple-system, "Segoe UI", sans-serif; }
+        .box { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 14px; padding: 32px 24px; box-sizing: border-box; text-align: center; }
+        img { width: 72px; height: 72px; border-radius: 18px; }
+        h1 { margin: 6px 0 0; font-size: 21px; font-weight: 800; }
+        p { margin: 0; font-size: 14.5px; line-height: 1.7; color: #aab4c6; max-width: 320px; }
+        .spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(0, 229, 255, .18);
+            border-top-color: #00e5ff; animation: s .8s linear infinite; }
+        @keyframes s { to { transform: rotate(360deg); } }
+        .btn { display: inline-block; margin-top: 8px; padding: 14px 26px; min-width: 220px; border-radius: 14px;
+            background: #00e5ff; color: #04121a; font-weight: 800; font-size: 16px; text-decoration: none; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <img src="/icons/icon-192.png" alt="Finextium">
+        <div class="spin" id="spin"></div>
+        <h1 id="title">מתחבר עם Google…</h1>
+        <p id="msg">רגע אחד, מעבירים אותך להתחברות המאובטחת של Google.</p>
+        <a class="btn" id="back" hidden>חזרה לאפליקציה</a>
+    </div>
+    <script>
+        (function () {
+            var SUPABASE_URL = 'https://jdebxhxaiwbtgweruznd.supabase.co';
+            var q = new URLSearchParams(location.search), h = location.hash || '';
+            var $ = function (id) { return document.getElementById(id); };
+            function show(title, msg, href, label) {
+                $('spin').hidden = true;
+                $('title').textContent = title;
+                $('msg').textContent = msg;
+                if (href) { $('back').href = href; $('back').textContent = label || 'חזרה לאפליקציה'; $('back').hidden = false; }
+            }
+
+            // 1) Start: remember that this login belongs to the app, then go to Google via Supabase.
+            if (q.get('start') === '1') {
+                try { localStorage.setItem('finx_app_oauth', String(Date.now())); } catch (e) { }
+                location.replace(SUPABASE_URL + '/auth/v1/authorize?provider=google'
+                    + '&redirect_to=' + encodeURIComponent(location.origin + '/app-auth.html')
+                    + '&prompt=select_account');
+                return;
+            }
+
+            // 2) Return from Google with the session → hand it to the app.
+            if (/access_token=/.test(h)) {
+                try { localStorage.removeItem('finx_app_oauth'); } catch (e) { }
+                var deep = 'finextium://auth' + h;
+                history.replaceState(null, '', location.pathname);      // don't leave tokens in this tab
+                show('ההתחברות הצליחה ✓', 'חוזרים לאפליקציה… אם היא לא נפתחה אוטומטית, הקש על הכפתור.', deep);
+                location.href = deep;
+                return;
+            }
+
+            // 3) Google / Supabase returned an error, or the user cancelled.
+            var params = new URLSearchParams(h.replace(/^#/, '') + '&' + location.search.replace(/^\?/, ''));
+            if (params.get('error') || params.get('error_description')) {
+                show('ההתחברות לא הושלמה', 'אפשר לחזור לאפליקציה ולנסות שוב, או להתחבר עם אימייל וסיסמה.',
+                    'finextium://auth?error=1');
+                return;
+            }
+
+            show('Finextium', 'הדף הזה משמש להתחברות עם Google מתוך האפליקציה.', '/', 'למעבר לאתר');
+        })();
+    </script>
+</body>
+</html>

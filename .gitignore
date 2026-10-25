@@ -9,3 +9,12 @@ package-lock.json
 
 # strategy-agent live secrets (VPS only)
 deploy/strategy-agent/.env
+
+# Native app shell (mobile-app/) — its npm manifest IS needed for the cloud APK/iOS build
+!mobile-app/package.json
+!mobile-app/package-lock.json
+mobile-app/android/app/src/main/assets/public/
+mobile-app/ios/App/App/public/
+mobile-app/**/*.keystore
+mobile-app/**/*.jks
+mobile-app/Finextium.apk

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Finextium · אין חיבור</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1420;color:#e8ecf4;font-family:Heebo,Assistant,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+  .box{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;box-sizing:border-box;text-align:center}
+  .ic{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.25);font-size:30px}
+  h1{margin:4px 0 0;font-size:21px;font-weight:800}
+  p{margin:0;font-size:14.5px;line-height:1.7;color:#aab4c6;max-width:300px}
+  button{margin-top:10px;padding:14px 28px;min-width:200px;border:0;border-radius:14px;background:#00e5ff;color:#04121a;font-weight:800;font-size:16px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="ic">📡</div>
+  <h1>אין חיבור לאינטרנט</h1>
+  <p>Finextium צריכה חיבור כדי להציג נתוני שוק ותיקים בזמן אמת. בדוק את החיבור ונסה שוב.</p>
+  <button onclick="location.href='https://www.finextium.com'">נסה שוב</button>
+</div>
+<script>
+  try { window.Capacitor && Capacitor.nativePromise('SplashScreen','hide',{}); } catch (e) {}
+  window.addEventListener('online', function(){ location.href = 'https://www.finextium.com'; });
+</script>
+</body>
+</html>

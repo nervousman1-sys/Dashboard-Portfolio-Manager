@@ -1,0 +1,37 @@
+{
+  "appId": "com.finextium.app",
+  "appName": "Finextium",
+  "webDir": "www",
+  "backgroundColor": "#0f1420",
+  "appendUserAgent": "FinextiumApp/1.0",
+  "loggingBehavior": "none",
+  "server": {
+    "url": "https://www.finextium.com",
+    "errorPath": "offline.html",
+    "allowNavigation": ["www.finextium.com", "finextium.com"]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DARK"
+    },
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 250,
+      "backgroundColor": "#0f1420",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP",
+      "splashFullScreen": false,
+      "splashImmersive": false
+    }
+  }
+}

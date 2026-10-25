@@ -38,6 +38,28 @@
     <script>
         try { if (localStorage.getItem('ui_theme') === 'day') document.documentElement.classList.add('day-mode'); } catch (e) { }
     </script>
+    <!-- Native app shell (Android/iOS, mobile-app/): the app's WebView appends "FinextiumApp" to the
+         user agent → tag <html class="is-app"> BEFORE first paint. Every app-only rule (css/app.css,
+         js/app-shell.js) is scoped to that class, so the website itself is unaffected.
+         Also: a Google login STARTED in the app runs in the phone's browser; if Supabase lands it on
+         the site root instead of /app-auth.html, hand the tokens back to the app from here. -->
+    <script>
+        (function () {
+            try {
+                var ua = navigator.userAgent || '', d = document.documentElement;
+                if (/FinextiumApp/.test(ua)) {
+                    var ios = /iPhone|iPad|iPod/.test(ua);
+                    d.classList.add('is-app', ios ? 'is-ios' : 'is-android');
+                    var v = document.querySelector('meta[name=viewport]');
+                    if (v) v.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                } else if (/access_token=/.test(location.hash)) {
+                    var t = +localStorage.getItem('finx_app_oauth') || 0;
+                    if (t && Date.now() - t < 15 * 60 * 1000) location.replace('/app-auth.html' + location.hash);
+                }
+            } catch (e) { }
+        })();
+    </script>
+    <link rel="stylesheet" href="css/app.css?v=1">
 </head>
 
 <body>
@@ -726,6 +748,8 @@
     <script defer src="js/auth.js?v=485"></script>
     <script defer src="js/mobile-sheets.js?v=2"></script>
     <script defer src="js/mobile-modals.js?v=2"></script>
+    <!-- Native app bridge — no-op on the website (exits unless <html class="is-app">) -->
+    <script defer src="js/app-shell.js?v=1"></script>
     <script defer src="js/init.js?v=488"></script>
 
 </body>

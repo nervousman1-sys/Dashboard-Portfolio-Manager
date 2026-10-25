@@ -1,0 +1,3 @@
+# The native app shell is built separately (GitHub Actions) — never part of the website deploy.
+mobile-app/
+.github/

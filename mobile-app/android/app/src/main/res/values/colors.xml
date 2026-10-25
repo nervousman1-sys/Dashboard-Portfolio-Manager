@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Finextium navy (matches the platform's dark theme #0f1420) -->
+    <color name="colorPrimary">#0F1420</color>
+    <color name="colorPrimaryDark">#0F1420</color>
+    <color name="colorAccent">#00E5FF</color>
+    <color name="finxWindow">#0F1420</color>
+</resources>
