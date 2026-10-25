@@ -63,3 +63,64 @@ html.is-app .app-toast.show {
     opacity: 1;
     transform: translate(-50%, 0);
 }
+
+/* ═══ Galaxy A56 polish (from the 412px QA pass) ═══════════════════════════════════════════════ */
+
+/* Portfolio hero: 5 KPIs on one line clipped the outer labels ("רווח/הפסד לא ממומש",
+   "תשואה יומית"). Reflow into a 3 + 2 grid — every label and figure fully visible. */
+html.is-app .ov-hero-kpis {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px !important;
+    padding: 0 4px;
+}
+html.is-app .ov-hero-kpis .ov-kpi-card {
+    grid-column: span 2;
+    min-width: 0;
+    padding: 9px 4px !important;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    text-align: center;
+}
+html.is-app .ov-hero-kpis .ov-kpi-card:nth-child(n+4) { grid-column: span 3; }
+html.is-app .ov-hero-kpis .ov-kpi-card + .ov-kpi-card::before { display: none; }   /* old vertical dividers */
+html.is-app .ov-hero-kpis .ov-kpi-label {
+    font-size: 10.5px !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+html.is-app .ov-hero-kpis .ov-kpi-value { font-size: 16px !important; white-space: nowrap; }
+html.is-app.day-mode .ov-hero-kpis .ov-kpi-card {
+    background: rgba(58, 50, 36, 0.04);
+    border-color: rgba(58, 50, 36, 0.14);
+}
+
+/* Readability floor: badges/labels that rendered at 7–8.5px are bumped to ≥9.5px. */
+html.is-app .qw-change { font-size: 9.5px !important; }
+html.is-app .sentiment-sub { font-size: 9.5px !important; }
+html.is-app .qw-fx-label { font-size: 10px !important; }
+html.is-app .dn-tab-n { font-size: 9.5px !important; }
+html.is-app .risk-ref-label { font-size: 10px !important; }
+html.is-app .alloc-price,
+html.is-app .card-footer-label { font-size: 10.5px !important; }
+html.is-app .mobile-nav-btn span,
+html.is-app #mobileMenuLabel { font-size: 10px !important; }
+html.is-app .lhe-tm-ghead { font-size: 10px !important; }
+
+/* Touch targets. Neighbouring controls sit only ~8px apart (e.g. ערוך / מחק תיק), so hit areas must
+   never overlap — buttons grow VISIBLY; the bell + TradingView pair (stacked) gets a small 4px slop. */
+html.is-app .filter-btn { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
+html.is-app .gold-bell-btn,
+html.is-app .tech-tv { position: relative; }
+html.is-app .gold-bell-btn::after,
+html.is-app .tech-tv::after {
+    content: "";
+    position: absolute;
+    inset: -4px -6px;
+}
+/* The smallest ones (chart range 1M/3M/1Y/ALL, watch-star) also grow visibly. */
+html.is-app .time-range-btn { min-height: 28px; padding-top: 5px; padding-bottom: 5px; }
+html.is-app .rep-star { font-size: 18px; padding: 4px 6px; }
