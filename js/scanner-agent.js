@@ -158,7 +158,9 @@ function _saStatusHTML(st, count) {
     if (st && st.next_run) bits.push(`הסריקה הבאה ${_saRel(st.next_run, true)}`);
     if (st && st.cycles) bits.push(`${st.cycles} סבבי סריקה`);
     bits.push(`${count} כרטיסים`);
-    const note = st && st.last_result ? `<div class="sa-status-note">↳ ${_saEsc(st.last_result)}</div>` : '';
+    // Same Hebrew-only rule as the card titles — drop English parentheticals from the status text.
+    const res = st && st.last_result ? String(st.last_result).replace(/\s*\([^()]*[A-Za-z][^()]*\)/g, '').replace(/\s+"/g, ' "').trim() : '';
+    const note = res ? `<div class="sa-status-note">↳ ${_saEsc(res)}</div>` : '';
     return `<div class="sa-meta-bar" id="saStatus">
         <div class="sa-status-line"><span class="sa-live ${live ? 'sa-live-on' : 'sa-live-warn'}"></span><b>${label}</b></div>
         <div class="sa-status-sub">${bits.join(' · ')}</div>${note}
