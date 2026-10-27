@@ -50,14 +50,24 @@ function _clearCanvas(canvasEl) {
     if (ctx2d) ctx2d.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
-// Benchmark configuration — all major indices available
+// Benchmark configuration — every series is REAL market data (Yahoo via /api/history).
+// US/TASE keys keep their historical ids (ETF total-return series for the US indices).
 const BENCHMARK_SYMBOLS = {
     'SPY': 'S&P 500',
     'QQQ': 'Nasdaq 100',
     'DIA': 'Dow Jones',
     'IWM': 'Russell 2000',
-    'TA125.TA': 'TA-125',
-    'TA35.TA': 'TA-35'
+    '^IXIC': 'Nasdaq Composite',
+    'TA35.TA': 'ת״א 35',
+    'TA125.TA': 'ת״א 125',
+    'URTH': 'MSCI World',
+    '^STOXX50E': 'Euro Stoxx 50',
+    '^GDAXI': 'DAX',
+    '^FTSE': 'FTSE 100',
+    '^N225': 'Nikkei 225',
+    'GC=F': 'זהב',
+    'TLT': 'אג״ח ארה״ב 20Y',
+    'BTC-USD': 'ביטקוין'
 };
 
 const BENCHMARK_COLORS = {
@@ -65,9 +75,28 @@ const BENCHMARK_COLORS = {
     'QQQ': '#06b6d4',
     'DIA': '#f43f5e',
     'IWM': '#a855f7',
+    '^IXIC': '#38bdf8',
+    'TA35.TA': '#8b5cf6',
     'TA125.TA': '#f97316',
-    'TA35.TA': '#8b5cf6'
+    'URTH': '#2dd4bf',
+    '^STOXX50E': '#818cf8',
+    '^GDAXI': '#fbbf24',
+    '^FTSE': '#f87171',
+    '^N225': '#e879f9',
+    'GC=F': '#fde047',
+    'TLT': '#94a3b8',
+    'BTC-USD': '#fb923c'
 };
+
+// Picker groups for the comparison panel (fullscreen chart).
+const BENCHMARK_GROUPS = [
+    ['ארה״ב', ['SPY', 'QQQ', 'DIA', 'IWM', '^IXIC']],
+    ['ישראל', ['TA35.TA', 'TA125.TA']],
+    ['עולם', ['URTH', '^STOXX50E', '^GDAXI', '^FTSE', '^N225']],
+    ['סחורות, אג״ח וקריפטו', ['GC=F', 'TLT', 'BTC-USD']]
+];
+// Other portfolios drawn on the same chart get their own palette (never the portfolio green/red).
+const COMPARE_PF_COLORS = ['#f472b6', '#60a5fa', '#c084fc', '#facc15', '#2dd4bf', '#fb7185'];
 
 // Cache for benchmark data: key = "symbol_range", value = { data, timestamp }
 const _benchmarkCache = {};
@@ -337,16 +366,8 @@ async function fetchBenchmarkData(symbol, range) {
         return data;
     }
 
-    // Static fallback: if all APIs fail, use approximate historical data.
-    // Covers SPY, QQQ, DIA, IWM, TA-125, TA-35 — all 6 supported benchmarks.
-    const staticData = _getStaticBenchmarkFallback(symbol, range);
-    if (staticData && staticData.length > 0) {
-        console.log(`[Benchmark] Using static fallback for ${symbol} (range=${range}, ${staticData.length} points)`);
-        const cacheEntry = { data: staticData, timestamp: Date.now() };
-        _benchmarkCache[cacheKey] = cacheEntry;
-        return staticData;
-    }
-
+    // No static/approximate fallback: a comparison line must be REAL market data or not drawn
+    // at all (the chart then marks that series "אין נתונים").
     console.error(`[Benchmark] ALL APIs FAILED for ${symbol} (range=${range}). Check: 1) API keys configured? 2) Rate limits exceeded? 3) Symbol valid?`);
     return null;
 }
@@ -894,6 +915,186 @@ function _prepareBenchmarkTimeline(benchData, portfolioPoints) {
     return trimmed; // Array of { x: timestamp, close: number }
 }
 
+// ========== PERFORMANCE-CHART HELPERS: axis labels, last-value tags, candles ==========
+
+const _HE_MON = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+const _LRM = '‎';   // keeps "+12%" from rendering as "12%+" on the RTL canvas
+
+// Hebrew X-axis label for a tick — the year is printed at each January so a long range reads
+// "2025 · אפר׳ · יולי · אוק׳ · 2026" instead of a wall of "Apr 2026".
+function _perfTickLabel(ts, unit) {
+    const d = new Date(ts);
+    if (unit === 'hour') return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    if (unit === 'day' || unit === 'week') return _LRM + d.getDate() + '.' + (d.getMonth() + 1) + _LRM;   // 28.9 — Israeli short date
+    if (unit === 'month') return d.getMonth() === 0 ? String(d.getFullYear()) : _HE_MON[d.getMonth()];
+    if (unit === 'quarter') return d.getMonth() < 3 ? String(d.getFullYear()) : _HE_MON[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2);
+    return String(d.getFullYear());
+}
+
+function _perfFmtPct(v, forceDecimals) {
+    if (v == null || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    const dec = forceDecimals != null ? forceDecimals : (a >= 10 || Number.isInteger(v) ? 0 : (a >= 1 ? 1 : 2));
+    return _LRM + (v > 0 ? '+' : v < 0 ? '−' : '') + a.toFixed(dec) + '%' + _LRM;
+}
+function _perfFmtUsd(v) {
+    if (v == null || !isFinite(v)) return '—';
+    const a = Math.abs(v), s = v < 0 ? '−' : '';
+    if (a >= 1e6) return _LRM + s + '$' + (a / 1e6).toFixed(2) + 'M' + _LRM;
+    if (a >= 1e4) return _LRM + s + '$' + (a / 1e3).toFixed(1) + 'K' + _LRM;
+    return _LRM + s + '$' + Math.round(a).toLocaleString('en-US') + _LRM;
+}
+
+// TradingView-style last-value tag on the price axis for every series (+ a faint guide line for
+// the portfolio). Tags never overlap — they are pushed apart vertically.
+const _lastValueTagPlugin = {
+    id: 'finxLastValueTag',
+    afterDatasetsDraw(chart) {
+        const fmt = chart.$finxFmt, y = chart.scales.y, area = chart.chartArea;
+        if (!fmt || !y || !area) return;
+        const tags = [];
+        chart.data.datasets.forEach((ds, i) => {
+            if (ds._finxCandle === 'wick' || !chart.isDatasetVisible(i) || !ds.data || !ds.data.length) return;
+            const last = ds.data[ds.data.length - 1];
+            const v = ds._finxCandle === 'body' ? last.c : last.y;
+            if (v == null || !isFinite(v)) return;
+            const color = ds._finxCandle === 'body' ? (last.c >= last.o ? COLORS.profit : COLORS.loss) : ds.borderColor;
+            tags.push({ v, py: y.getPixelForValue(v), color, main: i === 0 || ds._finxCandle === 'body' });
+        });
+        if (!tags.length) return;
+        const ctx = chart.ctx, H = 17;
+        ctx.save();
+        // guide line for the portfolio's current value
+        const m = tags.find(t => t.main);
+        if (m && m.py >= area.top && m.py <= area.bottom) {
+            ctx.beginPath(); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+            ctx.strokeStyle = m.color; ctx.globalAlpha = 0.45;
+            ctx.moveTo(area.left, m.py); ctx.lineTo(area.right, m.py); ctx.stroke();
+            ctx.globalAlpha = 1; ctx.setLineDash([]);
+        }
+        tags.sort((a, b) => a.py - b.py);
+        for (let i = 0; i < tags.length; i++) {
+            tags[i].py = Math.min(Math.max(tags[i].py, y.top + H / 2), y.bottom - H / 2);
+            if (i && tags[i].py - tags[i - 1].py < H) tags[i].py = tags[i - 1].py + H;
+        }
+        ctx.font = '700 10px ' + (Chart.defaults.font.family || 'sans-serif');
+        ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+        for (const t of tags) {
+            const label = fmt(t.v).replace(/‎/g, '');
+            const w = Math.max(y.width - 4, ctx.measureText(label).width + 10);
+            const x = y.left + 2;
+            ctx.fillStyle = t.color;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(x, t.py - H / 2, w, H, 4); else ctx.rect(x, t.py - H / 2, w, H);
+            ctx.fill();
+            ctx.fillStyle = '#06101c';
+            ctx.direction = 'ltr';
+            ctx.fillText(label, x + w / 2, t.py + 0.5);
+        }
+        ctx.restore();
+    }
+};
+
+// Candle bucket per range: [Yahoo range, interval]. Phones get coarser buckets so each candle
+// stays wide enough to read.
+function _candleSpec(range) {
+    const mob = window.innerWidth <= 768;
+    switch (range) {
+        case '1d': return ['1d', '15m'];
+        case '5d': return ['5d', '1h'];
+        case '1m': return ['1mo', '1d'];
+        case '3m': return ['3mo', '1d'];
+        case '6m': return ['6mo', mob ? '1wk' : '1d'];
+        case 'ytd': return ['ytd', (mob && _rangeToDays('ytd') > 100) ? '1wk' : '1d'];
+        case '1y': return ['1y', mob ? '1wk' : '1d'];
+        case '5y': return ['5y', mob ? '1mo' : '1wk'];
+        default: return ['10y', '1mo'];
+    }
+}
+
+// Portfolio OHLC candles from the holdings' REAL OHLC bars (same method as the synthetic line):
+// each holding leg = its real current value × price(t)/price(now) — unit-free, so agorot/shekel
+// or currency mismatches cannot distort it; before the buy date the leg sits flat at cost.
+// Open/close of the sum are exact; high/low are the sum of the legs' highs/lows (the standard
+// convention for composite/spread charts, e.g. TradingView).
+const _candleCache = {};
+async function _buildPortfolioCandles(client, range) {
+    const fxOf = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
+    const holds = (client.holdings || []).filter(h => (h.type === 'stock' || h.type === 'fund') && h.shares > 0 && h.ticker);
+    if (!holds.length) return null;
+    const symOf = (h) => {
+        const px = (typeof _proxySymbolFor === 'function') ? _proxySymbolFor(h.ticker) : null;
+        if (px) return px;
+        let s = h.ticker;
+        if (h.currency === 'ILS' && !/\.TA$/i.test(s)) s = s.replace(/:TASE$/i, '') + '.TA';
+        return s;
+    };
+    const [yr, iv] = _candleSpec(range);
+    const syms = [...new Set(holds.map(symOf))].slice(0, 40);
+    const key = syms.join(',') + '|' + yr + '|' + iv;
+    const ttl = /m$|h$/.test(iv) ? 5 * 60e3 : 30 * 60e3;
+    let series = _candleCache[key] && Date.now() - _candleCache[key].t < ttl ? _candleCache[key].d : null;
+    if (!series) {
+        const res = await fetch(`/api/history?symbols=${encodeURIComponent(syms.join(','))}&range=${yr}&interval=${iv}&ohlc=1`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        series = await res.json();
+        _candleCache[key] = { t: Date.now(), d: series };
+    }
+    const maps = {}, dateSet = new Set();
+    for (const sym of syms) {
+        const arr = series && series[sym];
+        if (!Array.isArray(arr) || !arr.length) continue;
+        const m = new Map();
+        for (const b of arr) { if (b && b.close > 0 && b.open > 0) { m.set(b.date, b); dateSet.add(b.date); } }
+        if (m.size) maps[sym] = m;
+    }
+    let dates = [...dateSet].sort();
+    if (dates.length < 2) return null;
+
+    // Never draw candles from before the portfolio existed.
+    const created = client.createdAt ? new Date(client.createdAt).toISOString().slice(0, 10) : null;
+    const inc = (typeof _portfolioInceptionIso === 'function') ? _portfolioInceptionIso(client) : null;
+    if (inc) {
+        const bucketed = iv === '1wk' || iv === '1mo';
+        dates = dates.filter((d, i) => bucketed ? (i + 1 >= dates.length || dates[i + 1].slice(0, 10) > inc) : d.slice(0, 10) >= inc);
+        if (dates.length < 2) return null;
+    }
+
+    let totalCost = 0;
+    const legs = [];
+    for (const h of holds) {
+        const f = fxOf(h.currency);
+        const costUsd = ((h.costBasis > 0 ? h.costBasis : h.shares * (h.price || 0)) || 0) * f;
+        const valueUsd = ((h.value > 0 ? h.value : costUsd / (f || 1)) || 0) * f;
+        if (!(costUsd > 0)) continue;
+        totalCost += costUsd;
+        const m = maps[symOf(h)];
+        let cur = 0;
+        if (m) for (let i = dates.length - 1; i >= 0; i--) { const b = m.get(dates[i]); if (b) { cur = b.close; break; } }
+        const buy = (h.buyDate || h.createdAt || created || '').slice(0, 10);
+        legs.push(m && cur > 0 && valueUsd > 0 ? { m, cur, costUsd, valueUsd, buy } : { flat: true, valueUsd: valueUsd || costUsd });
+    }
+    if (!legs.length || !(totalCost > 0)) return null;
+
+    const ffill = new Map();
+    const bars = [];
+    for (const d of dates) {
+        let o = 0, hi = 0, lo = 0, c = 0;
+        for (const L of legs) {
+            if (L.flat) { o += L.valueUsd; hi += L.valueUsd; lo += L.valueUsd; c += L.valueUsd; continue; }
+            if (L.buy && d.slice(0, 10) < L.buy) { o += L.costUsd; hi += L.costUsd; lo += L.costUsd; c += L.costUsd; continue; }
+            let b = L.m.get(d);
+            if (!b) { const pc = ffill.get(L) || L.cur; b = { open: pc, high: pc, low: pc, close: pc }; }
+            ffill.set(L, b.close);
+            const r = (x) => { let q = x / L.cur; if (!(q > 0) || !isFinite(q)) q = 1; return L.valueUsd * Math.min(10, Math.max(0.1, q)); };
+            o += r(b.open); hi += r(b.high); lo += r(b.low); c += r(b.close);
+        }
+        const x = d.length > 10 ? new Date(d.replace(' ', 'T')).getTime() : new Date(d + 'T12:00:00').getTime();
+        bars.push({ x, o, h: Math.max(hi, o, c), l: Math.min(lo, o, c), c });
+    }
+    return { bars, totalCost, cash: client.cashBalance || 0, interval: iv };
+}
+
 // ========== UNIFIED PERFORMANCE CHART RENDERER ==========
 
 // Parse a he-IL date string (DD.MM.YYYY) into a Date object
@@ -1342,7 +1543,9 @@ const _yAxisDragPlugin = {
 // Production-ready financial chart: real Supabase data mapped to {x: timestamp, y: value}.
 // Data-fitted visible range, 20-year zoom limits, grace-based containment, dynamic granularity.
 
-async function renderPerformanceChart(canvasId, clientId, range, benchmarks, chartKey) {
+// opts: { candles: bool, comparePortfolios: [clientId], isStale: () => bool }
+async function renderPerformanceChart(canvasId, clientId, range, benchmarks, chartKey, opts) {
+    opts = opts || {};
     const client = clients.find(c => c.id === clientId);
     if (!client) return null;
 
@@ -1569,6 +1772,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         return null;
     }
 
+    if (opts.isStale && opts.isStale()) return null;   // a newer render owns this canvas
+
     // ── 4. Destroy any previous Chart.js instance on this canvas (prevent memory leaks) ──
     if (chartKey) _safeDestroyChart(chartKey);
     _destroyChartOnCanvas(canvas);
@@ -1598,6 +1803,20 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             }
         }
         console.log(`[PerfChart] ${benchmarkResults.length}/${benchmarks.length} benchmarks loaded successfully`);
+    }
+    // Other portfolios — each one's own return reconstruction from its real price history
+    // (not available intraday). Rebased to the same 0% start as everything else on the chart.
+    const _cmpPf = (opts.comparePortfolios || []).filter(id => id !== clientId);
+    if (_cmpPf.length && !isIntraday && typeof fetchSyntheticHistory === 'function') {
+        const got = await Promise.allSettled(_cmpPf.map(async (id) => {
+            const other = clients.find(c => c.id === id);
+            if (!other) return null;
+            const syn = await fetchSyntheticHistory(other, range);
+            if (!syn || syn.length < 2) return null;
+            return { symbol: 'pf:' + id, label: other.name, color: COMPARE_PF_COLORS[_cmpPf.indexOf(id) % COMPARE_PF_COLORS.length], solid: true,
+                data: syn.filter(p => p.value > 0).map(p => ({ date: p.date, close: p.value })) };
+        }));
+        for (const r of got) if (r.status === 'fulfilled' && r.value && r.value.data.length >= 2) benchmarkResults.push(r.value);
     }
 
     // ── 6. Determine display mode ──
@@ -1690,7 +1909,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
     // ── 8. Build datasets ──
     const datasets = [{
-        label: usePercentMode ? 'תשואת תיק' : 'שווי תיק',
+        label: hasBenchmarks ? client.name : (usePercentMode ? 'תשואת תיק' : 'שווי תיק'),
+        _finxKey: 'main',
         data: portfolioPoints,
         borderColor: mainColor,
         backgroundColor: fillColor,
@@ -1718,7 +1938,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     //
     // Formula: benchmarkReturn = ((close - baseClose) / baseClose) * 100
 
-    for (const { symbol, data: benchData } of benchmarkResults) {
+    for (const { symbol, data: benchData, label: _bLabel, color: _bColor, solid: _bSolid } of benchmarkResults) {
         // Trim to portfolio date range — keep benchmark's native timestamps
         const trimmed = _prepareBenchmarkTimeline(benchData, portfolioPoints);
         if (trimmed.length < 2) continue;
@@ -1728,7 +1948,8 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         if (!benchBaseClose || benchBaseClose <= 0) continue;
 
         datasets.push({
-            label: BENCHMARK_SYMBOLS[symbol] || symbol,
+            label: _bLabel || BENCHMARK_SYMBOLS[symbol] || symbol,
+            _finxKey: symbol,
             data: trimmed.map(p => {
                 const pctFromBase = ((p.close - benchBaseClose) / benchBaseClose) * 100;
                 return {
@@ -1738,9 +1959,9 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         : firstValue * (1 + pctFromBase / 100)
                 };
             }),
-            borderColor: BENCHMARK_COLORS[symbol] || '#94a3b8',
-            borderWidth: 2,
-            borderDash: [6, 3],
+            borderColor: _bColor || BENCHMARK_COLORS[symbol] || '#94a3b8',
+            borderWidth: _bSolid ? 2 : 1.75,
+            borderDash: _bSolid ? [] : [5, 3],
             fill: false,
             pointRadius: 0,
             pointHoverRadius: 3,
@@ -1748,6 +1969,48 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
             clip: true
         });
     }
+
+    // ── 8b. Japanese candles (optional) — real OHLC, same y-space as the line it replaces ──
+    let _candleStep = 0, _isCandles = false;
+    if (opts.candles) {
+        let cd = null;
+        try { cd = await _buildPortfolioCandles(client, range); } catch (e) { console.warn('[PerfChart] candles failed:', e.message); }
+        if (cd && cd.bars.length >= 2) {
+            const lastLineY = portfolioPoints[portfolioPoints.length - 1].y;
+            const lastC = cd.bars[cd.bars.length - 1].c;
+            let tf;
+            if (!usePercentMode) tf = (v) => v + cd.cash;
+            else if (hasBenchmarks) { const base = cd.bars[0].o + cd.cash; tf = (v) => ((v + cd.cash) / base - 1) * 100; }
+            else {
+                // Same metric as the line (return from cost / from the session baseline), with the
+                // same rigid alignment so the last close lands exactly on the line's endpoint.
+                const raw = isIntraday ? ((v) => ((v + cd.cash) / (cd.bars[0].o + cd.cash) - 1) * 100) : ((v) => (v - cd.totalCost) / cd.totalCost * 100);
+                const shift = isFinite(lastLineY) ? lastLineY - raw(lastC) : 0;
+                tf = (v) => raw(v) + shift;
+            }
+            const cand = cd.bars.map(b => ({ x: b.x, o: tf(b.o), h: tf(b.h), l: tf(b.l), c: tf(b.c) }));
+            const colorOf = (c) => { const r = c.raw; return r && r.c >= r.o ? COLORS.profit : COLORS.loss; };
+            datasets[0] = {
+                type: 'bar', label: client.name, _finxKey: 'main', _finxCandle: 'body',
+                data: cand.map(b => ({ x: b.x, y: [Math.min(b.o, b.c), Math.max(b.o, b.c)], o: b.o, h: b.h, l: b.l, c: b.c })),
+                backgroundColor: colorOf, borderWidth: 0, minBarLength: 1.5,
+                barPercentage: 0.74, categoryPercentage: 1, grouped: false, order: 1
+            };
+            datasets.splice(1, 0, {
+                type: 'bar', label: '', _finxCandle: 'wick',
+                data: cand.map(b => ({ x: b.x, y: [b.l, b.h], o: b.o, c: b.c })),
+                backgroundColor: colorOf, borderWidth: 0, barThickness: 1.5, grouped: false, order: 2
+            });
+            const diffs = [];
+            for (let i = 1; i < cand.length; i++) diffs.push(cand[i].x - cand[i - 1].x);
+            diffs.sort((a, b) => a - b);
+            _candleStep = diffs[Math.floor(diffs.length / 2)] || 0;
+            _isCandles = true;
+        } else if (typeof showToast === 'function') {
+            showToast('נרות יפניים אינם זמינים לתיק זה כרגע — מוצג גרף קו', 'info');
+        }
+    }
+    if (opts.isStale && opts.isStale()) return null;   // a newer render owns this canvas
 
     // ── 9. Timeline configuration ──
     // ALL bounds are derived from actual data points — NEVER from theoretical range duration.
@@ -1763,7 +2026,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // Small padding (2%) so the line doesn't touch axis edges.
     // Capped at 1 day minimum to avoid zero-padding on very short ranges.
     const dataSpan = dataMaxTime - dataMinTime;
-    const xPadMs = Math.max(dataSpan * 0.02, 86400000);
+    const xPadMs = Math.max(dataSpan * 0.02, isIntraday ? 0 : 86400000, _candleStep * 0.75);
     const viewMin = dataMinTime - xPadMs;
     const viewMax = dataMaxTime + xPadMs;
 
@@ -1836,45 +2099,39 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         tooltipFormat: isIntraday ? 'dd/MM/yyyy HH:mm' : 'dd MMM yyyy'
                     },
                     ticks: {
-                        source: hasBenchmarks ? 'auto' : 'data',  // 'auto' for mixed-resolution datasets
+                        source: 'auto',
                         autoSkip: true,
-                        maxTicksLimit: _isMobile ? (_isFullscreen ? 7 : 5) : 12,
+                        autoSkipPadding: _isMobile ? 14 : 20,
+                        maxTicksLimit: _isMobile ? (_isFullscreen ? 6 : 5) : 12,
                         maxRotation: 0,
-                        color: '#94a3b8',
-                        font: { size: _isMobile ? 9 : 10 }
+                        padding: 6,
+                        color: '#8f9bb0',
+                        font: { size: _isMobile ? 10.5 : 11, weight: '500' },
+                        callback: (v) => _perfTickLabel(v, timeUnit)
                     },
-                    grid: {
-                        color: 'rgba(148,163,184,0.07)',
-                        drawTicks: false
-                    },
-                    border: { display: true, color: 'rgba(148,163,184,0.15)' }
+                    grid: { display: false, drawTicks: false },
+                    border: { display: true, color: 'rgba(148,163,184,0.18)' }
                 },
 
                 y: {
                     position: 'right',
                     // Never use beginAtZero — it clips lines out of view when returns are
                     // entirely positive or negative. Let Chart.js auto-fit the Y domain.
-                    grace: '10%',
+                    grace: '8%',
+                    beginAtZero: false,   // candles (bar datasets) would otherwise pin the axis to 0
+                    afterFit: (sc) => { sc.width = Math.max(sc.width, _isMobile ? 50 : 60); },
                     ticks: {
-                        color: '#94a3b8',
-                        font: { size: _isMobile ? 9 : 10 },
-                        callback: usePercentMode
-                            ? function(v) {
-                                // Percentage Y-axis: "+12.5%", "-3.2%", "0.0%"
-                                const sign = v > 0 ? '+' : '';
-                                return sign + v.toFixed(1) + '%';
-                            }
-                            : function(v) {
-                                if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
-                                if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
-                                return '$' + v.toFixed(0);
-                            },
-                        maxTicksLimit: _isMobile ? 4 : 6,
-                        padding: _isMobile ? 4 : 8,
+                        color: '#8f9bb0',
+                        font: { size: _isMobile ? 10.5 : 11, weight: '500' },
+                        // LRM-wrapped so the sign stays in front ("+40%", not "40%+") on the RTL canvas
+                        callback: usePercentMode ? (v) => _perfFmtPct(v) : (v) => _perfFmtUsd(v),
+                        maxTicksLimit: _isMobile ? 5 : 7,
+                        padding: _isMobile ? 6 : 10,
                         precision: 2
                     },
                     grid: {
-                        color: 'rgba(148,163,184,0.07)',
+                        // 0% is the reference line — a notch brighter than the rest
+                        color: (c) => (usePercentMode && c.tick && c.tick.value === 0) ? 'rgba(148,163,184,0.32)' : 'rgba(148,163,184,0.08)',
                         drawTicks: false
                     },
                     border: { display: false }
@@ -1883,10 +2140,12 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
 
             plugins: {
                 legend: {
-                    display: datasets.length > 1,
+                    // fullscreen shows its own legend chips (with each series' return)
+                    display: !_isFullscreen && datasets.filter(d => d._finxCandle !== 'wick').length > 1,
                     position: 'top',
                     rtl: true,
                     labels: {
+                        filter: (it, data) => data.datasets[it.datasetIndex]._finxCandle !== 'wick',
                         color: '#94a3b8',
                         font: { size: _isMobile ? 9 : 10 },
                         usePointStyle: true,
@@ -1909,9 +2168,15 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     boxWidth: 8,
                     boxHeight: 8,
                     boxPadding: 4,
+                    filter: (it) => it.dataset._finxCandle !== 'wick',
                     callbacks: {
-                        label: usePercentMode
+                        label: _isCandles || usePercentMode
                             ? function(ctx) {
+                                if (ctx.dataset._finxCandle === 'body') {
+                                    const r = ctx.raw, f = usePercentMode ? (v) => _perfFmtPct(v, 2) : (v) => formatCurrency(v);
+                                    return [` פתיחה ${f(r.o)}   גבוה ${f(r.h)}`, ` נמוך ${f(r.l)}   סגירה ${f(r.c)}`];
+                                }
+                                if (!usePercentMode) return ` ${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`;
                                 // Percentage mode: value IS the return %
                                 const pct = ctx.parsed.y;
                                 const sign = pct >= 0 ? '+' : '';
@@ -1920,7 +2185,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                             : function(ctx) {
                                 // Absolute mode: show $ value + derived %
                                 const val = ctx.parsed.y;
-                                const pct = firstVal > 0 ? ((val - firstVal) / firstVal * 100) : 0;
+                                const pct = firstValue > 0 ? ((val - firstValue) / firstValue * 100) : 0;
                                 const sign = pct >= 0 ? '+' : '';
                                 return ` ${ctx.dataset.label}: ${formatCurrency(val)} (${sign}${pct.toFixed(2)}%)`;
                             }
@@ -1970,9 +2235,19 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                     ctx.restore();
                 }
             },
-            _yAxisDragPlugin
+            _yAxisDragPlugin,
+            _lastValueTagPlugin
         ]
     });
+    chartInstance.$finxFmt = usePercentMode ? (v) => _perfFmtPct(v) : (v) => _perfFmtUsd(v);
+    // Each series' end value — the fullscreen legend chips read these.
+    chartInstance.$finx = {
+        percent: usePercentMode,
+        series: datasets.filter(d => d._finxCandle !== 'wick').map(d => {
+            const last = d.data[d.data.length - 1] || {};
+            return { key: d._finxKey, label: d.label, color: d._finxCandle ? (last.c >= last.o ? COLORS.profit : COLORS.loss) : d.borderColor, last: d._finxCandle ? last.c : last.y };
+        })
+    };
     } catch (chartErr) {
         // Chart.js construction failed (e.g., time adapter not loaded, plugin error).
         // Retry with a minimal config — no time scale, no zoom plugin.
@@ -2188,6 +2463,13 @@ function renderModalSectorChart(client) {
 let _fullscreenClientId = null;
 let _fullscreenRange = '1y';
 let _fullscreenBenchmarks = [];
+let _fullscreenComparePf = [];          // other portfolio ids drawn on the same chart
+let _fullscreenCandles = false;         // line ↔ Japanese candles (remembered per device)
+try { _fullscreenCandles = localStorage.getItem('fs_chart_type') === 'candle'; } catch (e) { }
+let _fsRenderSeq = 0;
+const _FS_MAX_COMPARE = 6;
+
+function _fsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function openFullscreenChart(clientId) {
     const client = clients.find(c => c.id === clientId);
@@ -2198,73 +2480,62 @@ function openFullscreenChart(clientId) {
     _fullscreenClientId = clientId;
     _fullscreenRange = _modalPerfRange || '1y';
     _fullscreenBenchmarks = [..._modalPerfBenchmarks];
+    _fullscreenComparePf = [];
 
     document.getElementById('fullscreenOverlay').classList.add('active');
 
-    // Build header with controls
+    // One header for phone and desktop — CSS lays it out (main.css "FULLSCREEN CHART TOOLBAR").
     const headerEl = document.querySelector('.fullscreen-chart-header');
     if (headerEl) {
-        const _isMob = window.innerWidth <= 768;
-        if (_isMob) {
-            // ── Mobile: compact stacked layout with title + X on first row ──
-            headerEl.style.cssText = 'display:flex;flex-direction:column;padding:10px 12px 6px;gap:6px;border-bottom:1px solid var(--border)';
-            headerEl.innerHTML = `
-                <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
-                    <h3 id="fullscreenTitle" style="font-size:14px;font-weight:700;margin:0;flex:1;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מעקב תשואה - ${client.name}</h3>
-                    <button class="fs-mob-x" onclick="closeFullscreen()" title="סגור" style="flex-shrink:0;width:34px;height:34px;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:rgba(15,23,42,0.8);color:var(--text-primary);cursor:pointer">&times;</button>
+        headerEl.style.cssText = '';
+        headerEl.classList.add('fsx');
+        headerEl.innerHTML = `
+            <div class="fsx-top">
+                <div class="fsx-title">
+                    <h3 id="fullscreenTitle">${_fsEsc(client.name)}</h3>
+                    <span class="fsx-sub">מעקב תשואה</span>
                 </div>
-                <div style="display:flex;flex-wrap:nowrap;justify-content:center;gap:4px">
-                    ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
-                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)" style="padding:5px 9px;font-size:11px">${_rangeLabel(r)}</button>`
-                    ).join('')}
+                <div class="fsx-ret" id="fsxRet"></div>
+                <button class="modal-close fs-close-btn" onclick="closeFullscreen()" title="סגור">&times;</button>
+            </div>
+            <div class="fsx-ranges perf-time-range">
+                ${['1d', '5d', '1m', '6m', 'ytd', '1y', '5y', 'max'].map(r =>
+                    `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${_rangeLabel(r)}</button>`
+                ).join('')}
+            </div>
+            <div class="fsx-tools">
+                <div class="fsx-seg" role="group" aria-label="סוג גרף">
+                    <button class="fsx-ct ${_fullscreenCandles ? '' : 'on'}" data-ct="line" onclick="setFullscreenChartType('line')" title="גרף קו">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/></svg><span>קו</span>
+                    </button>
+                    <button class="fsx-ct ${_fullscreenCandles ? 'on' : ''}" data-ct="candle" onclick="setFullscreenChartType('candle')" title="נרות יפניים">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="3" x2="7" y2="21"/><rect x="4.5" y="7" width="5" height="9" rx="1" fill="currentColor"/><line x1="17" y1="3" x2="17" y2="21"/><rect x="14.5" y="5" width="5" height="7" rx="1"/></svg><span>נרות</span>
+                    </button>
                 </div>
-                <div style="display:flex;flex-wrap:nowrap;gap:6px;align-items:center;justify-content:flex-end;direction:rtl">
-                    <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)" style="font-size:11px;padding:4px 10px">השוואה למדד</button>
-                    <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'};gap:4px">
-                    ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
-                        `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="font-size:10px;padding:3px 7px;white-space:nowrap;${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
-                    ).join('')}
-                    </div>
-                    <button class="display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}" onclick="toggleChartDisplayMode(this)" title="% / $" style="font-size:11px;width:28px;height:28px">${_chartDisplayMode === 'percent' ? '%' : '$'}</button>
+                <div class="fsx-seg fsx-mode" role="group" aria-label="תצוגה">
+                    <button class="fsx-dm" data-dm="percent" onclick="setFullscreenDisplayMode('percent')">%</button>
+                    <button class="fsx-dm" data-dm="value" onclick="setFullscreenDisplayMode('value')">$</button>
                 </div>
-                <div style="display:flex;justify-content:center;gap:8px;align-items:center">
-                    <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין" style="width:34px;height:34px;font-size:16px">+</button>
-                    <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט" style="width:34px;height:34px;font-size:16px">-</button>
-                    <button class="zoom-btn" onclick="fullscreenAutoScale()" title="התאמה אוטומטית" style="width:34px;height:34px;font-size:16px">⇕</button>
-                    <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום" style="width:auto;padding:0 14px;font-size:12px;height:34px">איפוס</button>
-                </div>
-            `;
-        } else {
-            // ── Desktop: horizontal flex layout ──
-            headerEl.style.cssText = '';
-            headerEl.innerHTML = `
-                <div class="fs-title-row">
-                    <h3 id="fullscreenTitle">מעקב תשואה - ${client.name}</h3>
-                    <button class="modal-close fs-close-btn" onclick="closeFullscreen()" title="סגור">&times;</button>
-                </div>
-                <div class="perf-time-range fs-time-range">
-                    ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>
-                        `<button class="time-btn ${r === _fullscreenRange ? 'active' : ''}" onclick="setFullscreenRange('${r}', this)">${_rangeLabel(r)}</button>`
-                    ).join('')}
-                </div>
-                <div class="perf-benchmarks fs-benchmarks">
-                    <button class="benchmark-toggle-btn ${_fullscreenBenchmarks.length > 0 ? 'active' : ''}" onclick="toggleBenchmarkPanel(this)">השוואה למדד</button>
-                    <div class="benchmark-options" style="display:${_fullscreenBenchmarks.length > 0 ? 'flex' : 'none'}">
-                    ${Object.entries(BENCHMARK_SYMBOLS).map(([sym, name]) =>
-                        `<button class="benchmark-btn ${_fullscreenBenchmarks.includes(sym) ? 'active' : ''}" style="${_fullscreenBenchmarks.includes(sym) ? 'color:' + BENCHMARK_COLORS[sym] : ''}" onclick="toggleFullscreenBenchmark('${sym}', this)">${name}</button>`
-                    ).join('')}
-                    </div>
-                    <button class="display-mode-btn ${_chartDisplayMode === 'percent' ? 'active-percent' : 'active-value'}" onclick="toggleChartDisplayMode(this)" title="% / $">${_chartDisplayMode === 'percent' ? '%' : '$'}</button>
-                </div>
-                <div class="fullscreen-chart-controls">
-                    <button class="zoom-btn" onclick="fullscreenZoom('in')" title="זום אין">+</button>
-                    <button class="zoom-btn" onclick="fullscreenZoom('out')" title="זום אאוט">-</button>
-                    <button class="zoom-btn" onclick="fullscreenAutoScale()" title="התאמה אוטומטית">⇕</button>
-                    <button class="zoom-btn reset" onclick="fullscreenZoom('reset')" title="איפוס זום">איפוס</button>
-                </div>
-            `;
-        }
+                <button class="fsx-cmp-btn" id="fsxCmpBtn" onclick="toggleFullscreenComparePicker()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    השוואה<b id="fsxCmpCount"></b>
+                </button>
+                <span class="fsx-spacer"></span>
+                <button class="fsx-icon fsx-desk" onclick="fullscreenZoom('in')" title="זום אין">+</button>
+                <button class="fsx-icon fsx-desk" onclick="fullscreenZoom('out')" title="זום אאוט">−</button>
+                <button class="fsx-icon" onclick="fullscreenZoom('reset')" title="איפוס תצוגה">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 9 9 9"/></svg>
+                </button>
+            </div>
+            <div class="fsx-chips" id="fsxChips" hidden></div>
+        `;
     }
+    _fsEnsurePicker();
+    const hint = document.querySelector('#fullscreenOverlay .zoom-hint');
+    if (hint) hint.textContent = window.matchMedia('(hover: none)').matches
+        ? 'צביטה לזום · גרירה לצפייה · החלקה למעלה מהפס התחתון לסגירה'
+        : 'גלגל עכבר לזום · גרירה לצפייה · לחיצה כפולה לאיפוס';
+    _fsSyncToolbar();
 
     // Destroy previous instance
     if (fullscreenChartInstance) {
@@ -2273,6 +2544,144 @@ function openFullscreenChart(clientId) {
     }
 
     _renderFullscreenChart();
+}
+
+// Comparison picker — a panel over the chart: my other portfolios + real indices by region.
+function _fsEnsurePicker() {
+    const box = document.querySelector('#fullscreenOverlay .fullscreen-chart-box');
+    if (!box) return;
+    let pk = document.getElementById('fsxPicker');
+    if (!pk) {
+        pk = document.createElement('div');
+        pk.id = 'fsxPicker';
+        pk.className = 'fsx-picker';
+        pk.hidden = true;
+        box.appendChild(pk);
+    }
+    const others = clients.filter(c => c.id !== _fullscreenClientId);
+    const chip = (kind, key, name, color, on) =>
+        `<button class="fsx-pick ${on ? 'on' : ''}" data-kind="${kind}" data-key="${_fsEsc(key)}" style="--c:${color}" onclick="_fsPick(this)"><i></i>${_fsEsc(name)}</button>`;
+    let html = `<div class="fsx-pk-head"><b>השוואה</b><span>עד ${_FS_MAX_COMPARE} סדרות · נתוני שוק אמיתיים</span><button class="fsx-pk-done" onclick="toggleFullscreenComparePicker(false)">סיום</button></div><div class="fsx-pk-body">`;
+    if (others.length) {
+        html += `<div class="fsx-pk-group"><div class="fsx-pk-label">התיקים שלי</div><div class="fsx-pk-chips">`
+            + others.map((c, i) => chip('pf', c.id, c.name, COMPARE_PF_COLORS[i % COMPARE_PF_COLORS.length], _fullscreenComparePf.includes(c.id))).join('')
+            + `</div></div>`;
+    }
+    for (const [g, syms] of BENCHMARK_GROUPS) {
+        html += `<div class="fsx-pk-group"><div class="fsx-pk-label">${g}</div><div class="fsx-pk-chips">`
+            + syms.map(sym => chip('idx', sym, BENCHMARK_SYMBOLS[sym], BENCHMARK_COLORS[sym], _fullscreenBenchmarks.includes(sym))).join('')
+            + `</div></div>`;
+    }
+    pk.innerHTML = html + `</div>`;
+}
+
+function toggleFullscreenComparePicker(force) {
+    const pk = document.getElementById('fsxPicker');
+    if (!pk) return;
+    const show = force != null ? !!force : pk.hidden;
+    if (show) _fsEnsurePicker();
+    pk.hidden = !show;
+    document.getElementById('fsxCmpBtn')?.classList.toggle('open', show);
+}
+
+function _fsPick(btn) {
+    const kind = btn.dataset.kind, key = btn.dataset.key;
+    const total = _fullscreenBenchmarks.length + _fullscreenComparePf.length;
+    const on = btn.classList.contains('on');
+    if (!on && total >= _FS_MAX_COMPARE) {
+        if (typeof showToast === 'function') showToast(`ניתן להשוות עד ${_FS_MAX_COMPARE} סדרות בו-זמנית`, 'info');
+        return;
+    }
+    btn.classList.toggle('on', !on);
+    if (kind === 'pf') {
+        const id = isNaN(+key) ? key : +key;
+        _fullscreenComparePf = on ? _fullscreenComparePf.filter(x => x !== id) : [..._fullscreenComparePf, id];
+    } else {
+        _fullscreenBenchmarks = on ? _fullscreenBenchmarks.filter(x => x !== key) : [..._fullscreenBenchmarks, key];
+    }
+    _fsSyncToolbar();
+    _renderFullscreenChart();
+}
+
+function _fsRemoveCompare(kind, key) {
+    if (kind === 'pf') { const id = isNaN(+key) ? key : +key; _fullscreenComparePf = _fullscreenComparePf.filter(x => x !== id); }
+    else _fullscreenBenchmarks = _fullscreenBenchmarks.filter(x => x !== key);
+    _fsEnsurePicker();
+    _fsSyncToolbar();
+    _renderFullscreenChart();
+}
+
+function setFullscreenChartType(t) {
+    _fullscreenCandles = t === 'candle';
+    try { localStorage.setItem('fs_chart_type', _fullscreenCandles ? 'candle' : 'line'); } catch (e) { }
+    _fsSyncToolbar();
+    _renderFullscreenChart();
+}
+
+function setFullscreenDisplayMode(mode) {
+    if (mode === _chartDisplayMode) return;
+    if (mode === 'value' && (_fullscreenBenchmarks.length || _fullscreenComparePf.length)) {
+        if (typeof showToast === 'function') showToast('בהשוואה הגרף מוצג באחוזים — כדי שכל הסדרות יתחילו מאותה נקודה', 'info');
+        return;
+    }
+    toggleChartDisplayMode();   // keeps the portfolio-modal toggle in sync and re-renders
+    _fsSyncToolbar();
+}
+
+function _fsSyncToolbar() {
+    const n = _fullscreenBenchmarks.length + _fullscreenComparePf.length;
+    const cnt = document.getElementById('fsxCmpCount');
+    if (cnt) cnt.textContent = n ? ' ' + n : '';
+    document.getElementById('fsxCmpBtn')?.classList.toggle('active', n > 0);
+    document.querySelectorAll('.fsx-ct').forEach(b => b.classList.toggle('on', (b.dataset.ct === 'candle') === _fullscreenCandles));
+    const effPct = n > 0 || _chartDisplayMode === 'percent';
+    document.querySelectorAll('.fsx-dm').forEach(b => {
+        b.classList.toggle('on', (b.dataset.dm === 'percent') === effPct);
+        b.classList.toggle('locked', b.dataset.dm === 'value' && n > 0);
+    });
+}
+
+// Legend chips + header return badge, filled from the rendered chart's own end values.
+function _fsRenderLegend(inst) {
+    const fin = inst && inst.$finx;
+    const fmt = (v) => fin && fin.percent ? _perfFmtPct(v, 2) : _perfFmtUsd(v);
+    const main = fin && fin.series.find(s => s.key === 'main');
+    const ret = document.getElementById('fsxRet');
+    if (ret) {
+        if (main && isFinite(main.last)) {
+            ret.textContent = fmt(main.last);
+            ret.className = 'fsx-ret ' + (fin.percent ? (main.last >= 0 ? 'up' : 'down') : '');
+            ret.title = fin.percent ? `תשואה בטווח ${_rangeLabel(_fullscreenRange)}` : 'שווי תיק';
+        } else { ret.textContent = ''; ret.className = 'fsx-ret'; }
+    }
+    // Say WHICH return the number is: comparisons rebase every series to 0% at the range start;
+    // alone, the portfolio shows its return on cost (the same number as the card).
+    const sub = document.querySelector('.fsx-sub');
+    if (sub) {
+        const cmp = _fullscreenBenchmarks.length + _fullscreenComparePf.length > 0;
+        sub.textContent = !fin || !fin.percent ? 'שווי התיק'
+            : cmp ? 'תשואה מתחילת הטווח · כל הסדרות מתחילות מאפס'
+            : (_fullscreenRange === '1d' ? 'שינוי יומי' : 'תשואה על העלות');
+    }
+    const el = document.getElementById('fsxChips');
+    if (!el) return;
+    const comps = [
+        ..._fullscreenComparePf.map(id => ({ kind: 'pf', key: id, sKey: 'pf:' + id, name: (clients.find(c => c.id === id) || {}).name || '' })),
+        ..._fullscreenBenchmarks.map(sym => ({ kind: 'idx', key: sym, sKey: sym, name: BENCHMARK_SYMBOLS[sym] || sym }))
+    ];
+    if (!comps.length) { el.hidden = true; el.innerHTML = ''; return; }
+    const client = clients.find(c => c.id === _fullscreenClientId);
+    const chipHTML = (name, color, val, removeAttr) =>
+        `<span class="fsx-chip" style="--c:${color}"><i></i><span class="fsx-chip-n">${_fsEsc(name)}</span><b>${val}</b>${removeAttr ? `<button class="fsx-chip-x" ${removeAttr} aria-label="הסר מההשוואה">✕</button>` : ''}</span>`;
+    let html = main ? chipHTML(client ? client.name : 'התיק', main.color, fmt(main.last), '') : '';
+    for (const c of comps) {
+        const s = fin && fin.series.find(x => x.key === c.sKey);
+        const color = s ? s.color : (c.kind === 'pf' ? '#94a3b8' : (BENCHMARK_COLORS[c.key] || '#94a3b8'));
+        const val = s && isFinite(s.last) ? fmt(s.last) : '<span class="fsx-na">אין נתונים</span>';
+        html += chipHTML(c.name, color, val, `onclick="_fsRemoveCompare('${c.kind}','${_fsEsc(String(c.key))}')"`);
+    }
+    el.innerHTML = html;
+    el.hidden = false;
 }
 
 async function _renderFullscreenChart() {
@@ -2295,6 +2704,7 @@ async function _renderFullscreenChart() {
         fullscreenChartInstance.destroy();
         fullscreenChartInstance = null;
     }
+    const seq = ++_fsRenderSeq;
 
     // Wait for CSS transition to finish and canvas to have real dimensions.
     const canvas = document.getElementById('fullscreen-chart');
@@ -2311,18 +2721,23 @@ async function _renderFullscreenChart() {
         };
         requestAnimationFrame(check);
     });
+    if (seq !== _fsRenderSeq) return;
 
-    fullscreenChartInstance = await renderPerformanceChart(
+    const inst = await renderPerformanceChart(
         'fullscreen-chart',
         clientId,
         _fullscreenRange,
         _fullscreenBenchmarks,
-        null
+        null,
+        { candles: _fullscreenCandles, comparePortfolios: _fullscreenComparePf, isStale: () => seq !== _fsRenderSeq }
     );
+    if (seq !== _fsRenderSeq) { if (inst && !inst._destroyed && inst !== fullscreenChartInstance) { try { inst.destroy(); } catch (e) { } } return; }
+    fullscreenChartInstance = inst;
+    _fsRenderLegend(inst);
 
     // Force resize after chart is created — catches any remaining layout drift
     if (fullscreenChartInstance && !fullscreenChartInstance._destroyed) {
-        requestAnimationFrame(() => fullscreenChartInstance.resize());
+        requestAnimationFrame(() => fullscreenChartInstance && fullscreenChartInstance.resize());
     }
 }
 
@@ -2334,17 +2749,11 @@ function setFullscreenRange(range, btn) {
     _renderFullscreenChart();
 }
 
-function toggleFullscreenBenchmark(symbol, btn) {
-    const idx = _fullscreenBenchmarks.indexOf(symbol);
-    if (idx >= 0) {
-        _fullscreenBenchmarks.splice(idx, 1);
-        btn.classList.remove('active');
-        btn.style.color = '';
-    } else {
-        _fullscreenBenchmarks.push(symbol);
-        btn.classList.add('active');
-        btn.style.color = BENCHMARK_COLORS[symbol] || '';
-    }
+function toggleFullscreenBenchmark(symbol) {
+    _fullscreenBenchmarks = _fullscreenBenchmarks.includes(symbol)
+        ? _fullscreenBenchmarks.filter(s => s !== symbol) : [..._fullscreenBenchmarks, symbol];
+    _fsEnsurePicker();
+    _fsSyncToolbar();
     _renderFullscreenChart();
 }
 
@@ -2356,6 +2765,8 @@ function fullscreenZoom(action) {
         fullscreenChartInstance.zoom(0.7);
     } else if (action === 'reset') {
         fullscreenChartInstance.resetZoom();
+        const y = fullscreenChartInstance.options.scales.y;
+        if (y.min != null || y.max != null) { delete y.min; delete y.max; fullscreenChartInstance.update('none'); }
     }
 }
 
@@ -2372,8 +2783,10 @@ function fullscreenAutoScale() {
     for (const ds of chart.data.datasets) {
         for (const pt of ds.data) {
             if (pt.x >= xMin && pt.x <= xMax) {
-                if (pt.y < yMin) yMin = pt.y;
-                if (pt.y > yMax) yMax = pt.y;
+                const lo = Array.isArray(pt.y) ? Math.min(...pt.y) : pt.y;   // candles: [low, high]
+                const hi = Array.isArray(pt.y) ? Math.max(...pt.y) : pt.y;
+                if (lo < yMin) yMin = lo;
+                if (hi > yMax) yMax = hi;
             }
         }
     }
@@ -2390,6 +2803,8 @@ function fullscreenAutoScale() {
 function closeFullscreen(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('fullscreenOverlay').classList.remove('active');
+    toggleFullscreenComparePicker(false);
+    _fsRenderSeq++;
     if (fullscreenChartInstance) {
         fullscreenChartInstance.destroy();
         fullscreenChartInstance = null;

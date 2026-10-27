@@ -21,7 +21,7 @@ function setCors(res) {
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
 }
 
-async function fetchYahoo(symbol, range, interval) {
+async function fetchYahoo(symbol, range, interval, ohlc) {
     const iv = ['1d', '1wk', '1mo', '5m', '15m', '30m', '1h'].includes(interval) ? interval : '1d';
     const intraday = ['5m', '15m', '30m', '1h'].includes(iv);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
@@ -50,13 +50,24 @@ async function fetchYahoo(symbol, range, interval) {
         && result.indicators.adjclose[0].adjclose) || null;
     // Exchange-local timestamps for intraday bars (Yahoo gives the offset)
     const gmtoff = (result.meta && result.meta.gmtoffset) || 0;
+    // ohlc=1 (candlestick charts): open/high/low on the SAME adjusted scale as the close —
+    // each raw bar is multiplied by that bar's adjclose/close factor.
+    const q0 = result.indicators.quote[0];
     const out = [];
     for (let i = 0; i < ts.length; i++) {
         const a = adj ? adj[i] : null;
         const c = (a != null && isFinite(a) && a > 0) ? a : closes[i];
         if (c != null && isFinite(c) && c > 0) {
             const d = new Date((ts[i] + (intraday ? gmtoff : 0)) * 1000).toISOString();
-            out.push({ date: intraday ? d.slice(0, 19).replace('T', ' ') : d.slice(0, 10), close: c });
+            const pt = { date: intraday ? d.slice(0, 19).replace('T', ' ') : d.slice(0, 10), close: c };
+            if (ohlc) {
+                const k = (closes[i] > 0) ? c / closes[i] : 1;
+                const o = q0.open && q0.open[i], h = q0.high && q0.high[i], l = q0.low && q0.low[i];
+                pt.open = (o > 0 ? o * k : c);
+                pt.high = Math.max(h > 0 ? h * k : c, pt.open, c);
+                pt.low = Math.min(l > 0 ? l * k : c, pt.open, c);
+            }
+            out.push(pt);
         }
     }
     return out;
@@ -70,11 +81,12 @@ module.exports = async (req, res) => {
         const q = req.query || {};
         const range = q.range || '1y';
         const interval = q.interval;
+        const ohlc = q.ohlc === '1';
 
         if (q.symbols) {
             const syms = String(q.symbols).split(',').map(s => s.trim()).filter(Boolean).slice(0, 40);
             const entries = await Promise.all(syms.map(async (s) => {
-                try { return [s, await fetchYahoo(s, range, interval)]; } catch (e) { return [s, null]; }
+                try { return [s, await fetchYahoo(s, range, interval, ohlc)]; } catch (e) { return [s, null]; }
             }));
             const out = {};
             for (const [s, v] of entries) out[s] = v;
@@ -84,7 +96,7 @@ module.exports = async (req, res) => {
 
         const symbol = q.symbol;
         if (!symbol) { res.status(400).json({ error: 'missing symbol or symbols' }); return; }
-        const points = await fetchYahoo(symbol, range, interval);
+        const points = await fetchYahoo(symbol, range, interval, ohlc);
         res.status(200).json({ symbol, points });
     } catch (e) {
         res.status(502).json({ error: 'history_proxy_failed', message: e.message });

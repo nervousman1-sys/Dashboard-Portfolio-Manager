@@ -585,7 +585,9 @@ async function fetchSyntheticHistory(client, range) {
         const shift = cardReturn - history[n - 1].returnPct;
         if (Math.abs(shift) > 0.001) for (let i = 0; i < n; i++) history[i].returnPct += shift;
         history[n - 1].returnPct = cardReturn; // exact to the decimal
-        const mvNowUsd = client.holdings.reduce((s, h) => s + (h.value || 0) * fxOf(h.currency), 0);
+        // Same holdings set as every other point (stocks/funds only) — summing ALL holdings here
+        // (bonds included) made the last value jump and drew a fake cliff in $ / comparison mode.
+        const mvNowUsd = allStockFundHoldings.reduce((s, h) => s + (h.value || 0) * fxOf(h.currency), 0);
         if (mvNowUsd > 0) history[n - 1].value = mvNowUsd + cashBalance;
     }
 

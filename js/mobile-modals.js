@@ -39,6 +39,7 @@
     //    button pops it (the pop is handled in init.js's popstate → _finxCloseTopOverlay). ──
     var pushed = 0;
     function syncHistory() {
+        if (grab) grab.classList.toggle('on', isPhone() && !!topOf(DISMISS));
         if (!isPhone()) return;
         var open = document.querySelectorAll(GENERIC).length + (document.querySelector('.sidebar.mobile-open') ? 1 : 0);
         while (pushed < open) { try { history.pushState({ finxOverlay: 1 }, '', location.href); } catch (e) { } pushed++; }
@@ -48,6 +49,70 @@
     var _syncQueued = false;
     function queueSync() { if (_syncQueued) return; _syncQueued = true; requestAnimationFrame(function () { _syncQueued = false; syncHistory(); }); }
     try { new MutationObserver(queueSync).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }); } catch (e) { }
+
+    // ── SWIPE UP from the bottom pill — close a window the way you close an app on the phone. ──
+    // While dragging, the window follows the finger, shrinks, rounds its corners and fades, so the
+    // page it was opened from shows behind it. Released past ~25% of the screen (or flicked) it
+    // flies away and closes; otherwise it springs back into place.
+    var DISMISS = ANY.replace(', .sidebar.mobile-open', '');
+    var grab = document.createElement('div');
+    grab.className = 'finx-grab';
+    grab.setAttribute('aria-hidden', 'true');
+    grab.innerHTML = '<span></span>';
+    if (document.body) document.body.appendChild(grab);
+    else document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(grab); }, { once: true });
+
+    function paint(ov, transform, opacity, radius, transition) {
+        var st = ov.style;
+        st.transition = transition || 'none';
+        st.transformOrigin = '50% 100%';
+        st.transform = transform;
+        st.opacity = opacity;
+        st.clipPath = radius ? 'inset(0 round ' + radius + 'px)' : '';
+    }
+    function unpaint(ov) {
+        var st = ov.style;
+        st.transition = 'none'; st.transform = ''; st.opacity = ''; st.clipPath = ''; st.willChange = ''; st.transformOrigin = '';
+    }
+    // Animate a window away, then run its own close (history/scroll-lock cleanup), then clear styles.
+    function flyOut(ov, transform) {
+        paint(ov, transform, 0, 26, 'transform .3s cubic-bezier(.2,.75,.25,1), opacity .26s ease-out');
+        setTimeout(function () { closeOverlay(ov); setTimeout(function () { unpaint(ov); }, 400); }, 240);
+    }
+
+    var g = null;
+    grab.addEventListener('touchstart', function (e) {
+        var ov = topOf(DISMISS);
+        if (!ov || e.touches.length !== 1) return;
+        var y = e.touches[0].clientY;
+        g = { ov: ov, y0: y, y: y, trail: [[performance.now(), y]] };
+        ov.style.willChange = 'transform, opacity';
+    }, { passive: true });
+    grab.addEventListener('touchmove', function (e) {
+        if (!g) return;
+        e.preventDefault();
+        var y = e.touches[0].clientY;
+        g.y = y;
+        g.trail.push([performance.now(), y]);
+        if (g.trail.length > 6) g.trail.shift();
+        var up = Math.max(0, g.y0 - y), down = Math.max(0, y - g.y0);
+        var p = Math.min(1, up / (window.innerHeight * 0.55));
+        paint(g.ov, 'translateY(' + (-up + down * 0.12) + 'px) scale(' + (1 - 0.16 * p) + ')', 1 - 0.28 * p, 30 * Math.min(1, p * 3));
+    }, { passive: false });
+    function release() {
+        if (!g) return;
+        var ov = g.ov, up = g.y0 - g.y, H = window.innerHeight;
+        var a = g.trail[0], b = g.trail[g.trail.length - 1];
+        var v = (a[1] - b[1]) / Math.max(1, b[0] - a[0]);          // px/ms, upward positive
+        g = null;
+        if (up > H * 0.25 || (v > 0.5 && up > 28)) flyOut(ov, 'translateY(' + (-H) + 'px) scale(0.7)');
+        else {
+            paint(ov, 'translateY(0) scale(1)', 1, 0, 'transform .36s cubic-bezier(.25,1.3,.4,1), opacity .2s ease');
+            setTimeout(function () { unpaint(ov); }, 380);
+        }
+    }
+    grab.addEventListener('touchend', release);
+    grab.addEventListener('touchcancel', release);
 
     // ── SWIPE to dismiss: a pull-DOWN from the top of the content, or a decisive SIDE swipe. ──
     var sx = 0, sy = 0, watching = null, startScroll = 0;
@@ -64,7 +129,7 @@
         if (!isPhone() || e.touches.length !== 1) return;
         var ov = topOf(ANY); if (!ov) return;
         // Don't hijack gestures that start on interactive controls / charts.
-        if (e.target.closest && e.target.closest('button, a, input, textarea, select, [role="button"], canvas, .slider, .ta-input')) return;
+        if (e.target.closest && e.target.closest('button, a, input, textarea, select, [role="button"], canvas, .slider, .ta-input, .finx-grab')) return;
         var t = e.touches[0]; sx = t.clientX; sy = t.clientY; watching = ov;
         var sc = scrollableFrom(e.target, ov); startScroll = sc ? sc.scrollTop : 0;
     }, { passive: true });
@@ -74,7 +139,8 @@
         var ax = Math.abs(dx), ay = Math.abs(dy);
         var downDismiss = dy > 95 && ay > ax * 1.4 && startScroll <= 2;  // pull down from the top
         var sideDismiss = ax > 115 && ax > ay * 1.4;                     // decisive horizontal swipe
-        if (downDismiss || sideDismiss) closeOverlay(watching);
+        if (downDismiss) flyOut(watching, 'translateY(' + Math.round(window.innerHeight * 0.9) + 'px) scale(0.9)');
+        else if (sideDismiss) flyOut(watching, 'translateX(' + (dx > 0 ? '' : '-') + Math.round(window.innerWidth * 0.9) + 'px) scale(0.92)');
         watching = null;
     }, { passive: true });
 })();

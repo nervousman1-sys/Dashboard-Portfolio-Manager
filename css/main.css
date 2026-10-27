@@ -13010,3 +13010,128 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .client-card .donut-legend-item i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
     .client-card .donut-legend-item b { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
 }
+
+/* ═══ FULLSCREEN CHART TOOLBAR (2026-10-27) — js/charts.js openFullscreenChart ═══
+   Title + period return · ranges · [קו|נרות] [%|$] [+השוואה] … reset · legend chips with each
+   series' return · comparison picker panel over the chart. */
+.fullscreen-chart-header.fsx {
+    display: flex; flex-direction: column; align-items: stretch; flex-wrap: nowrap;
+    gap: 10px; padding: 14px 20px 10px; max-height: none; overflow: visible;
+}
+.fsx-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fsx-title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fsx-title h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fsx-sub { font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
+.fsx-ret { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; direction: ltr; color: var(--text-primary); }
+.fsx-ret.up { color: var(--accent-green); }
+.fsx-ret.down { color: var(--accent-red); }
+.fsx-ranges { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0; }
+.fsx-ranges::-webkit-scrollbar { display: none; }
+.fsx-ranges .time-btn { flex: 0 0 auto; }
+.fsx-tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; }
+.fsx-spacer { flex: 1; }
+.fsx-seg {
+    display: inline-flex; padding: 2px; gap: 2px; border-radius: 10px;
+    background: rgba(148, 163, 184, 0.08); border: 1px solid var(--border); flex-shrink: 0;
+}
+.fsx-seg button {
+    display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px;
+    border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary);
+    font: 600 12.5px/1 inherit; font-family: inherit; cursor: pointer; transition: background .15s, color .15s;
+}
+.fsx-seg button.on { background: var(--accent-blue); color: #04121a; }
+.fsx-seg button.locked { opacity: .35; }
+.fsx-mode button { min-width: 34px; justify-content: center; padding: 0 8px; font-size: 13px; font-weight: 800; }
+.fsx-cmp-btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+    font: 700 12.5px/1 inherit; font-family: inherit; cursor: pointer;
+}
+.fsx-cmp-btn.active, .fsx-cmp-btn.open { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 229, 255, 0.08); }
+.fsx-cmp-btn b { font-variant-numeric: tabular-nums; }
+.fsx-icon {
+    width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+    font-size: 17px; font-family: inherit; cursor: pointer;
+}
+.fsx-icon:hover, .fsx-seg button:not(.on):hover, .fsx-cmp-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
+.fsx-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.fsx-chips::-webkit-scrollbar { display: none; }
+.fsx-chips[hidden] { display: none; }
+.fsx-chip {
+    display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 28px; padding: 0 4px 0 10px;
+    border-radius: 999px; background: rgba(148, 163, 184, 0.08); border: 1px solid var(--border);
+    font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+}
+.fsx-chip:first-child { padding-inline-start: 10px; padding-inline-end: 10px; }
+.fsx-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.fsx-chip-n { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.fsx-chip b { color: var(--text-primary); font-variant-numeric: tabular-nums; font-weight: 700; }
+.fsx-chip .fsx-na { color: var(--text-muted); font-weight: 500; }
+.fsx-chip-x {
+    width: 22px; height: 22px; border-radius: 50%; border: 0; background: transparent; color: var(--text-muted);
+    font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.fsx-chip-x:hover { background: rgba(148, 163, 184, 0.15); color: var(--text-primary); }
+.fullscreen-chart-box { position: relative; }
+.fsx-picker {
+    position: absolute; inset-inline: 12px; top: 128px; z-index: 6; max-height: min(62vh, 520px);
+    display: flex; flex-direction: column; border-radius: 16px; overflow: hidden;
+    background: var(--bg-surface); border: 1px solid var(--border-hover);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    animation: fsxPickIn .18s ease-out;
+}
+.fsx-picker[hidden] { display: none; }
+@keyframes fsxPickIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.fsx-pk-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.fsx-pk-head b { font-size: 14.5px; color: var(--text-primary); }
+.fsx-pk-head span { flex: 1; font-size: 11.5px; color: var(--text-muted); }
+.fsx-pk-done { height: 30px; padding: 0 14px; border-radius: 9px; border: 0; background: var(--accent-blue); color: #04121a; font: 800 12.5px inherit; font-family: inherit; cursor: pointer; }
+.fsx-pk-body { overflow-y: auto; padding: 6px 14px 14px; }
+.fsx-pk-group { padding-top: 10px; }
+.fsx-pk-label { font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 7px; letter-spacing: .2px; }
+.fsx-pk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fsx-pick {
+    display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+    font: 600 12.5px inherit; font-family: inherit; cursor: pointer; transition: all .15s;
+}
+.fsx-pick i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--c); background: transparent; transition: background .15s; }
+.fsx-pick.on { border-color: var(--c); color: var(--text-primary); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.fsx-pick.on i { background: var(--c); }
+@media (max-width: 768px) {
+    .fullscreen-chart-header.fsx { padding: 10px 12px 8px; gap: 8px; }
+    .fsx-title h3 { font-size: 15px; }
+    .fsx-sub { font-size: 11px; }
+    .fsx-ret { font-size: 17px; }
+    .fsx-ranges { justify-content: space-between; gap: 3px; }
+    .fsx-ranges .time-btn { padding: 6px 8px; font-size: 11.5px; min-width: 34px; }
+    .fsx-tools { gap: 6px; }
+    .fsx-seg button { height: 30px; padding: 0 9px; font-size: 12px; }
+    .fsx-mode button { min-width: 30px; padding: 0 6px; }
+    .fsx-cmp-btn { height: 34px; padding: 0 10px; font-size: 12px; }
+    .fsx-desk { display: none; }
+    .fsx-picker { inset-inline: 8px; top: 118px; max-height: 64vh; }
+    .fullscreen-chart-body { padding: 6px 4px 8px 6px; }
+}
+@media (max-width: 360px) {
+    .fsx-seg button span { display: none; }
+}
+html.day-mode .fsx-seg button.on, html.day-mode .fsx-pk-done { color: #fff; }
+
+/* ═══ SWIPE-UP CLOSE PILL (2026-10-27) — js/mobile-modals.js ═══
+   Shown at the bottom of any open window on phones; drag it up to close the window. */
+.finx-grab { display: none; }
+@media (max-width: 1023px) {
+    .finx-grab.on {
+        display: flex; align-items: flex-end; justify-content: center;
+        position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+        width: 58%; max-width: 280px; height: 34px; padding-bottom: 7px;
+        z-index: 2147483000; touch-action: none; -webkit-tap-highlight-color: transparent;
+    }
+    .finx-grab span {
+        width: 48px; height: 5px; border-radius: 3px;
+        background: rgba(226, 232, 240, 0.6); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+    html.day-mode .finx-grab span { background: rgba(30, 41, 59, 0.5); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); }
+}
