@@ -51,7 +51,7 @@ function renderAuthForm(mode) {
         <div class="auth-box">
             <div class="auth-header">
                 <h2>${isLogin ? 'התחברות למערכת' : 'הרשמה למערכת'}</h2>
-                <p>Dashboard Portfolio Manager</p>
+                <p>Finextium · ניהול תיקים וניתוח שוק</p>
             </div>
             <div class="auth-error" id="authError"></div>
             <div class="auth-field">

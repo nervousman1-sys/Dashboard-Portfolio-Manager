@@ -399,7 +399,10 @@ async function _dnLoadVision(det) {
     const mode = box.dataset.mode || 'transcribe';
     const imgs = _dnBoxImgs(box);
     if (!imgs.length) { box.innerHTML = '<div class="adv-empty">אין תוכן נוסף.</div>'; return; }
-    box.innerHTML = '<div class="adv-empty">קורא את התוכן מהתמונה…</div>';
+    // Show the original image(s) at once — the reader can already read it — while the AI
+    // transcription (quota-limited) runs; the text replaces it when ready.
+    const _imgsHTML = imgs.map(u => `<a href="${_dnEsc(u)}" target="_blank" rel="noopener"><img class="dn-vision-preview" src="${_dnEsc(u)}" alt="" loading="lazy"></a>`).join('');
+    box.innerHTML = '<div class="adv-empty dn-vision-wait">מתמלל את התמונה לטקסט…</div>' + _imgsHTML;
     // ALL the post's images in parallel — flows posts split the data across
     // several images; reading only the first one showed a partial picture.
     const texts = await Promise.all(imgs.map(u => _dnVisionText(u, mode)));
@@ -417,7 +420,7 @@ async function _dnLoadVision(det) {
         }
     } else {
         box.dataset.loaded = '';
-        box.innerHTML = `<div class="adv-empty">לא הצלחנו לקרוא את התמונה כרגע — <a href="${_dnEsc(imgs[0])}" target="_blank" rel="noopener" style="color:var(--accent-blue)">פתח את התמונה</a></div>`;
+        box.innerHTML = `<div class="adv-empty">התמלול לטקסט לא זמין כרגע — זו התמונה המקורית:</div>` + _imgsHTML;
     }
 }
 

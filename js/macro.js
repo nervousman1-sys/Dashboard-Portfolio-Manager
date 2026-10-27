@@ -1385,6 +1385,10 @@ async function _loadGeoMacroNews(forceRefresh) {
                 .eq('status', 'active').order('created_at', { ascending: false }).limit(40);
             if (!error && data && data.length) {
                 items = data.map(r => ({ he: r.headline_he, en: r.headline_en, tag: r.tag, source: r.source, url: r.url, date: r.published_at || String(r.created_at || '').slice(0, 10) }));
+                // The curated table is only as fresh as its 24/7 agent. If the agent is paused, never
+                // present months-old headlines as "updates" — use the live on-demand feed instead.
+                const newest = Date.parse(data[0].created_at);
+                if (!(newest > Date.now() - 3 * 86400000)) items = null;
             }
         }
     } catch (e) { /* fall through to endpoint */ }

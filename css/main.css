@@ -13135,3 +13135,7 @@ html.day-mode .fsx-seg button.on, html.day-mode .fsx-pk-done { color: #fff; }
     }
     html.day-mode .finx-grab span { background: rgba(30, 41, 59, 0.5); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); }
 }
+
+/* News post image shown immediately while the AI transcription runs (js/discord-news.js). */
+.dn-vision-preview { display: block; width: 100%; max-height: 520px; object-fit: contain; border-radius: 10px; margin-top: 8px; background: rgba(148, 163, 184, 0.06); }
+.dn-vision-wait { padding-bottom: 0 !important; }

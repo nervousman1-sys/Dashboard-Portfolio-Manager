@@ -56,12 +56,52 @@ const TICKER_LS_TTL = 72 * 60 * 60 * 1000; // 72h — daily closes barely change
 // Session-level dedup: track tickers already fetched this session
 const _sessionTickerCache = {};
 
+// ── Compact, size-capped localStorage cache ──
+// The old format ({date:'YYYY-MM-DD', close:123.456789…} per day, ~40 B/point, ~50 KB per 5Y
+// ticker) filled the whole ~5 MB origin quota after ~100 names: every later save failed silently
+// (prefs, card cache, chart settings) and the risk model re-downloaded history on each visit.
+// v2 entries: { v:2, ts, s:'YYYY-MM-DD' (first date), o:[day offsets], c:[closes, 6 sig. digits] }
+// ≈ 2.5× smaller, and at most TICKER_LS_MAX names are kept (oldest written evicted first).
+const TICKER_LS_MAX = 180;
+const TICKER_LS_IDX = 'ticker_hist_idx';
+let _tickerIdx = null;               // { ticker: writtenTs }
+function _tickerIdxLoad() {
+    if (_tickerIdx) return _tickerIdx;
+    try { _tickerIdx = JSON.parse(localStorage.getItem(TICKER_LS_IDX) || 'null'); } catch (e) { _tickerIdx = null; }
+    if (!_tickerIdx) {
+        // One-time migration: drop every old-format (or stray) entry — they are what filled the quota.
+        _tickerIdx = {};
+        try {
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('ticker_hist_')) keys.push(k); }
+            for (const k of keys) localStorage.removeItem(k);
+            localStorage.setItem(TICKER_LS_IDX, '{}');
+        } catch (e) { }
+    }
+    return _tickerIdx;
+}
+const _DAY_MS = 86400000;
+function _tickerPack(data) {
+    const t0 = Date.parse(data[0].date.slice(0, 10) + 'T00:00:00Z');
+    const o = new Array(data.length), c = new Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+        o[i] = Math.round((Date.parse(data[i].date.slice(0, 10) + 'T00:00:00Z') - t0) / _DAY_MS);
+        c[i] = +(+data[i].close).toPrecision(6);
+    }
+    return { v: 2, ts: Date.now(), s: data[0].date.slice(0, 10), o, c };
+}
+function _tickerUnpack(e) {
+    const t0 = Date.parse(e.s + 'T00:00:00Z'), out = new Array(e.o.length);
+    for (let i = 0; i < e.o.length; i++) out[i] = { date: new Date(t0 + e.o[i] * _DAY_MS).toISOString().slice(0, 10), close: e.c[i] };
+    return out;
+}
+
 function _getTickerFromLS(ticker, outputSize) {
     try {
         const raw = localStorage.getItem(TICKER_LS_PREFIX + ticker);
         if (!raw) return null;
         const entry = JSON.parse(raw);
-        if (Date.now() - entry.ts > TICKER_LS_TTL) {
+        if (entry.v !== 2 || Date.now() - entry.ts > TICKER_LS_TTL) {
             localStorage.removeItem(TICKER_LS_PREFIX + ticker);
             return null;
         }
@@ -70,20 +110,31 @@ function _getTickerFromLS(ticker, outputSize) {
         // cache here would silently compute β/σ/correlation on far too few days.
         // Long ranges (5Y/MAX) need a genuinely deep series, not last year's cache.
         const needed = outputSize > 600 ? Math.min(outputSize, 1000) : Math.min(outputSize, 200);
-        if (entry.data && entry.data.length >= needed) {
-            return entry.data;
+        if (entry.c && entry.c.length >= needed) {
+            return _tickerUnpack(entry);
         }
         return null;
     } catch (e) { return null; }
 }
 
 function _saveTickerToLS(ticker, data) {
-    try {
-        localStorage.setItem(TICKER_LS_PREFIX + ticker, JSON.stringify({
-            data: data,
-            ts: Date.now()
-        }));
-    } catch (e) { /* localStorage full — silent */ }
+    if (!Array.isArray(data) || data.length < 2 || !data[0] || !data[0].date) return;
+    const idx = _tickerIdxLoad();
+    let payload;
+    try { payload = JSON.stringify(_tickerPack(data)); } catch (e) { return; }
+    const evictOldest = (n) => {
+        const old = Object.entries(idx).filter(([t]) => t !== ticker).sort((a, b) => a[1] - b[1]).slice(0, n);
+        for (const [t] of old) { try { localStorage.removeItem(TICKER_LS_PREFIX + t); } catch (e) { } delete idx[t]; }
+    };
+    if (!(ticker in idx) && Object.keys(idx).length >= TICKER_LS_MAX) evictOldest(Object.keys(idx).length - TICKER_LS_MAX + 1);
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            localStorage.setItem(TICKER_LS_PREFIX + ticker, payload);
+            idx[ticker] = Date.now();
+            localStorage.setItem(TICKER_LS_IDX, JSON.stringify(idx));
+            return;
+        } catch (e) { evictOldest(15); }   // quota — make room (oldest first) and retry
+    }
 }
 
 // Invalidate cached synthetic history for a specific client.

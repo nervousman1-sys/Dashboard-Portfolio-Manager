@@ -1109,7 +1109,7 @@ function generateReport(clientId) {
             </table>
         </div>
         <div class="report-section" style="text-align:center;margin-top:40px">
-            <p style="color:#999;font-size:11px">דוח זה הופק אוטומטית מתוך Dashboard Portfolio Manager | ${dateStr}</p>
+            <p style="color:#999;font-size:11px">דוח זה הופק אוטומטית מתוך Finextium | ${dateStr}</p>
             <button class="report-back-btn" style="position:static;margin-top:16px" onclick="window.print()">הדפס / שמור כ-PDF</button>
         </div>
     `;
