@@ -168,8 +168,13 @@ function getClientFxRefRate(clientId) {
 // Yahoo proxy, "ILS=X" = USD/ILS), cached 24h. Lets the FX-adjusted return + ₪ FX P&L work for
 // EVERY portfolio without ever fabricating a rate. ──
 let _usdIlsHist = null; // [{ d:'YYYY-MM-DD', c:rate }] chronological
-async function ensureUsdIlsHistory() {
-    if (_usdIlsHist) return _usdIlsHist;
+let _usdIlsHistPending = null; // one in-flight fetch shared by concurrent callers
+function ensureUsdIlsHistory() {
+    if (_usdIlsHist) return Promise.resolve(_usdIlsHist);
+    if (!_usdIlsHistPending) _usdIlsHistPending = _loadUsdIlsHistory().finally(() => { _usdIlsHistPending = null; });
+    return _usdIlsHistPending;
+}
+async function _loadUsdIlsHistory() {
     try {
         const c = JSON.parse(localStorage.getItem('fx_usdils_hist_v1') || 'null');
         if (c && c.ts && (Date.now() - c.ts < 86400000) && Array.isArray(c.data) && c.data.length) { _usdIlsHist = c.data; return _usdIlsHist; }

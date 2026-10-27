@@ -12951,3 +12951,32 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .bulk-row.alloc-row > .bulk-row-name { grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bulk-row.alloc-row > .risk-badge { grid-column: 2; grid-row: 1; width: 100%; box-sizing: border-box; text-align: center; padding-inline: 0; }
 }
+
+/* ═══ MOBILE READABILITY FLOOR (2026-10-27) ═══
+   Phone sweep at 360px found text rendered at 7–9px (quote strip names, technical chips, report
+   deltas, small captions) and names clipped to "QA ברו…". Floor: nothing under 9.5px, body labels
+   ≥10.5px; variable names wrap to 2 lines instead of being cut. Phones only — desktop untouched. */
+@media (max-width: 768px) {
+    .qw-ticker .qw-name { font-size: 9.5px; letter-spacing: 0; opacity: 0.95; }
+    .qw-change { font-size: 9.5px; }
+    .tech-chips .dn-tab { font-size: 11px !important; padding: 5px 8px !important; }
+    .tech-chips .dn-tab .dn-tab-n { font-size: 10px !important; }
+    .rep-delta { font-size: 10px !important; }
+    .rep-score-cap, .rep-cr-mlabel { font-size: 10.5px !important; }
+    .adv-score-den { font-size: 10px; }
+    .stat-label, .stat-sub, .time-range-btn, .modal-tab, .rep-metric-name { font-size: 11px; }
+    .alloc-chg, .alloc-price { font-size: 11px; }
+    .sentiment-sub { font-size: 10px; }
+
+    /* Smart management: the name gets the room (2 lines, never "QA ברו…"); cash slot stays fixed */
+    .bulk-row:not(.alloc-row) { grid-template-columns: 22px minmax(0, 1fr) 60px 96px; column-gap: 8px; }
+    .bulk-row:not(.alloc-row) .bulk-row-name,
+    .bulk-row.alloc-row > .bulk-row-name {
+        white-space: normal; text-overflow: clip; line-height: 1.25;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+    }
+    .bulk-row:not(.alloc-row) .bulk-row-cash { font-size: 12px; white-space: nowrap; }
+
+    /* Liquidity engine asset cards: full name on up to 2 lines instead of "ביטקוין (coin…" */
+    .lhe-card-name { white-space: normal; text-overflow: clip; overflow: visible; line-height: 1.25; }
+}

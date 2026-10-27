@@ -1269,8 +1269,11 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
                     continue;
                 }
 
-                // Always persist live API prices to DB — no locks.
-                // If the API returned this price, it IS the current market price.
+                // Persist live API prices to DB — but skip rows the DB already holds at this exact
+                // price (market closed / no tick since the last open). Every skipped write is one
+                // less round-trip to the DB and one less pooled connection.
+                if (h._dbPrice != null && Math.abs(h._dbPrice - newPrice) < 1e-9 &&
+                    (newPreviousClose == null || Math.abs((h._dbPrev || 0) - newPreviousClose) < 1e-9)) continue;
                 const newValue = h.shares * newPrice;
                 affectedPortfolios.add(client.id);
 
@@ -1281,6 +1284,7 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
                         .eq('id', h.id)
                         .then(({ error }) => {
                             if (error) console.error(`[PriceService] DB update ${h.ticker}:`, error.message);
+                            else { h._dbPrice = newPrice; h._dbPrev = newPreviousClose; }
                             return !error;
                         })
                 );

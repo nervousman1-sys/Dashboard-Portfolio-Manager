@@ -1413,9 +1413,13 @@ function renderClientCards() {
         const _donutFx = (cur) => (typeof getFxRate === 'function') ? getFxRate(cur || 'USD', 'USD') : 1;
         const _stockValueUsd = stockHoldings.reduce((s, h) => s + ((h.value || h.shares * h.price) || 0) * _donutFx(h.currency), 0);
         const _bondValueUsd  = bondHoldings.reduce((s, h)  => s + ((h.value || h.shares * h.price) || 0) * _donutFx(h.currency), 0);
-        const _assetTotalUsd = _stockValueUsd + _bondValueUsd;
+        // Cash is part of the portfolio — the row weights (allocationPct) are taken over the total
+        // INCLUDING cash, so the donut must be too, or it shows "מניות 100%" beside a cash balance.
+        const _cashValueUsd = Math.max(0, _cashUsd) + Math.max(0, _cashIls) * _donutFx('ILS');
+        const _assetTotalUsd = _stockValueUsd + _bondValueUsd + _cashValueUsd;
         const totalStockPct = _assetTotalUsd > 0 ? (_stockValueUsd / _assetTotalUsd * 100) : 0;
         const totalBondPct  = _assetTotalUsd > 0 ? (_bondValueUsd  / _assetTotalUsd * 100) : 0;
+        const totalCashPct  = _assetTotalUsd > 0 ? (_cashValueUsd  / _assetTotalUsd * 100) : 0;
 
         // FX-aware return — respects the תשואה מתואמת מט"ח toggle
         const _pr = _calcReturn(client);
@@ -1579,11 +1583,12 @@ function renderClientCards() {
                 loadingMsg.textContent = 'טוען מחירים...';
                 ctx.parentElement.appendChild(loadingMsg);
             }
-            const chartData = hasData ? [totalStockPct, totalBondPct] : [1];
-            const chartLabels = hasData ? ['מניות', 'אג"ח'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
+            const chartData = hasData ? [totalStockPct, totalBondPct, totalCashPct] : [1];
+            const chartLabels = hasData ? ['מניות', 'אג"ח', 'מזומן'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
             const _donutDay = document.documentElement.classList.contains('day-mode');
-            const chartBg = hasData ? (_donutDay ? ['#3d94ae', '#8a68c2'] : ['#00e5ff', '#a855f7']) : ['rgba(255,255,255,0.08)'];
-            const chartBorder = hasData ? (_donutDay ? ['#31768b', '#6f4fa3'] : ['#00b8d4', '#9333ea']) : ['rgba(255,255,255,0.15)'];
+            // cash slice = the same green as the cash rows' dots (var(--accent-green))
+            const chartBg = hasData ? (_donutDay ? ['#3d94ae', '#8a68c2', '#047857'] : ['#00e5ff', '#a855f7', '#00ff94']) : ['rgba(255,255,255,0.08)'];
+            const chartBorder = hasData ? (_donutDay ? ['#31768b', '#6f4fa3', '#036146'] : ['#00b8d4', '#9333ea', '#00cc76']) : ['rgba(255,255,255,0.15)'];
 
             charts[client.id] = new Chart(ctx, {
                 type: 'doughnut',

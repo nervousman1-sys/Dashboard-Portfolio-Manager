@@ -58,6 +58,8 @@ function mapHolding(h) {
         shares: h.shares,
         price: h.price,
         previousClose: h.previous_close,
+        _dbPrice: h.price,                 // what the DB row holds — lets price persistence skip no-op writes
+        _dbPrev: h.previous_close,
         currency: h.currency,
         assetClass: h.asset_class || _inferAssetClass(h.type),
         bondType: h.bond_type || null,
@@ -69,7 +71,14 @@ function mapHolding(h) {
 
 // ========== FETCH ALL CLIENTS ==========
 
-async function supaFetchClients() {
+// Concurrent callers (login submit + auth-state listener both boot the dashboard) share ONE
+// in-flight request instead of each paying the full DB round-trip.
+let _supaFetchClientsPending = null;
+function supaFetchClients() {
+    if (!_supaFetchClientsPending) _supaFetchClientsPending = _supaFetchClientsOnce().finally(() => { _supaFetchClientsPending = null; });
+    return _supaFetchClientsPending;
+}
+async function _supaFetchClientsOnce() {
     // Use cached user ID from auth flow to avoid extra network call
     let userId = _cachedUserId || getCachedUserId();
 
@@ -839,6 +848,11 @@ async function supaRecalcClient(clientId) {
 // Records a daily snapshot of portfolio value for chart display.
 // Called after price refresh — max 1 snapshot per day per portfolio.
 async function supaRecordPerformanceSnapshot(clientId) {
+    // One snapshot per portfolio per day — once today's is confirmed, skip the DB read entirely.
+    const _snapDay = new Date().toLocaleDateString('he-IL');
+    const _snapKey = 'snap_done_' + clientId;
+    try { if (localStorage.getItem(_snapKey) === _snapDay) return; } catch (e) { }
+    const _markDone = () => { try { localStorage.setItem(_snapKey, _snapDay); } catch (e) { } };
     try {
         const { data: portfolio } = await supabaseClient
             .from('portfolios')
@@ -853,7 +867,7 @@ async function supaRecordPerformanceSnapshot(clientId) {
         const dateStr = now.toLocaleDateString('he-IL'); // DD.MM.YYYY format
 
         // Skip if we already have a snapshot for today
-        if (history.length > 0 && history[history.length - 1].date === dateStr) return;
+        if (history.length > 0 && history[history.length - 1].date === dateStr) { _markDone(); return; }
 
         // Anomaly guard: a value that jumps >18% off the last snapshot is usually a
         // mid-load artifact (prices not applied yet) and would paint a permanent fake
@@ -889,10 +903,11 @@ async function supaRecordPerformanceSnapshot(clientId) {
         // Keep max 1825 points (~5 years of daily data)
         if (history.length > 1825) history.splice(0, history.length - 1825);
 
-        await supabaseClient
+        const { error: snapErr } = await supabaseClient
             .from('portfolios')
             .update({ performance_history: history })
             .eq('id', clientId);
+        if (!snapErr) _markDone();
     } catch (e) {
         console.warn('supaRecordPerformanceSnapshot error:', e.message);
     }

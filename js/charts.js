@@ -1,5 +1,29 @@
 // ========== CHARTS - Chart.js Rendering (Fullscreen, Benchmark, Sector) ==========
 
+// ========== TOUCH TOOLTIP RELEASE ==========
+// Chart.js never receives a "finger lifted" event (touchend isn't in its default events), so on
+// phones a tapped tooltip/hover-offset stays stuck on the chart. Clear every chart's active
+// elements the moment the finger lifts, the pointer leaves, or the page scrolls.
+(function () {
+    function _releaseChartHover() {
+        if (!window.Chart || !Chart.instances) return;
+        Object.values(Chart.instances).forEach(ch => {
+            try {
+                const tip = ch.tooltip;
+                const hasActive = (ch.getActiveElements && ch.getActiveElements().length) || (tip && tip.getActiveElements && tip.getActiveElements().length);
+                if (!hasActive) return;
+                if (tip && tip.setActiveElements) tip.setActiveElements([], { x: 0, y: 0 });
+                ch.setActiveElements([]);
+                ch.update('none');
+            } catch (e) { /* chart mid-destroy — ignore */ }
+        });
+    }
+    ['touchend', 'touchcancel'].forEach(t => document.addEventListener(t, _releaseChartHover, { passive: true, capture: true }));
+    document.addEventListener('pointerleave', e => { if (e.target && e.target.tagName === 'CANVAS') _releaseChartHover(); }, true);
+    window.addEventListener('scroll', _releaseChartHover, { passive: true, capture: true });
+    window._releaseChartHover = _releaseChartHover;
+})();
+
 // ========== CHART LIFECYCLE UTILITIES ==========
 
 // Safely destroy a chart by its key in the charts{} map
