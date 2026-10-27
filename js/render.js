@@ -1351,7 +1351,7 @@ function renderClientCards() {
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
                             <span class="alloc-chg price-change ${changeClass}" title="שינוי יומי (מול סגירה קודמת)">${changeSign}${change.toFixed(1)}%</span>
-                            <span class="alloc-price">${currSym}${formatNumber(h.price)}</span>
+                            <span class="alloc-price">${currSym}${formatPrice(h.price)}</span>
                         </span>
                     </div>`;
             });
@@ -1373,7 +1373,7 @@ function renderClientCards() {
                         <span class="allocation-value">
                             <span class="alloc-pct">${h.allocationPct.toFixed(1)}%</span>
                             <span class="alloc-chg" aria-hidden="true" style="visibility:hidden">+0%</span>
-                            <span class="alloc-price">${bondCurrSym}${formatNumber(h.price)}</span>
+                            <span class="alloc-price">${bondCurrSym}${formatPrice(h.price)}</span>
                         </span>
                     </div>`;
             });
