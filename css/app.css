@@ -151,3 +151,21 @@ html.is-app .app-update-bar {
 html.is-app .app-update-bar span { flex: 1; }
 html.is-app .app-update-go { min-height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: #00e5ff; color: #04121a; font-weight: 800; font-family: inherit; }
 html.is-app .app-update-x { width: 36px; height: 36px; border: 0; background: none; color: #94a3b8; font-size: 16px; }
+/* Android: the system Back button closes the top window (js/mobile-modals.js + the init.js popstate
+   handler), so the windows' ✕ buttons are hidden — Back (or swipe-down) is the single way to close.
+   Still in the DOM: mobile-modals.js clicks them on Back so each window's own cleanup runs.
+   iOS has no Back button and keeps them. "ביטול" text buttons and chip-remove ✕s are actions, not
+   window closers, and stay. */
+html.is-android .modal-close,
+html.is-android .wl-close,
+html.is-android .chart-info-close,
+html.is-android .reco-close,
+html.is-android .sidebar-close-btn,
+html.is-android .rep-chart-modal-x,
+html.is-android .qw-config-close,
+html.is-android .pf-x,
+html.is-android .pa-modal-x,
+html.is-android .msheet-close,
+html.is-android .mcoll-modal-x,
+html.is-android .full-list-close-btn,
+html.is-android .fs-mob-x { display: none !important; }

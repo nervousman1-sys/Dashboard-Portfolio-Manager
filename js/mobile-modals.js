@@ -15,7 +15,7 @@
 
     // Generic overlays that DON'T manage their own history (we push a back-state for these).
     // NB: the mobile bottom-sheet toggles `.open` (not `.active`).
-    var GENERIC = '.wl-overlay.active, .chart-info-overlay.active, .fullscreen-chart-overlay.active, .pa-modal-overlay.active, #mobileSheetWrap.open';
+    var GENERIC = '.wl-overlay.active, .chart-info-overlay.active, .fullscreen-chart-overlay.active, .pa-modal-overlay.active, .pa-modal-overlay.open, #repChartModal, #mobileSheetWrap.open';
     // Every dismissable window (generic + the app-managed modals + the sidebar drawer) — for SWIPE.
     var ANY = GENERIC + ', .modal-overlay.active, .mgmt-overlay.active, .reco-overlay.active, .dc-overlay.active, .sa-overlay.active, .wl-overlay.active, .sidebar.mobile-open';
     // expose the generic list so init.js's popstate handler closes the same set
@@ -27,7 +27,8 @@
         if (!ov) return false;
         if (ov.classList.contains('sidebar')) { if (typeof toggleMobileSidebar === 'function') toggleMobileSidebar(); else ov.classList.remove('mobile-open'); return true; }
         // Click the modal's OWN close button so its cleanup (history, scroll-lock) runs.
-        var btn = ov.querySelector('.modal-close, .wl-close, .chart-info-close, .fs-close-btn, .msheet-close, .mgmt-close, [data-modal-close], [aria-label="סגור"], [aria-label="close"]');
+        // (In the Android app these buttons are hidden — Back is the close — but still clickable from here.)
+        var btn = ov.querySelector('.modal-close, .wl-close, .chart-info-close, .fs-close-btn, .fs-mob-x, .msheet-close, .mgmt-close, .pf-x, .pa-modal-x, .rep-chart-modal-x, .mcoll-modal-x, [data-modal-close], [aria-label="סגור"], [aria-label="close"]');
         if (btn) { btn.click(); return true; }
         ov.classList.remove('active');
         return true;
@@ -43,7 +44,10 @@
         while (pushed < open) { try { history.pushState({ finxOverlay: 1 }, '', location.href); } catch (e) { } pushed++; }
         if (open < pushed) pushed = open; // closed by ✕/back/swipe — resync (matches the app's existing pattern)
     }
-    try { new MutationObserver(syncHistory).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class'] }); } catch (e) { }
+    // childList too: some windows (report chart) are added/removed rather than class-toggled.
+    var _syncQueued = false;
+    function queueSync() { if (_syncQueued) return; _syncQueued = true; requestAnimationFrame(function () { _syncQueued = false; syncHistory(); }); }
+    try { new MutationObserver(queueSync).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }); } catch (e) { }
 
     // ── SWIPE to dismiss: a pull-DOWN from the top of the content, or a decisive SIDE swipe. ──
     var sx = 0, sy = 0, watching = null, startScroll = 0;

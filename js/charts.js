@@ -2211,7 +2211,7 @@ function openFullscreenChart(clientId) {
             headerEl.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
                     <h3 id="fullscreenTitle" style="font-size:14px;font-weight:700;margin:0;flex:1;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מעקב תשואה - ${client.name}</h3>
-                    <button onclick="closeFullscreen()" title="סגור" style="flex-shrink:0;width:34px;height:34px;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:rgba(15,23,42,0.8);color:var(--text-primary);cursor:pointer">&times;</button>
+                    <button class="fs-mob-x" onclick="closeFullscreen()" title="סגור" style="flex-shrink:0;width:34px;height:34px;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:rgba(15,23,42,0.8);color:var(--text-primary);cursor:pointer">&times;</button>
                 </div>
                 <div style="display:flex;flex-wrap:nowrap;justify-content:center;gap:4px">
                     ${['1d','5d','1m','6m','ytd','1y','5y','max'].map(r =>

@@ -1345,7 +1345,7 @@ function renderClientCards() {
                 assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
-                            <span class="allocation-dot" style="background: var(--accent-blue)"></span>
+                            <span class="allocation-dot" style="background: var(--alloc-stock)"></span>
                             ${displayName}
                         </span>
                         <span class="allocation-value">
@@ -1367,7 +1367,7 @@ function renderClientCards() {
                 assetsHTML += `
                     <div class="allocation-row">
                         <span class="allocation-label">
-                            <span class="allocation-dot" style="background: var(--accent-purple)"></span>
+                            <span class="allocation-dot" style="background: var(--alloc-bond)"></span>
                             ${bondLabel}
                         </span>
                         <span class="allocation-value">
@@ -1394,14 +1394,14 @@ function renderClientCards() {
         const cashHTML = `
             <div class="allocation-row cash-row">
                 <span class="allocation-label">
-                    <span class="allocation-dot" style="background:var(--accent-green)"></span>
+                    <span class="allocation-dot" style="background:var(--alloc-cash)"></span>
                     מזומן (USD)
                 </span>
                 <span class="cash-amount">${formatCurrency(_cashUsd, 'USD')}</span>
             </div>
             <div class="allocation-row cash-row">
                 <span class="allocation-label">
-                    <span class="allocation-dot" style="background:var(--accent-green)"></span>
+                    <span class="allocation-dot" style="background:var(--alloc-cash)"></span>
                     מזומן (ILS)
                 </span>
                 <span class="cash-amount">${formatCurrency(_cashIls, 'ILS')}</span>
@@ -1506,6 +1506,11 @@ function renderClientCards() {
                     <div class="chart-container">
                         <canvas id="chart-${client.id}" data-render-key="${_cardRenderKey}"></canvas>
                     </div>
+                    <div class="donut-legend" aria-label="מקרא">
+                        <span class="donut-legend-item"><i style="background:var(--alloc-stock)"></i>מניות <b>${_assetTotalUsd > 0 ? totalStockPct.toFixed(1) + '%' : '—'}</b></span>
+                        <span class="donut-legend-item"><i style="background:var(--alloc-bond)"></i>אג״ח <b>${_assetTotalUsd > 0 ? totalBondPct.toFixed(1) + '%' : '—'}</b></span>
+                        <span class="donut-legend-item"><i style="background:var(--alloc-cash)"></i>מזומן <b>${_assetTotalUsd > 0 ? totalCashPct.toFixed(1) + '%' : '—'}</b></span>
+                    </div>
                     <div class="holdings-summary">
                         <div class="holdings-list">${assetsHTML}</div>
                         <div class="cash-section">${cashHTML}</div>
@@ -1585,10 +1590,10 @@ function renderClientCards() {
             }
             const chartData = hasData ? [totalStockPct, totalBondPct, totalCashPct] : [1];
             const chartLabels = hasData ? ['מניות', 'אג"ח', 'מזומן'] : (allPricesStale && stockHoldings.length > 0 ? ['טוען...'] : ['מזומן']);
-            const _donutDay = document.documentElement.classList.contains('day-mode');
-            // cash slice = the same green as the cash rows' dots (var(--accent-green))
-            const chartBg = hasData ? (_donutDay ? ['#3d94ae', '#8a68c2', '#047857'] : ['#00e5ff', '#a855f7', '#00ff94']) : ['rgba(255,255,255,0.08)'];
-            const chartBorder = hasData ? (_donutDay ? ['#31768b', '#6f4fa3', '#036146'] : ['#00b8d4', '#9333ea', '#00cc76']) : ['rgba(255,255,255,0.15)'];
+            // Slice colours = the rows' dots and the legend (--alloc-stock / --alloc-bond / --alloc-cash).
+            const _cs = getComputedStyle(document.documentElement);
+            const _cv = (n, fb) => (_cs.getPropertyValue(n) || '').trim() || fb;
+            const chartBg = hasData ? [_cv('--alloc-stock', '#00e5ff'), _cv('--alloc-bond', '#a855f7'), _cv('--alloc-cash', '#ffb300')] : ['rgba(255,255,255,0.08)'];
 
             charts[client.id] = new Chart(ctx, {
                 type: 'doughnut',
@@ -1597,13 +1602,17 @@ function renderClientCards() {
                     datasets: [{
                         data: chartData,
                         backgroundColor: chartBg,
-                        borderColor: chartBorder,
-                        borderWidth: 2,
+                        // Crisp transparent gaps between slices instead of a same-hue border (which
+                        // blurred the slice edges); a lone slice keeps a hairline outline.
+                        borderWidth: hasData ? 0 : 1,
+                        borderColor: 'rgba(255,255,255,0.15)',
+                        spacing: hasData && chartData.filter(v => v > 0).length > 1 ? 3 : 0,
                         hoverOffset: hasData ? 6 : 0
                     }]
                 },
                 options: {
                     animation: false,   // no grow-animation on every re-render → no dashboard "jumps"
+                    devicePixelRatio: Math.max(2, window.devicePixelRatio || 1),   // razor-sharp edges
                     responsive: true,
                     maintainAspectRatio: true,
                     cutout: '55%',

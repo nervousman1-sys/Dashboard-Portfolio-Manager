@@ -30,6 +30,11 @@
     --accent-yellow: #facc15;
     --accent-purple: #c084fc;
 
+    /* ── Allocation (portfolio-card donut slices + their row dots + legend) ── */
+    --alloc-stock: #00e5ff;
+    --alloc-bond: #a855f7;
+    --alloc-cash: #ffb300;
+
     /* ── Risk ── */
     --risk-high: #ff4d4d;
     --risk-medium: #f59e0b;
@@ -8650,6 +8655,9 @@ html.day-mode {
     --border-hover: rgba(58, 50, 36, 0.34);
     --accent-blue: #0369a1;
     --accent-green: #047857;
+    --alloc-stock: #0891b2;
+    --alloc-bond: #7c3aed;
+    --alloc-cash: #d97706;
     --accent-red: #dc2626;
     /* Yellow/orange were never flipped for day mode — #facc15 on white is invisible. */
     --accent-yellow: #a16207;
@@ -12981,4 +12989,24 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     #lhePage .lhe-card-name, .lhe-card .lhe-card-name { white-space: normal; text-overflow: clip; overflow: visible; line-height: 1.25; }
     .alloc-group-label { font-size: 10.5px !important; }
     .ov-hero-live { font-size: 9.5px !important; }
+}
+
+/* ═══ PORTFOLIO-CARD DONUT LEGEND (2026-10-27) ═══
+   What each slice colour means. Phones only — the desktop card keeps its 100px donut beside the
+   rows (fixed-slot layout), where the rows' coloured dots already say it. */
+.donut-legend { display: none; }
+@media (max-width: 768px) {
+    .client-card .donut-legend {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        width: 100%;
+        margin: -2px 0 2px;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .client-card .donut-legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .client-card .donut-legend-item i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .client-card .donut-legend-item b { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
 }
