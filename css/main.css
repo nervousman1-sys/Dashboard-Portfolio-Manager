@@ -12978,5 +12978,7 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .bulk-row:not(.alloc-row) .bulk-row-cash { font-size: 12px; white-space: nowrap; }
 
     /* Liquidity engine asset cards: full name on up to 2 lines instead of "ביטקוין (coin…" */
-    .lhe-card-name { white-space: normal; text-overflow: clip; overflow: visible; line-height: 1.25; }
+    #lhePage .lhe-card-name, .lhe-card .lhe-card-name { white-space: normal; text-overflow: clip; overflow: visible; line-height: 1.25; }
+    .alloc-group-label { font-size: 10.5px !important; }
+    .ov-hero-live { font-size: 9.5px !important; }
 }

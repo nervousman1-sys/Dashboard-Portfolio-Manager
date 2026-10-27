@@ -1360,7 +1360,7 @@ function renderClientCards() {
             }
         }
         if (showBonds && bondHoldings.length > 0) {
-            assetsHTML += `<div style="font-size:9px;color:var(--text-muted);padding:4px 0 1px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.04);letter-spacing:0.5px">אג״ח</div>`;
+            assetsHTML += `<div class="alloc-group-label" style="font-size:9px;color:var(--text-muted);padding:4px 0 1px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.04);letter-spacing:0.5px">אג״ח</div>`;
             bondHoldings.slice(0, 2).forEach(h => {
                 const bondCurrSym = h.currency === 'ILS' ? '₪' : '$';
                 const bondLabel = _conciseBondLabel(h);
