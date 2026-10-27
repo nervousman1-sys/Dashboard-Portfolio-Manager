@@ -1289,18 +1289,18 @@ function _ecHistHTML() {
         let res;
         if (hasRes) {
             const anId = 'ecPastAn_' + (aid++);
-            res = `<b class="ec-rr-val">${_ecResVal(e.value, e.unit, e.kind)}</b>
-                <span class="ec-res-arrow ec-res-${sent}">${arrow(e.dir)}</span>
-                <span class="ec-rr-prev">קודם ${_ecResVal(e.previous, e.unit, e.kind)}</span>
+            // value · arrow · previous are ONE block so on phones it sits in a fixed slot (same place
+            // on every card) while only the title length varies.
+            res = `<span class="ec-hist-nums"><b class="ec-rr-val">${_ecResVal(e.value, e.unit, e.kind)}</b><span class="ec-res-arrow ec-res-${sent}">${arrow(e.dir)}</span><span class="ec-rr-prev">קודם ${_ecResVal(e.previous, e.unit, e.kind)}</span></span>
                 <span class="ec-res-badge ec-res-${sent}">${sentLabel[sent] || ''}</span>
                 <button class="ec-res-inline-btn" onclick="_ecToggleRowAnalysis('${anId}')">ניתוח קצר ›</button>
                 <div class="ec-res-analysis" id="${anId}" style="display:none">${_macroEscape(_ecAnalysis(e))}</div>`;
         } else {
-            res = `<span class="ec-rr-prev">התוצאה טרם זמינה</span>`;
+            res = `<span class="ec-hist-nums"><span class="ec-rr-prev">התוצאה טרם זמינה</span></span>`;
         }
         inner += `<div class="ec-row-result ec-res-${sent} ec-hist-row">
             <span class="ec-past-date">${dd}.${mo}</span>
-            <span class="ec-rr-label">${_macroEscape(e.he)}</span>
+            <span class="ec-rr-label" title="${_macroEscape(e.he)}">${_macroEscape(e.he)}</span>
             ${res}
         </div>`;
     }

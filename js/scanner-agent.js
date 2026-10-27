@@ -127,6 +127,14 @@ async function _saLoad(force) {
 
 function _saEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function _saDate(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`; }
+// "חישה נוירומורפית בקצה (Neuromorphic Sensing & Edge AI)" → { he: Hebrew title, en: English term }.
+// A name with no Hebrew at all is kept whole as the title (nothing to translate it to).
+function _saSplitSector(name) {
+    const s = String(name || '').trim();
+    const m = s.match(/^(.*?[֐-׿].*?)\s*\(([^()]*[A-Za-z][^()]*)\)\s*$/);
+    if (m) return { he: m[1].trim(), en: m[2].trim() };
+    return { he: s, en: '' };
+}
 function _saRel(ts, future) {
     if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return '';
     let s = Math.round((future ? d.getTime() - Date.now() : Date.now() - d.getTime()) / 1000); if (s < 0) s = 0;
@@ -201,12 +209,16 @@ function _saCardHTML(c) {
         return s.uri ? `<a class="sa-src" href="${_saEsc(s.uri)}" target="_blank" rel="noopener">${title}</a>` : `<span class="sa-src">${title}</span>`;
     }).join('');
 
+    // Sector names arrive as "Hebrew title (English Technical Term)". In a narrow RTL column the mixed
+    // text wrapped into a ragged tower and the bidi algorithm flipped the brackets ("Neuromorphic)").
+    // The card shows only the short Hebrew title; the English term moves into the opened card (LTR).
+    const { he: secHe, en: secEn } = _saSplitSector(c.sector_name || '');
     return `
     <div class="sa-card collapsed" id="sa-card-${id}">
         <div class="sa-card-head" onclick="_saToggle('${id}')">
             <div class="sa-head-row">
                 <span class="sa-caret">▸</span>
-                <div class="sa-sector">${_saEsc(c.sector_name || '')}</div>
+                <div class="sa-sector" title="${_saEsc(c.sector_name || '')}">${_saEsc(secHe)}</div>
             </div>
             <div class="sa-head-meta">
                 ${chips ? `<div class="sa-chips">${chips}</div>` : ''}
@@ -214,6 +226,7 @@ function _saCardHTML(c) {
             </div>
         </div>
         <div class="sa-card-body">
+            ${secEn ? `<div class="sa-sector-en"><span class="sa-sector-en-lbl">מונח מקצועי:</span> <bdi dir="ltr">${_saEsc(secEn)}</bdi></div>` : ''}
             ${(stage || sat) ? `<div class="sa-badges">
                 ${stage ? `<span class="sa-badge sa-stage">${stage}</span>` : ''}
                 ${sat ? `<span class="sa-badge ${satLow ? 'sa-sat-low' : 'sa-sat-hi'}">רוויה: ${sat}</span>` : ''}

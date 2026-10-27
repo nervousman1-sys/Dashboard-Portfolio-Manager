@@ -12841,3 +12841,86 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .header-left { flex-shrink: 0; }
     .header-right { min-width: 0; }
 }
+
+/* ═══ Fixed-slot card layouts (2026-10-27) ═══════════════════════════════════════════════════════
+   Rule: constant elements (badges, buttons, numbers, status) own FIXED slots; only the variable text
+   flows inside its own area — so nothing jumps as titles get longer or shorter. */
+
+/* Base helpers (all widths — keep desktop rows identical to before) */
+.ec-hist-nums { display: inline-flex; align-items: center; gap: 8px; }
+.sa-sector-en { font-size: 12.5px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.55; }
+.sa-sector-en-lbl { font-weight: 700; color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+    /* 1 ─ Macro · recent releases: [date | title ........................]
+                                     [badge| ניתוח קצר   ......  value ▲ prev]   — title is the ONLY variable. */
+    .ec-hist-row {
+        display: grid !important;
+        grid-template-columns: 54px auto minmax(0, 1fr) auto;
+        grid-template-areas: "date title title title" "badge btn . nums" "an an an an";
+        column-gap: 10px; row-gap: 8px; align-items: center;
+    }
+    .ec-hist-row .ec-past-date { grid-area: date; width: 100%; flex: none; }
+    .ec-hist-row .ec-rr-label {
+        grid-area: title; min-width: 0; font-size: 13px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ec-hist-row .ec-hist-nums {
+        grid-area: nums; display: grid; grid-template-columns: 56px 12px 74px;
+        column-gap: 6px; align-items: center; justify-self: end;
+    }
+    .ec-hist-row .ec-rr-val { text-align: left; white-space: nowrap; }
+    .ec-hist-row .ec-res-arrow { text-align: center; }
+    .ec-hist-row .ec-rr-prev { text-align: left; white-space: nowrap; }
+    .ec-hist-row .ec-hist-nums > .ec-rr-prev:only-child { grid-column: 1 / -1; }
+    .ec-hist-row .ec-res-badge { grid-area: badge; width: 100%; box-sizing: border-box; text-align: center; padding-inline: 0; }
+    .ec-hist-row .ec-res-inline-btn { grid-area: btn; justify-self: start; white-space: nowrap; }
+    .ec-hist-row .ec-res-analysis { grid-area: an; }
+
+    /* 2 ─ Macro · geopolitics news: tag pinned top-right, source·date top-left, headline full width
+           underneath — the headline always starts at the same x whatever the tag's length. */
+    .gm-item-row {
+        grid-template-columns: auto minmax(0, 1fr) !important;
+        grid-template-areas: "tag meta" "text text" "btn btn";
+        column-gap: 10px; row-gap: 9px; align-items: center;
+    }
+    .gm-item-row .gm-tag { grid-area: tag; justify-self: start; }
+    .gm-item-row .gm-meta { grid-area: meta; justify-self: end; text-align: left; font-size: 11px; }
+    .gm-item-row .gm-text { grid-area: text; }
+    .gm-item-row .gm-detail-btn { grid-area: btn; justify-self: start; }
+
+    /* 3 ─ Scanner: title on its own full-width line (short Hebrew title — English term moved into the
+           opened card), tickers + date on one fixed row beneath it. */
+    .sa-card-head { flex-direction: column; align-items: stretch; gap: 12px; }
+    .sa-head-row { align-items: flex-start; }
+    .sa-head-row .sa-caret { margin-top: 6px; }
+    .sa-sector { font-size: 16px; line-height: 1.45; min-width: 0; flex: 1; }
+    .sa-head-meta { flex-wrap: nowrap; justify-content: space-between; align-items: center; }
+    .sa-head-meta .sa-chips { min-width: 0; }
+    .sa-head-meta .sa-date { flex-shrink: 0; margin-inline-start: auto; }
+
+    /* 4 ─ Smart management: [☑ | name ............ | risk (fixed) | cash (fixed, left)] */
+    .bulk-row:not(.alloc-row) {
+        display: grid; grid-template-columns: 22px minmax(0, 1fr) 64px 124px;
+        column-gap: 10px; align-items: center;
+    }
+    .bulk-row:not(.alloc-row) .bulk-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bulk-row:not(.alloc-row) .risk-badge { width: 100%; box-sizing: border-box; text-align: center; padding-inline: 0; }
+    .bulk-row:not(.alloc-row) .bulk-row-cash { text-align: left; }
+    .bulk-row:not(.alloc-row) .bulk-row-reason { grid-column: 2 / -1; white-space: normal; }
+    /* risk filter: label on its own line, the three risk levels side by side in equal slots */
+    .bulk-risk-row:not(.alloc-bulk-row) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .bulk-risk-row:not(.alloc-bulk-row) .bulk-risk-label { grid-column: 1 / -1; }
+
+    /* 5 ─ AI trading agent: [name + summary ......... | status]
+                              [destination ........................]
+                              [מבנה | ערוך | השהה | מחק]   — 4 equal buttons, always one row. */
+    .ta-strat-main {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        column-gap: 8px; row-gap: 9px; align-items: start;
+    }
+    .ta-strat-main .ta-strat-id { grid-column: 1 / 4; grid-row: 1; min-width: 0; }
+    .ta-strat-main .ta-st-badge { grid-column: 4; grid-row: 1; justify-self: end; }
+    .ta-strat-main .ta-mode-badge { grid-column: 1 / -1; grid-row: 2; white-space: normal; }
+    .ta-strat-main .ta-mini { grid-row: 3; width: 100%; min-height: 38px; margin: 0; }
+}
