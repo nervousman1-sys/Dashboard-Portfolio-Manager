@@ -1247,7 +1247,22 @@ async function _backgroundPriceCompletion(intlTickers, intlSymbols, holdingsMap,
 
 // ========== SUPABASE PERSISTENCE (fire-and-forget) ==========
 
+// The DB copy of prices is only a cold-start fallback (the screen always shows live quotes and the
+// local cache), so writing every tick on every open just loads the shared connection pool.
+// Persist at most once per 5 min per device; a call already in flight is never doubled.
+const _PERSIST_MIN_GAP_MS = 5 * 60 * 1000;
+let _persistInFlight = false;
 async function _persistPricesToSupabase(priceMap, onUpdate) {
+    if (_persistInFlight) return;
+    let _lastPersist = 0;
+    try { _lastPersist = +localStorage.getItem('px_persist_ts') || 0; } catch (e) { }
+    if (Date.now() - _lastPersist < _PERSIST_MIN_GAP_MS) {
+        // still keep the local cache current so the next open paints today's prices instantly
+        if (typeof saveClientsToCache === 'function') saveClientsToCache(clients);
+        return;
+    }
+    _persistInFlight = true;
+    try { localStorage.setItem('px_persist_ts', String(Date.now())); } catch (e) { }
     try {
         const affectedPortfolios = new Set();
         const updatePromises = [];
@@ -1317,5 +1332,7 @@ async function _persistPricesToSupabase(priceMap, onUpdate) {
         console.log('[PriceService] === Background persistence complete ===');
     } catch (e) {
         console.warn('[PriceService] Supabase persist error:', e.message);
+    } finally {
+        _persistInFlight = false;
     }
 }
