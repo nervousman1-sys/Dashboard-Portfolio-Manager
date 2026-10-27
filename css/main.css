@@ -12931,3 +12931,23 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .gm-item-row .gm-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
     .gm-item-row .gm-tag { align-self: center; }
 }
+@media (max-width: 768px) {
+    /* 4b ─ Smart management · allocation targets — bulk setter: labels on their own lines, the three
+           risk levels in three equal slots, then [% input | החל] and [בטל] — nothing drifts. */
+    .bulk-risk-row.alloc-bulk-row {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: center;
+    }
+    .alloc-bulk-row .bulk-risk-label { grid-column: 1 / -1; }
+    .alloc-bulk-row .alloc-mini-wrap { grid-column: 1; }
+    .alloc-bulk-row .alloc-bulk-apply { grid-column: 2 / -1; }
+    .alloc-bulk-row .alloc-bulk-clear { grid-column: 1 / -1; }
+    .alloc-bulk-row .alloc-bulk-apply, .alloc-bulk-row .alloc-bulk-clear { width: 100%; margin: 0; }
+    /* per-portfolio rows: [name ............ | risk (fixed)] then figures / target / alerts full width */
+    .bulk-row.alloc-row {
+        display: grid !important; grid-template-columns: minmax(0, 1fr) 64px;
+        column-gap: 10px; row-gap: 9px; align-items: center;
+    }
+    .bulk-row.alloc-row > * { grid-column: 1 / -1; }
+    .bulk-row.alloc-row > .bulk-row-name { grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bulk-row.alloc-row > .risk-badge { grid-column: 2; grid-row: 1; width: 100%; box-sizing: border-box; text-align: center; padding-inline: 0; }
+}
