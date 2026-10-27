@@ -129,11 +129,15 @@ function _saEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => (
 function _saDate(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`; }
 // "חישה נוירומורפית בקצה (Neuromorphic Sensing & Edge AI)" → { he: Hebrew title, en: English term }.
 // A name with no Hebrew at all is kept whole as the title (nothing to translate it to).
+// Every English parenthetical is lifted out wherever it sits ("… (Microfluidics & Organ-on-a-Chip)
+// לגילוי תרופות"); Hebrew text, Hebrew-only parentheses and inline acronyms (MEMS, SAF) stay.
 function _saSplitSector(name) {
     const s = String(name || '').trim();
-    const m = s.match(/^(.*?[֐-׿].*?)\s*\(([^()]*[A-Za-z][^()]*)\)\s*$/);
-    if (m) return { he: m[1].trim(), en: m[2].trim() };
-    return { he: s, en: '' };
+    if (!/[֐-׿]/.test(s)) return { he: s, en: '' };
+    const en = [];
+    const he = s.replace(/\s*\(([^()]*[A-Za-z][^()]*)\)/g, (_, t) => { en.push(t.trim()); return ''; })
+        .replace(/\s+-\s+(?=\S)/g, ' – ').replace(/\s{2,}/g, ' ').replace(/^[\s–-]+|[\s–-]+$/g, '').trim();
+    return he ? { he, en: en.join(' · ') } : { he: s, en: '' };
 }
 function _saRel(ts, future) {
     if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return '';

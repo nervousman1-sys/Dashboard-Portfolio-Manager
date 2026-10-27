@@ -12924,3 +12924,10 @@ html.day-mode .rep-web-link { background: rgba(15, 118, 178, 0.09); border-color
     .ta-strat-main .ta-mode-badge { grid-column: 1 / -1; grid-row: 2; white-space: normal; }
     .ta-strat-main .ta-mini { grid-row: 3; width: 100%; min-height: 38px; margin: 0; }
 }
+@media (max-width: 768px) {
+    /* geo news: the top row (tag + source·date) is ONE line on every card, so the tag and the headline
+       start at the same height everywhere; a long source name ends in "…". */
+    .gm-item-row { align-items: start; }
+    .gm-item-row .gm-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
+    .gm-item-row .gm-tag { align-self: center; }
+}
