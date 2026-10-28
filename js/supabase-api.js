@@ -1076,7 +1076,16 @@ function _showSyncToast(message, type = 'success') {
     _syncToastEl.classList.add('visible');
     _syncToastTimer = setTimeout(() => {
         _syncToastEl.classList.remove('visible');
-    }, 2500);
+    }, type === 'info' ? 3600 : 2500);
+}
+
+// App-wide toast. Many modules call showToast(msg, type) guarded by `typeof showToast` — it was
+// never defined, so those messages (chart limits, "no candles for this portfolio", correlation
+// basket notices) were silently dropped and the buttons looked dead.
+if (typeof window.showToast !== 'function') {
+    window.showToast = function (message, type) {
+        _showSyncToast(String(message || ''), type === 'error' ? 'error' : type === 'success' ? 'success' : 'info');
+    };
 }
 
 // ── localStorage helpers (kept ONLY for one-time migration to Supabase) ──

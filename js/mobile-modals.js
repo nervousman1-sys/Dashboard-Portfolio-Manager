@@ -129,7 +129,7 @@
         if (!isPhone() || e.touches.length !== 1) return;
         var ov = topOf(ANY); if (!ov) return;
         // Don't hijack gestures that start on interactive controls / charts.
-        if (e.target.closest && e.target.closest('button, a, input, textarea, select, [role="button"], canvas, .slider, .ta-input, .finx-grab')) return;
+        if (e.target.closest && e.target.closest('button, a, input, textarea, select, [role="button"], canvas, .slider, .ta-input, .finx-grab, .fsx-picker')) return;
         var t = e.touches[0]; sx = t.clientX; sy = t.clientY; watching = ov;
         var sc = scrollableFrom(e.target, ov); startScroll = sc ? sc.scrollTop : 0;
     }, { passive: true });

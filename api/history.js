@@ -73,12 +73,50 @@ async function fetchYahoo(symbol, range, interval, ohlc) {
     return out;
 }
 
+// Asset search (keyless Yahoo) — every instrument the chart endpoint above can draw: stocks,
+// ETFs, funds, indices, crypto, futures, FX. Lives here (not in a new file) to stay within the
+// Vercel function limit.
+//   /api/history?search=nvidia  → { results: [ {symbol, name, type, exchange}, ... ] }
+const SEARCH_TYPES = { EQUITY: 'מניה', ETF: 'ETF', MUTUALFUND: 'קרן', INDEX: 'מדד', CRYPTOCURRENCY: 'קריפטו', FUTURE: 'חוזה', CURRENCY: 'מט״ח' };
+async function searchYahoo(query) {
+    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
+        '&quotesCount=15&newsCount=0&listsCount=0&enableFuzzyQuery=false';
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 6000);
+    let r;
+    try {
+        r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
+    } finally { clearTimeout(timer); }
+    if (!r.ok) throw new Error(`Yahoo search HTTP ${r.status}`);
+    const j = await r.json();
+    return ((j && j.quotes) || [])
+        .filter(x => x && x.symbol && SEARCH_TYPES[x.quoteType])
+        .slice(0, 12)
+        .map(x => ({
+            symbol: String(x.symbol),
+            name: String(x.longname || x.shortname || x.symbol).replace(/\s+/g, ' ').trim(),
+            type: SEARCH_TYPES[x.quoteType],
+            exchange: String(x.exchDisp || x.exchange || '')
+        }));
+}
+
 module.exports = async (req, res) => {
     setCors(res);
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
 
     try {
         const q = req.query || {};
+        if (q.search != null) {
+            const term = String(q.search).trim().slice(0, 40);
+            // Yahoo rejects non-Latin queries (HTTP 400); Hebrew names are matched client-side.
+            if (!term || /[^\x20-\x7E]/.test(term)) { res.status(200).json({ results: [] }); return; }
+            let results;
+            try { results = await searchYahoo(term); }
+            catch (e) { res.setHeader('Cache-Control', 'no-store'); res.status(200).json({ results: [], error: 'search_unavailable' }); return; }
+            res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+            res.status(200).json({ results });
+            return;
+        }
         const range = q.range || '1y';
         const interval = q.interval;
         const ohlc = q.ohlc === '1';

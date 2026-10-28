@@ -97,6 +97,20 @@ const BENCHMARK_GROUPS = [
 ];
 // Other portfolios drawn on the same chart get their own palette (never the portfolio green/red).
 const COMPARE_PF_COLORS = ['#f472b6', '#60a5fa', '#c084fc', '#facc15', '#2dd4bf', '#fb7185'];
+// Any searched asset / own holding added to a comparison: symbol → { name, color }.
+const COMPARE_ASSET_COLORS = ['#38bdf8', '#e879f9', '#a3e635', '#fbbf24', '#f87171', '#818cf8', '#34d399', '#fda4af'];
+const _cmpAssetMeta = {};
+function _cmpName(sym) { return BENCHMARK_SYMBOLS[sym] || (_cmpAssetMeta[sym] && _cmpAssetMeta[sym].name) || sym; }
+function _cmpColor(sym) { return BENCHMARK_COLORS[sym] || (_cmpAssetMeta[sym] && _cmpAssetMeta[sym].color) || '#94a3b8'; }
+function _cmpRegisterAsset(sym, name, inUse) {
+    if (BENCHMARK_SYMBOLS[sym]) return;
+    const m = _cmpAssetMeta[sym] || (_cmpAssetMeta[sym] = {});
+    if (name) m.name = name;
+    if (!m.color) {
+        const used = new Set((inUse || []).map(_cmpColor));
+        m.color = COMPARE_ASSET_COLORS.find(c => !used.has(c)) || COMPARE_ASSET_COLORS[Object.keys(_cmpAssetMeta).length % COMPARE_ASSET_COLORS.length];
+    }
+}
 
 // Cache for benchmark data: key = "symbol_range", value = { data, timestamp }
 const _benchmarkCache = {};
@@ -995,21 +1009,23 @@ const _lastValueTagPlugin = {
     }
 };
 
-// Candle bucket per range: [Yahoo range, interval]. Phones get coarser buckets so each candle
-// stays wide enough to read.
-function _candleSpec(range) {
+// Candle bucket: [Yahoo range, interval]. The bucket follows the span actually drawn — the range,
+// or the portfolio's age when it is younger (a 3-month-old portfolio at MAX gets daily candles,
+// not 3 monthly ones). Phones get coarser buckets so each candle stays wide enough to read.
+function _candleSpec(range, ageDays) {
     const mob = window.innerWidth <= 768;
-    switch (range) {
-        case '1d': return ['1d', '15m'];
-        case '5d': return ['5d', '1h'];
-        case '1m': return ['1mo', '1d'];
-        case '3m': return ['3mo', '1d'];
-        case '6m': return ['6mo', mob ? '1wk' : '1d'];
-        case 'ytd': return ['ytd', (mob && _rangeToDays('ytd') > 100) ? '1wk' : '1d'];
-        case '1y': return ['1y', mob ? '1wk' : '1d'];
-        case '5y': return ['5y', mob ? '1mo' : '1wk'];
-        default: return ['10y', '1mo'];
-    }
+    if (range === '1d') return ['1d', '15m'];
+    if (range === '5d') return ['5d', '1h'];
+    const isMax = range === 'max' || range === 'all';
+    const rangeDays = isMax ? 3650 : _rangeToDays(range);
+    const span = Math.max(1, Math.min(rangeDays, ageDays > 0 ? ageDays : rangeDays));
+    const iv = span <= 120 ? '1d'
+        : span <= 400 ? (mob ? '1wk' : '1d')
+        : span <= 2000 ? (mob && span > 800 ? '1mo' : '1wk')
+        : '1mo';
+    const yr = !isMax ? ({ '1m': '1mo', '3m': '3mo', '6m': '6mo', 'ytd': 'ytd', '1y': '1y', '5y': '5y' }[range] || '1y')
+        : span <= 26 ? '1mo' : span <= 85 ? '3mo' : span <= 175 ? '6mo' : span <= 358 ? '1y' : span <= 720 ? '2y' : span <= 1800 ? '5y' : '10y';
+    return [yr, iv];
 }
 
 // Portfolio OHLC candles from the holdings' REAL OHLC bars (same method as the synthetic line):
@@ -1029,7 +1045,10 @@ async function _buildPortfolioCandles(client, range) {
         if (h.currency === 'ILS' && !/\.TA$/i.test(s)) s = s.replace(/:TASE$/i, '') + '.TA';
         return s;
     };
-    const [yr, iv] = _candleSpec(range);
+    const created = client.createdAt ? new Date(client.createdAt).toISOString().slice(0, 10) : null;
+    const inc = (typeof _portfolioInceptionIso === 'function') ? _portfolioInceptionIso(client) : null;
+    const ageDays = inc ? (Date.now() - new Date(inc + 'T00:00:00').getTime()) / 86400000 : 0;
+    const [yr, iv] = _candleSpec(range, ageDays);
     const syms = [...new Set(holds.map(symOf))].slice(0, 40);
     const key = syms.join(',') + '|' + yr + '|' + iv;
     const ttl = /m$|h$/.test(iv) ? 5 * 60e3 : 30 * 60e3;
@@ -1052,8 +1071,6 @@ async function _buildPortfolioCandles(client, range) {
     if (dates.length < 2) return null;
 
     // Never draw candles from before the portfolio existed.
-    const created = client.createdAt ? new Date(client.createdAt).toISOString().slice(0, 10) : null;
-    const inc = (typeof _portfolioInceptionIso === 'function') ? _portfolioInceptionIso(client) : null;
     if (inc) {
         const bucketed = iv === '1wk' || iv === '1mo';
         dates = dates.filter((d, i) => bucketed ? (i + 1 >= dates.length || dates[i + 1].slice(0, 10) > inc) : d.slice(0, 10) >= inc);
@@ -1788,9 +1805,17 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
     // the others don't wait. All benchmarks resolve together.
     const benchmarkResults = [];
     if (benchmarks && benchmarks.length > 0) {
-        console.log(`[PerfChart] Fetching ${benchmarks.length} benchmarks: ${benchmarks.join(', ')} (range=${range})`);
+        // MAX on a young portfolio: fetch the comparison at the resolution of the portfolio's real
+        // age (daily for a few months) instead of 10y weekly bars, which left only a handful of points.
+        let benchRange = range;
+        if (range === 'max' || range === 'all') {
+            const t0 = (hist[0]._dateObj || _parseHistDate(hist[0].date)).getTime();
+            const age = (Date.now() - t0) / 86400000;
+            benchRange = age <= 26 ? '1m' : age <= 85 ? '3m' : age <= 175 ? '6m' : age <= 358 ? '1y' : age <= 1800 ? '5y' : range;
+        }
+        console.log(`[PerfChart] Fetching ${benchmarks.length} benchmarks: ${benchmarks.join(', ')} (range=${benchRange})`);
         const benchPromises = benchmarks.map(symbol =>
-            fetchBenchmarkData(symbol, range).then(data => ({ symbol, data }))
+            fetchBenchmarkData(symbol, benchRange).then(data => ({ symbol, data }))
         );
         const settled = await Promise.allSettled(benchPromises);
         for (const r of settled) {
@@ -1948,7 +1973,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
         if (!benchBaseClose || benchBaseClose <= 0) continue;
 
         datasets.push({
-            label: _bLabel || BENCHMARK_SYMBOLS[symbol] || symbol,
+            label: _bLabel || _cmpName(symbol),
             _finxKey: symbol,
             data: trimmed.map(p => {
                 const pctFromBase = ((p.close - benchBaseClose) / benchBaseClose) * 100;
@@ -1959,7 +1984,7 @@ async function renderPerformanceChart(canvasId, clientId, range, benchmarks, cha
                         : firstValue * (1 + pctFromBase / 100)
                 };
             }),
-            borderColor: _bColor || BENCHMARK_COLORS[symbol] || '#94a3b8',
+            borderColor: _bColor || _cmpColor(symbol),
             borderWidth: _bSolid ? 2 : 1.75,
             borderDash: _bSolid ? [] : [5, 3],
             fill: false,
@@ -2546,7 +2571,10 @@ function openFullscreenChart(clientId) {
     _renderFullscreenChart();
 }
 
-// Comparison picker — a panel over the chart: my other portfolios + real indices by region.
+// Comparison picker — a panel over the chart: search ANY asset (stocks, ETFs, funds, indices,
+// crypto…), this portfolio's own holdings, my other portfolios, and real indices by region.
+// The shell (header + search box) is built once per open so typing is never interrupted; only
+// the chip list re-renders.
 function _fsEnsurePicker() {
     const box = document.querySelector('#fullscreenOverlay .fullscreen-chart-box');
     if (!box) return;
@@ -2558,21 +2586,99 @@ function _fsEnsurePicker() {
         pk.hidden = true;
         box.appendChild(pk);
     }
-    const others = clients.filter(c => c.id !== _fullscreenClientId);
+    if (!pk.querySelector('#fsxPkList')) {
+        pk.innerHTML = `
+            <div class="fsx-pk-head"><b>השוואה</b><span>עד ${_FS_MAX_COMPARE} סדרות · נתוני שוק אמיתיים</span><button class="fsx-pk-done" onclick="toggleFullscreenComparePicker(false)">סיום</button></div>
+            <div class="fsx-pk-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+                <input id="fsxPkQ" type="search" autocomplete="off" enterkeyhint="search" placeholder="חיפוש נכס — מניה, קרן, ETF, מדד, קריפטו" oninput="_fsSearch(this.value)">
+            </div>
+            <div class="fsx-pk-body"><div id="fsxPkRes" hidden></div><div id="fsxPkList"></div></div>`;
+    }
+    _fsRenderPickerList();
+}
+
+// Yahoo symbol a holding is drawn with (same resolution as the candles / synthetic history).
+function _fsHoldingSymbol(h) {
+    const px = (typeof _proxySymbolFor === 'function') ? _proxySymbolFor(h.ticker) : null;
+    if (px) return null;                       // index-tracking fund → its index is already listed
+    let s = String(h.ticker || '').trim();
+    if (!s || /^\d+(\.TA)?$/i.test(s)) return null;  // numeric TASE fund ids are not on Yahoo
+    if (h.currency === 'ILS' && !/\.TA$/i.test(s)) s = s.replace(/:TASE$/i, '') + '.TA';
+    return s;
+}
+
+function _fsRenderPickerList() {
+    const list = document.getElementById('fsxPkList');
+    if (!list) return;
+    const sel = _fullscreenBenchmarks;
     const chip = (kind, key, name, color, on) =>
-        `<button class="fsx-pick ${on ? 'on' : ''}" data-kind="${kind}" data-key="${_fsEsc(key)}" style="--c:${color}" onclick="_fsPick(this)"><i></i>${_fsEsc(name)}</button>`;
-    let html = `<div class="fsx-pk-head"><b>השוואה</b><span>עד ${_FS_MAX_COMPARE} סדרות · נתוני שוק אמיתיים</span><button class="fsx-pk-done" onclick="toggleFullscreenComparePicker(false)">סיום</button></div><div class="fsx-pk-body">`;
-    if (others.length) {
-        html += `<div class="fsx-pk-group"><div class="fsx-pk-label">התיקים שלי</div><div class="fsx-pk-chips">`
-            + others.map((c, i) => chip('pf', c.id, c.name, COMPARE_PF_COLORS[i % COMPARE_PF_COLORS.length], _fullscreenComparePf.includes(c.id))).join('')
-            + `</div></div>`;
+        `<button class="fsx-pick ${on ? 'on' : ''}" data-kind="${kind}" data-key="${_fsEsc(key)}" data-name="${_fsEsc(name)}" style="--c:${color}" onclick="_fsPick(this)"><i></i>${_fsEsc(name)}</button>`;
+    const group = (label, chips) => chips ? `<div class="fsx-pk-group"><div class="fsx-pk-label">${label}</div><div class="fsx-pk-chips">${chips}</div></div>` : '';
+    let html = '';
+    // Searched assets the user already added (so they can be toggled off here too)
+    const listed = new Set(BENCHMARK_GROUPS.flatMap(g => g[1]));
+    const client = clients.find(c => c.id === _fullscreenClientId);
+    const holdSyms = [];
+    for (const h of (client && client.holdings) || []) {
+        if (!(h.type === 'stock' || h.type === 'fund') || !(h.shares > 0)) continue;
+        const s = _fsHoldingSymbol(h);
+        if (s && !listed.has(s) && !holdSyms.some(x => x.s === s)) holdSyms.push({ s, name: h.ticker === h.name || !h.name ? s.replace(/\.TA$/i, '') : h.name });
     }
-    for (const [g, syms] of BENCHMARK_GROUPS) {
-        html += `<div class="fsx-pk-group"><div class="fsx-pk-label">${g}</div><div class="fsx-pk-chips">`
-            + syms.map(sym => chip('idx', sym, BENCHMARK_SYMBOLS[sym], BENCHMARK_COLORS[sym], _fullscreenBenchmarks.includes(sym))).join('')
-            + `</div></div>`;
+    const custom = sel.filter(s => !listed.has(s) && !holdSyms.some(x => x.s === s));
+    html += group('נבחרו מהחיפוש', custom.map(s => chip('idx', s, _cmpName(s), _cmpColor(s), true)).join(''));
+    html += group('הנכסים בתיק', holdSyms.map(x => chip('idx', x.s, x.name, sel.includes(x.s) ? _cmpColor(x.s) : '#94a3b8', sel.includes(x.s))).join(''));
+    const others = clients.filter(c => c.id !== _fullscreenClientId);
+    html += group('התיקים שלי', others.map((c, i) => chip('pf', c.id, c.name, COMPARE_PF_COLORS[i % COMPARE_PF_COLORS.length], _fullscreenComparePf.includes(c.id))).join(''));
+    for (const [g, syms] of BENCHMARK_GROUPS)
+        html += group(g, syms.map(s => chip('idx', s, BENCHMARK_SYMBOLS[s], BENCHMARK_COLORS[s], sel.includes(s))).join(''));
+    list.innerHTML = html;
+}
+
+// ── Asset search: local Hebrew/TASE names instantly + keyless Yahoo search (server-side) ──
+let _fsSearchTimer = null, _fsSearchSeq = 0;
+const _fsSearchCache = {};
+function _fsSearch(raw) {
+    const q = String(raw || '').trim();
+    const box = document.getElementById('fsxPkRes');
+    if (!box) return;
+    clearTimeout(_fsSearchTimer);
+    const seq = ++_fsSearchSeq;
+    if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+    const local = (typeof searchHebrewNames === 'function' ? searchHebrewNames(q) : []).slice(0, 6)
+        .map(r => ({ symbol: r.symbol, name: r.hebrewName || r.name || r.symbol, type: 'מניה', exchange: 'ת״א' }));
+    _fsRenderResults(local, q, true);
+    _fsSearchTimer = setTimeout(async () => {
+        let api = _fsSearchCache[q.toLowerCase()];
+        if (!api) {
+            try {
+                const r = await fetch(`/api/history?search=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+                api = r.ok ? ((await r.json()).results || []) : [];
+                if (r.ok) _fsSearchCache[q.toLowerCase()] = api;
+            } catch (e) { api = []; }
+        }
+        if (seq !== _fsSearchSeq) return;   // user typed again
+        const seen = new Set(local.map(r => r.symbol.toUpperCase()));
+        _fsRenderResults([...local, ...api.filter(r => !seen.has(r.symbol.toUpperCase()))], q, false);
+    }, 280);
+}
+
+function _fsRenderResults(results, q, pending) {
+    const box = document.getElementById('fsxPkRes');
+    if (!box) return;
+    box.hidden = false;
+    if (!results.length) {
+        box.innerHTML = `<div class="fsx-res-empty">${pending ? 'מחפש…' : 'לא נמצאו נכסים עבור "' + _fsEsc(q) + '"'}</div>`;
+        return;
     }
-    pk.innerHTML = html + `</div>`;
+    box.innerHTML = results.slice(0, 10).map(r => {
+        const on = _fullscreenBenchmarks.includes(r.symbol);
+        return `<button class="fsx-res ${on ? 'on' : ''}" data-kind="idx" data-key="${_fsEsc(r.symbol)}" data-name="${_fsEsc(r.name)}" onclick="_fsPick(this)">
+            <span class="fsx-res-main"><b>${_fsEsc(r.name)}</b><small>${_fsEsc(r.symbol)}${r.exchange ? ' · ' + _fsEsc(r.exchange) : ''}</small></span>
+            ${r.type ? `<span class="fsx-res-type">${_fsEsc(r.type)}</span>` : ''}
+            <span class="fsx-res-add" aria-hidden="true">${on ? '✓' : '+'}</span>
+        </button>`;
+    }).join('') + (pending ? '<div class="fsx-res-empty">מחפש עוד…</div>' : '');
 }
 
 function toggleFullscreenComparePicker(force) {
@@ -2582,25 +2688,50 @@ function toggleFullscreenComparePicker(force) {
     if (show) _fsEnsurePicker();
     pk.hidden = !show;
     document.getElementById('fsxCmpBtn')?.classList.toggle('open', show);
+    if (!show) {
+        const inp = document.getElementById('fsxPkQ');
+        if (inp) { inp.value = ''; inp.blur(); }
+        _fsSearch('');
+        _fsFlushRender();   // draw the final selection right away
+    }
+}
+
+// Picks are batched: several quick taps → ONE chart load (each load used to block the next tap).
+let _fsRenderTimer = null;
+function _fsQueueRender() {
+    clearTimeout(_fsRenderTimer);
+    _fsRenderTimer = setTimeout(() => { _fsRenderTimer = null; _renderFullscreenChart(); }, 650);
+}
+function _fsFlushRender() {
+    if (!_fsRenderTimer) return;
+    clearTimeout(_fsRenderTimer); _fsRenderTimer = null;
+    _renderFullscreenChart();
 }
 
 function _fsPick(btn) {
     const kind = btn.dataset.kind, key = btn.dataset.key;
+    const id = kind === 'pf' ? (isNaN(+key) ? key : +key) : key;
+    const on = kind === 'pf' ? _fullscreenComparePf.includes(id) : _fullscreenBenchmarks.includes(key);
     const total = _fullscreenBenchmarks.length + _fullscreenComparePf.length;
-    const on = btn.classList.contains('on');
     if (!on && total >= _FS_MAX_COMPARE) {
-        if (typeof showToast === 'function') showToast(`ניתן להשוות עד ${_FS_MAX_COMPARE} סדרות בו-זמנית`, 'info');
+        showToast(`ניתן להשוות עד ${_FS_MAX_COMPARE} סדרות בו-זמנית — הסר סדרה כדי להוסיף אחרת`, 'info');
         return;
     }
-    btn.classList.toggle('on', !on);
     if (kind === 'pf') {
-        const id = isNaN(+key) ? key : +key;
         _fullscreenComparePf = on ? _fullscreenComparePf.filter(x => x !== id) : [..._fullscreenComparePf, id];
     } else {
+        if (!on) _cmpRegisterAsset(key, btn.dataset.name, _fullscreenBenchmarks);
         _fullscreenBenchmarks = on ? _fullscreenBenchmarks.filter(x => x !== key) : [..._fullscreenBenchmarks, key];
     }
+    // Reflect the toggle everywhere it is shown (chip list + search results)
+    document.querySelectorAll('#fsxPicker [data-key]').forEach(b => {
+        if (b.dataset.key !== String(key) || b.dataset.kind !== kind) return;
+        b.classList.toggle('on', !on);
+        const add = b.querySelector('.fsx-res-add'); if (add) add.textContent = on ? '+' : '✓';
+    });
+    _fsRenderPickerList();
     _fsSyncToolbar();
-    _renderFullscreenChart();
+    _fsQueueRender();
 }
 
 function _fsRemoveCompare(kind, key) {
@@ -2667,7 +2798,7 @@ function _fsRenderLegend(inst) {
     if (!el) return;
     const comps = [
         ..._fullscreenComparePf.map(id => ({ kind: 'pf', key: id, sKey: 'pf:' + id, name: (clients.find(c => c.id === id) || {}).name || '' })),
-        ..._fullscreenBenchmarks.map(sym => ({ kind: 'idx', key: sym, sKey: sym, name: BENCHMARK_SYMBOLS[sym] || sym }))
+        ..._fullscreenBenchmarks.map(sym => ({ kind: 'idx', key: sym, sKey: sym, name: _cmpName(sym) }))
     ];
     if (!comps.length) { el.hidden = true; el.innerHTML = ''; return; }
     const client = clients.find(c => c.id === _fullscreenClientId);
@@ -2676,7 +2807,7 @@ function _fsRenderLegend(inst) {
     let html = main ? chipHTML(client ? client.name : 'התיק', main.color, fmt(main.last), '') : '';
     for (const c of comps) {
         const s = fin && fin.series.find(x => x.key === c.sKey);
-        const color = s ? s.color : (c.kind === 'pf' ? '#94a3b8' : (BENCHMARK_COLORS[c.key] || '#94a3b8'));
+        const color = s ? s.color : (c.kind === 'pf' ? '#94a3b8' : _cmpColor(c.key));
         const val = s && isFinite(s.last) ? fmt(s.last) : '<span class="fsx-na">אין נתונים</span>';
         html += chipHTML(c.name, color, val, `onclick="_fsRemoveCompare('${c.kind}','${_fsEsc(String(c.key))}')"`);
     }
@@ -2688,6 +2819,7 @@ async function _renderFullscreenChart() {
     // Use the saved _fullscreenClientId — set once in openFullscreenChart().
     // This is the ONLY place that determines which portfolio to render.
     const clientId = _fullscreenClientId;
+    clearTimeout(_fsRenderTimer); _fsRenderTimer = null;   // this render supersedes a batched one
     if (!clientId) {
         console.warn('[Fullscreen] No client ID set — cannot render chart');
         return;
@@ -2803,6 +2935,7 @@ function fullscreenAutoScale() {
 function closeFullscreen(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('fullscreenOverlay').classList.remove('active');
+    clearTimeout(_fsRenderTimer); _fsRenderTimer = null;   // never draw into a closed window
     toggleFullscreenComparePicker(false);
     _fsRenderSeq++;
     if (fullscreenChartInstance) {

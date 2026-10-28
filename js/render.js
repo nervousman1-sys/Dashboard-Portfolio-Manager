@@ -1602,11 +1602,11 @@ function renderClientCards() {
                     datasets: [{
                         data: chartData,
                         backgroundColor: chartBg,
-                        // Crisp transparent gaps between slices instead of a same-hue border (which
-                        // blurred the slice edges); a lone slice keeps a hairline outline.
-                        borderWidth: hasData ? 0 : 1,
-                        borderColor: 'rgba(255,255,255,0.15)',
-                        spacing: hasData && chartData.filter(v => v > 0).length > 1 ? 3 : 0,
+                        // Slices touch with NO gap; a hairline in each slice's own colour seals the
+                        // anti-aliasing seam between neighbours. The empty ring keeps a faint outline.
+                        borderWidth: hasData ? 0.6 : 1,
+                        borderColor: hasData ? chartBg : 'rgba(255,255,255,0.15)',
+                        spacing: 0,
                         hoverOffset: hasData ? 6 : 0
                     }]
                 },
