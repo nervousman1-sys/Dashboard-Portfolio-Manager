@@ -228,13 +228,37 @@ async function _fetchTwelveDataChunk(chunk, originalTickers, holdingsMap) {
 
 let tickerSearchTimeout = null;
 
-async function searchTwelveDataSymbols(query) {
-    if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') {
-        console.warn('Twelve Data API key not configured');
+// US-listed stocks/ETFs/funds (every Russell 2000 / S&P 500 / Nasdaq name) via the keyless
+// same-origin /api/history?search=…&us=1. Israeli names are NOT returned here — they come from
+// the local TASE list (searchHebrewNames), which every caller shows first.
+const _usSearchCache = {};
+async function _searchUsSymbols(query) {
+    const key = query.trim().toLowerCase();
+    if (!key || /[^\x20-\x7E]/.test(key)) return [];   // Hebrew → local list only
+    if (_usSearchCache[key]) return _usSearchCache[key];
+    try {
+        const res = await fetch(`/api/history?search=${encodeURIComponent(key)}&us=1`, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return [];
+        const j = await res.json();
+        // names are rendered into HTML/onclick by several callers — keep them plain text
+        const clean = (s) => String(s || '').replace(/[<>"'`\\]/g, '').trim();
+        const out = (Array.isArray(j.results) ? j.results : [])
+            .filter(r => r && /^[A-Z0-9][A-Z0-9-]{0,9}$/i.test(r.symbol))
+            .map(r => ({ ...r, symbol: r.symbol.toUpperCase(), name: clean(r.name) || r.symbol }));
+        if (!j.error) _usSearchCache[key] = out;
+        return out;
+    } catch (e) {
         return [];
     }
+}
 
+async function searchTwelveDataSymbols(query) {
     if (!query || query.length < 1) return [];
+    // Production ships no client-side Twelve Data key (keys stay server-side) — without the
+    // fallback this returned [] and US companies could never be found when adding a holding.
+    if (!TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY === 'YOUR_TWELVE_DATA_API_KEY') {
+        return _searchUsSymbols(query);
+    }
 
     try {
         const res = await fetch(

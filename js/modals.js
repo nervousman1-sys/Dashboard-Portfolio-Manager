@@ -2067,7 +2067,7 @@ function _renderSearchDropdown(results, dropdown, fetchPrices) {
     }
     dropdown.innerHTML = results.map((r, i) => {
         const heName = r.hebrewName || ((typeof HEBREW_NAMES !== 'undefined') ? HEBREW_NAMES[(r.symbol || '').replace('.TA', '').toUpperCase()] : '');
-        const safeName = (r.name || '').replace(/'/g, "\\'");
+        const safeName = (r.name || '').replace(/\\/g, '').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
         const exchangeLabel = r.exchange || '';
         const isBond = r.type === 'Bond';
         // Bonds: English name is primary ("Galil 0523"), Hebrew is secondary ("גליל (צמוד מדד)")
@@ -2087,7 +2087,7 @@ function _renderSearchDropdown(results, dropdown, fetchPrices) {
         return `<div class="ticker-search-item" onclick="_lastSearchResultType='${rType}';selectSearchResult('${r.symbol}', '${safeName}', '${r.currency}', '${exchangeLabel}')">
             <div class="search-row-grid">
                 <div class="search-col-name">
-                    <span class="search-name-primary">${bondTag}${primaryLabel}</span>
+                    <span class="search-name-primary" dir="auto" style="text-align:right">${bondTag}${primaryLabel}</span>
                     ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
                 <div class="search-col-ticker">${displayTicker}</div>
@@ -3036,7 +3036,7 @@ function _renderRowSearchDropdown(results, dropdown, rowId, fetchPrices) {
         return `<div class="ticker-search-item" onclick="selectRowTicker('${rowId}', '${r.symbol}', '${r.currency}')">
             <div class="search-row-grid">
                 <div class="search-col-name">
-                    <span class="search-name-primary">${bondTag}${primaryLabel}</span>
+                    <span class="search-name-primary" dir="auto" style="text-align:right">${bondTag}${primaryLabel}</span>
                     ${secondaryLabel ? `<span class="search-name-secondary">${secondaryLabel}</span>` : ''}
                 </div>
                 <div class="search-col-ticker">${displayTicker}</div>

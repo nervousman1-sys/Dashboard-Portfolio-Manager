@@ -78,6 +78,36 @@ async function fetchYahoo(symbol, range, interval, ohlc) {
 // Vercel function limit.
 //   /api/history?search=nvidia  → { results: [ {symbol, name, type, exchange}, ... ] }
 const SEARCH_TYPES = { EQUITY: 'מניה', ETF: 'ETF', MUTUALFUND: 'קרן', INDEX: 'מדד', CRYPTOCURRENCY: 'קריפטו', FUTURE: 'חוזה', CURRENCY: 'מט״ח' };
+// us=1 (add-holding search): ONLY US-listed stocks/ETFs/funds — Israeli names come from the
+// app's local TASE list, so they are never replaced by foreign listings of the same company.
+const US_EXCH = { NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NAS: 'NASDAQ', NYQ: 'NYSE', ASE: 'NYSE American', PCX: 'NYSE Arca', BTS: 'Cboe', PNK: 'OTC', OQX: 'OTC', OQB: 'OTC', OEM: 'OTC', OGM: 'OTC', OBB: 'OTC' };
+const US_TYPES = { EQUITY: 'Common Stock', ETF: 'ETF', MUTUALFUND: 'Mutual Fund' };
+async function searchYahooUS(query) {
+    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
+        '&quotesCount=30&newsCount=0&listsCount=0&enableFuzzyQuery=false';
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 6000);
+    let r;
+    try {
+        r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
+    } finally { clearTimeout(timer); }
+    if (!r.ok) throw new Error(`Yahoo search HTTP ${r.status}`);
+    const j = await r.json();
+    const seen = new Set();
+    return ((j && j.quotes) || [])
+        .filter(x => x && x.symbol && US_EXCH[x.exchange] && US_TYPES[x.quoteType] && !/[.=^]/.test(x.symbol.replace(/-/g, '')))
+        .filter(x => !seen.has(x.symbol) && seen.add(x.symbol))
+        .slice(0, 12)
+        .map(x => ({
+            symbol: String(x.symbol),
+            name: String(x.longname || x.shortname || x.symbol).replace(/\s+/g, ' ').trim(),
+            exchange: US_EXCH[x.exchange],
+            currency: 'USD',
+            country: 'United States',
+            type: US_TYPES[x.quoteType]
+        }));
+}
+
 async function searchYahoo(query) {
     const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
         '&quotesCount=15&newsCount=0&listsCount=0&enableFuzzyQuery=false';
@@ -111,7 +141,7 @@ module.exports = async (req, res) => {
             // Yahoo rejects non-Latin queries (HTTP 400); Hebrew names are matched client-side.
             if (!term || /[^\x20-\x7E]/.test(term)) { res.status(200).json({ results: [] }); return; }
             let results;
-            try { results = await searchYahoo(term); }
+            try { results = q.us === '1' ? await searchYahooUS(term) : await searchYahoo(term); }
             catch (e) { res.setHeader('Cache-Control', 'no-store'); res.status(200).json({ results: [], error: 'search_unavailable' }); return; }
             res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
             res.status(200).json({ results });
