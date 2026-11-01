@@ -82,17 +82,25 @@ const SEARCH_TYPES = { EQUITY: 'מניה', ETF: 'ETF', MUTUALFUND: 'קרן', IND
 // app's local TASE list, so they are never replaced by foreign listings of the same company.
 const US_EXCH = { NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NAS: 'NASDAQ', NYQ: 'NYSE', ASE: 'NYSE American', PCX: 'NYSE Arca', BTS: 'Cboe', PNK: 'OTC', OQX: 'OTC', OQB: 'OTC', OEM: 'OTC', OGM: 'OTC', OBB: 'OTC' };
 const US_TYPES = { EQUITY: 'Common Stock', ETF: 'ETF', MUTUALFUND: 'Mutual Fund' };
+// Yahoo's search intermittently refuses a request from a shared cloud IP — try the second host.
+async function fetchYahooSearch(query, count) {
+    let lastErr;
+    for (const host of ['query2', 'query1']) {
+        const url = `https://${host}.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
+            `&quotesCount=${count}&newsCount=0&listsCount=0&enableFuzzyQuery=false`;
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 5000);
+        try {
+            const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
+            if (r.ok) return await r.json();
+            lastErr = new Error(`Yahoo search HTTP ${r.status}`);
+        } catch (e) { lastErr = e; } finally { clearTimeout(timer); }
+    }
+    throw lastErr;
+}
+
 async function searchYahooUS(query) {
-    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
-        '&quotesCount=30&newsCount=0&listsCount=0&enableFuzzyQuery=false';
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 6000);
-    let r;
-    try {
-        r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
-    } finally { clearTimeout(timer); }
-    if (!r.ok) throw new Error(`Yahoo search HTTP ${r.status}`);
-    const j = await r.json();
+    const j = await fetchYahooSearch(query, 30);
     const seen = new Set();
     return ((j && j.quotes) || [])
         .filter(x => x && x.symbol && US_EXCH[x.exchange] && US_TYPES[x.quoteType] && !/[.=^]/.test(x.symbol.replace(/-/g, '')))
@@ -109,16 +117,7 @@ async function searchYahooUS(query) {
 }
 
 async function searchYahoo(query) {
-    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
-        '&quotesCount=15&newsCount=0&listsCount=0&enableFuzzyQuery=false';
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 6000);
-    let r;
-    try {
-        r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, signal: ac.signal });
-    } finally { clearTimeout(timer); }
-    if (!r.ok) throw new Error(`Yahoo search HTTP ${r.status}`);
-    const j = await r.json();
+    const j = await fetchYahooSearch(query, 15);
     return ((j && j.quotes) || [])
         .filter(x => x && x.symbol && SEARCH_TYPES[x.quoteType])
         .slice(0, 12)

@@ -237,9 +237,15 @@ async function _searchUsSymbols(query) {
     if (!key || /[^\x20-\x7E]/.test(key)) return [];   // Hebrew → local list only
     if (_usSearchCache[key]) return _usSearchCache[key];
     try {
-        const res = await fetch(`/api/history?search=${encodeURIComponent(key)}&us=1&v=2`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) return [];
-        const j = await res.json();
+        const url = `/api/history?search=${encodeURIComponent(key)}&us=1&v=2`;
+        let res = await fetch(url, { headers: { Accept: 'application/json' } });
+        let j = res.ok ? await res.json() : { error: 'http' };
+        if (j.error) {   // transient upstream refusal — one quiet retry before showing "no results"
+            await new Promise(r => setTimeout(r, 600));
+            res = await fetch(url + '&r=1', { headers: { Accept: 'application/json' } });
+            if (!res.ok) return [];
+            j = await res.json();
+        }
         // names are rendered into HTML/onclick by several callers — keep them plain text
         const clean = (s) => String(s || '').replace(/[<>"'`\\]/g, '').trim();
         const out = (Array.isArray(j.results) ? j.results : [])
