@@ -237,14 +237,21 @@ async function _searchUsSymbols(query) {
     if (!key || /[^\x20-\x7E]/.test(key)) return [];   // Hebrew → local list only
     if (_usSearchCache[key]) return _usSearchCache[key];
     try {
-        const res = await fetch(`/api/history?search=${encodeURIComponent(key)}&us=1`, { headers: { Accept: 'application/json' } });
+        const res = await fetch(`/api/history?search=${encodeURIComponent(key)}&us=1&v=2`, { headers: { Accept: 'application/json' } });
         if (!res.ok) return [];
         const j = await res.json();
         // names are rendered into HTML/onclick by several callers — keep them plain text
         const clean = (s) => String(s || '').replace(/[<>"'`\\]/g, '').trim();
         const out = (Array.isArray(j.results) ? j.results : [])
             .filter(r => r && /^[A-Z0-9][A-Z0-9-]{0,9}$/i.test(r.symbol))
-            .map(r => ({ ...r, symbol: r.symbol.toUpperCase(), name: clean(r.name) || r.symbol }));
+            .map(r => ({
+                symbol: r.symbol.toUpperCase(),
+                name: clean(r.name) || r.symbol,
+                exchange: clean(r.exchange) || 'US',
+                currency: 'USD',
+                country: 'United States',
+                type: ['Common Stock', 'ETF', 'Mutual Fund'].includes(r.type) ? r.type : 'Common Stock'
+            }));
         if (!j.error) _usSearchCache[key] = out;
         return out;
     } catch (e) {
